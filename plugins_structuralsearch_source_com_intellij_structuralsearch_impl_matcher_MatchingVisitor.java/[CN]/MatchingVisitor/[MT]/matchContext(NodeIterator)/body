@@ -1,0 +1,63 @@
+{
+  final CompiledPattern pattern=matchContext.getPattern();
+  final NodeIterator patternNodes=pattern.getNodes().clone();
+  if (!patternNodes.hasNext())   return;
+  List<PsiElement> matchedNodes=null;
+  PsiElement patternElement;
+  MatchResultImpl saveResult=matchContext.getResult();
+  matchContext.setResult(null);
+  Loop:   for (; elements.hasNext(); elements.advance()) {
+    final PsiElement element=elements.current();
+    patternElement=patternNodes.current();
+    final Handler handler=matchContext.getPattern().getHandler(patternElement);
+    if (!handler.match(patternElement,element,matchContext) && !allowsAbsenceOfMatch(patternElement)) {
+      if (matchContext.hasResult())       matchContext.clearResult();
+      if (matchedNodes != null && matchedNodes.size() > 0) {
+        patternNodes.reset();
+        elements.rewind(matchedNodes.size());
+      }
+      if (matchContext.getPattern().getStrategy().continueMatching(element)) {
+        matchContext(new FilteringNodeIterator(new ArrayBackedNodeIterator(element.getChildren())));
+      }
+      if (matchedNodes != null)       matchedNodes.clear();
+      continue;
+    }
+    if (matchedNodes == null)     matchedNodes=new LinkedList<PsiElement>();
+    matchedNodes.add(element);
+    if (handler.shouldAdvanceThePatternFor(patternElement,element)) {
+      patternNodes.advance();
+    }
+    if (!handler.shouldAdvanceTheMatchFor(patternElement,element)) {
+      elements.rewind();
+    }
+    if (!patternNodes.hasNext()) {
+      MatchResultImpl result=matchContext.getResult();
+      final Iterator sons=result.getSons();
+      if (!sons.hasNext() || matchContext.getOptions().isResultIsContextMatch()) {
+        processNoSubstitutionMatch(matchedNodes,result);
+      }
+ else {
+        boolean seenSearchTarget=false;
+        while (sons.hasNext()) {
+          MatchResultImpl realResult=(MatchResultImpl)sons.next();
+          if (realResult.isTarget()) {
+            if (seenSearchTarget)             matchContext.getSink().newMatch(result);
+            result=processOneMatch(realResult);
+            seenSearchTarget=true;
+          }
+        }
+        if (!seenSearchTarget) {
+          processNoSubstitutionMatch(matchedNodes,result);
+        }
+      }
+      matchContext.getSink().newMatch(result);
+      patternNodes.reset();
+      matchedNodes.clear();
+      matchContext.setResult(null);
+    }
+    if (matchContext.getOptions().isRecursiveSearch() && matchContext.getPattern().getStrategy().continueMatching(element)) {
+      matchContext(new FilteringNodeIterator(new ArrayBackedNodeIterator(element.getChildren())));
+    }
+  }
+  matchContext.setResult(saveResult);
+}

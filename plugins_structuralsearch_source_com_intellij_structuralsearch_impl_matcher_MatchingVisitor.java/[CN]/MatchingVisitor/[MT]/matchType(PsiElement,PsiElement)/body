@@ -1,0 +1,72 @@
+{
+  boolean result;
+  PsiElement el=type;
+  PsiElement el2=type2;
+  if (type instanceof PsiTypeElement && ((PsiTypeElement)type).getInnermostComponentReferenceElement() != null) {
+    el=((PsiTypeElement)type).getInnermostComponentReferenceElement();
+    PsiReferenceParameterList list=((PsiJavaCodeReferenceElement)el).getParameterList();
+    PsiElement[] typeparams=null;
+    if (type2 instanceof PsiTypeElement && ((PsiTypeElement)type2).getInnermostComponentReferenceElement() != null) {
+      el2=((PsiTypeElement)type2).getInnermostComponentReferenceElement();
+    }
+    if (el2 instanceof PsiJavaCodeReferenceElement) {
+      typeparams=((PsiJavaCodeReferenceElement)el2).getParameterList().getTypeParameterElements();
+      if (typeparams.length > 0) {
+        el2=((PsiJavaCodeReferenceElement)el2).getReferenceNameElement();
+      }
+    }
+ else     if (el2 instanceof PsiTypeParameter) {
+      el2=((PsiTypeParameter)el2).getNameIdentifier();
+    }
+ else     if (el2 instanceof PsiClass && ((PsiClass)el2).getTypeParameterList().getTypeParameters().length > 0) {
+      typeparams=((PsiClass)el2).getTypeParameterList().getTypeParameters();
+      el2=((PsiClass)el2).getNameIdentifier();
+    }
+ else     if (el2 instanceof PsiMethod && ((PsiMethod)el2).getTypeParameterList().getTypeParameters().length > 0) {
+      typeparams=((PsiMethod)type2).getTypeParameterList().getTypeParameters();
+      el2=((PsiMethod)type2).getNameIdentifier();
+    }
+    if (list != null && list.getTypeParameterElements().length > 0) {
+      result=typeparams != null && matchInAnyOrder(list.getTypeParameterElements(),typeparams);
+      if (!result)       return false;
+      el=((PsiJavaCodeReferenceElement)el).getReferenceNameElement();
+    }
+  }
+  type=el;
+  type2=el2;
+  if (matchContext.getPattern().isTypedVar(type)) {
+    final SubstitutionHandler handler=(SubstitutionHandler)matchContext.getPattern().getHandler(type);
+    if (handler.isSubtype() || handler.isStrictSubtype()) {
+      final NodeIterator node=new HierarchyNodeIterator(type2,true,true);
+      if (handler.isStrictSubtype()) {
+        node.advance();
+      }
+      while (node.hasNext() && !handler.validate(node.current(),0,-1,matchContext)) {
+        node.advance();
+      }
+      if (node.hasNext()) {
+        handler.addResult(el2,0,-1,matchContext);
+        return true;
+      }
+ else {
+        return false;
+      }
+    }
+ else {
+      return handler.handle(type2,matchContext);
+    }
+  }
+  final String text=type.getText();
+  if (text.indexOf('.') == -1 || !(el2 instanceof PsiJavaReference)) {
+    return MatchUtils.compareWithNoDifferenceToPackage(text,type2.getText());
+  }
+ else {
+    PsiElement element2=((PsiJavaReference)el2).resolve();
+    if (element2 != null) {
+      return text.equals(((PsiClass)element2).getQualifiedName());
+    }
+ else {
+      return MatchUtils.compareWithNoDifferenceToPackage(text,type2.getText());
+    }
+  }
+}

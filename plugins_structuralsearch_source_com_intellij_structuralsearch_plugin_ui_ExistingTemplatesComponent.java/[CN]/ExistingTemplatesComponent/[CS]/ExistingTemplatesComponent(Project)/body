@@ -1,0 +1,84 @@
+{
+  final DefaultMutableTreeNode root;
+  project=_project;
+  patternTreeModel=new DefaultTreeModel(root=new DefaultMutableTreeNode(null));
+  DefaultMutableTreeNode parent=null;
+  String lastCategory=null;
+  LinkedList nodesToExpand=new LinkedList();
+  final PredefinedConfiguration[] predefined=PredefinedConfiguration.getPredefinedTemplates();
+  for (int i=0; i < predefined.length; ++i) {
+    final PredefinedConfiguration info=predefined[i];
+    final DefaultMutableTreeNode node=new DefaultMutableTreeNode(info);
+    if (lastCategory == null || !lastCategory.equals(info.getCategory())) {
+      if (info.getCategory().length() > 0) {
+        root.add(parent=new DefaultMutableTreeNode(info.getCategory()));
+        nodesToExpand.add(parent);
+        lastCategory=info.getCategory();
+      }
+ else {
+        root.add(node);
+        continue;
+      }
+    }
+    parent.add(node);
+  }
+  parent=new DefaultMutableTreeNode(PredefinedConfiguration.USER_DEFINED_TYPE);
+  userTemplatesNode=parent;
+  root.add(parent);
+  nodesToExpand.add(parent);
+  final ConfigurationManager configurationManager=StructuralSearchPlugin.getInstance(project).getConfigurationManager();
+  if (configurationManager.getConfigurations() != null) {
+    for (Iterator i=configurationManager.getConfigurations().iterator(); i.hasNext(); ) {
+      final Configuration config=(Configuration)i.next();
+      parent.add(new DefaultMutableTreeNode(config));
+    }
+  }
+  patternTree=createTree(patternTreeModel);
+  for (Iterator i=nodesToExpand.iterator(); i.hasNext(); ) {
+    patternTree.expandPath(new TreePath(new Object[]{root,i.next()}));
+  }
+  DefaultActionGroup group=new DefaultActionGroup();
+  AnAction addAction=new AnAction("Create Template",null,IconLoader.getIcon("/general/add.png")){
+    public void actionPerformed(    AnActionEvent e){
+      addSelectedTreeNodeAndClose();
+    }
+  }
+;
+  AnAction removeAction=new AnAction("Remove Template",null,IconLoader.getIcon("/general/remove.png")){
+    public void actionPerformed(    AnActionEvent e){
+      Object selection=patternTree.getLastSelectedPathComponent();
+      if (selection instanceof DefaultMutableTreeNode) {
+        DefaultMutableTreeNode node=(DefaultMutableTreeNode)selection;
+        if (node.getUserObject() instanceof Configuration) {
+          Configuration configuration=(Configuration)node.getUserObject();
+          patternTreeModel.removeNodeFromParent(node);
+          configurationManager.removeConfiguration(configuration);
+        }
+      }
+    }
+  }
+;
+  group.add(addAction);
+  group.add(removeAction);
+  JPanel templatesPanel=new JPanel(new BorderLayout());
+  addAction.registerCustomShortcutSet(CommonShortcuts.INSERT,templatesPanel);
+  removeAction.registerCustomShortcutSet(CommonShortcuts.DELETE,templatesPanel);
+  templatesPanel.add(BorderLayout.NORTH,ActionManager.getInstance().createActionToolbar(ActionPlaces.UNKNOWN,group,true).getComponent());
+  templatesPanel.add(BorderLayout.CENTER,new JScrollPane(patternTree));
+  panel=templatesPanel;
+  configureSelectTemplateAction(patternTree);
+  historyModel=new DefaultListModel();
+  historyPanel=new JPanel(new BorderLayout());
+  historyPanel.add(BorderLayout.NORTH,new JLabel("Used templates"));
+  historyPanel.add(BorderLayout.CENTER,new JScrollPane(historyList=new JList(historyModel)));
+  historyList.setCellRenderer(new ListCellRenderer());
+  historyList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+  new ListSpeedSearch(historyList);
+  if (configurationManager.getHistoryConfigurations() != null) {
+    for (Iterator i=configurationManager.getHistoryConfigurations().iterator(); i.hasNext(); ) {
+      historyModel.addElement(i.next());
+    }
+    historyList.setSelectedIndex(0);
+  }
+  configureSelectTemplateAction(historyList);
+}

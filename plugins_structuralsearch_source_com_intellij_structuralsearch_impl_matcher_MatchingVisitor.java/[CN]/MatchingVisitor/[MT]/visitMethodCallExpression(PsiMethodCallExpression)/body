@@ -1,0 +1,48 @@
+{
+  final PsiMethodCallExpression mcall2=(PsiMethodCallExpression)element;
+  final PsiReferenceExpression mcallRef1=mcall.getMethodExpression();
+  final PsiReferenceExpression mcallRef2=mcall2.getMethodExpression();
+  final String mcallname1=mcallRef1.getReferenceName();
+  final String mcallname2=mcallRef2.getReferenceName();
+  boolean isTypedVar=matchContext.getPattern().isTypedVar(mcallRef1.getReferenceNameElement());
+  if (!mcallname1.equals(mcallname2) && !isTypedVar) {
+    result=false;
+    return;
+  }
+  if (mcallRef1.getQualifierExpression() != null) {
+    String FQN=mcall.getUserData(CompiledPattern.FQN);
+    boolean processedFQN=false;
+    if (FQN != null) {
+      PsiElement element=mcallRef2.getQualifierExpression();
+      if (element instanceof PsiJavaReference) {
+        PsiElement clazz=((PsiJavaReference)element).resolve();
+        if (clazz instanceof PsiClass) {
+          result=((PsiClass)clazz).getQualifiedName().equals(FQN);
+          if (!result)           return;
+          processedFQN=true;
+        }
+      }
+    }
+    if (!processedFQN) {
+      if (mcallRef2.getQualifierExpression() != null) {
+        result=match(mcallRef1.getQualifierExpression(),mcallRef2.getQualifierExpression());
+        if (!result)         return;
+      }
+ else {
+        Handler handler=matchContext.getPattern().getHandler(mcallRef1.getQualifierExpression());
+        if (!(handler instanceof SubstitutionHandler) || ((SubstitutionHandler)handler).getMinOccurs() != 0) {
+          result=false;
+          return;
+        }
+      }
+    }
+  }
+ else   if (mcallRef2.getQualifierExpression() != null) {
+    result=false;
+    return;
+  }
+  result=matchSons(mcall.getArgumentList(),mcall2.getArgumentList());
+  if (result && isTypedVar) {
+    result&=handleTypedElement(mcallRef1.getReferenceNameElement(),mcallRef2.getReferenceNameElement());
+  }
+}

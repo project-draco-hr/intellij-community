@@ -1,0 +1,72 @@
+{
+  PsiClass saveClazz=this.clazz;
+  Handler.UnmatchedElementsListener listener=Handler.getUnmatchedElementsListener();
+  this.clazz=clazz2;
+  final PsiElement allRemainingClassContentElement=clazz.getUserData(CompiledPattern.ALL_CLASS_CONTENT_VAR_KEY);
+  Handler.UnmatchedElementsListener mylistener=null;
+  boolean result=false;
+  if (allRemainingClassContentElement != null) {
+    Handler.setUnmatchedElementsListener(mylistener=new Handler.UnmatchedElementsListener(){
+      List<PsiElement> l;
+      public void matchedElements(      List<PsiElement> elementList){
+        if (elementList != null) {
+          if (l == null)           l=new LinkedList<PsiElement>(elementList);
+ else           l.addAll(elementList);
+        }
+      }
+      public void commitUnmatched(){
+        final SubstitutionHandler handler=(SubstitutionHandler)matchContext.getPattern().getHandler(allRemainingClassContentElement);
+        for (PsiElement el=clazz2.getFirstChild(); el != null; el=el.getNextSibling()) {
+          if (el instanceof PsiMember && (l == null || l.indexOf(el) == -1)) {
+            handler.handle(el,matchContext);
+          }
+        }
+      }
+    }
+);
+  }
+  try {
+    if (clazz.isInterface() != clazz2.isInterface())     return false;
+    if (!matchInAnyOrder(clazz.getExtendsList(),clazz2.getExtendsList())) {
+      return false;
+    }
+    if (!matchInAnyOrder(clazz.getImplementsList(),clazz2.getImplementsList())) {
+      return false;
+    }
+    final PsiField fields[]=clazz.getFields();
+    if (fields.length > 0) {
+      final PsiField fields2[]=(matchContext.getPattern()).isRequestsSuperFields() ? clazz2.getAllFields() : clazz2.getFields();
+      if (!matchInAnyOrder(fields,fields2)) {
+        return false;
+      }
+    }
+    final PsiMethod methods[]=clazz.getMethods();
+    if (methods.length > 0) {
+      final PsiMethod methods2[]=(matchContext.getPattern()).isRequestsSuperMethods() ? clazz2.getAllMethods() : clazz2.getMethods();
+      if (!matchInAnyOrder(methods,methods2)) {
+        return false;
+      }
+    }
+    final PsiClass[] nestedClasses=clazz.getInnerClasses();
+    if (nestedClasses.length > 0) {
+      final PsiClass[] nestedClasses2=(matchContext.getPattern()).isRequestsSuperInners() ? clazz2.getAllInnerClasses() : clazz2.getInnerClasses();
+      if (!matchInAnyOrder(nestedClasses,nestedClasses2)) {
+        return false;
+      }
+    }
+    final PsiClassInitializer[] initializers=clazz.getInitializers();
+    if (initializers.length > 0) {
+      final PsiClassInitializer[] initializers2=clazz2.getInitializers();
+      if (!matchInAnyOrder(initializers,initializers2)) {
+        return false;
+      }
+    }
+    result=true;
+    return result;
+  }
+  finally {
+    if (result && mylistener != null)     mylistener.commitUnmatched();
+    this.clazz=saveClazz;
+    Handler.setUnmatchedElementsListener(listener);
+  }
+}

@@ -1,0 +1,29 @@
+{
+  super.visitDeclarationStatement(psiDeclarationStatement);
+  if (psiDeclarationStatement.getFirstChild() instanceof PsiTypeElement) {
+    final PsiJavaCodeReferenceElement reference=((PsiTypeElement)psiDeclarationStatement.getFirstChild()).getInnermostComponentReferenceElement();
+    if (reference != null && (context.pattern.isRealTypedVar(reference.getReferenceNameElement())) && reference.getParameterList().getTypeParameterElements().length > 0) {
+      setHandler(psiDeclarationStatement,new TypedSymbolHandler());
+      final Handler handler=context.pattern.getHandler(psiDeclarationStatement);
+      handler.setFilter(TypedSymbolNodeFilter.getInstance());
+      final PsiTypeElement[] params=reference.getParameterList().getTypeParameterElements();
+      for (int i=0; i < params.length; ++i) {
+        if (params[i].getInnermostComponentReferenceElement() != null && (context.pattern.isRealTypedVar(params[i].getInnermostComponentReferenceElement().getReferenceNameElement()))) {
+          context.pattern.getHandler(params[i]).setFilter(TypeParameterFilter.getInstance());
+        }
+      }
+      return;
+    }
+  }
+  final Handler handler=new DeclarationStatementHandler();
+  context.pattern.setHandler(psiDeclarationStatement,handler);
+  PsiElement previousNonWhiteSpace=psiDeclarationStatement.getPrevSibling();
+  while (previousNonWhiteSpace instanceof PsiWhiteSpace) {
+    previousNonWhiteSpace=previousNonWhiteSpace.getPrevSibling();
+  }
+  if (previousNonWhiteSpace instanceof PsiComment) {
+    ((DeclarationStatementHandler)handler).setCommentHandler(context.pattern.getHandler(previousNonWhiteSpace));
+    context.pattern.setHandler(previousNonWhiteSpace,handler);
+  }
+  handler.setFilter(DeclarationFilter.getInstance());
+}

@@ -1,0 +1,127 @@
+{
+  final String pattern=options.getSearchPattern();
+  buf.setLength(0);
+  StringBuffer miscBuffer=null;
+  int anonymousTypedVarsCount=0;
+  for (int index=0; index < pattern.length(); ++index) {
+    char ch=pattern.charAt(index);
+    if (ch == '\'') {
+      if (index + 1 < pattern.length() && pattern.charAt(index + 1) == '\'') {
+        index++;
+      }
+ else       if (index + 2 < pattern.length() && pattern.charAt(index + 2) == '\'') {
+        buf.append(ch);
+        buf.append(pattern.charAt(++index));
+        ch=pattern.charAt(++index);
+      }
+ else       if (index + 3 < pattern.length() && pattern.charAt(index + 1) == '\\' && pattern.charAt(index + 3) == '\'') {
+        buf.append(ch);
+        buf.append(pattern.charAt(++index));
+        buf.append(pattern.charAt(++index));
+        ch=pattern.charAt(++index);
+      }
+ else       if (index + 7 < pattern.length() && pattern.charAt(index + 1) == '\\' && pattern.charAt(index + 2) == 'u' && pattern.charAt(index + 7) == '\'') {
+        buf.append(ch);
+        buf.append(pattern.charAt(++index));
+        buf.append(pattern.charAt(++index));
+        buf.append(pattern.charAt(++index));
+        buf.append(pattern.charAt(++index));
+        buf.append(pattern.charAt(++index));
+        buf.append(pattern.charAt(++index));
+        ch=pattern.charAt(++index);
+      }
+ else {
+        buf.append("$");
+        if (miscBuffer == null)         miscBuffer=new StringBuffer();
+ else         miscBuffer.setLength(0);
+        for (++index; index < pattern.length() && Character.isJavaIdentifierPart(pattern.charAt(index)); ++index) {
+          ch=pattern.charAt(index);
+          miscBuffer.append(ch);
+          buf.append(ch);
+        }
+        boolean anonymous=false;
+        if (miscBuffer.charAt(0) == '_') {
+          anonymous=true;
+          if (miscBuffer.length() == 1) {
+            anonymousTypedVarsCount++;
+            miscBuffer.append(anonymousTypedVarsCount);
+            buf.append(anonymousTypedVarsCount);
+          }
+ else {
+            buf.deleteCharAt(buf.length() - miscBuffer.length());
+            miscBuffer.deleteCharAt(0);
+          }
+        }
+        buf.append("$");
+        String typedVar=miscBuffer.toString();
+        int minOccurs=1;
+        int maxOccurs=1;
+        boolean greedy=true;
+        MatchVariableConstraint constraint=options.getVariableConstraint(typedVar);
+        boolean constraintCreated=false;
+        if (constraint == null) {
+          constraint=new MatchVariableConstraint();
+          constraint.setName(typedVar);
+          options.addVariableConstraint(constraint);
+          constraintCreated=true;
+        }
+        if (index < pattern.length()) {
+          char possibleQuantifier=pattern.charAt(index);
+          if (possibleQuantifier == '+') {
+            maxOccurs=Integer.MAX_VALUE;
+            ++index;
+          }
+ else           if (possibleQuantifier == '?') {
+            minOccurs=0;
+            ++index;
+          }
+ else           if (possibleQuantifier == '*') {
+            minOccurs=0;
+            maxOccurs=Integer.MAX_VALUE;
+            ++index;
+          }
+ else           if (possibleQuantifier == '{') {
+            ++index;
+            minOccurs=0;
+            while ((ch=pattern.charAt(index)) >= '0' && ch <= '9') {
+              minOccurs*=10;
+              minOccurs+=(ch - '0');
+              ++index;
+            }
+            if (ch == ',') {
+              ++index;
+              maxOccurs=0;
+              while ((ch=pattern.charAt(index)) >= '0' && ch <= '9') {
+                maxOccurs*=10;
+                maxOccurs+=(ch - '0');
+                ++index;
+              }
+            }
+ else {
+              maxOccurs=Integer.MAX_VALUE;
+            }
+            ++index;
+          }
+          if (index < pattern.length()) {
+            ch=pattern.charAt(index);
+            if (ch == '?') {
+              greedy=false;
+              ++index;
+            }
+          }
+        }
+        if (constraintCreated) {
+          constraint.setMinCount(minOccurs);
+          constraint.setMaxCount(maxOccurs);
+          constraint.setGreedy(greedy);
+          constraint.setPartOfSearchResults(!anonymous);
+        }
+        index=eatTypedVarCondition(index,pattern,miscBuffer,constraint);
+        if (index == pattern.length())         break;
+        ch=pattern.charAt(index);
+      }
+    }
+    buf.append(ch);
+  }
+  options.setSearchPattern(buf.toString());
+}
