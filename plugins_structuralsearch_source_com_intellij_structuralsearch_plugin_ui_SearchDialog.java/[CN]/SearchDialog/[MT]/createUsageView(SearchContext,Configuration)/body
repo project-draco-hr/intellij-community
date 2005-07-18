@@ -1,2 +1,51 @@
 {
+  UsageViewManager manager=searchContext.getProject().getComponent(UsageViewManager.class);
+  final UsageViewContext context=createUsageViewContext(config);
+  final UsageViewPresentation presentation=new UsageViewPresentation();
+  presentation.setOpenInNewTab(openInNewTab.isSelected());
+  presentation.setScopeText(config.getMatchOptions().getScope().getDisplayName());
+  context.configure(presentation);
+  final FindUsagesProcessPresentation processPresentation=new FindUsagesProcessPresentation();
+  processPresentation.setShowNotFoundMessage(true);
+  processPresentation.setShowPanelIfOnlyOneUsage(true);
+  processPresentation.setProgressIndicatorFactory(new Factory<ProgressIndicator>(){
+    public ProgressIndicator create(){
+      return new FindProgressIndicator(searchContext.getProject(),presentation.getScopeText()){
+        public void cancel(){
+          context.getCommand().stopAsyncSearch();
+          super.cancel();
+        }
+      }
+;
+    }
+  }
+);
+  processPresentation.addNotFoundAction(new AbstractAction("Edit Query"){
+{
+      putValue(FindUsagesProcessPresentation.NAME_WITH_MNEMONIC_KEY,"Edit &Query");
+    }
+    public void actionPerformed(    ActionEvent e){
+      UIUtil.invokeActionAnotherTime(config,searchContext);
+    }
+  }
+);
+  manager.searchAndShowUsages(new UsageTarget[]{context.getTarget()},new Factory<UsageSearcher>(){
+    public UsageSearcher create(){
+      return new UsageSearcher(){
+        public void generate(        final Processor<Usage> processor){
+          context.getCommand().findUsages(processor);
+        }
+      }
+;
+    }
+  }
+,processPresentation,presentation,new com.intellij.usages.UsageViewManager.UsageViewStateListener(){
+    public void usageViewCreated(    com.intellij.usages.UsageView usageView){
+      context.setUsageView(usageView);
+      configureActions(context);
+    }
+    public void findingUsagesFinished(    final UsageView usageView){
+    }
+  }
+);
 }
