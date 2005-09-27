@@ -1,11 +1,52 @@
 {
-  if (el instanceof PsiModifierListOwner && replacement instanceof PsiModifierListOwner) {
-    PsiModifierList modifierList=((PsiModifierListOwner)el).getModifierList();
-    final PsiStatement[] searchStatements=context.getCodeBlock().getStatements();
-    if (searchStatements.length > 0 && searchStatements[0] instanceof PsiDeclarationStatement && ((PsiDeclarationStatement)searchStatements[0]).getDeclaredElements()[0] instanceof PsiModifierListOwner) {
-      PsiModifierListOwner searchVar=(PsiModifierListOwner)((PsiDeclarationStatement)searchStatements[0]).getDeclaredElements()[0];
-      if (searchVar.getModifierList().getTextLength() == 0 && ((PsiModifierListOwner)replacement).getModifierList().getTextLength() == 0) {
-        ((PsiModifierListOwner)replacement).getModifierList().replace(modifierList);
+  Map<String,String> newNameToSearchPatternNameMap=new HashMap<String,String>(1);
+  final Map<String,MatchResult> variableMap=context.replacementInfo.variableMap;
+  if (variableMap != null) {
+    for (    String s : variableMap.keySet()) {
+      final MatchResult matchResult=context.replacementInfo.variableMap.get(s);
+      PsiElement match=matchResult.getMatchRef() != null ? matchResult.getMatch() : null;
+      if (match instanceof PsiIdentifier)       match=match.getParent();
+      if (match instanceof PsiNamedElement) {
+        final String name=((PsiNamedElement)match).getName();
+        newNameToSearchPatternNameMap.put(name,s);
+      }
+    }
+  }
+  ModifierListOwnerCollector collector=new ModifierListOwnerCollector();
+  el.accept(collector);
+  Map<String,PsiNamedElement> originalNamedElements=(Map<String,PsiNamedElement>)collector.namedElements.clone();
+  collector.namedElements.clear();
+  replacement.accept(collector);
+  Map<String,PsiNamedElement> replacedNamedElements=(Map<String,PsiNamedElement>)collector.namedElements.clone();
+  collector.namedElements.clear();
+  if (originalNamedElements.size() == 0 && replacedNamedElements.size() == 0) {
+    handleComments(el,replacement);
+    return;
+  }
+  final PsiStatement[] statements=context.getCodeBlock().getStatements();
+  if (statements.length > 0) {
+    statements[0].getParent().accept(collector);
+  }
+  Map<String,PsiNamedElement> searchedNamedElements=(Map<String,PsiNamedElement>)collector.namedElements.clone();
+  collector.namedElements.clear();
+  for (  String name : originalNamedElements.keySet()) {
+    PsiNamedElement originalNamedElement=originalNamedElements.get(name);
+    PsiNamedElement replacementNamedElement=replacedNamedElements.get(name);
+    PsiDocComment comment=null;
+    if (originalNamedElement instanceof PsiDocCommentOwner) {
+      comment=((PsiDocCommentOwner)originalNamedElement).getDocComment();
+    }
+    handleComments(originalNamedElement,replacementNamedElement);
+    if (comment != null && replacementNamedElement instanceof PsiDocCommentOwner) {
+      replacementNamedElement.addBefore(comment,replacementNamedElement.getFirstChild());
+    }
+    if (originalNamedElement instanceof PsiModifierListOwner && replacementNamedElement instanceof PsiModifierListOwner) {
+      PsiModifierList modifierList=((PsiModifierListOwner)originalNamedElements.get(name)).getModifierList();
+      String key=newNameToSearchPatternNameMap.get(name);
+      if (key == null)       key=name;
+      PsiNamedElement searchNamedElement=searchedNamedElements.get(key);
+      if (searchNamedElement instanceof PsiModifierListOwner && ((PsiModifierListOwner)searchNamedElement).getModifierList().getTextLength() == 0 && ((PsiModifierListOwner)replacementNamedElement).getModifierList().getTextLength() == 0) {
+        ((PsiModifierListOwner)replacementNamedElement).getModifierList().replace(modifierList);
       }
     }
   }
