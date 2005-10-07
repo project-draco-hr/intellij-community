@@ -1,10 +1,50 @@
 {
   final PsiModifierList list2=(PsiModifierList)element;
-  for (int i=0; i < MODIFIERS.length; ++i) {
-    if (list.hasModifierProperty(MODIFIERS[i]) && !list2.hasModifierProperty(MODIFIERS[i])) {
+  for (  String aMODIFIERS : MODIFIERS) {
+    if (list.hasModifierProperty(aMODIFIERS) && !list2.hasModifierProperty(aMODIFIERS)) {
       result=false;
       return;
     }
   }
-  result=matchInAnyOrder(list.getAnnotations(),list2.getAnnotations());
+  final PsiAnnotation[] annotations=list.getAnnotations();
+  if (annotations.length > 0) {
+    HashSet<PsiAnnotation> set=new HashSet<PsiAnnotation>(Arrays.asList(annotations));
+    for (    PsiAnnotation annotation : annotations) {
+      final PsiJavaCodeReferenceElement nameReferenceElement=annotation.getNameReferenceElement();
+      if (nameReferenceElement != null && "Modifier".equals(nameReferenceElement.getText())) {
+        final PsiAnnotationParameterList parameterList=annotation.getParameterList();
+        if (parameterList != null) {
+          final PsiNameValuePair[] attributes=parameterList.getAttributes();
+          for (          PsiNameValuePair pair : attributes) {
+            final PsiAnnotationMemberValue value=pair.getValue();
+            if (value == null)             continue;
+            if (value instanceof PsiArrayInitializerMemberValue) {
+              boolean matchedOne=false;
+              for (              PsiAnnotationMemberValue v : ((PsiArrayInitializerMemberValue)value).getInitializers()) {
+                if (list2.hasModifierProperty(StringUtil.stripQuotesAroundValue(v.getText()))) {
+                  matchedOne=true;
+                  break;
+                }
+              }
+              if (!matchedOne) {
+                result=false;
+                return;
+              }
+            }
+ else {
+              if (!list2.hasModifierProperty(StringUtil.stripQuotesAroundValue(value.getText()))) {
+                result=false;
+                return;
+              }
+            }
+          }
+        }
+        set.remove(annotation);
+      }
+    }
+    result=set.size() == 0 || matchInAnyOrder(set.toArray(new PsiAnnotation[set.size()]),list2.getAnnotations());
+  }
+ else {
+    result=true;
+  }
 }
