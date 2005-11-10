@@ -1,98 +1,99 @@
 {
   PsiDocumentManager.getInstance(project).commitAllDocuments();
   matchContext.clear();
-  matchContext.setSink(new MatchConstraintsSink(sink,_options.getMaxMatchesCount(),_options.isDistinct(),_options.isCaseSensitiveMatch()));
-  matchContext.setOptions(_options);
+  matchContext.setSink(new MatchConstraintsSink(sink,options.getMaxMatchesCount(),options.isDistinct(),options.isCaseSensitiveMatch()));
+  matchContext.setOptions(options);
   matchContext.setMatcher(visitor);
   CompiledPattern compiledPattern=null;
 synchronized (getClass()) {
-    if (_options == lastOptions) {
+    if (options == lastOptions) {
       compiledPattern=lastPattern;
     }
     lastOptions=null;
     lastPattern=null;
   }
   if (compiledPattern == null) {
-    compiledPattern=PatternCompiler.compilePattern(project,_options);
+    compiledPattern=PatternCompiler.compilePattern(project,options);
   }
-  if (compiledPattern != null) {
-    matchContext.setPattern(compiledPattern);
-    matchContext.getSink().setMatchingProcess(scheduler);
-    scheduler.init();
-    progress=matchContext.getSink().getProgressIndicator();
-    visitor.setMatchContext(matchContext);
-    if (isTesting) {
-      final PsiElement[] elements=((LocalSearchScope)_options.getScope()).getScope();
-      for (      PsiElement element : elements) {
-        match(element);
-      }
-      matchContext.getSink().matchingFinished();
-      return;
+  if (compiledPattern == null) {
+    return;
+  }
+  matchContext.setPattern(compiledPattern);
+  matchContext.getSink().setMatchingProcess(scheduler);
+  scheduler.init();
+  progress=matchContext.getSink().getProgressIndicator();
+  visitor.setMatchContext(matchContext);
+  if (isTesting) {
+    final PsiElement[] elements=((LocalSearchScope)options.getScope()).getScope();
+    for (    PsiElement element : elements) {
+      match(element);
     }
-    SearchScope searchScope=compiledPattern.getScope();
-    if (searchScope == null)     searchScope=_options.getScope();
-    if (searchScope instanceof GlobalSearchScope) {
-      final GlobalSearchScope scope=(GlobalSearchScope)searchScope;
-      final ContentIterator ci=new ContentIterator(){
-        public boolean processFile(        VirtualFile fileOrDir){
-          if (!fileOrDir.isDirectory()) {
-            final PsiFile file=PsiManager.getInstance(project).findFile(fileOrDir);
-            if ((_options.getFileType() == StdFileTypes.JAVA && file instanceof PsiJavaFile) || (_options.getFileType() != StdFileTypes.JAVA && file instanceof XmlFile)) {
-              final PsiFile[] psiRoots=file.getPsiRoots();
-              for (              PsiFile root : psiRoots) {
-                ++totalFilesToScan;
-                scheduler.addOneTask(new MatchOneFile(root));
-              }
+    matchContext.getSink().matchingFinished();
+    return;
+  }
+  SearchScope searchScope=compiledPattern.getScope();
+  if (searchScope == null)   searchScope=options.getScope();
+  if (searchScope instanceof GlobalSearchScope) {
+    final GlobalSearchScope scope=(GlobalSearchScope)searchScope;
+    final ContentIterator ci=new ContentIterator(){
+      public boolean processFile(      VirtualFile fileOrDir){
+        if (!fileOrDir.isDirectory()) {
+          final PsiFile file=PsiManager.getInstance(project).findFile(fileOrDir);
+          if ((options.getFileType() == StdFileTypes.JAVA && file instanceof PsiJavaFile) || (options.getFileType() != StdFileTypes.JAVA && file instanceof XmlFile)) {
+            final PsiFile[] psiRoots=file.getPsiRoots();
+            for (            PsiFile root : psiRoots) {
+              ++totalFilesToScan;
+              scheduler.addOneTask(new MatchOneFile(root));
             }
           }
-          return true;
         }
-      }
-;
-      final ProjectRootManager instance=ProjectRootManager.getInstance(project);
-      ProjectFileIndex projectFileIndex=instance.getFileIndex();
-      final VirtualFile[] rootFiles=ApplicationManager.getApplication().runReadAction(new Computable<VirtualFile[]>(){
-        public VirtualFile[] compute(){
-          return (_options.getFileType() == StdFileTypes.JAVA) ? instance.getRootFiles(ProjectRootType.SOURCE) : instance.getContentRoots();
-        }
-      }
-);
-      HashSet<VirtualFile> visited=new HashSet<VirtualFile>(rootFiles.length);
-      final VirtualFileFilter filter=new VirtualFileFilter(){
-        public boolean accept(        VirtualFile file){
-          return scope.contains(file);
-        }
-      }
-;
-      for (      final VirtualFile rootFile : rootFiles) {
-        if (visited.contains(rootFile))         continue;
-        if (projectFileIndex.isInLibrarySource(rootFile) && !scope.isSearchInLibraries()) {
-          continue;
-        }
-        ApplicationManager.getApplication().runReadAction(new Runnable(){
-          public void run(){
-            FileIndexImplUtil.iterateRecursively(rootFile,filter,ci);
-          }
-        }
-);
-        visited.add(rootFile);
+        return true;
       }
     }
- else {
-      final PsiElement[] elementsToScan=((LocalSearchScope)searchScope).getScope();
-      totalFilesToScan=elementsToScan.length;
-      for (      PsiElement anElementsToScan : elementsToScan) {
-        scheduler.addOneTask(new MatchOneFile(anElementsToScan));
+;
+    final ProjectRootManager instance=ProjectRootManager.getInstance(project);
+    ProjectFileIndex projectFileIndex=instance.getFileIndex();
+    final VirtualFile[] rootFiles=ApplicationManager.getApplication().runReadAction(new Computable<VirtualFile[]>(){
+      public VirtualFile[] compute(){
+        return (options.getFileType() == StdFileTypes.JAVA) ? instance.getRootFiles(ProjectRootType.SOURCE) : instance.getContentRoots();
       }
     }
-    if (scheduler.getTaskQueueEndAction() == null) {
-      scheduler.setTaskQueueEndAction(new Runnable(){
+);
+    HashSet<VirtualFile> visited=new HashSet<VirtualFile>(rootFiles.length);
+    final VirtualFileFilter filter=new VirtualFileFilter(){
+      public boolean accept(      VirtualFile file){
+        return scope.contains(file);
+      }
+    }
+;
+    for (    final VirtualFile rootFile : rootFiles) {
+      if (visited.contains(rootFile))       continue;
+      if (projectFileIndex.isInLibrarySource(rootFile) && !scope.isSearchInLibraries()) {
+        continue;
+      }
+      ApplicationManager.getApplication().runReadAction(new Runnable(){
         public void run(){
-          matchContext.getSink().matchingFinished();
+          FileIndexImplUtil.iterateRecursively(rootFile,filter,ci);
         }
       }
 );
+      visited.add(rootFile);
     }
-    scheduler.executeNext();
   }
+ else {
+    final PsiElement[] elementsToScan=((LocalSearchScope)searchScope).getScope();
+    totalFilesToScan=elementsToScan.length;
+    for (    PsiElement anElementsToScan : elementsToScan) {
+      scheduler.addOneTask(new MatchOneFile(anElementsToScan));
+    }
+  }
+  if (scheduler.getTaskQueueEndAction() == null) {
+    scheduler.setTaskQueueEndAction(new Runnable(){
+      public void run(){
+        matchContext.getSink().matchingFinished();
+      }
+    }
+);
+  }
+  scheduler.executeNext();
 }

@@ -1,122 +1,14 @@
 {
-  final ReplacementInfoImpl info=(ReplacementInfoImpl)_info;
-  final PsiElement element=(info.matchesPtrList.get(0)).getElement();
-  final String replacement=info.result;
+  final ReplacementInfoImpl replacementInfo=(ReplacementInfoImpl)info;
+  final PsiElement element=replacementInfo.matchesPtrList.get(0).getElement();
+  final String replacement=replacementInfo.result;
   if (element == null || !element.isWritable() || !element.isValid())   return;
   final PsiElement elementParent=element.getParent();
   CommandProcessor.getInstance().executeCommand(project,new Runnable(){
     public void run(){
       ApplicationManager.getApplication().runWriteAction(new Runnable(){
         public void run(){
-          boolean listContext=false;
-          try {
-            PsiElement el=findRealSubstitutionElement(element);
-            listContext=isListContext(el);
-            final PsiElement[] statements=MatcherImplUtil.createTreeFromText(replacement,false,options.getMatchOptions().getFileType(),project);
-            if (context == null)             context=new ReplacementContext(options,project);
-            context.replacementInfo=info;
-            if (listContext) {
-              if (statements.length > 1) {
-                elementParent.addRangeBefore(statements[0],statements[statements.length - 1],element);
-              }
- else               if (statements.length == 1) {
-                PsiElement replacement=getMatchExpr(statements[0]);
-                handleModifierList(el,replacement,context);
-                replacement=handleSymbolReplacemenent(replacement,el,context);
-                if (replacement instanceof PsiTryStatement) {
-                  final List<PsiCodeBlock> unmatchedCatchBlocks=el.getUserData(MatcherImplUtil.UNMATCHED_CATCH_BLOCK_CONTENT_VAR_KEY);
-                  final List<PsiParameter> unmatchedCatchParams=el.getUserData(MatcherImplUtil.UNMATCHED_CATCH_PARAM_CONTENT_VAR_KEY);
-                  final PsiCatchSection[] catches=((PsiTryStatement)replacement).getCatchSections();
-                  if (unmatchedCatchBlocks != null && unmatchedCatchParams != null) {
-                    for (int i=unmatchedCatchBlocks.size() - 1; i >= 0; --i) {
-                      final PsiParameter parameter=unmatchedCatchParams.get(i);
-                      final PsiCatchSection catchSection=PsiManager.getInstance(project).getElementFactory().createCatchSection((PsiClassType)parameter.getType(),parameter.getName(),null);
-                      catchSection.getCatchBlock().replace(unmatchedCatchBlocks.get(i));
-                      replacement.addAfter(catchSection,catches[catches.length - 1]);
-                    }
-                  }
-                }
-                elementParent.addBefore(replacement,element);
-              }
-            }
- else             if (statements.length > 0) {
-              int i=0;
-              while (true) {
-                if (!(statements[i] instanceof PsiComment || statements[i] instanceof PsiWhiteSpace)) {
-                  break;
-                }
-                ++i;
-              }
-              if (i != 0) {
-                elementParent.addRangeBefore(statements[0],statements[i - 1],el);
-              }
-              PsiElement replacement=getMatchExpr(statements[i]);
-              if (replacement instanceof PsiStatement && !(replacement.getLastChild() instanceof PsiJavaToken)) {
-                elementParent.addRangeBefore(replacement.getFirstChild(),replacement.getLastChild().getPrevSibling(),el);
-                el.delete();
-              }
- else {
-                handleModifierList(el,replacement,context);
-                if (replacement instanceof PsiClass) {
-                  final PsiStatement[] searchStatements=context.getCodeBlock().getStatements();
-                  if (searchStatements.length > 0 && searchStatements[0] instanceof PsiDeclarationStatement && ((PsiDeclarationStatement)searchStatements[0]).getDeclaredElements()[0] instanceof PsiClass) {
-                    final PsiClass replaceClazz=(PsiClass)replacement;
-                    final PsiClass queryClazz=(PsiClass)((PsiDeclarationStatement)searchStatements[0]).getDeclaredElements()[0];
-                    final PsiClass clazz=(PsiClass)el;
-                    if (replaceClazz.getExtendsList().getTextLength() == 0 && queryClazz.getExtendsList().getTextLength() == 0 && clazz.getExtendsList().getTextLength() != 0) {
-                      replaceClazz.getExtendsList().addRange(clazz.getExtendsList().getFirstChild(),clazz.getExtendsList().getLastChild());
-                    }
-                    if (replaceClazz.getImplementsList().getTextLength() == 0 && queryClazz.getImplementsList().getTextLength() == 0 && clazz.getImplementsList().getTextLength() != 0) {
-                      replaceClazz.getImplementsList().addRange(clazz.getImplementsList().getFirstChild(),clazz.getImplementsList().getLastChild());
-                    }
-                    if (replaceClazz.getTypeParameterList().getTextLength() == 0 && queryClazz.getTypeParameterList().getTextLength() == 0 && clazz.getTypeParameterList().getTextLength() != 0) {
-                      replaceClazz.getTypeParameterList().replace(clazz.getTypeParameterList());
-                    }
-                  }
-                }
-                replacement=handleSymbolReplacemenent(replacement,el,context);
-                el.replace(replacement);
-              }
-            }
- else {
-              el.delete();
-            }
-          }
- catch (          IncorrectOperationException ex) {
-            ex.printStackTrace();
-          }
-          if (listContext) {
-            for (            SmartPsiElementPointer aMatchesPtrList : info.matchesPtrList) {
-              try {
-                PsiElement element=findRealSubstitutionElement(aMatchesPtrList.getElement());
-                element.delete();
-              }
- catch (              IncorrectOperationException ex) {
-                ex.printStackTrace();
-              }
-            }
-          }
-          try {
-            CodeStyleManager codeStyleManager=PsiManager.getInstance(project).getCodeStyleManager();
-            final PsiFile containingFile=elementParent.getContainingFile();
-            if (containingFile != null) {
-              if (options.isToShortenFQN()) {
-                if (containingFile.getVirtualFile() != null) {
-                  PsiDocumentManager.getInstance(project).commitDocument(FileDocumentManager.getInstance().getDocument(containingFile.getVirtualFile()));
-                }
-                codeStyleManager.shortenClassReferences(containingFile,elementParent.getTextOffset(),elementParent.getTextOffset() + elementParent.getTextLength());
-              }
-              if (options.isToReformatAccordingToStyle()) {
-                if (containingFile.getVirtualFile() != null) {
-                  PsiDocumentManager.getInstance(project).commitDocument(FileDocumentManager.getInstance().getDocument(containingFile.getVirtualFile()));
-                }
-                codeStyleManager.reformatRange(containingFile,elementParent.getTextOffset(),elementParent.getTextOffset() + elementParent.getTextLength(),true);
-              }
-            }
-          }
- catch (          IncorrectOperationException ex) {
-            ex.printStackTrace();
-          }
+          doReplace(element,replacement,replacementInfo,elementParent);
         }
       }
 );
