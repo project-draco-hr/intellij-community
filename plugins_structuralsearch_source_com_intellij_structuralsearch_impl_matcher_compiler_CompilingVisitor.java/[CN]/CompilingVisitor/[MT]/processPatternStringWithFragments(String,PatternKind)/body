@@ -1,0 +1,62 @@
+{
+  String content;
+  if (kind == PatternKind.LITERAL) {
+    content=pattern.substring(1,pattern.length() - 1);
+  }
+ else   if (kind == PatternKind.COMMENT) {
+    content=pattern;
+  }
+ else {
+    return null;
+  }
+  StringBuffer buf=new StringBuffer(content.length());
+  Matcher matcher=substitutionPattern.matcher(content);
+  List<SubstitutionHandler> handlers=null;
+  int start=0;
+  String word;
+  boolean hasLiteralContent=false;
+  SubstitutionHandler handler=null;
+  while (matcher.find()) {
+    if (handlers == null)     handlers=new LinkedList<SubstitutionHandler>();
+    handler=(SubstitutionHandler)context.pattern.getHandler(matcher.group(1));
+    if (handler != null)     handlers.add(handler);
+    word=content.substring(start,matcher.start());
+    if (word.length() > 0) {
+      buf.append(shieldSpecialChars(word));
+      hasLiteralContent=true;
+      if (context.findMatchingFiles) {
+        processTokenizedName(word,false,kind);
+      }
+    }
+    RegExpPredicate predicate=getSimpleRegExpPredicate(handler);
+    if (predicate == null || !predicate.isWholeWords())     buf.append("(.*?)");
+ else {
+      buf.append(".*?\\b(").append(predicate.getRegExp()).append(")\\b.*?");
+    }
+    if (context.findMatchingFiles) {
+      if (!IsNotSuitablePredicate(predicate,handler)) {
+        processTokenizedName(predicate.getRegExp(),false,kind);
+      }
+    }
+    start=matcher.end();
+  }
+  word=content.substring(start,content.length());
+  if (word.length() > 0) {
+    hasLiteralContent=true;
+    buf.append(shieldSpecialChars(word));
+    if (context.findMatchingFiles) {
+      processTokenizedName(word,false,kind);
+    }
+  }
+  if (hasLiteralContent) {
+    if (kind == PatternKind.LITERAL) {
+      buf.insert(0,"\"");
+      buf.append("\"");
+    }
+    buf.append("$");
+  }
+  if (handlers != null) {
+    return (hasLiteralContent) ? (Handler)new LiteralWithSubstituionHandler(buf.toString(),handlers) : handler;
+  }
+  return null;
+}
