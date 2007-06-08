@@ -1,0 +1,63 @@
+{
+  if (info.name.equals(match.getName())) {
+    String replacementString=match.getMatchImage();
+    boolean forceAddingNewLine=false;
+    if (info.methodParameterContext) {
+      StringBuilder buf=new StringBuilder();
+      handleMethodParameter(buf,info);
+      replacementString=buf.toString();
+    }
+ else     if (match.getAllSons().size() > 0 && !match.isScopeMatch()) {
+      StringBuilder buf=new StringBuilder();
+      MatchResult previous;
+      MatchResult r=null;
+      for (      final MatchResult matchResult : match.getAllSons()) {
+        previous=r;
+        r=matchResult;
+        if (buf.length() > 0) {
+          if (info.statementContext) {
+            if (!(previous.getMatchRef().getElement() instanceof PsiComment) && buf.charAt(buf.length() - 1) != '}') {
+              buf.append(';');
+            }
+            final PsiElement prevSibling=r.getMatch().getPrevSibling();
+            if (prevSibling instanceof PsiWhiteSpace && prevSibling.getPrevSibling() == previous.getMatch()) {
+              buf.append(prevSibling.getText());
+            }
+ else {
+              buf.append('\n');
+            }
+          }
+ else           if (info.parameterContext) {
+            buf.append(',');
+          }
+ else           if (info.classContext) {
+            buf.append('\n');
+          }
+ else {
+            buf.append(' ');
+          }
+        }
+        buf.append(r.getMatchImage());
+        removeExtraSemicolonForSingleVarInstanceInMultipleMatch(info,r,buf);
+        forceAddingNewLine=r.getMatch() instanceof PsiComment;
+      }
+      replacementString=buf.toString();
+    }
+ else {
+      StringBuilder buf=new StringBuilder();
+      if (info.statementContext) {
+        forceAddingNewLine=match.getMatch() instanceof PsiComment;
+      }
+      buf.append(replacementString);
+      removeExtraSemicolonForSingleVarInstanceInMultipleMatch(info,match,buf);
+      replacementString=buf.toString();
+    }
+    offset=insertSubstitution(result,offset,info,replacementString);
+    offset=removeExtraSemicolon(info,offset,result,match);
+    if (forceAddingNewLine && info.statementContext) {
+      result.insert(info.startIndex + offset + 1,'\n');
+      offset++;
+    }
+  }
+  return offset;
+}
