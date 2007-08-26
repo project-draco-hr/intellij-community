@@ -2,41 +2,43 @@
   final PsiTryStatement try2=(PsiTryStatement)element;
   result=matchSons(try1.getTryBlock(),try2.getTryBlock());
   if (!result)   return;
-  final PsiCodeBlock[] catches1=try1.getCatchBlocks();
-  final PsiParameter[] catchesArgs1=try1.getCatchBlockParameters();
+  final PsiCatchSection[] catches1=try1.getCatchSections();
   final PsiCodeBlock finally1=try1.getFinallyBlock();
-  final PsiCodeBlock[] catches2=try2.getCatchBlocks();
-  final PsiParameter[] catchesArgs2=try2.getCatchBlockParameters();
+  final PsiCatchSection[] catches2=try2.getCatchSections();
   final PsiCodeBlock finally2=try2.getFinallyBlock();
   if (!matchContext.getOptions().isLooseMatching() && ((catches1.length == 0 && catches2.length != 0) || (finally1 == null && finally2 != null))) {
     result=false;
   }
  else {
-    List<PsiCodeBlock> unmatchedCatchBlocks=new ArrayList<PsiCodeBlock>();
-    List<PsiParameter> unmatchedCatchParams=new ArrayList<PsiParameter>();
+    List<PsiCatchSection> unmatchedCatchSections=new ArrayList<PsiCatchSection>();
     for (int j=0; j < catches2.length; ++j) {
-      unmatchedCatchBlocks.add(catches2[j]);
-      unmatchedCatchParams.add(catchesArgs2[j]);
+      unmatchedCatchSections.add(catches2[j]);
     }
     for (int i=0, j; i < catches1.length; ++i) {
-      for (j=0; j < unmatchedCatchBlocks.size(); ++j) {
-        if (i < catchesArgs1.length && match(catchesArgs1[i],unmatchedCatchParams.get(j)) && match(catches1[i],unmatchedCatchBlocks.get(j))) {
-          unmatchedCatchBlocks.remove(j);
-          unmatchedCatchParams.remove(j);
-          break;
-        }
+      Handler handler=matchContext.getPattern().getHandler(catches1[i]);
+      final PsiElement pinnedNode=handler.getPinnedNode(null);
+      if (pinnedNode != null) {
+        result=handler.match(catches1[i],pinnedNode,matchContext);
+        if (!result)         return;
       }
-      if (j == catches2.length) {
-        result=false;
-        return;
+ else {
+        for (j=0; j < unmatchedCatchSections.size(); ++j) {
+          if (handler.match(catches1[i],unmatchedCatchSections.get(j),matchContext)) {
+            unmatchedCatchSections.remove(j);
+            break;
+          }
+        }
+        if (j == catches2.length) {
+          result=false;
+          return;
+        }
       }
     }
     if (finally1 != null) {
       result=matchSons(finally1,finally2);
     }
-    if (result && unmatchedCatchBlocks.size() > 0 && !matchContext.getOptions().isLooseMatching()) {
-      try2.putUserData(MatcherImplUtil.UNMATCHED_CATCH_BLOCK_CONTENT_VAR_KEY,unmatchedCatchBlocks);
-      try2.putUserData(MatcherImplUtil.UNMATCHED_CATCH_PARAM_CONTENT_VAR_KEY,unmatchedCatchParams);
+    if (result && unmatchedCatchSections.size() > 0 && !matchContext.getOptions().isLooseMatching()) {
+      try2.putUserData(MatcherImplUtil.UNMATCHED_CATCH_SECTION_CONTENT_VAR_KEY,unmatchedCatchSections);
     }
   }
 }
