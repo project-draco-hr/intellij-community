@@ -1,10 +1,31 @@
 {
   visitElement(reference);
-  if ((context.pattern.isRealTypedVar(reference)) && reference.getQualifierExpression() == null && !(reference.getParent() instanceof PsiExpressionStatement)) {
+  boolean typedVarProcessed=false;
+  final PsiElement referenceParent=reference.getParent();
+  if ((context.pattern.isRealTypedVar(reference)) && reference.getQualifierExpression() == null && !(referenceParent instanceof PsiExpressionStatement)) {
     Handler handler=context.pattern.getHandler(reference);
     setFilter(handler,ExpressionFilter.getInstance());
+    typedVarProcessed=true;
   }
-  if (!(reference.getParent() instanceof PsiMethodCallExpression)) {
+  if (!(referenceParent instanceof PsiMethodCallExpression)) {
     handleReference(reference);
+  }
+  Handler handler=context.pattern.getHandler(reference);
+  final String referencedName=reference.getReferenceName();
+  if (!typedVarProcessed && !(handler instanceof SubstitutionHandler)) {
+    final PsiElement resolve=reference.resolve();
+    if (resolve instanceof PsiClass || (resolve == null && referencedName != null && Character.isUpperCase(referencedName.charAt(0)))) {
+      boolean hasNoNestedSubstitutionHandlers=false;
+      PsiExpression qualifier;
+      PsiReferenceExpression currentReference=reference;
+      while ((qualifier=currentReference.getQualifierExpression()) != null) {
+        if (!(qualifier instanceof PsiReferenceExpression) || context.pattern.getHandler(qualifier) instanceof SubstitutionHandler) {
+          hasNoNestedSubstitutionHandlers=true;
+          break;
+        }
+        currentReference=(PsiReferenceExpression)qualifier;
+      }
+      if (!hasNoNestedSubstitutionHandlers)       createAndSetSubstitutionHandlerFromReference(reference,reference);
+    }
   }
 }
