@@ -1,4 +1,7 @@
 {
+  final StringBuffer buf=new StringBuffer();
+  final CompileContext context=new CompileContext();
+  if (ApplicationManager.getApplication().isUnitTestMode())   lastTestingContext=context;
   CompiledPattern result=options.getFileType() == StdFileTypes.JAVA ? new CompiledPattern.JavaCompiledPattern() : new CompiledPattern.XmlCompiledPattern();
   try {
     context.init(result,options,project,options.getScope() instanceof GlobalSearchScope);
@@ -70,7 +73,21 @@
         addPredicate(handler,predicate);
       }
       if (constraint.getScriptCodeConstraint() != null && constraint.getScriptCodeConstraint().length() > 0) {
-        predicate=compileScript(name,constraint.getScriptCodeConstraint());
+        predicate=new ScriptPredicate(name,constraint.getScriptCodeConstraint());
+        addPredicate(handler,predicate);
+      }
+      if (constraint.getContainsConstraint() != null && constraint.getContainsConstraint().length() > 0) {
+        predicate=new ContainsPredicate(name,constraint.getContainsConstraint());
+        if (constraint.isInvertContainsConstraint()) {
+          predicate=new NotPredicate(predicate);
+        }
+        addPredicate(handler,predicate);
+      }
+      if (constraint.getWithinConstraint() != null && constraint.getWithinConstraint().length() > 0) {
+        predicate=new WithinPredicate(name,constraint.getWithinConstraint(),project);
+        if (constraint.isInvertWithinConstraint()) {
+          predicate=new NotPredicate(predicate);
+        }
         addPredicate(handler,predicate);
       }
       prevOffset=offset;
@@ -87,7 +104,7 @@
       throw new MalformedPatternException(e.getMessage());
     }
     NodeFilter filter=LexicalNodesFilter.getInstance();
-    CompilingVisitor compilingVisitor=CompilingVisitor.getInstance();
+    CompilingVisitor compilingVisitor=new CompilingVisitor();
     compilingVisitor.compile(patternNode,context);
     List<PsiElement> elements=new LinkedList<PsiElement>();
     for (    PsiElement matchStatement : matchStatements) {
