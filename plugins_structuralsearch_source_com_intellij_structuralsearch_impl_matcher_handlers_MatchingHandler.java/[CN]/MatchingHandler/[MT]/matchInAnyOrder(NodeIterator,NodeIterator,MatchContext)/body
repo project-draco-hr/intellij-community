@@ -1,0 +1,59 @@
+{
+  MatchResultImpl saveResult=context.hasResult() ? context.getResult() : null;
+  context.setResult(null);
+  try {
+    if (nodes.hasNext() && !nodes2.hasNext()) {
+      return validateSatisfactionOfHandlers(nodes,context);
+    }
+    List<PsiElement> usedVars=null;
+    for (; nodes.hasNext(); nodes.advance()) {
+      final PsiElement el=nodes.current();
+      final PsiElement startMatching=nodes2.current();
+      do {
+        final MatchingHandler handler=context.getPattern().getHandler(el);
+        final PsiElement element=handler.getPinnedNode(null);
+        final PsiElement el2=element != null ? element : nodes2.current();
+        if (element == null)         nodes2.advance();
+        if (!nodes2.hasNext())         nodes2.reset();
+        if (usedVars == null || usedVars.indexOf(el2) == -1) {
+          final boolean matched=handler.match(el,el2,context);
+          if (matched) {
+            if (usedVars == null)             usedVars=new LinkedList<PsiElement>();
+            usedVars.add(el2);
+            if (context.getMatcher().shouldAdvanceThePattern(el,el2)) {
+              break;
+            }
+          }
+ else           if (element != null) {
+            return false;
+          }
+          clearingVisitor.clearState(context.getPattern(),el);
+        }
+        if (startMatching == nodes2.current()) {
+          boolean result=validateSatisfactionOfHandlers(nodes,context);
+          if (result && context.getUnmatchedElementsListener() != null) {
+            context.getUnmatchedElementsListener().matchedElements(usedVars);
+          }
+          return result;
+        }
+      }
+ while (true);
+      if (!context.getMatcher().shouldAdvanceThePattern(el,null)) {
+        nodes.rewind();
+      }
+    }
+    boolean result=validateSatisfactionOfHandlers(nodes,context);
+    if (result && context.getUnmatchedElementsListener() != null) {
+      context.getUnmatchedElementsListener().matchedElements(usedVars);
+    }
+    return result;
+  }
+  finally {
+    if (saveResult != null) {
+      if (context.hasResult()) {
+        saveResult.getMatches().addAll(context.getResult().getMatches());
+      }
+      context.setResult(saveResult);
+    }
+  }
+}
