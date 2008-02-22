@@ -1,0 +1,34 @@
+{
+  final String referencedName=getReferencedName();
+  if (referencedName == null)   return null;
+  final PyExpression qualifier=getQualifier();
+  if (qualifier != null) {
+    if (qualifier instanceof PyCallExpression) {
+      final PyCallExpression callExpression=(PyCallExpression)qualifier;
+      final PyReferenceExpression expression=callExpression.getCalledFunctionReference();
+      final PsiElement element=expression.resolve();
+      if (element != null) {
+        return PyResolveUtil.treeWalkUp(new PyResolveUtil.ResolveProcessor(referencedName),element,element,element);
+      }
+    }
+ else     if (qualifier instanceof PyReferenceExpression) {
+      final PsiElement element=((PyReferenceExpression)qualifier).resolve();
+      if (element != null) {
+        final PsiElement parent=element.getParent();
+        if (parent instanceof PyAssignmentStatement) {
+          final PyExpression value=((PyAssignmentStatement)parent).getAssignedValue();
+          if (value instanceof PyCallExpression) {
+            final PsiElement c=((PyCallExpression)value).getCalledFunctionReference().resolve();
+            return PyResolveUtil.treeWalkUp(new PyResolveUtil.ResolveProcessor(referencedName),c,c,c);
+          }
+        }
+      }
+    }
+    return null;
+  }
+  if (getParent() instanceof PyImportElement) {
+    final PsiFile[] files=FilenameIndex.getFilesByName(getProject(),referencedName + ".py",GlobalSearchScope.allScope(getProject()));
+    if (files.length == 1)     return files[0];
+  }
+  return PyResolveUtil.treeWalkUp(new PyResolveUtil.ResolveProcessor(referencedName),this,this,null);
+}

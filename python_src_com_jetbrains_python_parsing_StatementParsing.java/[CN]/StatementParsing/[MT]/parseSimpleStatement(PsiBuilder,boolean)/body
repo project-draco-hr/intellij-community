@@ -1,0 +1,104 @@
+{
+  final IElementType firstToken=builder.getTokenType();
+  if (firstToken == null) {
+    return;
+  }
+  if (firstToken == PyTokenTypes.PRINT_KEYWORD) {
+    parsePrintStatement(builder,inSuite);
+    return;
+  }
+  if (firstToken == PyTokenTypes.ASSERT_KEYWORD) {
+    parseAssertStatement(builder,inSuite);
+    return;
+  }
+  if (firstToken == PyTokenTypes.BREAK_KEYWORD) {
+    parseKeywordStatement(builder,PyElementTypes.BREAK_STATEMENT,inSuite);
+    return;
+  }
+  if (firstToken == PyTokenTypes.CONTINUE_KEYWORD) {
+    parseKeywordStatement(builder,PyElementTypes.CONTINUE_STATEMENT,inSuite);
+    return;
+  }
+  if (firstToken == PyTokenTypes.DEL_KEYWORD) {
+    parseDelStatement(builder,inSuite);
+    return;
+  }
+  if (firstToken == PyTokenTypes.EXEC_KEYWORD) {
+    parseExecStatement(builder,inSuite);
+    return;
+  }
+  if (firstToken == PyTokenTypes.GLOBAL_KEYWORD) {
+    parseGlobalStatement(builder,inSuite);
+    return;
+  }
+  if (firstToken == PyTokenTypes.IMPORT_KEYWORD) {
+    parseImportStatement(builder,inSuite);
+    return;
+  }
+  if (firstToken == PyTokenTypes.FROM_KEYWORD) {
+    parseFromImportStatement(builder,inSuite);
+    return;
+  }
+  if (firstToken == PyTokenTypes.PASS_KEYWORD) {
+    parseKeywordStatement(builder,PyElementTypes.PASS_STATEMENT,inSuite);
+    return;
+  }
+  if (firstToken == PyTokenTypes.RETURN_KEYWORD) {
+    parseReturnStatement(builder,inSuite);
+    return;
+  }
+  if (firstToken == PyTokenTypes.RAISE_KEYWORD) {
+    parseRaiseStatement(builder,inSuite);
+    return;
+  }
+  PsiBuilder.Marker exprStatement=builder.mark();
+  if (builder.getTokenType() == PyTokenTypes.YIELD_KEYWORD) {
+    getExpressionParser().parseYieldOrTupleExpression(builder,false);
+    exprStatement.done(PyElementTypes.EXPRESSION_STATEMENT);
+    return;
+  }
+ else   if (getExpressionParser().parseExpressionOptional(builder)) {
+    IElementType statementType=PyElementTypes.EXPRESSION_STATEMENT;
+    if (PyTokenTypes.AUG_ASSIGN_OPERATIONS.contains(builder.getTokenType())) {
+      statementType=PyElementTypes.AUG_ASSIGNMENT_STATEMENT;
+      builder.advanceLexer();
+      if (!getExpressionParser().parseYieldOrTupleExpression(builder,false)) {
+        builder.error("expression expected");
+      }
+    }
+ else     if (builder.getTokenType() == PyTokenTypes.EQ) {
+      statementType=PyElementTypes.ASSIGNMENT_STATEMENT;
+      exprStatement.rollbackTo();
+      exprStatement=builder.mark();
+      getExpressionParser().parseExpression(builder,false,true);
+      LOG.assertTrue(builder.getTokenType() == PyTokenTypes.EQ);
+      builder.advanceLexer();
+      while (true) {
+        PsiBuilder.Marker maybeExprMarker=builder.mark();
+        if (!getExpressionParser().parseYieldOrTupleExpression(builder,false)) {
+          maybeExprMarker.drop();
+          builder.error("expression expected");
+          break;
+        }
+        if (builder.getTokenType() == PyTokenTypes.EQ) {
+          maybeExprMarker.rollbackTo();
+          getExpressionParser().parseExpression(builder,false,true);
+          LOG.assertTrue(builder.getTokenType() == PyTokenTypes.EQ);
+          builder.advanceLexer();
+        }
+ else {
+          maybeExprMarker.drop();
+          break;
+        }
+      }
+    }
+    checkEndOfStatement(builder,inSuite);
+    exprStatement.done(statementType);
+    return;
+  }
+ else {
+    exprStatement.drop();
+  }
+  builder.advanceLexer();
+  builder.error("statement expected, found " + firstToken.toString());
+}
