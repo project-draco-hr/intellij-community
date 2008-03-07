@@ -1,5 +1,5 @@
 {
-  String referencedName=importRef.getReferencedName();
+  final String referencedName=importRef.getReferencedName();
   if (referencedName == null)   return null;
   final PyExpression qualifier=importRef.getQualifier();
   if (qualifier instanceof PyReferenceExpression) {
@@ -21,16 +21,16 @@
   if (files.length == 1)   return files[0];
   final Module module=ModuleUtil.findModuleForPsiElement(importRef);
   if (module == null)   return null;
-  final VirtualFile[] contentRoots=ModuleRootManager.getInstance(module).getContentRoots();
-  for (  VirtualFile root : contentRoots) {
-    final VirtualFile childFile=root.findChild(referencedName + ".py");
-    if (childFile != null) {
-      return PsiManager.getInstance(importRef.getProject()).findFile(childFile);
+  RootPolicy<PsiElement> resolvePolicy=new RootPolicy<PsiElement>(){
+    public PsiElement visitModuleSourceOrderEntry(    final ModuleSourceOrderEntry moduleOrderEntry,    final PsiElement value){
+      if (value != null)       return value;
+      return resolveInRoots(moduleOrderEntry.getRootModel().getContentRoots(),referencedName,importRef);
     }
-    final VirtualFile childDir=root.findChild(referencedName);
-    if (childDir != null) {
-      return PsiManager.getInstance(importRef.getProject()).findDirectory(childDir);
+    public PsiElement visitJdkOrderEntry(    final JdkOrderEntry jdkOrderEntry,    final PsiElement value){
+      if (value != null)       return value;
+      return resolveInRoots(jdkOrderEntry.getRootFiles(OrderRootType.CLASSES),referencedName,importRef);
     }
   }
-  return null;
+;
+  return ModuleRootManager.getInstance(module).processOrder(resolvePolicy,null);
 }
