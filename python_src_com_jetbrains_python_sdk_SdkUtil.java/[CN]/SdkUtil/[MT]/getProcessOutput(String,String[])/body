@@ -1,0 +1,39 @@
+{
+  if (homePath == null || !new File(homePath).exists()) {
+    return new ProcessCallInfo(null,null);
+  }
+  List<String> stdout=null;
+  List<String> stderr=null;
+  try {
+    Application app=ApplicationManager.getApplication();
+    Process process=Runtime.getRuntime().exec(command);
+    ReadLinesThread stdout_thread=new ReadLinesThread(process.getInputStream());
+    final Future<?> stdout_future=app.executeOnPooledThread(stdout_thread);
+    ReadLinesThread stderr_thread=new ReadLinesThread(process.getErrorStream());
+    final Future<?> stderr_future=app.executeOnPooledThread(stderr_thread);
+    try {
+      try {
+        process.waitFor();
+      }
+ catch (      InterruptedException e) {
+        LOG.info(e);
+        process.destroy();
+      }
+    }
+  finally {
+      try {
+        stdout_future.get();
+        stderr_future.get();
+        stdout=stdout_thread.getResult();
+        stderr=stderr_thread.getResult();
+      }
+ catch (      Exception e) {
+        LOG.info(e);
+      }
+    }
+  }
+ catch (  IOException ex) {
+    LOG.info(ex);
+  }
+  return new ProcessCallInfo(stdout,stderr);
+}

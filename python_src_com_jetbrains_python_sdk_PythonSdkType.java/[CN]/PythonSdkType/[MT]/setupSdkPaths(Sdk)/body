@@ -1,26 +1,22 @@
 {
   final SdkModificator sdkModificator=sdk.getSdkModificator();
-  VirtualFile libDir;
-  if (SystemInfo.isLinux)   libDir=sdk.getHomeDirectory();
- else   libDir=sdk.getHomeDirectory().findChild("Lib");
-  final String stubsPath=PathManager.getSystemPath() + File.separator + "python_stubs"+ File.separator+ sdk.getHomePath().hashCode()+ File.separator;
-  if (libDir != null) {
-    if (SystemInfo.isMac) {
-      for (      VirtualFile child : libDir.getChildren()) {
-        if (child.getName().startsWith("python")) {
-          sdkModificator.addRoot(child,OrderRootType.SOURCES);
-          sdkModificator.addRoot(child,OrderRootType.CLASSES);
-          break;
-        }
+  String sdk_path=sdk.getHomePath();
+  String bin_path=getInterpreterPath(sdk_path);
+  final String stubs_path=PathManager.getSystemPath() + File.separator + "python_stubs"+ File.separator+ sdk_path.hashCode()+ File.separator;
+  String script="import sys\n" + "for x in sys.path:\n" + "  sys.stdout.write(x+chr(10))";
+  final List<String> paths=SdkUtil.getProcessOutput(sdk_path,new String[]{bin_path,"-c",script}).getStdout();
+  if ((paths != null) && paths.size() > 0) {
+    for (    String path : paths) {
+      if (path.indexOf(File.separator) < 0)       continue;
+      VirtualFile child=LocalFileSystem.getInstance().findFileByPath(path);
+      if (child != null) {
+        sdkModificator.addRoot(child,OrderRootType.SOURCES);
+        sdkModificator.addRoot(child,OrderRootType.CLASSES);
       }
-      generateStubs(sdk.getHomePath(),stubsPath);
+ else       LOG.info("Bogus sys.path entry " + path);
     }
- else {
-      sdkModificator.addRoot(libDir,OrderRootType.SOURCES);
-      sdkModificator.addRoot(libDir,OrderRootType.CLASSES);
-      generateStubs(sdk.getHomePath(),stubsPath);
-    }
-    sdkModificator.addRoot(LocalFileSystem.getInstance().refreshAndFindFileByPath(stubsPath),OrderRootType.SOURCES);
+    generateStubs(sdk_path,stubs_path);
+    sdkModificator.addRoot(LocalFileSystem.getInstance().refreshAndFindFileByPath(stubs_path),OrderRootType.SOURCES);
   }
   sdkModificator.commitChanges();
 }
