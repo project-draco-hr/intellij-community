@@ -1,0 +1,41 @@
+{
+  if (!new File(stubsRoot).exists())   return;
+  try {
+    final String bin_path=getInterpreterPath(sdkPath);
+    String text;
+    FileWriter out;
+    text=FileUtil.loadTextAndClose(new InputStreamReader(PythonSdkType.class.getResourceAsStream("find_binaries.py")));
+    final File find_bin_file=FileUtil.createTempFile("find_bin","");
+    out=new FileWriter(find_bin_file);
+    out.write(text);
+    out.close();
+    text=FileUtil.loadTextAndClose(new InputStreamReader(PythonSdkType.class.getResourceAsStream("generator3.py")));
+    final File gen3_file=FileUtil.createTempFile("gen3","");
+    out=new FileWriter(gen3_file);
+    out.write(text);
+    out.close();
+    final SdkUtil.ProcessCallInfo run_result=SdkUtil.getProcessOutput(sdkPath,new String[]{bin_path,find_bin_file.getPath()});
+    if (run_result.exitValue() == 0) {
+      for (      String line : run_result.getStdout()) {
+        int cutpos=line.indexOf(' ');
+        String modname=line.substring(0,cutpos);
+        String mod_fname=modname.replace(".",File.separator);
+        String fname=line.substring(cutpos + 1);
+        File f_orig=new File(fname);
+        File f_skel=new File(stubsRoot + File.separator + mod_fname+ ".py");
+        if (f_orig.lastModified() >= f_skel.lastModified()) {
+          LOG.info("Skeleton for " + modname);
+          final SdkUtil.ProcessCallInfo gen_result=SdkUtil.getProcessOutput(sdkPath,new String[]{bin_path,gen3_file.getPath(),"-d",stubsRoot,modname});
+          if (gen_result.exitValue() != 0) {
+            for (            String err_line : gen_result.getStderr()) {
+              LOG.error(err_line);
+            }
+          }
+        }
+      }
+    }
+  }
+ catch (  IOException e) {
+    LOG.error(e);
+  }
+}
