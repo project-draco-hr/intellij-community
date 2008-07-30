@@ -10,6 +10,7 @@
         target=file;
         file.putCopyableUserData(PyFile.KEY_IS_DIRECTORY,Boolean.TRUE);
       }
+ else       return null;
     }
     return target;
   }
@@ -21,5 +22,30 @@
     }
     return null;
   }
-  return PyResolveUtil.treeWalkUp(new PyResolveUtil.ResolveProcessor(referencedName),this,this,null);
+  PsiElement ret=PyResolveUtil.treeCrawlUp(new PyResolveUtil.ResolveProcessor(referencedName),this);
+  if (ret == null) {
+    PyType otype=PyBuiltinCache.getInstance(this.getProject()).getObjectType();
+    ret=otype.resolveMember(getName());
+  }
+  if (ret == null) {
+    PyFile bfile=PyBuiltinCache.getInstance(this.getProject()).getBuiltinsFile();
+    ret=PyResolveUtil.treeCrawlUp(new PyResolveUtil.ResolveProcessor(referencedName),bfile,true);
+  }
+  if (ret == null) {
+    PsiElement our_cap=PyResolveUtil.getConcealingParent(this);
+    PyResolveUtil.ResolveProcessor proc=new PyResolveUtil.ResolveProcessor(referencedName);
+    if (our_cap != null) {
+      PsiElement cap=our_cap;
+      while (true) {
+        cap=PyResolveUtil.getConcealingParent(cap);
+        if (cap == null)         cap=this.getContainingFile();
+        ret=PyResolveUtil.treeCrawlUp(proc,cap,true);
+        if ((ret != null) && !PsiTreeUtil.isAncestor(our_cap,ret,true)) {
+          break;
+        }
+        if (cap instanceof PsiFile)         break;
+      }
+    }
+  }
+  return ret;
 }

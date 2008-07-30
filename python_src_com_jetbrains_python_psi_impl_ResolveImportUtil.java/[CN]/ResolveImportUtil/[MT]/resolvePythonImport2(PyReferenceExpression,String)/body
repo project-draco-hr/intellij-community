@@ -1,0 +1,55 @@
+{
+  final String the_name=referencedName != null ? referencedName : importRef.getName();
+  PsiFile containing_file=importRef.getContainingFile();
+  PsiElement last_resolved=null;
+  List<PyReferenceExpression> ref_path=PyResolveUtil.unwindRefPath(importRef);
+  Iterator<PyReferenceExpression> it=ref_path.iterator();
+  if (ref_path.size() > 1) {
+    if (it.hasNext()) {
+      last_resolved=it.next().resolve();
+    }
+ else     return null;
+    while (it.hasNext()) {
+      last_resolved=resolveChild(last_resolved,it.next().getName(),containing_file);
+      if (last_resolved == null)       return null;
+    }
+    if (referencedName != null) {
+      return resolveChild(last_resolved,referencedName,containing_file);
+    }
+ else     return last_resolved;
+  }
+  if (referencedName != null) {
+    return resolveChild(importRef.resolve(),referencedName,containing_file);
+  }
+  final PsiFile pfile=importRef.getContainingFile();
+  if (pfile != null) {
+    PsiDirectory pdir=pfile.getContainingDirectory();
+    if (pdir != null) {
+      PsiElement elt=resolveChild(pdir,the_name,null);
+      if (elt != null)       return elt;
+    }
+  }
+  final Module module=ModuleUtil.findModuleForPsiElement(importRef);
+  if (module != null) {
+    RootPolicy<PsiElement> resolvePolicy=new RootPolicy<PsiElement>(){
+      @Nullable public PsiElement visitJdkOrderEntry(      final JdkOrderEntry jdkOrderEntry,      final PsiElement value){
+        if (value != null)         return value;
+        return resolveInRoots(jdkOrderEntry.getRootFiles(OrderRootType.SOURCES),the_name,importRef);
+      }
+    }
+;
+    return ModuleRootManager.getInstance(module).processOrder(resolvePolicy,null);
+  }
+ else {
+    try {
+      for (      OrderEntry entry : ProjectRootManager.getInstance(importRef.getProject()).getFileIndex().getOrderEntriesForFile(importRef.getContainingFile().getVirtualFile())) {
+        PsiElement elt=resolveInRoots(entry.getFiles(OrderRootType.CLASSES),the_name,importRef);
+        if (elt != null)         return elt;
+      }
+    }
+ catch (    NullPointerException ex) {
+      return null;
+    }
+  }
+  return null;
+}
