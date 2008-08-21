@@ -1,4 +1,40 @@
 {
   PyExpression calleeReference=getCallee();
-  return (PyElement)calleeReference.getReference().resolve();
+  if (calleeReference != null) {
+    PsiReference cref=calleeReference.getReference();
+    if (cref != null) {
+      PyElement resolved=(PyElement)cref.resolve();
+      if (resolved != null) {
+        EnumSet<Flag> flags=EnumSet.noneOf(Flag.class);
+        if (isByInstance())         flags.add(Flag.IMPLICIT_FIRST_ARG);
+        if (resolved instanceof PyClass) {
+          final PyClass cls=(PyClass)resolved;
+          resolved=cls.findMethodByName("__init__");
+          flags.add(Flag.IMPLICIT_FIRST_ARG);
+        }
+        if (resolved != null) {
+          PsiElement parent=resolved.getParent();
+          if (parent instanceof PyDecoratedFunction) {
+            final PyDecoratedFunction decorated=(PyDecoratedFunction)parent;
+            PsiElement decorator=PsiTreeUtil.getChildOfType(decorated,PyReferenceExpression.class);
+            if (decorator != null) {
+              String deco_name=decorator.getText();
+              @NonNls final String STATICMETHOD="staticmethod";
+              @NonNls final String CLASSMETHOD="classmethod";
+              if (STATICMETHOD.equals(deco_name)) {
+                flags.add(Flag.STATICMETHOD);
+                flags.remove(Flag.IMPLICIT_FIRST_ARG);
+              }
+ else               if (CLASSMETHOD.equals(deco_name)) {
+                flags.add(Flag.CLASSMETHOD);
+              }
+            }
+          }
+        }
+        if (!(resolved instanceof PyFunction))         return null;
+        return new PyMarkedFunction((PyFunction)resolved,flags);
+      }
+    }
+  }
+  return null;
 }
