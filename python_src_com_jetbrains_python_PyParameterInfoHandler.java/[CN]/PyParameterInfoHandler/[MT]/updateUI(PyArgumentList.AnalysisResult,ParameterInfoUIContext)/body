@@ -1,0 +1,58 @@
+{
+  if (result == null)   return;
+  PyMarkedFunction marked=result.getMarkedFunction();
+  if (marked == null)   return;
+  final PyFunction py_function=marked.getFunction();
+  if (py_function == null)   return;
+  final PyParameter[] params=py_function.getParameterList().getParameters();
+  final PyArgumentList arglist=result.getArgumentList();
+  int arg_index=context.getCurrentParameterIndex() >= 0 ? context.getCurrentParameterIndex() : params.length;
+  String[] param_texts=new String[params.length];
+  for (int i=0; i < param_texts.length; i+=1) {
+    StringBuilder strb=new StringBuilder();
+    final PyParameter param=params[i];
+    if (param.isKeywordContainer())     strb.append("**");
+ else     if (param.isPositionalContainer())     strb.append("*");
+    strb.append(param.getName());
+    PyExpression default_v=param.getDefaultValue();
+    if (default_v != null)     strb.append("=").append(PyResolveUtil.getReadableRepr(default_v));
+    if (i < param_texts.length - 1)     strb.append(",");
+    param_texts[i]=strb.toString();
+  }
+  Map<PyParameter,Integer> param_indexes=new HashMap<PyParameter,Integer>();
+  for (int i=0; i < params.length; i+=1)   param_indexes.put(params[i],i);
+  EnumSet<ParameterInfoUIContextEx.Flag>[] flags=(EnumSet<ParameterInfoUIContextEx.Flag>[])Array.newInstance(EnumSet.class,params.length);
+  for (int i=0; i < flags.length; i+=1)   flags[i]=EnumSet.noneOf(ParameterInfoUIContextEx.Flag.class);
+  if (marked.getFlags().contains(Flag.IMPLICIT_FIRST_ARG)) {
+    flags[0].add(ParameterInfoUIContextEx.Flag.STRIKEOUT);
+  }
+  int cur_arg_index=0;
+  for (  PyExpression arg : arglist.getArguments()) {
+    if (cur_arg_index == arg_index) {
+      PyParameter param=result.getPlainMappedParams().get(arg);
+      if (param != null) {
+        final Integer param_index=param_indexes.get(param);
+        if (param_index < flags.length) {
+          flags[param_index].add(ParameterInfoUIContextEx.Flag.HIGHLIGHT);
+        }
+      }
+ else       if (arg == result.getTupleArg()) {
+        for (        PyParameter tpar : result.getTupleMappedParams()) {
+          final Integer param_index=param_indexes.get(tpar);
+          if (param_index != null && param_index.intValue() < flags.length)           flags[param_index.intValue()].add(ParameterInfoUIContextEx.Flag.HIGHLIGHT);
+        }
+      }
+ else       if (arg == result.getKwdArg()) {
+        for (        PyParameter tpar : result.getKwdMappedParams()) {
+          final Integer param_index=param_indexes.get(tpar);
+          if (param_index != null && param_index < flags.length)           flags[param_index].add(ParameterInfoUIContextEx.Flag.HIGHLIGHT);
+        }
+      }
+    }
+    cur_arg_index+=1;
+  }
+  if (context instanceof ParameterInfoUIContextEx) {
+    final ParameterInfoUIContextEx pic=(ParameterInfoUIContextEx)context;
+    pic.setupUIComponentPresentation(param_texts,flags,false,context.getDefaultParameterColor());
+  }
+}
