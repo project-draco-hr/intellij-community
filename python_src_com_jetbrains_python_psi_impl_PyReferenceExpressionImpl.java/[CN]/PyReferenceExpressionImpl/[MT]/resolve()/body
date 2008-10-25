@@ -1,52 +1,8 @@
 {
-  final String referencedName=getReferencedName();
-  if (referencedName == null)   return null;
-  if (PsiTreeUtil.getParentOfType(this,PyImportElement.class,PyFromImportStatement.class) != null) {
-    PsiElement target=ResolveImportUtil.resolveImportReference(this);
-    if (target instanceof PsiDirectory) {
-      final PsiDirectory dir=(PsiDirectory)target;
-      final PsiFile file=dir.findFile(ResolveImportUtil.INIT_PY);
-      if (file != null) {
-        target=file;
-        file.putCopyableUserData(PyFile.KEY_IS_DIRECTORY,Boolean.TRUE);
-      }
- else       return null;
-    }
-    return target;
+  final PsiManager manager=getElement().getManager();
+  if (manager instanceof PsiManagerImpl) {
+    final ResolveCache cache=((PsiManagerImpl)manager).getResolveCache();
+    return cache.resolveWithCaching(this,Resolver.INSTANCE,false,false);
   }
-  final PyExpression qualifier=getQualifier();
-  if (qualifier != null) {
-    PyType qualifierType=qualifier.getType();
-    if (qualifierType != null) {
-      if (qualifier instanceof PyQualifiedExpression) {
-        List<PyQualifiedExpression> qualifier_path=PyResolveUtil.unwindQualifiers((PyQualifiedExpression)qualifier);
-        if (qualifier_path != null) {
-          for (          PyExpression ex : collectAssignedAttributes((PyQualifiedExpression)qualifier)) {
-            if (referencedName.equals(ex.getName()))             return ex;
-          }
-        }
-      }
-      return qualifierType.resolveMember(referencedName);
-    }
-    return null;
-  }
-  PsiElement ret=PyResolveUtil.treeCrawlUp(new PyResolveUtil.ResolveProcessor(referencedName),this);
-  if ((ret != null) && (ret instanceof PyClass)) {
-    PyClass cls=(PyClass)ret;
-    for (    PyExpression base_expr : cls.getSuperClassExpressions()) {
-      if (base_expr == this)       return null;
-    }
-  }
-  if (ret == null) {
-    PyType otype=PyBuiltinCache.getInstance(this.getProject()).getObjectType();
-    if (otype != null)     ret=otype.resolveMember(getName());
-  }
-  if (ret == null) {
-    PyFile bfile=PyBuiltinCache.getInstance(this.getProject()).getBuiltinsFile();
-    ret=PyResolveUtil.treeCrawlUp(new PyResolveUtil.ResolveProcessor(referencedName),true,bfile);
-  }
-  if (ret == null) {
-    ret=PyResolveUtil.resolveOffContext(this);
-  }
-  return ret;
+ else   return resolveInner();
 }
