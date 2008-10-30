@@ -1,8 +1,8 @@
 {
-  final List<PyElement> childrenElements=new ArrayList<PyElement>();
-  _element.acceptChildren(new PyElementVisitor(){
+  final Set<PyElement> childrenElements=new HashSet<PyElement>();
+  my_element.acceptChildren(new PyElementVisitor(){
     @Override public void visitElement(    PsiElement element){
-      if (element instanceof PsiNamedElement && ((PsiNamedElement)element).getName() != null) {
+      if (isWorthyClassItem(element)) {
         childrenElements.add((PyElement)element);
       }
  else {
@@ -14,8 +14,31 @@
   }
 );
   StructureViewTreeElement[] children=new StructureViewTreeElement[childrenElements.size()];
-  for (int i=0; i < children.length; i++) {
-    children[i]=new PyStructureViewElement(childrenElements.get(i));
+  int i=0;
+  for (  PyElement element : childrenElements) {
+    Visibility vis=Visibility.NORMAL;
+    if (PsiTreeUtil.getParentOfType(element,PyFunction.class) != null) {
+      vis=Visibility.INVISIBLE;
+    }
+ else {
+      String name=element.getName();
+      if (name != null && name.startsWith("__")) {
+        if (PyNames.UnderscoredNames.contains(name))         vis=Visibility.PREDEFINED;
+ else         vis=Visibility.PRIVATE;
+      }
+    }
+    children[i]=new PyStructureViewElement(element,vis);
+    if (element instanceof PyClass) {
+      PyClass the_exception=PyBuiltinCache.getInstance(element.getProject()).getClass("Exception");
+      final PyClass cls=(PyClass)element;
+      for (      PyClass anc : cls.iterateAncestors()) {
+        if (anc == the_exception) {
+          ((PyStructureViewElement)(children[i])).setIcon(Icons.EXCEPTION_CLASS_ICON);
+          break;
+        }
+      }
+    }
+    i+=1;
   }
   return children;
 }
