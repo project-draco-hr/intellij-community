@@ -1,0 +1,53 @@
+{
+  super.visitPyElement(node);
+  for (  final PsiReference reference : node.getReferences()) {
+    if (reference.isSoft())     continue;
+    HighlightSeverity severity=HighlightSeverity.ERROR;
+    if (reference instanceof PsiReferenceEx) {
+      severity=((PsiReferenceEx)reference).getUnresolvedHighlightSeverity();
+      if (severity == null)       continue;
+    }
+    if (reference.resolve() == null) {
+      StringBuffer description_buf=new StringBuffer("");
+      String text=reference.getElement().getText();
+      if (reference instanceof PyReferenceExpression) {
+        PyReferenceExpression refex=(PyReferenceExpression)reference;
+        String refname=refex.getReferencedName();
+        if (refex.getQualifier() != null) {
+          final PyClassType object_type=PyBuiltinCache.getInstance(node.getProject()).getObjectType();
+          if ((object_type != null) && object_type.getPossibleInstanceMembers().contains(refname))           continue;
+        }
+        if ((new PyModuleType(node.getContainingFile())).getPossibleInstanceMembers().contains(refname))         continue;
+        if ((PsiTreeUtil.getParentOfType(PsiTreeUtil.getParentOfType(node,PyImportElement.class),PyTryExceptStatement.class,PyIfStatement.class) != null)) {
+          severity=HighlightSeverity.WARNING;
+          description_buf.append("Module '").append(reference.getRangeInElement().substring(text)).append("' not found");
+        }
+      }
+      if (reference instanceof PsiReferenceEx) {
+        final String s=((PsiReferenceEx)reference).getUnresolvedDescription();
+        if (s != null)         description_buf.append(s);
+      }
+      if (description_buf.length() == 0) {
+        description_buf.append("Unresolved reference '").append(reference.getRangeInElement().substring(text)).append("'");
+        if (reference instanceof PyQualifiedExpression) {
+          final PyExpression qexpr=((PyQualifiedExpression)reference).getQualifier();
+          if (qexpr != null) {
+            PyType qtype=qexpr.getType();
+            if (qtype != null) {
+              description_buf.append(" for class ").append(qtype.getName());
+            }
+          }
+        }
+      }
+      String description=description_buf.toString();
+      ProblemHighlightType hl_type;
+      if (severity == HighlightSeverity.WARNING) {
+        hl_type=ProblemHighlightType.INFO;
+      }
+ else {
+        hl_type=ProblemHighlightType.LIKE_UNKNOWN_SYMBOL;
+      }
+      registerProblem(reference.getElement(),description,hl_type,null,new AddImportAction(reference));
+    }
+  }
+}
