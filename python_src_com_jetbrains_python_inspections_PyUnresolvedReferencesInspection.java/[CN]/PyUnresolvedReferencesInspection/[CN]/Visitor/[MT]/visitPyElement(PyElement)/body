@@ -10,6 +10,9 @@
     if (reference.resolve() == null) {
       StringBuffer description_buf=new StringBuffer("");
       String text=reference.getElement().getText();
+      String ref_text=reference.getRangeInElement().substring(text);
+      HintAction action=null;
+      if (ref_text.length() <= 0)       return;
       if (reference instanceof PyReferenceExpression) {
         PyReferenceExpression refex=(PyReferenceExpression)reference;
         String refname=refex.getReferencedName();
@@ -19,8 +22,9 @@
         }
         if ((new PyModuleType(node.getContainingFile())).getPossibleInstanceMembers().contains(refname))         continue;
         if ((PsiTreeUtil.getParentOfType(PsiTreeUtil.getParentOfType(node,PyImportElement.class),PyTryExceptStatement.class,PyIfStatement.class) != null)) {
-          severity=HighlightSeverity.WARNING;
-          description_buf.append("Module '").append(reference.getRangeInElement().substring(text)).append("' not found");
+          severity=HighlightSeverity.INFO;
+          String errmsg=PyBundle.message("INSP.module.$0.not.found",ref_text);
+          description_buf.append(errmsg);
         }
       }
       if (reference instanceof PsiReferenceEx) {
@@ -28,7 +32,7 @@
         if (s != null)         description_buf.append(s);
       }
       if (description_buf.length() == 0) {
-        description_buf.append("Unresolved reference '").append(reference.getRangeInElement().substring(text)).append("'");
+        boolean marked_for_class=false;
         if (reference instanceof PyQualifiedExpression) {
           final PyExpression qexpr=((PyQualifiedExpression)reference).getQualifier();
           if (qexpr != null) {
@@ -37,9 +41,13 @@
               if (qtype instanceof PyNoneType) {
                 continue;
               }
-              description_buf.append(" for class ").append(qtype.getName());
+              description_buf.append(PyBundle.message("INSP.unresolved.ref.$0.for.class.$1",ref_text,qtype.getName()));
+              marked_for_class=true;
             }
           }
+        }
+        if (!marked_for_class) {
+          description_buf.append(PyBundle.message("INSP.unresolved.ref.$0",ref_text));
         }
       }
       String description=description_buf.toString();
@@ -50,7 +58,9 @@
  else {
         hl_type=ProblemHighlightType.LIKE_UNKNOWN_SYMBOL;
       }
-      registerProblem(reference.getElement(),description,hl_type,new AddImportAction(reference));
+      PsiElement point=node.getLastChild();
+      if (point == null)       point=node;
+      registerProblem(point,description,hl_type,action);
     }
   }
 }
