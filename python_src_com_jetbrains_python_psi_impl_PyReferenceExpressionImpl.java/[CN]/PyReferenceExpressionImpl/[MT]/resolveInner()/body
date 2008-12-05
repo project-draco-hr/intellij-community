@@ -1,6 +1,7 @@
 {
+  ResultList ret=new ResultList();
   final String referencedName=getReferencedName();
-  if (referencedName == null)   return null;
+  if (referencedName == null)   return ret;
   if (PsiTreeUtil.getParentOfType(this,PyImportElement.class,PyFromImportStatement.class) != null) {
     PsiElement target=ResolveImportUtil.resolveImportReference(this);
     if (target instanceof PsiDirectory) {
@@ -10,9 +11,13 @@
         target=file;
         file.putCopyableUserData(PyFile.KEY_IS_DIRECTORY,Boolean.TRUE);
       }
- else       return null;
+ else {
+        ret.clear();
+        return ret;
+      }
     }
-    return target;
+    ret.poke(target,RatedResolveResult.RATE_HIGH);
+    return ret;
   }
   final PyExpression qualifier=getQualifier();
   if (qualifier != null) {
@@ -22,31 +27,46 @@
         List<PyQualifiedExpression> qualifier_path=PyResolveUtil.unwindQualifiers((PyQualifiedExpression)qualifier);
         if (qualifier_path != null) {
           for (          PyExpression ex : collectAssignedAttributes((PyQualifiedExpression)qualifier)) {
-            if (referencedName.equals(ex.getName()))             return ex;
+            if (referencedName.equals(ex.getName())) {
+              ret.poke(ex,RatedResolveResult.RATE_NORMAL);
+              return ret;
+            }
           }
         }
       }
-      return qualifierType.resolveMember(referencedName);
+      PsiElement ref_elt=qualifierType.resolveMember(referencedName);
+      if (ref_elt != null)       ret.poke(ref_elt,RatedResolveResult.RATE_NORMAL);
+      return ret;
     }
-    return null;
+    return ret;
   }
-  PsiElement ret=PyResolveUtil.treeCrawlUp(new PyResolveUtil.ResolveProcessor(referencedName),this);
-  if ((ret != null) && (ret instanceof PyClass)) {
-    PyClass cls=(PyClass)ret;
-    for (    PyExpression base_expr : cls.getSuperClassExpressions()) {
-      if (base_expr == this)       return null;
+  PyResolveUtil.ResolveProcessor processor=new PyResolveUtil.ResolveProcessor(referencedName);
+  PsiElement uexpr=PyResolveUtil.treeCrawlUp(processor,this);
+  if ((uexpr != null)) {
+    if ((uexpr instanceof PyClass)) {
+      PyClass cls=(PyClass)uexpr;
+      for (      PyExpression base_expr : cls.getSuperClassExpressions()) {
+        if (base_expr == this) {
+          ret.clear();
+          return ret;
+        }
+      }
+    }
+    for (    NameDefiner hit : processor.getDefiners()) {
+      ret.poke(hit,getRate(hit));
     }
   }
-  if (ret == null) {
-    PyType otype=PyBuiltinCache.getInstance(this.getProject()).getObjectType();
-    if (otype != null)     ret=otype.resolveMember(getName());
+  if (uexpr == null) {
+    PyType otype=PyBuiltinCache.getInstance(getProject()).getObjectType();
+    if (otype != null)     uexpr=otype.resolveMember(getName());
   }
-  if (ret == null) {
-    PyFile bfile=PyBuiltinCache.getInstance(this.getProject()).getBuiltinsFile();
-    ret=PyResolveUtil.treeCrawlUp(new PyResolveUtil.ResolveProcessor(referencedName),true,bfile);
+  if (uexpr == null) {
+    PyFile bfile=PyBuiltinCache.getInstance(getProject()).getBuiltinsFile();
+    uexpr=PyResolveUtil.treeCrawlUp(new PyResolveUtil.ResolveProcessor(referencedName),true,bfile);
   }
-  if (ret == null) {
-    ret=PyResolveUtil.resolveOffContext(this);
+  if (uexpr == null) {
+    uexpr=PyResolveUtil.resolveOffContext(this);
   }
+  ret.poke(uexpr,getRate(uexpr));
   return ret;
 }
