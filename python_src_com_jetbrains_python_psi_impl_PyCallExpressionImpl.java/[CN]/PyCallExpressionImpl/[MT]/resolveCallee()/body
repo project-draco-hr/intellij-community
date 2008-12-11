@@ -3,7 +3,19 @@
   if (calleeReference != null) {
     PsiReference cref=calleeReference.getReference();
     if (cref != null) {
-      PsiElement resolved=cref.resolve();
+      PsiElement resolved=null;
+      if (cref instanceof PsiPolyVariantReference) {
+        PsiPolyVariantReference poly=(PsiPolyVariantReference)cref;
+        ResolveResult[] targets=poly.multiResolve(false);
+        for (        ResolveResult target : targets) {
+          PsiElement elt=target.getElement();
+          if (elt instanceof PyFunction) {
+            resolved=elt;
+            break;
+          }
+        }
+      }
+ else       resolved=cref.resolve();
       if (resolved != null) {
         EnumSet<Flag> flags=EnumSet.noneOf(Flag.class);
         if (isByInstance())         flags.add(Flag.IMPLICIT_FIRST_ARG);
@@ -11,22 +23,20 @@
           PyFunction meth=(PyFunction)resolved;
           if (PyNames.INIT.equals(meth.getName()))           flags.add(Flag.IMPLICIT_FIRST_ARG);
         }
-        if (resolved != null) {
-          PsiElement parent=resolved.getParent();
-          if (parent instanceof PyDecoratedFunction) {
-            final PyDecoratedFunction decorated=(PyDecoratedFunction)parent;
-            PsiElement decorator=PsiTreeUtil.getChildOfType(decorated,PyReferenceExpression.class);
-            if (decorator != null) {
-              String deco_name=decorator.getText();
-              @NonNls final String STATICMETHOD="staticmethod";
-              @NonNls final String CLASSMETHOD="classmethod";
-              if (STATICMETHOD.equals(deco_name)) {
-                flags.add(Flag.STATICMETHOD);
-                flags.remove(Flag.IMPLICIT_FIRST_ARG);
-              }
- else               if (CLASSMETHOD.equals(deco_name)) {
-                flags.add(Flag.CLASSMETHOD);
-              }
+        PsiElement parent=resolved.getParent();
+        if (parent instanceof PyDecoratedFunction) {
+          final PyDecoratedFunction decorated=(PyDecoratedFunction)parent;
+          PsiElement decorator=PsiTreeUtil.getChildOfType(decorated,PyReferenceExpression.class);
+          if (decorator != null) {
+            String deco_name=decorator.getText();
+            @NonNls final String STATICMETHOD="staticmethod";
+            @NonNls final String CLASSMETHOD="classmethod";
+            if (STATICMETHOD.equals(deco_name)) {
+              flags.add(Flag.STATICMETHOD);
+              flags.remove(Flag.IMPLICIT_FIRST_ARG);
+            }
+ else             if (CLASSMETHOD.equals(deco_name)) {
+              flags.add(Flag.CLASSMETHOD);
             }
           }
         }
