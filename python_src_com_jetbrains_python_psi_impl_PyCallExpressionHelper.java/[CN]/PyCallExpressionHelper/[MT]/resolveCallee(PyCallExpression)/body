@@ -1,0 +1,49 @@
+{
+  PyExpression calleeReference=us.getCallee();
+  if (calleeReference != null) {
+    PsiReference cref=calleeReference.getReference();
+    if (cref != null) {
+      PsiElement resolved=null;
+      if (cref instanceof PsiPolyVariantReference) {
+        PsiPolyVariantReference poly=(PsiPolyVariantReference)cref;
+        ResolveResult[] targets=poly.multiResolve(false);
+        for (        ResolveResult target : targets) {
+          PsiElement elt=target.getElement();
+          if (elt instanceof PyFunction) {
+            resolved=elt;
+            break;
+          }
+        }
+      }
+ else       resolved=cref.resolve();
+      if (resolved != null) {
+        EnumSet<PyCallExpression.Flag> flags=EnumSet.noneOf(PyCallExpression.Flag.class);
+        if (isByInstance(us))         flags.add(PyCallExpression.Flag.IMPLICIT_FIRST_ARG);
+        if (resolved instanceof PyFunction) {
+          PyFunction meth=(PyFunction)resolved;
+          if (PyNames.INIT.equals(meth.getName()))           flags.add(PyCallExpression.Flag.IMPLICIT_FIRST_ARG);
+          PyDecoratorList decolist=meth.getDecoratorList();
+          if (decolist != null) {
+            PyDecorator[] decos=decolist.getDecorators();
+            if (decos.length == 1) {
+              PyDecorator deco=decos[0];
+              String deconame=deco.getName();
+              if (deco.isBuiltin()) {
+                if (PyNames.STATICMETHOD.equals(deconame)) {
+                  flags.add(PyCallExpression.Flag.STATICMETHOD);
+                  flags.remove(PyCallExpression.Flag.IMPLICIT_FIRST_ARG);
+                }
+ else                 if (PyNames.CLASSMETHOD.equals(deconame)) {
+                  flags.add(PyCallExpression.Flag.CLASSMETHOD);
+                }
+              }
+            }
+          }
+        }
+        if (!(resolved instanceof PyFunction))         return null;
+        return new PyCallExpression.PyMarkedFunction((PyFunction)resolved,flags);
+      }
+    }
+  }
+  return null;
+}
