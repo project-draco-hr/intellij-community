@@ -19,67 +19,19 @@
       }
  else       return null;
       while (it.hasNext()) {
-        last_resolved=resolveChild(last_resolved,it.next().getName(),containing_file);
+        last_resolved=resolveChild(last_resolved,it.next().getName(),containing_file,true);
         if (last_resolved == null)         return null;
       }
       if (referencedName != null) {
-        return resolveChild(last_resolved,referencedName,containing_file);
+        return resolveChild(last_resolved,referencedName,containing_file,false);
       }
  else       return last_resolved;
     }
     if (referencedName != null) {
-      return resolveChild(importRef.resolve(),referencedName,containing_file);
+      return resolveChild(importRef.resolve(),referencedName,containing_file,false);
     }
-    PsiFile pfile=importRef.getContainingFile().getOriginalFile();
-    if (pfile != null) {
-      PsiDirectory pdir=pfile.getContainingDirectory();
-      if (pdir != null) {
-        PsiElement elt=resolveChild(pdir,the_name,containing_file);
-        if (elt != null)         return elt;
-      }
-    }
-    final Module module=ModuleUtil.findModuleForPsiElement(importRef);
-    if (module != null) {
-      ModuleRootManager rootManager=ModuleRootManager.getInstance(module);
-      boolean source_entries_missing=true;
-      for (      ContentEntry entry : rootManager.getContentEntries()) {
-        VirtualFile root_file=entry.getFile();
-        PsiElement ret=matchToFile(the_name,importRef,root_file);
-        if (ret != null)         return ret;
-        for (        VirtualFile folder : entry.getSourceFolderFiles()) {
-          source_entries_missing=false;
-          ret=matchToFile(the_name,importRef,folder);
-          if (ret != null)           return ret;
-        }
-      }
-      if (source_entries_missing) {
-        VirtualFile project_root=module.getProject().getBaseDir();
-        PsiElement ret=matchToFile(the_name,importRef,project_root);
-        if (ret != null)         return ret;
-      }
-      RootPolicy<PsiElement> resolvePolicy=new RootPolicy<PsiElement>(){
-        @Nullable public PsiElement visitJdkOrderEntry(        final JdkOrderEntry jdkOrderEntry,        final PsiElement value){
-          if (value != null)           return value;
-          LookupRootVisitor visitor=new LookupRootVisitor(the_name,importRef.getManager());
-          visitRoots(jdkOrderEntry.getRootFiles(OrderRootType.SOURCES),visitor);
-          return visitor.getResult();
-        }
-      }
-;
-      PsiElement ret=rootManager.processOrder(resolvePolicy,null);
-      if (ret != null)       return ret;
-    }
- else {
-      try {
-        for (        OrderEntry entry : ProjectRootManager.getInstance(importRef.getProject()).getFileIndex().getOrderEntriesForFile(importRef.getContainingFile().getVirtualFile())) {
-          PsiElement elt=resolveInRoots(entry.getFiles(OrderRootType.SOURCES),the_name,importRef);
-          if (elt != null)           return elt;
-        }
-      }
- catch (      NullPointerException ex) {
-        return null;
-      }
-    }
+    PsiElement root_elt=resolveInRoots(importRef,the_name);
+    if (root_elt != null)     return root_elt;
   }
   finally {
     being_imported.remove(import_fqname);
