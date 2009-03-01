@@ -1,0 +1,69 @@
+{
+  if (homePath == null || !new File(homePath).exists()) {
+    return new ProcessCallInfo(null,null,-1);
+  }
+  List<String> stdout=NO_LINES;
+  List<String> stderr=NO_LINES;
+  int exit_code=-1;
+  try {
+    Application app=ApplicationManager.getApplication();
+    Process process=Runtime.getRuntime().exec(command);
+    ReadLinesThread stdout_thread=new ReadLinesThread(process.getInputStream());
+    final Future<?> stdout_future=app.executeOnPooledThread(stdout_thread);
+    ReadLinesThread stderr_thread=new ReadLinesThread(process.getErrorStream());
+    final Future<?> stderr_future=app.executeOnPooledThread(stderr_thread);
+    final AtomicBoolean done=new AtomicBoolean(false);
+    final AtomicBoolean timed_out=new AtomicBoolean(false);
+    if (timeout > 0) {
+      final Thread worker=Thread.currentThread();
+      Runnable watchdog=new Runnable(){
+        public void run(){
+          try {
+            Thread.sleep(timeout);
+            if (!done.get()) {
+              timed_out.set(true);
+              worker.interrupt();
+            }
+          }
+ catch (          InterruptedException ignore) {
+          }
+        }
+      }
+;
+      app.executeOnPooledThread(watchdog);
+    }
+    try {
+      try {
+        process.waitFor();
+      }
+ catch (      InterruptedException e) {
+        if (!timed_out.get()) {
+          LOG.info(e);
+        }
+        process.destroy();
+      }
+    }
+  finally {
+      done.set(true);
+      try {
+        stdout_future.get();
+        stderr_future.get();
+        stdout=stdout_thread.getResult();
+        stderr=stderr_thread.getResult();
+        if (timed_out.get()) {
+          exit_code=process.exitValue();
+        }
+ else {
+          exit_code=ProcessCallInfo.TIMEOUT_CODE;
+        }
+      }
+ catch (      Exception e) {
+        LOG.info(e);
+      }
+    }
+  }
+ catch (  IOException ex) {
+    LOG.info(ex);
+  }
+  return new ProcessCallInfo(stdout,stderr,exit_code);
+}
