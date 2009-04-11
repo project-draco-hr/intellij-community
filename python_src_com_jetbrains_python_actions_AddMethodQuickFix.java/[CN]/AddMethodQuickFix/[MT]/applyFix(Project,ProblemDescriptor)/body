@@ -1,0 +1,40 @@
+{
+  PsiElement problem_elt=descriptor.getPsiElement().getParent();
+  PyClass cls=myQualifierClass;
+  String item_name=myIdentifier;
+  if (cls != null && item_name != null) {
+    PyStatementList cls_stmt_list=cls.getStatementList();
+    PyUtil.ensureWritable(cls_stmt_list);
+    Language language=cls.getLanguage();
+    if (language instanceof PythonLanguage) {
+      PythonLanguage pythonLanguage=(PythonLanguage)language;
+      PyElementGenerator generator=pythonLanguage.getElementGenerator();
+      StringBuffer param_buf=new StringBuffer("(self");
+      PsiElement pe=problem_elt.getParent();
+      if (pe instanceof PyCallExpression) {
+        PyArgumentList arglist=((PyCallExpression)pe).getArgumentList();
+        if (arglist != null) {
+          int cnt=1;
+          for (          PyExpression arg : arglist.getArguments()) {
+            if (arg instanceof PyReferenceExpression) {
+              param_buf.append(", ").append(((PyReferenceExpression)arg).getReferencedName()).append("_").append(cnt);
+            }
+ else {
+              param_buf.append(", param_").append(cnt);
+            }
+            cnt+=1;
+          }
+        }
+      }
+      param_buf.append("):\n");
+      PyFunction meth=generator.createFromText(project,PyFunction.class,"def " + item_name + param_buf);
+      PyStatement new_stmt=generator.createFromText(project,PyStatement.class,"pass");
+      meth.getStatementList().add(new_stmt);
+      meth.add(generator.createFromText(project,PsiWhiteSpace.class,"\n\n"));
+      cls_stmt_list.add(generator.createFromText(project,PsiWhiteSpace.class,"\n\n"));
+      cls_stmt_list.add(meth);
+      return;
+    }
+  }
+  PyUtil.showBalloon(project,PyBundle.message("QFIX.failed.to.add.method"),MessageType.ERROR);
+}
