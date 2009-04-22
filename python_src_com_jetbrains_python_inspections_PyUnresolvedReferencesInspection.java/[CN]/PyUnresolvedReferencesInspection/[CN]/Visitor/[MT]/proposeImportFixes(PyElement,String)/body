@@ -1,0 +1,50 @@
+{
+  boolean worthy_fix=false;
+  ImportFromExistingFix fix=null;
+  CollectProcessor import_prc=new CollectProcessor(PyImportStatement.class);
+  PyResolveUtil.treeCrawlUp(import_prc,node);
+  List<PsiElement> result=import_prc.getResult();
+  if (result.size() > 0) {
+    fix=new ImportFromExistingFix(node,ref_text);
+    for (    PsiElement stmt : import_prc.getResult()) {
+      for (      PyImportElement ielt : ((PyImportStatement)stmt).getImportElements()) {
+        final PyReferenceExpression src=ielt.getImportReference();
+        if (src != null) {
+          PsiElement dst=src.resolve();
+          if (dst instanceof PyFile) {
+            PsiElement res=((PyFile)dst).findExportedName(ref_text);
+            if (res != null) {
+              fix.addImport(ielt,res);
+              worthy_fix=true;
+            }
+          }
+        }
+      }
+    }
+  }
+  CollectProcessor from_import_prc=new CollectProcessor(PyFromImportStatement.class);
+  PyResolveUtil.treeCrawlUp(from_import_prc,node);
+  result=from_import_prc.getResult();
+  if (result.size() > 0) {
+    if (fix == null)     fix=new ImportFromExistingFix(node,ref_text);
+    for (    PsiElement stmt : from_import_prc.getResult()) {
+      PyFromImportStatement from_stmt=(PyFromImportStatement)stmt;
+      PyImportElement[] ielts=from_stmt.getImportElements();
+      if (ielts != null && ielts.length > 0) {
+        final PyReferenceExpression src=from_stmt.getImportSource();
+        if (src != null) {
+          PsiElement dst=src.resolve();
+          if (dst instanceof PyFile) {
+            PsiElement res=((PyFile)dst).findExportedName(ref_text);
+            if (res != null) {
+              fix.addImport(ielts[ielts.length - 1],res);
+              worthy_fix=true;
+            }
+          }
+        }
+      }
+    }
+  }
+  if (worthy_fix)   return fix;
+ else   return null;
+}
