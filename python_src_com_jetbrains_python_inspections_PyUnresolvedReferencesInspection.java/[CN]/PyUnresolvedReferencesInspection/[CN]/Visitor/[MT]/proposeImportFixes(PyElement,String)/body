@@ -1,6 +1,8 @@
 {
   boolean worthy_fix=false;
   ImportFromExistingFix fix=null;
+  Set<String> seen_file_names=new HashSet<String>();
+  Set<String> seen_as_names=new HashSet<String>();
   CollectProcessor import_prc=new CollectProcessor(PyImportStatement.class);
   PyResolveUtil.treeCrawlUp(import_prc,node);
   List<PsiElement> result=import_prc.getResult();
@@ -12,9 +14,12 @@
         if (src != null) {
           PsiElement dst=src.resolve();
           if (dst instanceof PyFile) {
-            PsiElement res=((PyFile)dst).findExportedName(ref_text);
+            PyFile dst_file=(PyFile)dst;
+            seen_file_names.add(ielt.getImportReference().getReferencedName());
+            seen_as_names.add(ielt.getVisibleName());
+            PsiElement res=(dst_file).findExportedName(ref_text);
             if (res != null) {
-              fix.addImport(ielt,res);
+              fix.addImport(res,dst_file,ielt);
               worthy_fix=true;
             }
           }
@@ -35,10 +40,40 @@
         if (src != null) {
           PsiElement dst=src.resolve();
           if (dst instanceof PyFile) {
-            PsiElement res=((PyFile)dst).findExportedName(ref_text);
+            PyFile dst_file=(PyFile)dst;
+            seen_file_names.add(from_stmt.getImportSource().getReferencedName());
+            PsiElement res=(dst_file).findExportedName(ref_text);
             if (res != null) {
-              fix.addImport(ielts[ielts.length - 1],res);
+              fix.addImport(res,dst_file,ielts[ielts.length - 1]);
               worthy_fix=true;
+            }
+          }
+        }
+      }
+    }
+  }
+  Project project=node.getProject();
+  GlobalSearchScope scope=null;
+  List<PsiElement> symbols=new ArrayList<PsiElement>();
+  symbols.addAll(StubIndex.getInstance().get(PyClassNameIndex.KEY,ref_text,project,scope));
+  symbols.addAll(StubIndex.getInstance().get(PyFunctionNameIndex.KEY,ref_text,project,scope));
+  if (symbols.size() > 0) {
+    if (fix == null)     fix=new ImportFromExistingFix(node,ref_text);
+    for (    PsiElement symbol : symbols) {
+      if (symbol.getParent() instanceof PsiFile) {
+        PsiFile srcfile=symbol.getContainingFile();
+        if (srcfile != null) {
+          VirtualFile vfile=srcfile.getVirtualFile();
+          if (vfile != null) {
+            String import_path=ResolveImportUtil.findShortestImportableName(node,vfile);
+            if (import_path != null && !seen_file_names.contains(import_path)) {
+              String as_name=null;
+              if (seen_as_names.contains(import_path)) {
+                as_name=propseAsName(node.getContainingFile(),import_path);
+                seen_as_names.add(as_name);
+              }
+              fix.addImport(symbol,srcfile,null,import_path,as_name);
+              seen_file_names.add(import_path);
             }
           }
         }

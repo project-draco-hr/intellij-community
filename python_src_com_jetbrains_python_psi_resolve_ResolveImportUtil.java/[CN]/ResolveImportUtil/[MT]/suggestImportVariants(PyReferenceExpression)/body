@@ -1,0 +1,52 @@
+{
+  List<Object> variants=new ArrayList<Object>();
+  PyFromImportStatement maybe_from_import=PsiTreeUtil.getParentOfType(partial_ref,PyFromImportStatement.class);
+  if (maybe_from_import != null) {
+    if (partial_ref.getParent() != maybe_from_import) {
+      PyReferenceExpression src=maybe_from_import.getImportSource();
+      if (src != null) {
+        PsiElement mod=src.resolve();
+        if (mod != null) {
+          final VariantsProcessor processor=new VariantsProcessor();
+          PyResolveUtil.treeCrawlUp(processor,true,mod);
+          return processor.getResult();
+        }
+      }
+    }
+  }
+  DataContext dataContext=DataManager.getInstance().getDataContext();
+  final VirtualFile pfile=PlatformDataKeys.VIRTUAL_FILE.getData(dataContext);
+  if (pfile != null) {
+    VirtualFile pdir=pfile.getParent();
+    if (pdir != null) {
+      for (      VirtualFile a_file : pdir.getChildren()) {
+        if (a_file != pfile) {
+          if (pfile.isDirectory()) {
+            if (pfile.findChild(INIT_PY) != null)             variants.add(a_file.getName());
+          }
+ else {
+            String fname=a_file.getName();
+            if (fname.endsWith(PY_SUFFIX)) {
+              variants.add(fname.substring(0,fname.length() - PY_SUFFIX.length()));
+            }
+          }
+        }
+      }
+    }
+  }
+  final CollectingRootVisitor visitor=new CollectingRootVisitor(partial_ref.getManager());
+  final Module module=ModuleUtil.findModuleForPsiElement(partial_ref);
+  if (module != null) {
+    RootPolicy<PsiElement> resolvePolicy=new RootPolicy<PsiElement>(){
+      @Nullable public PsiElement visitJdkOrderEntry(      final JdkOrderEntry jdkOrderEntry,      final PsiElement value){
+        if (value != null)         return value;
+        visitGivenRoots(jdkOrderEntry.getRootFiles(OrderRootType.SOURCES),visitor);
+        return null;
+      }
+    }
+;
+    ModuleRootManager.getInstance(module).processOrder(resolvePolicy,null);
+    variants.addAll(visitor.getResult());
+  }
+  return variants.toArray(new Object[variants.size()]);
+}

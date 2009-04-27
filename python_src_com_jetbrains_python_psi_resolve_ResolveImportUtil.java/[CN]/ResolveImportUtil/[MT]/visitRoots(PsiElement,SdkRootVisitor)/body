@@ -1,0 +1,39 @@
+{
+  final Module module=ModuleUtil.findModuleForPsiElement(elt);
+  if (module != null) {
+    ModuleRootManager rootManager=ModuleRootManager.getInstance(module);
+    boolean source_entries_missing=true;
+    for (    ContentEntry entry : rootManager.getContentEntries()) {
+      VirtualFile root_file=entry.getFile();
+      if (!visitor.visitRoot(root_file))       return;
+      for (      VirtualFile folder : entry.getSourceFolderFiles()) {
+        source_entries_missing=false;
+        if (!visitor.visitRoot(folder))         return;
+      }
+    }
+    if (source_entries_missing) {
+      VirtualFile project_root=module.getProject().getBaseDir();
+      if (!visitor.visitRoot(project_root))       return;
+    }
+    RootPolicy<PsiElement> resolvePolicy=new RootPolicy<PsiElement>(){
+      @Nullable public PsiElement visitJdkOrderEntry(      final JdkOrderEntry jdkOrderEntry,      final PsiElement value){
+        if (value != null)         return value;
+        visitGivenRoots(jdkOrderEntry.getRootFiles(OrderRootType.SOURCES),visitor);
+        return null;
+      }
+    }
+;
+    rootManager.processOrder(resolvePolicy,null);
+  }
+ else {
+    final PsiFile elt_psifile=elt.getContainingFile();
+    if (elt_psifile != null) {
+      final VirtualFile elt_vfile=elt_psifile.getVirtualFile();
+      if (elt_vfile != null) {
+        for (        OrderEntry entry : ProjectRootManager.getInstance(elt.getProject()).getFileIndex().getOrderEntriesForFile(elt_vfile)) {
+          if (!visitGivenRoots(entry.getFiles(OrderRootType.SOURCES),visitor))           break;
+        }
+      }
+    }
+  }
+}
