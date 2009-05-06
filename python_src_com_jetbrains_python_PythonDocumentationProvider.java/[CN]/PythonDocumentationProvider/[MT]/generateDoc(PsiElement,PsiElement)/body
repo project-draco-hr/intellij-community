@@ -1,34 +1,45 @@
 {
+  StringBuffer cat=new StringBuffer("<html><body><code>");
   if (element instanceof PyDocStringOwner) {
     String docString=((PyDocStringOwner)element).getDocString();
-    if (docString == null) {
-      if (element instanceof PyClass) {
-        PyClass cls=(PyClass)element;
-        StringBuffer cat=new StringBuffer("class ");
-        cat.append(cls.getName());
-        final PyExpression[] ancestors=cls.getSuperClassExpressions();
-        if (ancestors.length > 0) {
-          cat.append("(");
-          boolean is_not_first=false;
-          for (          PyExpression one : ancestors) {
-            if (is_not_first)             cat.append(", ");
- else             is_not_first=true;
-            cat.append(PyUtil.getReadableRepr(one,false));
-          }
-          cat.append(")");
-        }
-        docString=cat.toString();
-      }
- else       if (element instanceof PyFunction) {
-        PyFunction fun=(PyFunction)element;
-        StringBuffer cat=new StringBuffer("def ");
-        cat.append(fun.getName());
-        cat.append(PyUtil.getReadableRepr(fun.getParameterList(),false));
-        docString=cat.toString();
-      }
- else       docString=PyUtil.getReadableRepr(element,false);
+    if (element instanceof PyClass) {
+      PyClass cls=(PyClass)element;
+      describeClass(cls,cat);
     }
-    return XmlStringUtil.escapeString(docString).replace("\n","<br>").replace(" ","&nbsp;");
+ else     if (element instanceof PyFunction) {
+      PyFunction fun=(PyFunction)element;
+      PyClass cls=fun.getContainingClass();
+      if (cls != null) {
+        cat.append("<small>class ").append(cls.getName()).append("</small>").append(BR);
+      }
+      describeFunction(fun,cat);
+      if (docString == null) {
+        String meth_name=fun.getName();
+        if (cls != null && meth_name != null && PyNames.UnderscoredNames.contains(meth_name)) {
+          PyClassType objtype=PyBuiltinCache.getInstance(fun.getProject()).getObjectType();
+          if (objtype != null) {
+            PyClass objcls=objtype.getPyClass();
+            if (objcls != null) {
+              PyFunction obj_underscored=objcls.findMethodByName(meth_name);
+              if (obj_underscored != null) {
+                String predefined_doc=obj_underscored.getDocString();
+                if (predefined_doc != null && predefined_doc.length() > 1) {
+                  cat.append(BR).append(BR).append(predefined_doc).append(BR).append("</code><small>(copied from built-in description)</small><code>");
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+ else {
+      cat.append(combUp(PyUtil.getReadableRepr(element,false)));
+    }
+    cat.append("</code>");
+    if (docString != null) {
+      cat.append(BR).append(BR).append(combUp(docString));
+    }
+    return cat.append("</body></html>").toString();
   }
   return null;
 }
