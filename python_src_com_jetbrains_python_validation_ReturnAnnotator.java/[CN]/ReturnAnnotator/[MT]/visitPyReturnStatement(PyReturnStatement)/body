@@ -1,14 +1,29 @@
 {
-  PyFunction function=node.getContainingElement(PyFunction.class);
-  if (function == null) {
+  List<? extends PsiElement> found=SyntaxMatchers.IN_FUNCTION.search(node);
+  if (found == null) {
     getHolder().createErrorAnnotation(node,"'return' outside of function");
     return;
   }
+  PyFunction function=(PyFunction)found.get(0);
   if (node.getExpression() != null) {
     YieldVisitor visitor=new YieldVisitor();
     function.acceptChildren(visitor);
     if (visitor.haveYield()) {
       getHolder().createErrorAnnotation(node,"'return' with argument inside generator");
+    }
+  }
+  PsiElement parent_elt=node.getParent();
+  if (parent_elt instanceof PyStatementList) {
+    PsiElement first_after_us=PyUtil.getFirstNonCommentAfter(node.getNextSibling());
+    if (first_after_us != null) {
+      PsiElement last_after_us=first_after_us;
+      PsiElement feeler=first_after_us;
+      while (feeler != null) {
+        last_after_us=feeler;
+        feeler=PyUtil.getFirstNonCommentAfter(feeler.getNextSibling());
+      }
+      TextRange the_wrong=new TextRange(first_after_us.getTextOffset(),last_after_us.getTextRange().getEndOffset());
+      getHolder().createWarningAnnotation(the_wrong,"Unreachable code");
     }
   }
 }
