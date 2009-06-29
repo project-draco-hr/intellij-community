@@ -1,17 +1,39 @@
 {
   List<Object> variants=new ArrayList<Object>();
-  PyFromImportStatement maybe_from_import=PsiTreeUtil.getParentOfType(partial_ref,PyFromImportStatement.class);
-  if (maybe_from_import != null) {
-    if (partial_ref.getParent() != maybe_from_import) {
-      PyReferenceExpression src=maybe_from_import.getImportSource();
-      if (src != null) {
-        PsiElement mod=src.resolve();
-        if (mod != null) {
-          final VariantsProcessor processor=new VariantsProcessor();
-          PyResolveUtil.treeCrawlUp(processor,true,mod);
-          return processor.getResult();
+  if (partial_ref == null)   return variants.toArray();
+  PyFromImportStatement from_import=PsiTreeUtil.getParentOfType(partial_ref,PyFromImportStatement.class);
+  if (from_import != null && partial_ref.getParent() != from_import) {
+    PyReferenceExpression src=from_import.getImportSource();
+    if (src != null) {
+      PsiElement mod_candidate=src.resolve();
+      if (mod_candidate instanceof PyExpression) {
+        final Set<String> names_already=new java.util.HashSet<String>();
+        addImportedNames(from_import.getImportElements(),names_already);
+        final VariantsProcessor processor=new VariantsProcessor(new PyResolveUtil.FilterNameNotIn(names_already));
+        PyResolveUtil.treeCrawlUp(processor,true,mod_candidate);
+        variants.addAll(processor.getResultList());
+        PyExpression module=(PyExpression)mod_candidate;
+        PyType qualifierType=module.getType();
+        if (qualifierType != null) {
+          ProcessingContext ctx=new ProcessingContext();
+          for (          Object ex : variants) {
+            if (ex instanceof PyReferenceExpression) {
+              names_already.add(((PyReferenceExpression)ex).getReferencedName());
+            }
+          }
+          ctx.put(PyType.CTX_NAMES,names_already);
+          Collections.addAll(variants,qualifierType.getCompletionVariants(partial_ref,ctx));
         }
+        return variants.toArray();
       }
+    }
+  }
+  final Set<String> names_already=new java.util.HashSet<String>();
+  if (from_import != null)   addImportedNames(from_import.getImportElements(),names_already);
+ else {
+    PyImportStatement import_stmt=PsiTreeUtil.getParentOfType(partial_ref,PyImportStatement.class);
+    if (import_stmt != null) {
+      addImportedNames(import_stmt.getImportElements(),names_already);
     }
   }
   DataContext dataContext=DataManager.getInstance().getDataContext();
@@ -24,14 +46,14 @@
           if (a_file.isDirectory()) {
             if (a_file.findChild(INIT_PY) != null) {
               final String name=a_file.getName();
-              if (PyUtil.isIdentifier(name))               variants.add(name);
+              if (PyUtil.isIdentifier(name) && !names_already.contains(name))               variants.add(name);
             }
           }
  else {
             String fname=a_file.getName();
             if (fname.endsWith(PY_SUFFIX)) {
               final String name=fname.substring(0,fname.length() - PY_SUFFIX.length());
-              if (PyUtil.isIdentifier(name))               variants.add(name);
+              if (PyUtil.isIdentifier(name) && !names_already.contains(name))               variants.add(name);
             }
           }
         }
@@ -43,7 +65,7 @@
   if (module != null) {
     ModuleRootManager.getInstance(module).processOrder(new SdkRootVisitingPolicy(visitor),null);
     for (    String name : visitor.getResult()) {
-      if (PyUtil.isIdentifier(name))       variants.add(name);
+      if (PyUtil.isIdentifier(name) && !names_already.contains(name))       variants.add(name);
     }
   }
   return variants.toArray(new Object[variants.size()]);
