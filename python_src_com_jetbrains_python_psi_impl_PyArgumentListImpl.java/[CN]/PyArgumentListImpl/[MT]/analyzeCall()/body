@@ -1,5 +1,5 @@
 {
-  AnalysisResultImpl ret=new AnalysisResultImpl();
+  final AnalysisResultImpl ret=new AnalysisResultImpl();
   PyExpression[] arguments=getArguments();
   PyCallExpression call=getCallExpression();
   if (call != null) {
@@ -8,19 +8,22 @@
     if (resolved_callee != null) {
       PyFunction func=resolved_callee.getFunction();
       PyParameterList paramlist=func.getParameterList();
-      if (paramlist.containsTuples())       return null;
       PyParameter[] params=paramlist.getParameters();
       List<PyExpression> unmatched_args=new LinkedList<PyExpression>();
       Collections.addAll(unmatched_args,arguments);
       Map<String,PyExpression> param_slots=new HashMap<String,PyExpression>();
-      PyParameter kwd_slot=null;
-      PyParameter tuple_slot=null;
+      PyNamedParameter kwd_slot=null;
+      PyNamedParameter tuple_slot=null;
       PyStarArgument kwd_arg=null;
       PyStarArgument tuple_arg=null;
+      final List<PyExpression> unmatched_subargs=new LinkedList<PyExpression>();
       for (      PyParameter a_param : params) {
-        if (a_param.isPositionalContainer())         tuple_slot=a_param;
- else         if (a_param.isKeywordContainer())         kwd_slot=a_param;
- else         param_slots.put(a_param.getName(),null);
+        PyNamedParameter n_param=a_param.getAsNamed();
+        if (n_param != null) {
+          if (n_param.isPositionalContainer())           tuple_slot=n_param;
+ else           if (n_param.isKeywordContainer())           kwd_slot=n_param;
+ else           param_slots.put(a_param.getName(),null);
+        }
       }
       for (      PyExpression arg : arguments) {
         if (arg instanceof PyStarArgument) {
@@ -52,16 +55,25 @@
       boolean seen_kwd_arg=false;
       ListIterator<PyExpression> unmatched_arg_iter=unmatched_args.listIterator();
       while (unmatched_arg_iter.hasNext() && (param_index < params.length)) {
-        PyExpression arg=unmatched_arg_iter.next();
-        PyParameter param=params[param_index];
-        if (arg instanceof PyKeywordArgument || arg instanceof PyStarArgument || param.isKeywordContainer()|| param.isPositionalContainer()) {
-          seen_tuple_arg|=(arg == tuple_arg);
-          seen_kwd_arg|=(arg == kwd_arg);
-          unmatched_arg_iter.previous();
-          break;
+        final PyExpression arg=unmatched_arg_iter.next();
+        PyParameter a_param=params[param_index];
+        PyNamedParameter n_param=a_param.getAsNamed();
+        if (n_param != null) {
+          if (arg instanceof PyKeywordArgument || arg instanceof PyStarArgument || n_param.isKeywordContainer()|| n_param.isPositionalContainer()) {
+            seen_tuple_arg|=(arg == tuple_arg);
+            seen_kwd_arg|=(arg == kwd_arg);
+            unmatched_arg_iter.previous();
+            break;
+          }
+          param_slots.put(n_param.getName(),arg);
+          ret.my_plain_mapped_params.put(arg,n_param);
         }
-        param_slots.put(param.getName(),arg);
-        ret.my_plain_mapped_params.put(arg,param);
+ else {
+          unmatched_arg_iter.previous();
+          MyParamVisitor visitor=new MyParamVisitor(unmatched_arg_iter,ret);
+          visitor.enterTuple(a_param.getAsTuple());
+          unmatched_subargs.addAll(visitor.getUnmatchedSubargs());
+        }
         unmatched_arg_iter.remove();
         param_index+=1;
       }
@@ -120,33 +132,42 @@
         }
       }
       if (seen_tuple_arg) {
-        for (        PyParameter param : params) {
-          final String param_name=param.getName();
-          if ((param.getDefaultValue() == null) && param_slots.containsKey(param_name) && (param_slots.get(param_name) == null)) {
-            param_slots.put(param_name,tuple_arg);
-            unmatched_args.remove(tuple_arg);
+        for (        PyParameter a_param : params) {
+          PyNamedParameter n_param=a_param.getAsNamed();
+          if (n_param != null) {
+            final String param_name=n_param.getName();
+            if ((n_param.getDefaultValue() == null) && param_slots.containsKey(param_name) && (param_slots.get(param_name) == null)) {
+              param_slots.put(param_name,tuple_arg);
+              unmatched_args.remove(tuple_arg);
+            }
           }
         }
       }
       if (seen_kwd_arg) {
-        for (        PyParameter param : params) {
-          final String param_name=param.getName();
-          if ((param.getDefaultValue() == null) && param_slots.containsKey(param_name) && (param_slots.get(param_name) == null)) {
-            param_slots.put(param_name,kwd_arg);
-            unmatched_args.remove(kwd_arg);
+        for (        PyParameter a_param : params) {
+          PyNamedParameter n_param=a_param.getAsNamed();
+          if (n_param != null) {
+            final String param_name=n_param.getName();
+            if ((n_param.getDefaultValue() == null) && param_slots.containsKey(param_name) && (param_slots.get(param_name) == null)) {
+              param_slots.put(param_name,kwd_arg);
+              unmatched_args.remove(kwd_arg);
+            }
           }
         }
       }
-      Map<String,PyParameter> unfilled_params=new HashMap<String,PyParameter>();
-      for (      PyParameter param : params) {
-        final String param_name=param.getName();
-        if ((param.getDefaultValue() == null) && param_slots.containsKey(param_name) && (param_slots.get(param_name) == null)) {
-          if (tuple_arg != null) {
-            param_slots.put(param_name,tuple_arg);
-            unmatched_args.remove(tuple_arg);
-          }
+      Map<String,PyNamedParameter> unfilled_params=new HashMap<String,PyNamedParameter>();
+      for (      PyParameter a_param : params) {
+        PyNamedParameter n_param=a_param.getAsNamed();
+        if (n_param != null) {
+          final String param_name=n_param.getName();
+          if ((n_param.getDefaultValue() == null) && param_slots.containsKey(param_name) && (param_slots.get(param_name) == null)) {
+            if (tuple_arg != null) {
+              param_slots.put(param_name,tuple_arg);
+              unmatched_args.remove(tuple_arg);
+            }
  else {
-            unfilled_params.put(param_name,param);
+              unfilled_params.put(param_name,n_param);
+            }
           }
         }
       }
@@ -159,20 +180,26 @@
         unmatched_args.remove(tuple_arg);
       }
       if (tuple_arg != null && ret.my_tuple_mapped_params.isEmpty()) {
-        for (        PyParameter param : params) {
-          final String param_name=param.getName();
-          if (param_slots.containsKey(param_name) && (param_slots.get(param_name) == null)) {
-            param_slots.put(param_name,tuple_arg);
-            unmatched_args.remove(tuple_arg);
+        for (        PyParameter a_param : params) {
+          PyNamedParameter n_param=a_param.getAsNamed();
+          if (n_param != null) {
+            final String param_name=n_param.getName();
+            if (param_slots.containsKey(param_name) && (param_slots.get(param_name) == null)) {
+              param_slots.put(param_name,tuple_arg);
+              unmatched_args.remove(tuple_arg);
+            }
           }
         }
       }
       if (kwd_arg != null && ret.my_kwd_mapped_params.isEmpty()) {
-        for (        PyParameter param : params) {
-          final String param_name=param.getName();
-          if (param_slots.containsKey(param_name) && (param_slots.get(param_name) == null)) {
-            param_slots.put(param_name,kwd_arg);
-            unmatched_args.remove(kwd_arg);
+        for (        PyParameter a_param : params) {
+          PyNamedParameter n_param=a_param.getAsNamed();
+          if (n_param != null) {
+            final String param_name=n_param.getName();
+            if (param_slots.containsKey(param_name) && (param_slots.get(param_name) == null)) {
+              param_slots.put(param_name,kwd_arg);
+              unmatched_args.remove(kwd_arg);
+            }
           }
         }
       }
@@ -187,22 +214,28 @@
         if (arg == kwd_arg && tuple_arg_consumed_some)         continue;
         ret.markArgument(arg,ArgFlag.IS_UNMAPPED);
       }
-      for (      final PyParameter param : unfilled_params.values()) {
+      for (      final PyNamedParameter param : unfilled_params.values()) {
         ret.my_unmapped_params.add(param);
       }
-      for (      PyParameter param : params) {
-        PyExpression arg=param_slots.get(param.getName());
-        if (arg != null) {
-          if (arg instanceof PyStarArgument) {
-            PyStarArgument star_arg=(PyStarArgument)arg;
-            if (star_arg.isKeyword())             ret.my_kwd_mapped_params.add(param);
- else             ret.my_tuple_mapped_params.add(param);
+      for (      PyParameter a_param : params) {
+        PyNamedParameter n_param=a_param.getAsNamed();
+        if (n_param != null) {
+          PyExpression arg=param_slots.get(n_param.getName());
+          if (arg != null) {
+            if (arg instanceof PyStarArgument) {
+              PyStarArgument star_arg=(PyStarArgument)arg;
+              if (star_arg.isKeyword())               ret.my_kwd_mapped_params.add(n_param);
+ else               ret.my_tuple_mapped_params.add(n_param);
+            }
+ else             ret.my_plain_mapped_params.put(arg,n_param);
           }
- else           ret.my_plain_mapped_params.put(arg,param);
         }
       }
       ret.my_kwd_arg=kwd_arg;
       ret.my_tuple_arg=tuple_arg;
+      for (      PyExpression subarg : unmatched_subargs) {
+        ret.my_arg_flags.put(subarg,EnumSet.of(ArgFlag.IS_UNMAPPED));
+      }
     }
   }
   return ret;
