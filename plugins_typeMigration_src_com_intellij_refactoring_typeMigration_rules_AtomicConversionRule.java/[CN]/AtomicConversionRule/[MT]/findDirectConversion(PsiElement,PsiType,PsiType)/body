@@ -1,0 +1,83 @@
+{
+  final PsiClass toTypeClass=PsiUtil.resolveClassInType(to);
+  LOG.assertTrue(toTypeClass != null);
+  final String qualifiedName=toTypeClass.getQualifiedName();
+  if (qualifiedName != null) {
+    if (qualifiedName.equals(AtomicInteger.class.getName()) || qualifiedName.equals(AtomicLong.class.getName())) {
+      if (context instanceof PsiPostfixExpression) {
+        final IElementType operationSign=((PsiPostfixExpression)context).getOperationTokenType();
+        if (operationSign == JavaTokenType.MINUSMINUS) {
+          return new TypeConversionDescriptor("$qualifier$--","$qualifier$.getAndDecrement()");
+        }
+        if (operationSign == JavaTokenType.PLUSPLUS) {
+          return new TypeConversionDescriptor("$qualifier$++","$qualifier$.getAndIncrement()");
+        }
+      }
+ else       if (context instanceof PsiPrefixExpression) {
+        final IElementType operationSign=((PsiPrefixExpression)context).getOperationTokenType();
+        if (operationSign == JavaTokenType.MINUSMINUS) {
+          return new TypeConversionDescriptor("--$qualifier$","$qualifier$.decrementAndGet()");
+        }
+        if (operationSign == JavaTokenType.PLUSPLUS) {
+          return new TypeConversionDescriptor("++$qualifier$","$qualifier$.incrementAndGet()");
+        }
+      }
+ else       if (context instanceof PsiBinaryExpression) {
+        final IElementType operationSign=((PsiBinaryExpression)context).getOperationTokenType();
+        if (operationSign == JavaTokenType.PLUS) {
+          return new TypeConversionDescriptor("$qualifier$ + $delta$","$qualifier$.addAndGet($delta$)");
+        }
+        if (operationSign == JavaTokenType.MINUS) {
+          return new TypeConversionDescriptor("$qualifier$ - $delta$","$qualifier$.addAndGet(-($delta$))");
+        }
+      }
+ else       if (context instanceof PsiAssignmentExpression) {
+        final PsiJavaToken signToken=((PsiAssignmentExpression)context).getOperationSign();
+        final IElementType operationSign=signToken.getTokenType();
+        final String sign=signToken.getText();
+        if (operationSign == JavaTokenType.PLUSEQ || operationSign == JavaTokenType.MINUSEQ) {
+          return new TypeConversionDescriptor("$qualifier$ " + sign + " $val$","$qualifier$.getAndAdd(" + (operationSign == JavaTokenType.MINUSEQ ? "-" : "") + "($val$))");
+        }
+      }
+    }
+ else     if (qualifiedName.equals(AtomicIntegerArray.class.getName()) || qualifiedName.equals(AtomicLongArray.class.getName())) {
+      PsiElement parentExpression=context.getParent();
+      if (parentExpression instanceof PsiPostfixExpression) {
+        final IElementType operationSign=((PsiPostfixExpression)parentExpression).getOperationTokenType();
+        if (operationSign == JavaTokenType.MINUSMINUS) {
+          return new TypeConversionDescriptor("$qualifier$[$idx$]--","$qualifier$.getAndDecrement($idx$)",(PsiExpression)parentExpression);
+        }
+        if (operationSign == JavaTokenType.PLUSPLUS) {
+          return new TypeConversionDescriptor("$qualifier$[$idx$]++","$qualifier$.getAndIncrement($idx$)",(PsiExpression)parentExpression);
+        }
+      }
+ else       if (parentExpression instanceof PsiPrefixExpression) {
+        final IElementType operationSign=((PsiPrefixExpression)parentExpression).getOperationTokenType();
+        if (operationSign == JavaTokenType.MINUSMINUS) {
+          return new TypeConversionDescriptor("--$qualifier$[$idx$]","$qualifier$.decrementAndGet($idx$)",(PsiExpression)parentExpression);
+        }
+        if (operationSign == JavaTokenType.PLUSPLUS) {
+          return new TypeConversionDescriptor("++$qualifier$[$idx$]","$qualifier$.incrementAndGet($idx$)",(PsiExpression)parentExpression);
+        }
+      }
+ else       if (parentExpression instanceof PsiBinaryExpression) {
+        final IElementType operationSign=((PsiBinaryExpression)parentExpression).getOperationTokenType();
+        if (operationSign == JavaTokenType.PLUS) {
+          return new TypeConversionDescriptor("$qualifier$[$idx$] + $delta$","$qualifier$.addAndGet($idx$, $delta$)",(PsiExpression)parentExpression);
+        }
+        if (operationSign == JavaTokenType.MINUS) {
+          return new TypeConversionDescriptor("$qualifier$[$idx$] - $delta$","$qualifier$.addAndGet($idx$, -($delta$))",(PsiExpression)parentExpression);
+        }
+      }
+ else       if (parentExpression instanceof PsiAssignmentExpression) {
+        final PsiJavaToken signToken=((PsiAssignmentExpression)parentExpression).getOperationSign();
+        final IElementType operationSign=signToken.getTokenType();
+        final String sign=signToken.getText();
+        if (operationSign == JavaTokenType.PLUSEQ || operationSign == JavaTokenType.MINUSEQ) {
+          return new TypeConversionDescriptor("$qualifier$[$idx$] " + sign + " $val$","$qualifier$.getAndAdd($idx$, " + (operationSign == JavaTokenType.MINUSEQ ? "-" : "") + "($val$))",(PsiExpression)parentExpression);
+        }
+      }
+    }
+  }
+  return from instanceof PsiArrayType ? findDirectConversionForAtomicReferenceArray(context,to,from) : findDirectConversionForAtomicReference(context,to,from);
+}

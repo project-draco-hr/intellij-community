@@ -1,0 +1,146 @@
+{
+  if (expr == null)   return null;
+  final LinkedList<PsiType> e=myTypeMap.get(new TypeMigrationUsageInfo(expr));
+  if (e != null) {
+    return e.getFirst();
+  }
+  if (expr instanceof PsiArrayAccessExpression) {
+    final PsiType at=evaluateType(((PsiArrayAccessExpression)expr).getArrayExpression());
+    if (at instanceof PsiArrayType) {
+      return ((PsiArrayType)at).getComponentType();
+    }
+  }
+ else   if (expr instanceof PsiAssignmentExpression) {
+    return evaluateType(((PsiAssignmentExpression)expr).getLExpression());
+  }
+ else   if (expr instanceof PsiMethodCallExpression) {
+    final PsiMethodCallExpression call=((PsiMethodCallExpression)expr);
+    final PsiMethod method=call.resolveMethod();
+    if (method != null) {
+      final PsiParameter[] parameters=method.getParameterList().getParameters();
+      final PsiExpression[] actualParms=call.getArgumentList().getExpressions();
+      return createMethodSubstitution(parameters,actualParms,method,call,myLabeler).substitute(evaluateType(call.getMethodExpression()));
+    }
+  }
+ else   if (expr instanceof PsiBinaryExpression) {
+    final PsiExpression lOperand=((PsiBinaryExpression)expr).getLOperand();
+    final PsiExpression rOperand=((PsiBinaryExpression)expr).getROperand();
+    final PsiJavaToken operationSign=((PsiBinaryExpression)expr).getOperationSign();
+    return TypeConversionUtil.calcTypeForBinaryExpression(evaluateType(lOperand),evaluateType(rOperand),operationSign.getTokenType());
+  }
+ else   if (expr instanceof PsiPostfixExpression) {
+    return evaluateType(((PsiPostfixExpression)expr).getOperand());
+  }
+ else   if (expr instanceof PsiPrefixExpression) {
+    return evaluateType(((PsiPrefixExpression)expr).getOperand());
+  }
+ else   if (expr instanceof PsiParenthesizedExpression) {
+    return evaluateType(((PsiParenthesizedExpression)expr).getExpression());
+  }
+ else   if (expr instanceof PsiConditionalExpression) {
+    final PsiExpression thenExpression=((PsiConditionalExpression)expr).getThenExpression();
+    final PsiExpression elseExpression=((PsiConditionalExpression)expr).getElseExpression();
+    final PsiType thenType=evaluateType(thenExpression);
+    final PsiType elseType=evaluateType(elseExpression);
+switch ((thenType == null ? 0 : 1) + (elseType == null ? 0 : 2)) {
+case 0:
+      return expr.getType();
+case 1:
+    return thenType;
+case 2:
+  return elseType;
+case 3:
+if (TypeConversionUtil.areTypesConvertible(thenType,elseType)) {
+  return thenType;
+}
+ else if (TypeConversionUtil.areTypesConvertible(elseType,thenType)) {
+  return elseType;
+}
+ else {
+switch ((thenType.equals(thenExpression.getType()) ? 0 : 1) + (elseType.equals(elseExpression.getType()) ? 0 : 2)) {
+case 0:
+    return expr.getType();
+case 1:
+  return thenType;
+case 2:
+return elseType;
+case 3:
+LOG.error("Condition type conflict.");
+return null;
+default :
+LOG.error("Must not happen.");
+}
+}
+default :
+LOG.error("Must not happen.");
+}
+}
+ else if (expr instanceof PsiNewExpression) {
+final PsiExpression qualifier=((PsiNewExpression)expr).getQualifier();
+if (qualifier != null) {
+final PsiClassType.ClassResolveResult qualifierResult=resolveType(evaluateType(qualifier));
+if (qualifierResult.getElement() != null) {
+final PsiSubstitutor qualifierSubs=qualifierResult.getSubstitutor();
+final PsiClassType.ClassResolveResult result=resolveType(expr.getType());
+if (result.getElement() != null) {
+final PsiClass aClass=result.getElement();
+return JavaPsiFacade.getInstance(aClass.getProject()).getElementFactory().createType(aClass,result.getSubstitutor().putAll(qualifierSubs));
+}
+}
+}
+}
+ else if (expr instanceof PsiReferenceExpression) {
+final PsiReferenceExpression ref=((PsiReferenceExpression)expr);
+final PsiExpression qualifier=ref.getQualifierExpression();
+if (qualifier == null) {
+final PsiElement resolvee=ref.resolve();
+if (resolvee == null) {
+return null;
+}
+return resolvee instanceof PsiClass ? JavaPsiFacade.getElementFactory(resolvee.getProject()).createType((PsiClass)resolvee,PsiSubstitutor.EMPTY) : getType(resolvee);
+}
+ else {
+final PsiType qualifierType=evaluateType(qualifier);
+final PsiElement element=ref.resolve();
+final PsiClassType.ClassResolveResult result=resolveType(qualifierType);
+final PsiClass aClass=result.getElement();
+if (aClass != null) {
+final PsiSubstitutor aSubst=result.getSubstitutor();
+if (element instanceof PsiField) {
+final PsiField field=(PsiField)element;
+PsiType aType=field.getType();
+final PsiClass superClass=field.getContainingClass();
+if (InheritanceUtil.isInheritorOrSelf(aClass,superClass,true)) {
+aType=TypeConversionUtil.getSuperClassSubstitutor(superClass,aClass,PsiSubstitutor.EMPTY).substitute(aType);
+}
+return aSubst.substitute(aType);
+}
+ else if (element instanceof PsiMethod) {
+final PsiMethod method=(PsiMethod)element;
+PsiType aType=method.getReturnType();
+final PsiClass superClass=method.getContainingClass();
+if (InheritanceUtil.isInheritorOrSelf(aClass,superClass,true)) {
+aType=TypeConversionUtil.getSuperClassSubstitutor(superClass,aClass,PsiSubstitutor.EMPTY).substitute(aType);
+}
+ else if (InheritanceUtil.isInheritorOrSelf(superClass,aClass,true)) {
+final PsiMethod[] methods=method.findSuperMethods(aClass);
+if (methods.length > 0) {
+aType=methods[0].getReturnType();
+}
+}
+return aSubst.substitute(aType);
+}
+}
+}
+}
+ else if (expr instanceof PsiSuperExpression) {
+final PsiClass psiClass=PsiTreeUtil.getParentOfType(expr,PsiClass.class);
+if (psiClass != null) {
+final PsiClass superClass=psiClass.getSuperClass();
+if (superClass != null) {
+return getType(new TypeMigrationUsageInfo(superClass));
+}
+}
+}
+return getType(expr);
+}

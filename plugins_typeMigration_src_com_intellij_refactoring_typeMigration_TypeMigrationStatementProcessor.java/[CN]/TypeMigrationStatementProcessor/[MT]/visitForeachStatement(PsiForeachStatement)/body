@@ -1,0 +1,28 @@
+{
+  super.visitForeachStatement(statement);
+  final PsiExpression value=statement.getIteratedValue();
+  final PsiParameter psiParameter=statement.getIterationParameter();
+  if (value != null) {
+    PsiType psiType=myTypeEvaluator.evaluateType(value);
+    if (psiType instanceof PsiArrayType) {
+      psiType=((PsiArrayType)psiType).getComponentType();
+    }
+ else     if (psiType instanceof PsiClassType) {
+      final PsiClassType.ClassResolveResult resolveResult=((PsiClassType)psiType).resolveGenerics();
+      final PsiClass psiClass=resolveResult.getElement();
+      final Project project=statement.getProject();
+      final PsiClass iterableClass=JavaPsiFacade.getInstance(project).findClass("java.lang.Iterable",GlobalSearchScope.allScope(project));
+      if (iterableClass == null)       return;
+      if (!InheritanceUtil.isInheritorOrSelf(psiClass,iterableClass,true))       return;
+      final PsiSubstitutor iterableParamSubstitutor=TypeConversionUtil.getClassSubstitutor(iterableClass,psiClass,PsiSubstitutor.EMPTY);
+      LOG.assertTrue(iterableParamSubstitutor != null);
+      final PsiTypeParameter[] typeParameters=iterableClass.getTypeParameters();
+      LOG.assertTrue(typeParameters.length == 1);
+      psiType=resolveResult.getSubstitutor().substitute(iterableParamSubstitutor.substitute(typeParameters[0]));
+    }
+ else {
+      return;
+    }
+    processVariable(psiParameter,value,psiType,null,null,false);
+  }
+}

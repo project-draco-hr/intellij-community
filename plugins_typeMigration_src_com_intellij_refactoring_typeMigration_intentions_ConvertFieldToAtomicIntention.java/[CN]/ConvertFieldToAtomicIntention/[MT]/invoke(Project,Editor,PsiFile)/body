@@ -1,0 +1,68 @@
+{
+  if (!CodeInsightUtilBase.prepareFileForWrite(file))   return;
+  final PsiElement element=file.findElementAt(editor.getCaretModel().getOffset());
+  final PsiField psiField=PsiTreeUtil.getParentOfType(element,PsiField.class);
+  LOG.assertTrue(psiField != null);
+  final JavaPsiFacade psiFacade=JavaPsiFacade.getInstance(project);
+  final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
+  final PsiType fromType=psiField.getType();
+  PsiClassType toType;
+  final String atomicQualifiedName=myFromToMap.get(fromType);
+  if (atomicQualifiedName != null) {
+    final PsiClass atomicClass=psiFacade.findClass(atomicQualifiedName,GlobalSearchScope.allScope(project));
+    if (atomicClass == null) {
+      return;
+    }
+    toType=elementFactory.createType(atomicClass);
+  }
+ else   if (fromType instanceof PsiArrayType) {
+    final PsiClass atomicReferenceArrayClass=psiFacade.findClass(AtomicReferenceArray.class.getName(),GlobalSearchScope.allScope(project));
+    if (atomicReferenceArrayClass == null) {
+      return;
+    }
+    final HashMap<PsiTypeParameter,PsiType> substitutor=new HashMap<PsiTypeParameter,PsiType>();
+    final PsiTypeParameter[] typeParameters=atomicReferenceArrayClass.getTypeParameters();
+    if (typeParameters.length == 1) {
+      final PsiType componentType=((PsiArrayType)fromType).getComponentType();
+      substitutor.put(typeParameters[0],componentType instanceof PsiPrimitiveType ? ((PsiPrimitiveType)componentType).getBoxedType(file) : componentType);
+    }
+    toType=elementFactory.createType(atomicReferenceArrayClass,elementFactory.createSubstitutor(substitutor));
+  }
+ else {
+    final PsiClass atomicReferenceClass=psiFacade.findClass(AtomicReference.class.getName(),GlobalSearchScope.allScope(project));
+    if (atomicReferenceClass == null) {
+      return;
+    }
+    final HashMap<PsiTypeParameter,PsiType> substitutor=new HashMap<PsiTypeParameter,PsiType>();
+    final PsiTypeParameter[] typeParameters=atomicReferenceClass.getTypeParameters();
+    if (typeParameters.length == 1) {
+      substitutor.put(typeParameters[0],fromType instanceof PsiPrimitiveType ? ((PsiPrimitiveType)fromType).getBoxedType(file) : fromType);
+    }
+    toType=elementFactory.createType(atomicReferenceClass,elementFactory.createSubstitutor(substitutor));
+  }
+  try {
+    psiField.getTypeElement().replace(elementFactory.createTypeElement(toType));
+    final PsiExpression initializer=psiField.getInitializer();
+    if (initializer != null) {
+      final TypeConversionDescriptor directConversion=AtomicConversionRule.findDirectConversion(initializer,toType,initializer.getType());
+      if (directConversion != null) {
+        TypeMigrationReplacementUtil.replaceExpression(initializer,project,directConversion);
+      }
+    }
+    for (    PsiReference reference : ReferencesSearch.search(psiField)) {
+      PsiElement psiElement=reference.getElement();
+      if (psiElement instanceof PsiExpression) {
+        if (psiElement.getParent() instanceof PsiExpression) {
+          psiElement=psiElement.getParent();
+        }
+        final TypeConversionDescriptor directConversion=AtomicConversionRule.findDirectConversion(psiElement,toType,fromType);
+        if (directConversion != null) {
+          TypeMigrationReplacementUtil.replaceExpression((PsiExpression)psiElement,project,directConversion);
+        }
+      }
+    }
+  }
+ catch (  IncorrectOperationException e) {
+    LOG.error(e);
+  }
+}

@@ -1,0 +1,34 @@
+{
+  boolean checkNumberOfArguments=false;
+  if (param.getType() instanceof PsiEllipsisType && !(getTypeEvaluator().getType(param) instanceof PsiEllipsisType)) {
+    checkNumberOfArguments=true;
+  }
+  final PsiMethod method=(PsiMethod)param.getDeclarationScope();
+  final PsiParameterList parameterList=method.getParameterList();
+  final int parametersCount=parameterList.getParametersCount();
+  final int index=parameterList.getParameterIndex(param);
+  final List<PsiReference> refs=filterReferences(psiClass,ReferencesSearch.search(method,method.getUseScope().intersectWith(myRules.getSearchScope()),true));
+  for (  PsiReference ref1 : refs) {
+    final PsiElement ref=ref1.getElement();
+    final PsiElement parent=Util.getEssentialParent(ref);
+    if (parent instanceof PsiCallExpression) {
+      final PsiExpressionList argumentList=((PsiCallExpression)parent).getArgumentList();
+      if (argumentList != null) {
+        final PsiExpression[] expressions=argumentList.getExpressions();
+        if (checkNumberOfArguments && parametersCount != expressions.length) {
+          markFailedConversion(new Pair<PsiType,PsiType>(param.getType(),migrationType),(PsiCallExpression)parent);
+        }
+        if (index > -1 && index < expressions.length) {
+          final PsiExpression actual=expressions[index];
+          final PsiType type=getTypeEvaluator().evaluateType(actual);
+          if (type != null) {
+            migrateExpressionType(actual,migrationType,parent,TypeConversionUtil.isAssignable(migrationType,type),true);
+          }
+        }
+      }
+    }
+ else     if (ref instanceof PsiDocTagValue) {
+      myConversions.put(ref,method);
+    }
+  }
+}
