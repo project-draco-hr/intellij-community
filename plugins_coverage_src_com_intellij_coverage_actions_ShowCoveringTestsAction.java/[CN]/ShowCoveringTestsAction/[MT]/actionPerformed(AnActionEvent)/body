@@ -1,0 +1,53 @@
+{
+  final Project project=PlatformDataKeys.PROJECT.getData(e.getDataContext());
+  LOG.assertTrue(project != null);
+  final CoverageSuite currentSuite=CoverageDataManager.getInstance(project).getCurrentSuite();
+  LOG.assertTrue(currentSuite != null);
+  final File[] traceFiles=getTraceFiles(project);
+  final Set<String> tests=new HashSet<String>();
+  Runnable runnable=new Runnable(){
+    public void run(){
+      for (      File traceFile : traceFiles) {
+        DataInputStream in=null;
+        try {
+          in=new DataInputStream(new FileInputStream(traceFile));
+          extractTests(traceFile,in,tests);
+        }
+ catch (        Exception ex) {
+          LOG.error(traceFile.getName(),ex);
+        }
+ finally {
+          try {
+            in.close();
+          }
+ catch (          IOException ex) {
+            LOG.error(ex);
+          }
+        }
+      }
+    }
+  }
+;
+  if (ProgressManager.getInstance().runProcessWithProgressSynchronously(runnable,"Exctract information about tests",false,project)) {
+    final String[] testNames=ArrayUtil.toStringArray(tests);
+    Arrays.sort(testNames);
+    final List<PsiElement> elements=new ArrayList<PsiElement>();
+    final JavaPsiFacade facade=JavaPsiFacade.getInstance(project);
+    for (    String testName : testNames) {
+      final PsiClass psiClass=facade.findClass(testName.substring(0,testName.lastIndexOf(".")),GlobalSearchScope.projectScope(project));
+      if (psiClass != null) {
+        final PsiMethod[] testsByName=psiClass.findMethodsByName(testName.substring(testName.lastIndexOf(".") + 1),true);
+        if (testsByName.length == 1) {
+          elements.add(testsByName[0]);
+        }
+      }
+    }
+    final ImplementationViewComponent component=new ImplementationViewComponent(elements.toArray(new PsiElement[elements.size()]),0);
+    if (component.hasElementsToShow()) {
+      final String title="Tests covering line " + myClassFQName + ":"+ myLineData.getLineNumber();
+      final JBPopup popup=JBPopupFactory.getInstance().createComponentPopupBuilder(component,component.getPrefferedFocusableComponent()).setRequestFocusCondition(project,NotLookupOrSearchCondition.INSTANCE).setProject(project).setDimensionServiceKey(project,"ShowTestsPopup",false).setResizable(true).setMovable(true).setTitle(title).createPopup();
+      popup.showInBestPositionFor(DataManager.getInstance().getDataContext());
+      component.setHint(popup,title);
+    }
+  }
+}

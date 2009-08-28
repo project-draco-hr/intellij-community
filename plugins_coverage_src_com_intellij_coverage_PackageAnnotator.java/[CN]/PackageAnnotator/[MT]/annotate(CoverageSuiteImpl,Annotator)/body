@@ -1,0 +1,49 @@
+{
+  final ProjectData data=suite.getCoverageData(myCoverageManager);
+  if (data == null)   return;
+  if (!suite.isPackageFiltered(myPackage.getQualifiedName()))   return;
+  final Module[] modules=myCoverageManager.doInReadActionIfProjectOpen(new Computable<Module[]>(){
+    public Module[] compute(){
+      return ModuleManager.getInstance(myProject).getModules();
+    }
+  }
+);
+  if (modules == null)   return;
+  Map<String,PackageCoverageInfo> packageCoverageMap=new HashMap<String,PackageCoverageInfo>();
+  for (  final Module module : modules) {
+    final String rootPackageVMName=myPackage.getQualifiedName().replaceAll("\\.","/");
+    final VirtualFile packageRoot=myCoverageManager.doInReadActionIfProjectOpen(new Computable<VirtualFile>(){
+      @Nullable public VirtualFile compute(){
+        final VirtualFile outputPath=CompilerModuleExtension.getInstance(module).getCompilerOutputPath();
+        if (outputPath != null) {
+          return rootPackageVMName.length() > 0 ? outputPath.findFileByRelativePath(rootPackageVMName) : outputPath;
+        }
+        return null;
+      }
+    }
+);
+    if (packageRoot != null) {
+      collectCoverageInformation(packageRoot,packageCoverageMap,data,rootPackageVMName,annotator,module,suite.isTrackTestFolders(),false);
+    }
+    if (suite.isTrackTestFolders()) {
+      final VirtualFile testPackageRoot=myCoverageManager.doInReadActionIfProjectOpen(new Computable<VirtualFile>(){
+        @Nullable public VirtualFile compute(){
+          final VirtualFile outputPath=CompilerModuleExtension.getInstance(module).getCompilerOutputPathForTests();
+          if (outputPath != null) {
+            return rootPackageVMName.length() > 0 ? outputPath.findFileByRelativePath(rootPackageVMName) : outputPath;
+          }
+          return null;
+        }
+      }
+);
+      if (testPackageRoot != null) {
+        collectCoverageInformation(testPackageRoot,packageCoverageMap,data,rootPackageVMName,annotator,module,suite.isTrackTestFolders(),true);
+      }
+    }
+  }
+  for (  Map.Entry<String,PackageCoverageInfo> entry : packageCoverageMap.entrySet()) {
+    final String packageFQName=entry.getKey().replaceAll("/",".");
+    final PackageCoverageInfo info=entry.getValue();
+    annotator.annotatePackage(packageFQName,info);
+  }
+}

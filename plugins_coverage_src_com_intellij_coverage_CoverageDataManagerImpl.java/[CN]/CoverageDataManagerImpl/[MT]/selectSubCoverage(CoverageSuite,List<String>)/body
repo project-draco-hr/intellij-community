@@ -1,0 +1,54 @@
+{
+  ((CoverageSuiteImpl)suite).restoreCoverageData();
+  final ProjectData data=((CoverageSuiteImpl)suite).getCoverageData(this);
+  if (data == null)   return;
+  mySubCoverageIsActive=true;
+  final Map<String,Set<Integer>> executionTrace=new HashMap<String,Set<Integer>>();
+  final String fileName=suite.getCoverageDataFileName();
+  final File tracesDir=getTracesDirectory(fileName);
+  for (  String testName : testNames) {
+    final File file=new File(tracesDir,testName + ".tr");
+    if (file.exists()) {
+      DataInputStream in=null;
+      try {
+        in=new DataInputStream(new FileInputStream(file));
+        int traceSize=in.readInt();
+        for (int i=0; i < traceSize; i++) {
+          final String className=in.readUTF();
+          final int linesSize=in.readInt();
+          Set<Integer> lines=executionTrace.get(className);
+          if (lines == null) {
+            lines=new HashSet<Integer>();
+            executionTrace.put(className,lines);
+          }
+          for (int l=0; l < linesSize; l++) {
+            lines.add(in.readInt());
+          }
+        }
+      }
+ catch (      Exception e) {
+        LOG.error(e);
+      }
+ finally {
+        try {
+          in.close();
+        }
+ catch (        IOException e) {
+          LOG.error(e);
+        }
+      }
+    }
+  }
+  final ProjectData projectData=new ProjectData();
+  for (  String className : executionTrace.keySet()) {
+    ClassData loadedClassData=projectData.getClassData(className);
+    if (loadedClassData == null) {
+      loadedClassData=projectData.getOrCreateClassData(className);
+    }
+    for (    Integer line : executionTrace.get(className)) {
+      loadedClassData.getOrCreateLine(line.intValue(),null).setStatus(LineCoverage.FULL);
+    }
+  }
+  ((CoverageSuiteImpl)suite).setCoverageData(projectData);
+  renewCoverageData(suite);
+}

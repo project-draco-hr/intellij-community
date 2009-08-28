@@ -1,0 +1,88 @@
+{
+  final StringBuffer buf=new StringBuffer();
+  final LineData lineData=getLineData(lineNumber);
+  buf.append("Hits: ").append(lineData.getHits()).append("\n");
+  final Document document=editor.getDocument();
+  final Project project=editor.getProject();
+  final PsiFile psiFile=PsiDocumentManager.getInstance(project).getPsiFile(document);
+  final int startOffset=document.getLineStartOffset(lineNumber);
+  final int endOffset=document.getLineEndOffset(lineNumber);
+  final List<PsiExpression> expressions=new ArrayList<PsiExpression>();
+  for (int offset=startOffset; offset < endOffset; offset++) {
+    PsiElement parent=PsiTreeUtil.getParentOfType(psiFile.findElementAt(offset),PsiStatement.class);
+    PsiElement condition=null;
+    if (parent instanceof PsiIfStatement) {
+      condition=((PsiIfStatement)parent).getCondition();
+    }
+ else     if (parent instanceof PsiSwitchStatement) {
+      condition=((PsiSwitchStatement)parent).getExpression();
+    }
+ else     if (parent instanceof PsiDoWhileStatement) {
+      condition=((PsiDoWhileStatement)parent).getCondition();
+    }
+ else     if (parent instanceof PsiForStatement) {
+      condition=((PsiForStatement)parent).getCondition();
+    }
+ else     if (parent instanceof PsiWhileStatement) {
+      condition=((PsiWhileStatement)parent).getCondition();
+    }
+ else     if (parent instanceof PsiForeachStatement) {
+      condition=((PsiForeachStatement)parent).getIteratedValue();
+    }
+ else     if (parent instanceof PsiAssertStatement) {
+      condition=((PsiAssertStatement)parent).getAssertCondition();
+    }
+    if (condition != null) {
+      try {
+        final ControlFlow controlFlow=ControlFlowFactory.getInstance(project).getControlFlow(parent,AllVariablesControlFlowPolicy.getInstance());
+        for (        Instruction instruction : controlFlow.getInstructions()) {
+          if (instruction instanceof ConditionalBranchingInstruction) {
+            final PsiExpression expression=((ConditionalBranchingInstruction)instruction).expression;
+            if (!expressions.contains(expression)) {
+              expressions.add(expression);
+            }
+          }
+        }
+      }
+ catch (      AnalysisCanceledException e) {
+        return buf.toString();
+      }
+    }
+  }
+  final String indent="    ";
+  try {
+    int idx=0;
+    if (lineData.getJumps() != null) {
+      for (      Object o : lineData.getJumps()) {
+        final JumpData jumpData=(JumpData)o;
+        if (jumpData.getTrueHits() + jumpData.getFalseHits() > 0) {
+          final PsiExpression expression=expressions.get(idx++);
+          final PsiElement parentExpression=expression.getParent();
+          boolean reverse=parentExpression instanceof PsiBinaryExpression && ((PsiBinaryExpression)parentExpression).getOperationSign().getTokenType() == JavaTokenType.OROR || parentExpression instanceof PsiDoWhileStatement || parentExpression instanceof PsiAssertStatement;
+          buf.append(indent).append(expression.getText()).append("\n");
+          buf.append(indent).append(indent).append("true hits: ").append(reverse ? jumpData.getFalseHits() : jumpData.getTrueHits()).append("\n");
+          buf.append(indent).append(indent).append("false hits: ").append(reverse ? jumpData.getTrueHits() : jumpData.getFalseHits()).append("\n");
+        }
+      }
+    }
+    if (lineData.getSwitches() != null) {
+      for (      Object o : lineData.getSwitches()) {
+        final SwitchData switchData=(SwitchData)o;
+        final PsiExpression conditionExpression=expressions.get(idx++);
+        buf.append(indent).append(conditionExpression.getText()).append("\n");
+        if (hasDefaultLabel(conditionExpression)) {
+          buf.append(indent).append(indent).append("Default hits: ").append(switchData.getDefaultHits()).append("\n");
+        }
+        int i=0;
+        for (        int key : switchData.getKeys()) {
+          buf.append(indent).append(indent).append("case ").append(key).append(": ").append(switchData.getHits()[i++]).append("\n");
+        }
+      }
+    }
+  }
+ catch (  Exception e) {
+    LOG.info(e);
+    return "Hits: " + getLineData(lineNumber).getHits();
+  }
+  return buf.toString();
+}

@@ -1,0 +1,35 @@
+{
+  final TIntIntHashMap mapping;
+  if (classFile.getTimeStamp() < getVirtualFile().getTimeStamp()) {
+    mapping=getOldToNewLineMapping(classFile.getTimeStamp());
+    if (mapping == null)     return;
+  }
+ else {
+    mapping=null;
+  }
+  final byte[] content;
+  try {
+    content=classFile.contentsToByteArray();
+  }
+ catch (  IOException e) {
+    return;
+  }
+  ClassReader reader=new ClassReader(content,0,content.length);
+  final CoverageSuiteImpl coverageSuite=(CoverageSuiteImpl)CoverageDataManager.getInstance(myProject).getCurrentSuite();
+  SourceLineCounter collector=new SourceLineCounter(new EmptyVisitor(),null,coverageSuite.getRunner() instanceof IDEACoverageRunner && coverageSuite.isTracingEnabled());
+  reader.accept(collector,0);
+  final TIntObjectHashMap lines=collector.getSourceLines();
+  lines.forEachKey(new TIntProcedure(){
+    public boolean execute(    int line){
+      line--;
+      int lineNumber=line;
+      if (mapping != null)       line=mapping.get(line);
+      if (line >= myDocument.getLineCount())       return true;
+      executableLines.put(line,null);
+      final RangeHighlighter highlighter=createRangeHighlighter(classFile.getTimeStamp(),markupModel,coverageByTestApplicable,executableLines,null,lineNumber,line);
+      highlighters.add(highlighter);
+      return true;
+    }
+  }
+);
+}
