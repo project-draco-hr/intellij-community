@@ -1,0 +1,55 @@
+{
+  if (!CodeInsightUtilBase.prepareFileForWrite(file))   return;
+  final PsiElement element=file.findElementAt(editor.getCaretModel().getOffset());
+  final PsiField psiField=PsiTreeUtil.getParentOfType(element,PsiField.class);
+  LOG.assertTrue(psiField != null);
+  final JavaPsiFacade psiFacade=JavaPsiFacade.getInstance(project);
+  final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
+  final PsiType fromType=psiField.getType();
+  final PsiClass threadLocalClass=psiFacade.findClass(ThreadLocal.class.getName(),GlobalSearchScope.allScope(project));
+  if (threadLocalClass == null) {
+    return;
+  }
+  final HashMap<PsiTypeParameter,PsiType> substitutor=new HashMap<PsiTypeParameter,PsiType>();
+  final PsiTypeParameter[] typeParameters=threadLocalClass.getTypeParameters();
+  if (typeParameters.length == 1) {
+    substitutor.put(typeParameters[0],fromType instanceof PsiPrimitiveType ? ((PsiPrimitiveType)fromType).getBoxedType(file) : fromType);
+  }
+  final PsiClassType toType=elementFactory.createType(threadLocalClass,elementFactory.createSubstitutor(substitutor));
+  try {
+    psiField.getTypeElement().replace(elementFactory.createTypeElement(toType));
+    final TypeMigrationRules rules=new TypeMigrationRules(fromType);
+    rules.setMigrationRootType(toType);
+    rules.setBoundScope(GlobalSearchScope.fileScope(file));
+    final TypeMigrationLabeler labeler=new TypeMigrationLabeler(rules);
+    labeler.getMigratedUsages(psiField,false);
+    for (    PsiReference reference : ReferencesSearch.search(psiField)) {
+      PsiElement psiElement=reference.getElement();
+      if (psiElement instanceof PsiExpression) {
+        if (psiElement.getParent() instanceof PsiExpression) {
+          psiElement=psiElement.getParent();
+        }
+        final TypeConversionDescriptor directConversion=ThreadLocalConversionRule.findDirectConversion(psiElement,toType,fromType,labeler);
+        if (directConversion != null) {
+          TypeMigrationReplacementUtil.replaceExpression((PsiExpression)psiElement,project,directConversion);
+        }
+      }
+    }
+    final PsiExpression initializer=psiField.getInitializer();
+    if (initializer != null) {
+      psiField.setInitializer(elementFactory.createExpressionFromText("new " + toType.getCanonicalText() + "()",psiField));
+      final String initializerText=psiField.getName() + ".set(" + initializer.getText()+ ");";
+      final PsiClassInitializer classInitializer=elementFactory.createClassInitializer();
+      classInitializer.getModifierList().setModifierProperty(PsiModifier.STATIC,psiField.hasModifierProperty(PsiModifier.STATIC));
+      final PsiClass containingClass=psiField.getContainingClass();
+      final PsiClassInitializer addedInitializerBlock=(PsiClassInitializer)containingClass.addAfter(classInitializer,psiField);
+      containingClass.addAfter(CodeEditUtil.createLineFeed(psiField.getManager()),psiField);
+      final PsiStatement initializerStatement=elementFactory.createStatementFromText(initializerText,addedInitializerBlock);
+      addedInitializerBlock.getBody().add(initializerStatement);
+      CodeStyleManager.getInstance(project).reformat(addedInitializerBlock);
+    }
+  }
+ catch (  IncorrectOperationException e) {
+    LOG.error(e);
+  }
+}
