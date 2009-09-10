@@ -6,20 +6,9 @@
   try {
     final int RUN_TIMEOUT=10 * 1000;
     final String bin_path=getInterpreterPath(sdkPath);
-    String text;
-    FileWriter out;
-    text=FileUtil.loadTextAndClose(new InputStreamReader(PythonSdkType.class.getResourceAsStream("find_binaries.py")));
-    final File find_bin_file=FileUtil.createTempFile("find_bin","");
-    out=new FileWriter(find_bin_file);
-    out.write(text);
-    out.close();
-    text=FileUtil.loadTextAndClose(new InputStreamReader(PythonSdkType.class.getResourceAsStream("generator3.py")));
-    final File gen3_file=FileUtil.createTempFile("gen3","");
-    out=new FileWriter(gen3_file);
-    out.write(text);
-    out.close();
+    final File tempDir=copyResourcesToTempDir(GENERATOR3,FIND_BINARIES,"pyparsing.py","pyparsing_py3.py");
     try {
-      final ProcessOutput run_result=SdkUtil.getProcessOutput(sdkPath,new String[]{bin_path,find_bin_file.getPath()});
+      final ProcessOutput run_result=SdkUtil.getProcessOutput(sdkPath,new String[]{bin_path,tempDir.getPath() + File.separatorChar + FIND_BINARIES});
       if (run_result.getExitCode() == 0) {
         for (        String line : run_result.getStdoutLines()) {
           int cutpos=line.indexOf(' ');
@@ -33,7 +22,7 @@
               indicator.setText2(modname);
             }
             LOG.info("Skeleton for " + modname);
-            final ProcessOutput gen_result=SdkUtil.getProcessOutput(sdkPath,new String[]{bin_path,gen3_file.getPath(),"-d",stubsRoot,modname},RUN_TIMEOUT);
+            final ProcessOutput gen_result=SdkUtil.getProcessOutput(sdkPath,new String[]{bin_path,tempDir.getPath() + File.separatorChar + GENERATOR3,"-d",stubsRoot,modname},RUN_TIMEOUT);
             if (gen_result.getExitCode() != 0) {
               StringBuffer sb=new StringBuffer("Skeleton for ");
               sb.append(modname).append(" failed. stderr: --");
@@ -47,12 +36,11 @@
  else {
         StringBuffer sb=new StringBuffer();
         for (        String err_line : run_result.getStderrLines())         sb.append(err_line).append("\n");
-        LOG.error("failed to run find_binaries, exit code " + run_result.getExitCode() + ", stderr '"+ sb.toString()+ "'");
+        LOG.error("failed to run " + FIND_BINARIES + ", exit code "+ run_result.getExitCode()+ ", stderr '"+ sb.toString()+ "'");
       }
     }
   finally {
-      FileUtil.delete(find_bin_file);
-      FileUtil.delete(gen3_file);
+      FileUtil.delete(tempDir);
     }
   }
  catch (  IOException e) {
