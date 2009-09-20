@@ -19,7 +19,7 @@
       StringBuilder description_buf=new StringBuilder("");
       String text=reference.getElement().getText();
       String ref_text=reference.getRangeInElement().substring(text);
-      LocalQuickFix action=null;
+      List<LocalQuickFix> actions=new ArrayList<LocalQuickFix>(2);
       HintAction hint_action=null;
       if (ref_text.length() <= 0)       return;
       if (reference instanceof PyReferenceExpression) {
@@ -35,7 +35,14 @@
           String errmsg=PyBundle.message("INSP.module.$0.not.found",ref_text);
           description_buf.append(errmsg);
         }
-        hint_action=proposeImportFixes(node,ref_text);
+        List<LocalQuickFix> import_fixes=proposeImportFixes(node,ref_text);
+        if (import_fixes.size() > 0) {
+          actions.addAll(import_fixes);
+          Object first_action=import_fixes.get(0);
+          if (first_action instanceof HintAction) {
+            hint_action=((HintAction)first_action);
+          }
+        }
       }
       if (reference instanceof PsiReferenceEx) {
         final String s=((PsiReferenceEx)reference).getUnresolvedDescription();
@@ -55,9 +62,9 @@
                 PyClass cls=((PyClassType)qtype).getPyClass();
                 if (cls != null) {
                   if (reference.getElement().getParent() instanceof PyCallExpression) {
-                    action=new AddMethodQuickFix(ref_text,cls);
+                    actions.add(new AddMethodQuickFix(ref_text,cls));
                   }
- else                   action=new AddFieldQuickFix(ref_text,cls);
+ else                   actions.add(new AddFieldQuickFix(ref_text,cls));
                 }
                 description_buf.append(PyBundle.message("INSP.unresolved.ref.$0.for.class.$1",ref_text,qtype.getName()));
                 marked_qualified=true;
@@ -71,7 +78,7 @@
         }
         if (!marked_qualified) {
           description_buf.append(PyBundle.message("INSP.unresolved.ref.$0",ref_text));
-          action=new AddImportAction(reference);
+          hint_action=new AddImportAction(reference);
         }
       }
       String description=description_buf.toString();
@@ -84,7 +91,7 @@
       }
       PsiElement point=node.getLastChild();
       if (point == null)       point=node;
-      registerProblem(point,description,hl_type,hint_action,action);
+      registerProblem(point,description,hl_type,hint_action,actions.toArray(LQF_EMPTY));
     }
   }
 }

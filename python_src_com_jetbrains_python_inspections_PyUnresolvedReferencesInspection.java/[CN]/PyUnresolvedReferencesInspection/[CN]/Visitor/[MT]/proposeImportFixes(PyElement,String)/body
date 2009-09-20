@@ -1,12 +1,13 @@
 {
-  boolean worthy_fix=false;
+  PsiFile exisitng_import_file=null;
   ImportFromExistingFix fix=null;
+  List<LocalQuickFix> fixes=new ArrayList<LocalQuickFix>(2);
   Set<String> seen_file_names=new HashSet<String>();
   CollectProcessor import_prc=new CollectProcessor(PyImportStatement.class);
   PyResolveUtil.treeCrawlUp(import_prc,node);
   List<PsiElement> result=import_prc.getResult();
   if (result.size() > 0) {
-    fix=new ImportFromExistingFix(node,ref_text);
+    fix=new ImportFromExistingFix(node,ref_text,true);
     for (    PsiElement stmt : import_prc.getResult()) {
       for (      PyImportElement ielt : ((PyImportStatement)stmt).getImportElements()) {
         final PyReferenceExpression src=ielt.getImportReference();
@@ -18,8 +19,9 @@
             seen_file_names.add(name);
             PsiElement res=(dst_file).findExportedName(ref_text);
             if (res != null) {
+              exisitng_import_file=dst_file;
               fix.addImport(res,dst_file,ielt);
-              worthy_fix=true;
+              fixes.add(fix);
             }
           }
         }
@@ -30,7 +32,7 @@
   PyResolveUtil.treeCrawlUp(from_import_prc,node);
   result=from_import_prc.getResult();
   if (result.size() > 0) {
-    if (fix == null)     fix=new ImportFromExistingFix(node,ref_text);
+    if (fix == null)     fix=new ImportFromExistingFix(node,ref_text,false);
     for (    PsiElement stmt : from_import_prc.getResult()) {
       PyFromImportStatement from_stmt=(PyFromImportStatement)stmt;
       PyImportElement[] ielts=from_stmt.getImportElements();
@@ -44,38 +46,40 @@
             seen_file_names.add(name);
             PsiElement res=(dst_file).findExportedName(ref_text);
             if (res != null) {
+              exisitng_import_file=dst_file;
               fix.addImport(res,dst_file,ielts[ielts.length - 1]);
-              worthy_fix=true;
+              fixes.add(fix);
             }
           }
         }
       }
     }
   }
+  ProgressManager.getInstance().checkCanceled();
   Project project=node.getProject();
   GlobalSearchScope scope=null;
   List<PsiElement> symbols=new ArrayList<PsiElement>();
   symbols.addAll(StubIndex.getInstance().get(PyClassNameIndex.KEY,ref_text,project,scope));
   symbols.addAll(StubIndex.getInstance().get(PyFunctionNameIndex.KEY,ref_text,project,scope));
   if (symbols.size() > 0) {
-    if (fix == null)     fix=new ImportFromExistingFix(node,ref_text);
+    if (fix == null)     fix=new ImportFromExistingFix(node,ref_text,false);
     for (    PsiElement symbol : symbols) {
       if (symbol.getParent() instanceof PsiFile) {
         PsiFile srcfile=symbol.getContainingFile();
-        if (srcfile != null) {
+        if (srcfile != null && srcfile != exisitng_import_file) {
           VirtualFile vfile=srcfile.getVirtualFile();
           if (vfile != null) {
             String import_path=ResolveImportUtil.findShortestImportableName(node,vfile);
             if (import_path != null && !seen_file_names.contains(import_path)) {
-              fix.addImport(symbol,srcfile,null,import_path,propseAsName(node.getContainingFile(),ref_text,import_path));
+              fix.addImport(symbol,srcfile,null,import_path,proposeAsName(node.getContainingFile(),ref_text,import_path));
               seen_file_names.add(import_path);
-              worthy_fix=true;
             }
           }
         }
       }
     }
+    fixes.add(fix);
+    fixes.add(fix.createDual());
   }
-  if (worthy_fix)   return fix;
- else   return null;
+  return fixes;
 }
