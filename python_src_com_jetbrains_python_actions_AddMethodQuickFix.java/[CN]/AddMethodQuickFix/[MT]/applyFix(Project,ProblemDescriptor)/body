@@ -1,43 +1,76 @@
 {
-  PsiElement problem_elt=descriptor.getPsiElement().getParent();
-  PyClass cls=myQualifierClass;
-  String item_name=myIdentifier;
-  if (cls != null && item_name != null) {
+  try {
+    PsiElement problem_elt=descriptor.getPsiElement().getParent();
+    PyClass cls=myQualifierType.getPyClass();
+    boolean call_by_class=myQualifierType.isDefinition();
+    String item_name=myIdentifier;
+    sure(cls);
+    sure(item_name);
     PyStatementList cls_stmt_list=cls.getStatementList();
-    if (!CodeInsightUtilBase.preparePsiElementForWrite(cls_stmt_list)) {
-      return;
-    }
+    sure(CodeInsightUtilBase.preparePsiElementForWrite(cls_stmt_list));
     Language language=cls.getLanguage();
-    if (language instanceof PythonLanguage) {
-      PythonLanguage pythonLanguage=(PythonLanguage)language;
-      PyElementGenerator generator=pythonLanguage.getElementGenerator();
-      StringBuffer param_buf=new StringBuffer("(self");
-      PsiElement pe=problem_elt.getParent();
-      if (pe instanceof PyCallExpression) {
-        PyArgumentList arglist=((PyCallExpression)pe).getArgumentList();
-        if (arglist != null) {
-          int cnt=1;
-          for (          PyExpression arg : arglist.getArguments()) {
-            if (arg instanceof PyReferenceExpression) {
-              param_buf.append(", ").append(((PyReferenceExpression)arg).getReferencedName()).append("_").append(cnt);
-            }
- else {
-              param_buf.append(", param_").append(cnt);
-            }
-            cnt+=1;
-          }
+    sure(language instanceof PythonLanguage);
+    PythonLanguage pythonLanguage=(PythonLanguage)language;
+    PyElementGenerator generator=pythonLanguage.getElementGenerator();
+    StringBuffer param_buf=new StringBuffer("(");
+    PsiElement pe=problem_elt.getParent();
+    String deco_name=null;
+    sure(pe instanceof PyCallExpression);
+    PyArgumentList arglist=((PyCallExpression)pe).getArgumentList();
+    sure(arglist);
+    final PyExpression[] args=arglist.getArguments();
+    boolean made_instance=false;
+    if (call_by_class) {
+      if (args.length > 0) {
+        PyType first_arg_type=args[0].getType();
+        if (first_arg_type instanceof PyClassType && ((PyClassType)first_arg_type).getPyClass().isSublclass(cls)) {
+          param_buf.append("self");
+          made_instance=true;
         }
       }
-      param_buf.append("):\n");
-      PyFunction meth=generator.createFromText(project,PyFunction.class,"def " + item_name + param_buf);
-      PyStatement new_stmt=generator.createFromText(project,PyStatement.class,"pass");
-      meth.getStatementList().add(new_stmt);
-      meth.add(generator.createFromText(project,PsiWhiteSpace.class,"\n\n"));
+      if (!made_instance) {
+        param_buf.append("cls");
+        deco_name="classmethod";
+      }
+    }
+ else {
+      param_buf.append("self");
+    }
+    int cnt=1;
+    boolean skip_first=call_by_class && made_instance;
+    for (    PyExpression arg : args) {
+      if (skip_first) {
+        skip_first=false;
+        continue;
+      }
+      if (arg instanceof PyKeywordArgument) {
+        param_buf.append(", ").append(((PyKeywordArgument)arg).getKeyword());
+      }
+ else {
+        param_buf.append(", param_").append(cnt);
+      }
+      cnt+=1;
+    }
+    param_buf.append("):\n");
+    PyFunction meth=generator.createFromText(project,PyFunction.class,"def " + item_name + param_buf);
+    if (deco_name != null) {
+      PyDecoratorList deco_list=generator.createFromText(project,PyDecoratorList.class,"@" + deco_name + "\ndef foo(): pass",new int[]{0,0});
+      meth.addBefore(deco_list,meth.getFirstChild());
+    }
+    PyStatement new_stmt=generator.createFromText(project,PyStatement.class,"pass");
+    meth.getStatementList().add(new_stmt);
+    meth.add(generator.createFromText(project,PsiWhiteSpace.class,"\n\n"));
+    final PsiElement first_stmt=cls_stmt_list.getFirstChild();
+    if (first_stmt == cls_stmt_list.getLastChild() && first_stmt instanceof PyPassStatement) {
+      meth=(PyFunction)first_stmt.replace(meth);
+    }
+ else {
       cls_stmt_list.add(generator.createFromText(project,PsiWhiteSpace.class,"\n\n"));
       meth=(PyFunction)cls_stmt_list.add(meth);
-      showTemplateBuilder(meth);
-      return;
     }
+    showTemplateBuilder(meth);
   }
-  PyUtil.showBalloon(project,PyBundle.message("QFIX.failed.to.add.method"),MessageType.ERROR);
+ catch (  IncorrectOperationException ignored) {
+    PyUtil.showBalloon(project,PyBundle.message("QFIX.failed.to.add.method"),MessageType.ERROR);
+  }
 }
