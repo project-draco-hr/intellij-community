@@ -1,11 +1,11 @@
 {
   if (!CodeInsightUtilBase.prepareFileForWrite(file))   return;
   final PsiElement element=file.findElementAt(editor.getCaretModel().getOffset());
-  final PsiField psiField=PsiTreeUtil.getParentOfType(element,PsiField.class);
-  LOG.assertTrue(psiField != null);
+  final PsiVariable psiVariable=PsiTreeUtil.getParentOfType(element,PsiVariable.class);
+  LOG.assertTrue(psiVariable != null);
   final JavaPsiFacade psiFacade=JavaPsiFacade.getInstance(project);
   final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
-  final PsiType fromType=psiField.getType();
+  final PsiType fromType=psiVariable.getType();
   PsiClassType toType;
   final String atomicQualifiedName=myFromToMap.get(fromType);
   if (atomicQualifiedName != null) {
@@ -41,19 +41,20 @@
     toType=elementFactory.createType(atomicReferenceClass,elementFactory.createSubstitutor(substitutor));
   }
   try {
-    psiField.getTypeElement().replace(elementFactory.createTypeElement(toType));
-    final PsiExpression initializer=psiField.getInitializer();
+    psiVariable.getTypeElement().replace(elementFactory.createTypeElement(toType));
+    final PsiExpression initializer=psiVariable.getInitializer();
     if (initializer != null) {
       final TypeConversionDescriptor directConversion=AtomicConversionRule.findDirectConversion(initializer,toType,initializer.getType());
       if (directConversion != null) {
         TypeMigrationReplacementUtil.replaceExpression(initializer,project,directConversion);
       }
     }
-    for (    PsiReference reference : ReferencesSearch.search(psiField)) {
+    for (    PsiReference reference : ReferencesSearch.search(psiVariable)) {
       PsiElement psiElement=reference.getElement();
       if (psiElement instanceof PsiExpression) {
-        if (psiElement.getParent() instanceof PsiExpression) {
-          psiElement=psiElement.getParent();
+        final PsiElement parent=psiElement.getParent();
+        if (parent instanceof PsiExpression && !(parent instanceof PsiReferenceExpression)) {
+          psiElement=parent;
         }
         final TypeConversionDescriptor directConversion=AtomicConversionRule.findDirectConversion(psiElement,toType,fromType);
         if (directConversion != null) {
