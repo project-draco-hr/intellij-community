@@ -15,6 +15,15 @@
     }
     element=PyUtil.followAssignmentsChain((PyReferenceExpression)element);
   }
+  if (element instanceof PyCallExpression) {
+    Pair<String,PyFunction> wrap_info=PyCallExpressionHelper.interpretAsStaticmethodOrClassmethodWrappingCall((PyCallExpression)element,originalElement);
+    if (wrap_info != null) {
+      String wrapper_name=wrap_info.getFirst();
+      PyFunction wrapped_func=wrap_info.getSecond();
+      LWrapInSmall.enclose(cat,"Wrapped in <code>",wrapper_name,"</code>",BR);
+      element=wrapped_func;
+    }
+  }
   cat.append("<code>");
   if (element instanceof PyDocStringOwner) {
     String docString=null;
@@ -37,7 +46,7 @@
         String meth_name=fun.getName();
         if (cls != null && meth_name != null) {
           for (          PyClass ancestor : cls.iterateAncestors()) {
-            PyFunction inherited=ancestor.findMethodByName(meth_name);
+            PyFunction inherited=ancestor.findMethodByName(meth_name,false);
             if (inherited != null) {
               PyStringLiteralExpression doc_elt=inherited.getDocStringExpression();
               if (doc_elt != null) {
@@ -52,11 +61,11 @@
           }
           if (not_found) {
             if (PyNames.UnderscoredNames.contains(meth_name)) {
-              PyClassType objtype=PyBuiltinCache.getInstance(fun.getProject()).getObjectType();
+              PyClassType objtype=PyBuiltinCache.getInstance(fun).getObjectType();
               if (objtype != null) {
                 PyClass objcls=objtype.getPyClass();
                 if (objcls != null) {
-                  PyFunction obj_underscored=objcls.findMethodByName(meth_name);
+                  PyFunction obj_underscored=objcls.findMethodByName(meth_name,false);
                   if (obj_underscored != null) {
                     PyStringLiteralExpression predefined_doc_expr=obj_underscored.getDocStringExpression();
                     String predefined_doc=predefined_doc_expr != null ? predefined_doc_expr.getStringValue() : null;

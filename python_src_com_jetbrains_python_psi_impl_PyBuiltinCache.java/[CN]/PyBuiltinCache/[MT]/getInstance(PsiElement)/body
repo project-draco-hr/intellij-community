@@ -1,0 +1,48 @@
+{
+  if (reference != null) {
+    final Module module=ModuleUtil.findModuleForPsiElement(reference);
+    final Project project=reference.getProject();
+    ComponentManager instance_key=module != null ? module : project;
+    PyBuiltinCache instance=ourInstanceCache.get(instance_key);
+    if (instance != null) {
+      return instance;
+    }
+    Sdk sdk=null;
+    if (module != null) {
+      sdk=PythonSdkType.findPythonSdk(module);
+    }
+ else {
+      final PsiFile psifile=reference.getContainingFile();
+      if (psifile != null) {
+        final VirtualFile vfile=psifile.getVirtualFile();
+        if (vfile != null) {
+          sdk=ProjectRootManager.getInstance(project).getProjectJdk();
+        }
+      }
+    }
+    if (sdk != null) {
+      for (      String url : sdk.getRootProvider().getUrls(OrderRootType.SOURCES)) {
+        if (url.contains(PythonSdkType.SKELETON_DIR_NAME)) {
+          final String builtins_url=url + "/" + ((PythonSdkType)sdk.getSdkType()).getBuiltinsFileName();
+          File builtins=new File(VfsUtil.urlToPath(builtins_url));
+          if (builtins.isFile() && builtins.canRead()) {
+            try {
+              VirtualFile builtins_vfile=VfsUtil.findFileByURL(new URL(builtins_url));
+              if (builtins_vfile != null) {
+                PsiFile builtins_psifile=PsiManager.getInstance(project).findFile(builtins_vfile);
+                if (builtins_psifile instanceof PyFile) {
+                  instance=new PyBuiltinCache((PyFile)builtins_psifile);
+                  ourInstanceCache.put(instance_key,instance);
+                  return instance;
+                }
+              }
+            }
+ catch (            MalformedURLException ignored) {
+            }
+          }
+        }
+      }
+    }
+  }
+  return DUD_INSTANCE;
+}

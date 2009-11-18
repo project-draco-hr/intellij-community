@@ -1,14 +1,31 @@
 {
   PyExpression callee=us.getCallee();
+  PyCallExpression.Flag wrapped_flag=null;
   if (callee instanceof PyReferenceExpression) {
     PyReferenceExpression ref=(PyReferenceExpression)callee;
     PsiElement resolved=PyUtil.followAssignmentsChain(ref);
-    if (resolved instanceof PyClass)     resolved=((PyClass)resolved).findMethodByName(PyNames.INIT);
+    if (resolved instanceof PyClass)     resolved=((PyClass)resolved).findMethodByName(PyNames.INIT,false);
+ else     if (resolved instanceof PyCallExpression) {
+      PyCallExpression redefining_call=(PyCallExpression)resolved;
+      Pair<String,PyFunction> wrapper_info=interpretAsStaticmethodOrClassmethodWrappingCall(redefining_call,us);
+      if (wrapper_info != null) {
+        resolved=wrapper_info.getSecond();
+        String wrapper_name=wrapper_info.getFirst();
+        if (PyNames.CLASSMETHOD.equals(wrapper_name))         wrapped_flag=PyCallExpression.Flag.CLASSMETHOD;
+ else         if (PyNames.STATICMETHOD.equals(wrapper_name))         wrapped_flag=PyCallExpression.Flag.STATICMETHOD;
+      }
+    }
     if (resolved instanceof PyFunction) {
       EnumSet<PyCallExpression.Flag> flags=EnumSet.noneOf(PyCallExpression.Flag.class);
       int implicit_offset=0;
       boolean is_by_instance=isByInstance(us);
       if (is_by_instance)       implicit_offset+=1;
+      if (wrapped_flag != null) {
+        flags.add(wrapped_flag);
+        flags.add(PyCallExpression.Flag.WRAPPED);
+        if (wrapped_flag == PyCallExpression.Flag.STATICMETHOD && implicit_offset > 0)         implicit_offset-=1;
+        if (wrapped_flag == PyCallExpression.Flag.CLASSMETHOD && !is_by_instance)         implicit_offset+=1;
+      }
       PyFunction method=(PyFunction)resolved;
       if (PyNames.INIT.equals(method.getName()))       implicit_offset+=1;
       PyDecoratorList decolist=method.getDecoratorList();
