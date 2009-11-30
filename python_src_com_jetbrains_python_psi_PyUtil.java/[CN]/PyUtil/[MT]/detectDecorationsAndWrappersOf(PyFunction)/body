@@ -1,0 +1,33 @@
+{
+  Set<PyFunction.Flag> flags=EnumSet.noneOf(PyFunction.Flag.class);
+  String deconame=getTheOnlyBuiltinDecorator(function);
+  if (PyNames.CLASSMETHOD.equals(deconame))   flags.add(CLASSMETHOD);
+ else   if (PyNames.STATICMETHOD.equals(deconame))   flags.add(STATICMETHOD);
+  if (!flags.contains(CLASSMETHOD) && !flags.contains(STATICMETHOD)) {
+    String func_name=function.getName();
+    if (func_name != null) {
+      PyAssignmentStatement assignment=PsiTreeUtil.getNextSiblingOfType(function,PyAssignmentStatement.class);
+      if (assignment != null) {
+        for (        Pair<PyExpression,PyExpression> pair : assignment.getTargetsToValuesMapping()) {
+          PyExpression value=pair.getSecond();
+          if (value instanceof PyCallExpression) {
+            PyExpression target=pair.getFirst();
+            if (target instanceof PyTargetExpression && func_name.equals(target.getName())) {
+              Pair<String,PyFunction> interpreted=interpretAsStaticmethodOrClassmethodWrappingCall((PyCallExpression)value,function);
+              if (interpreted != null) {
+                PyFunction original=interpreted.getSecond();
+                if (original == function) {
+                  String wrapper_name=interpreted.getFirst();
+                  if (PyNames.CLASSMETHOD.equals(wrapper_name))                   flags.add(CLASSMETHOD);
+ else                   if (PyNames.STATICMETHOD.equals(wrapper_name))                   flags.add(STATICMETHOD);
+                  flags.add(WRAPPED);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return flags;
+}
