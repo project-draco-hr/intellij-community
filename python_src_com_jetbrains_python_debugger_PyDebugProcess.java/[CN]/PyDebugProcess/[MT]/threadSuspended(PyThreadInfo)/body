@@ -1,0 +1,28 @@
+{
+  if (mySuspendedThread != null) {
+    final ResumeCommand command=new ResumeCommand(threadInfo.getId(),ResumeCommand.Mode.RESUME);
+    myDebugger.sendCommand(command);
+    return;
+  }
+  mySuspendedThread=threadInfo;
+  final List<PyStackFrameInfo> frames=threadInfo.getFrames();
+  if (frames != null) {
+    final PySuspendContext suspendContext=new PySuspendContext(this,threadInfo);
+    XLineBreakpoint breakpoint=null;
+    if (threadInfo.isStopOnBreakpoint()) {
+      final PySourcePosition position=frames.get(0).getPosition();
+      breakpoint=myRegisteredBreakpoints.get(position);
+      if (breakpoint == null) {
+        myDebugger.sendCommand(new RemoveBreakpointCommand(position.getFile(),position.getLine()));
+      }
+    }
+    if (breakpoint != null) {
+      if (!getSession().breakpointReached(breakpoint,suspendContext)) {
+        resume();
+      }
+    }
+ else {
+      getSession().positionReached(suspendContext);
+    }
+  }
+}

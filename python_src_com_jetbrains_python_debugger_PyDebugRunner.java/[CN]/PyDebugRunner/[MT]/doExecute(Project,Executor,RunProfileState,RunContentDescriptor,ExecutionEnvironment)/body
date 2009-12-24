@@ -1,0 +1,27 @@
+{
+  FileDocumentManager.getInstance().saveAllDocuments();
+  final ServerSocket serverSocket;
+  try {
+    serverSocket=new ServerSocket(0);
+  }
+ catch (  IOException e) {
+    throw new ExecutionException("Failed to find free socket port",e);
+  }
+  PythonCommandLineState pyState=(PythonCommandLineState)state;
+  final ExecutionResult result=pyState.execute(new CommandLinePatcher(){
+    public void patchCommandLine(    GeneralCommandLine commandLine){
+      final String[] args=new String[]{PythonHelpersLocator.getHelperPath("pydev/pydevd.py"),"--client","127.0.0.1","--port",String.valueOf(serverSocket.getLocalPort()),"--file"};
+      for (int i=0; i < args.length; i++) {
+        commandLine.getParametersList().addAt(i,args[i]);
+      }
+    }
+  }
+);
+  final XDebugSession session=XDebuggerManager.getInstance(project).startSession(this,env,contentToReuse,new XDebugProcessStarter(){
+    @NotNull public XDebugProcess start(    @NotNull final XDebugSession session){
+      return new PyDebugProcess(session,serverSocket,result.getExecutionConsole(),result.getProcessHandler());
+    }
+  }
+);
+  return session.getRunContentDescriptor();
+}
