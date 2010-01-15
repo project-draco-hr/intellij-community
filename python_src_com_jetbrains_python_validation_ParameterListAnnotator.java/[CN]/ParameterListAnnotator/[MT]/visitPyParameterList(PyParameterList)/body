@@ -1,8 +1,11 @@
 {
+  final LanguageLevel languageLevel=((PyFile)paramlist.getContainingFile()).getLanguageLevel();
   ParamHelper.walkDownParamArray(paramlist.getParameters(),new ParamHelper.ParamVisitor(){
     Set<String> parameterNames=new HashSet<String>();
-    boolean hadPositionalContainer=false, hadKeywordContainer=false;
+    boolean hadPositionalContainer=false;
+    boolean hadKeywordContainer=false;
     boolean hadDefaultValue=false;
+    boolean hadSingleStar=false;
     @Override public void visitNamedParameter(    PyNamedParameter parameter,    boolean first,    boolean last){
       if (parameterNames.contains(parameter.getName())) {
         getHolder().createErrorAnnotation(parameter,PyBundle.message("ANN.duplicate.param.name"));
@@ -18,18 +21,24 @@
         hadKeywordContainer=true;
       }
  else {
-        if (hadPositionalContainer || hadKeywordContainer) {
-          getHolder().createErrorAnnotation(parameter,PyBundle.message("ANN.regular.param.after.starred"));
+        if (hadPositionalContainer && !languageLevel.isPy3K()) {
+          getHolder().createErrorAnnotation(parameter,PyBundle.message("ANN.regular.param.after.vararg"));
+        }
+ else         if (hadKeywordContainer) {
+          getHolder().createErrorAnnotation(parameter,PyBundle.message("ANN.regular.param.after.keyword"));
         }
         if (parameter.getDefaultValue() != null) {
           hadDefaultValue=true;
         }
  else {
-          if (hadDefaultValue) {
+          if (hadDefaultValue && !hadSingleStar && (!languageLevel.isPy3K() || !hadPositionalContainer)) {
             getHolder().createErrorAnnotation(parameter,PyBundle.message("ANN.non.default.param.after.default"));
           }
         }
       }
+    }
+    @Override public void visitSingleStarParameter(    PySingleStarParameter param,    boolean first,    boolean last){
+      hadSingleStar=true;
     }
   }
 );
