@@ -1,0 +1,58 @@
+{
+  startNode(node);
+  final PyTryPart tryPart=node.getTryPart();
+  startNode(tryPart);
+  tryPart.accept(this);
+  final Instruction lastBlockInstruction=myPrevInstruction;
+  final PyElsePart elsePart=node.getElsePart();
+  if (elsePart != null) {
+    startNode(elsePart);
+    elsePart.accept(this);
+    addPendingEdge(node,myPrevInstruction);
+  }
+ else {
+    addPendingEdge(node,myPrevInstruction);
+  }
+  final ArrayList<Instruction> rescueInstructions=new ArrayList<Instruction>();
+  for (  PyExceptPart exceptPart : node.getExceptParts()) {
+    myPrevInstruction=lastBlockInstruction;
+    final Instruction rescueInstruction=startNode(exceptPart);
+    rescueInstructions.add(rescueInstruction);
+    exceptPart.accept(this);
+    addPendingEdge(node,myPrevInstruction);
+  }
+  final PyFinallyPart finallyPart=node.getFinallyPart();
+  Instruction finallyInstruction=null;
+  Instruction lastFinallyInstruction=null;
+  if (finallyPart != null) {
+    flowAbrupted();
+    finallyInstruction=startNode(finallyPart);
+    finallyPart.accept(this);
+    lastFinallyInstruction=myPrevInstruction;
+    addPendingEdge(finallyPart,lastFinallyInstruction);
+  }
+  final Ref<Instruction> finallyRef=new Ref<Instruction>(finallyInstruction);
+  final Ref<Instruction> lastFinallyRef=new Ref<Instruction>(lastFinallyInstruction);
+  processPending(new PendingProcessor(){
+    public void process(    final PsiElement pendingScope,    final Instruction instruction){
+      final PyElement pendingElement=instruction.getElement();
+      if (pendingElement instanceof PyRaiseStatement && PsiTreeUtil.isAncestor(tryPart,pendingElement,false)) {
+        for (        Instruction rescueInstruction : rescueInstructions) {
+          addEdge(instruction,rescueInstruction);
+        }
+        return;
+      }
+      if (pendingElement instanceof PyReturnStatement && !finallyRef.isNull() && PsiTreeUtil.isAncestor(node,pendingElement,false)) {
+        addEdge(instruction,finallyRef.get());
+        addPendingEdge(null,lastFinallyRef.get());
+        return;
+      }
+      if (pendingElement != null && finallyPart != null && pendingScope != finallyPart && PsiTreeUtil.isAncestor(node,pendingElement,false)) {
+        addEdge(instruction,finallyRef.get());
+        return;
+      }
+      addPendingEdge(pendingScope,instruction);
+    }
+  }
+);
+}

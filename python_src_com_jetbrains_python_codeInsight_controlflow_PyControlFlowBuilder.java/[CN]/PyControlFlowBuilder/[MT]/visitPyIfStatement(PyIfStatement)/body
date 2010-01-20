@@ -1,0 +1,60 @@
+{
+  startNode(node);
+  final PyIfPart ifPart=node.getIfPart();
+  PyExpression condition=ifPart.getCondition();
+  if (condition != null) {
+    condition.accept(this);
+  }
+  Instruction head=getPrevInstruction(condition);
+  myPrevInstruction=head;
+  final PyStatementList thenStatements=ifPart.getStatementList();
+  if (thenStatements != null) {
+    startConditionalNode(thenStatements,condition,true);
+    thenStatements.accept(this);
+    processPending(new PendingProcessor(){
+      public void process(      final PsiElement pendingScope,      final Instruction instruction){
+        if (pendingScope != null && PsiTreeUtil.isAncestor(thenStatements,pendingScope,false)) {
+          addPendingEdge(node,instruction);
+        }
+ else {
+          addPendingEdge(pendingScope,instruction);
+        }
+      }
+    }
+);
+    addPendingEdge(node,myPrevInstruction);
+  }
+  for (  PyIfPart part : node.getElifParts()) {
+    myPrevInstruction=head;
+    condition=part.getCondition();
+    if (condition != null) {
+      condition.accept(this);
+    }
+    head=getPrevInstruction(condition);
+    myPrevInstruction=head;
+    startConditionalNode(ifPart,condition,true);
+    final PyStatementList statementList=part.getStatementList();
+    if (statementList != null) {
+      statementList.accept(this);
+    }
+    processPending(new PendingProcessor(){
+      public void process(      final PsiElement pendingScope,      final Instruction instruction){
+        if (pendingScope != null && PsiTreeUtil.isAncestor(ifPart,pendingScope,false)) {
+          addPendingEdge(node,instruction);
+        }
+ else {
+          addPendingEdge(pendingScope,instruction);
+        }
+      }
+    }
+);
+    addPendingEdge(node,myPrevInstruction);
+  }
+  myPrevInstruction=head;
+  final PyElsePart elseBranch=node.getElsePart();
+  if (elseBranch != null) {
+    startConditionalNode(elseBranch,condition,false);
+    elseBranch.accept(this);
+    addPendingEdge(node,myPrevInstruction);
+  }
+}
