@@ -1,57 +1,57 @@
 {
-  startNode(node);
+  myBuilder.startNode(node);
   final PyTryPart tryPart=node.getTryPart();
-  startNode(tryPart);
+  myBuilder.startNode(tryPart);
   tryPart.accept(this);
-  final Instruction lastBlockInstruction=myPrevInstruction;
+  final Instruction lastBlockInstruction=myBuilder.prevInstruction;
   final PyElsePart elsePart=node.getElsePart();
   if (elsePart != null) {
-    startNode(elsePart);
+    myBuilder.startNode(elsePart);
     elsePart.accept(this);
-    addPendingEdge(node,myPrevInstruction);
+    myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
   }
  else {
-    addPendingEdge(node,myPrevInstruction);
+    myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
   }
   final ArrayList<Instruction> rescueInstructions=new ArrayList<Instruction>();
   for (  PyExceptPart exceptPart : node.getExceptParts()) {
-    myPrevInstruction=lastBlockInstruction;
-    final Instruction rescueInstruction=startNode(exceptPart);
+    myBuilder.prevInstruction=lastBlockInstruction;
+    final Instruction rescueInstruction=myBuilder.startNode(exceptPart);
     rescueInstructions.add(rescueInstruction);
     exceptPart.accept(this);
-    addPendingEdge(node,myPrevInstruction);
+    myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
   }
   final PyFinallyPart finallyPart=node.getFinallyPart();
   Instruction finallyInstruction=null;
   Instruction lastFinallyInstruction=null;
   if (finallyPart != null) {
-    flowAbrupted();
-    finallyInstruction=startNode(finallyPart);
+    myBuilder.flowAbrupted();
+    finallyInstruction=myBuilder.startNode(finallyPart);
     finallyPart.accept(this);
-    lastFinallyInstruction=myPrevInstruction;
-    addPendingEdge(finallyPart,lastFinallyInstruction);
+    lastFinallyInstruction=myBuilder.prevInstruction;
+    myBuilder.addPendingEdge(finallyPart,lastFinallyInstruction);
   }
   final Ref<Instruction> finallyRef=new Ref<Instruction>(finallyInstruction);
   final Ref<Instruction> lastFinallyRef=new Ref<Instruction>(lastFinallyInstruction);
-  processPending(new PendingProcessor(){
+  myBuilder.processPending(new ControlFlowBuilder.PendingProcessor(){
     public void process(    final PsiElement pendingScope,    final Instruction instruction){
-      final PyElement pendingElement=instruction.getElement();
+      final PsiElement pendingElement=instruction.getElement();
       if (pendingElement instanceof PyRaiseStatement && PsiTreeUtil.isAncestor(tryPart,pendingElement,false)) {
         for (        Instruction rescueInstruction : rescueInstructions) {
-          addEdge(instruction,rescueInstruction);
+          myBuilder.addEdge(instruction,rescueInstruction);
         }
         return;
       }
       if (pendingElement instanceof PyReturnStatement && !finallyRef.isNull() && PsiTreeUtil.isAncestor(node,pendingElement,false)) {
-        addEdge(instruction,finallyRef.get());
-        addPendingEdge(null,lastFinallyRef.get());
+        myBuilder.addEdge(instruction,finallyRef.get());
+        myBuilder.addPendingEdge(null,lastFinallyRef.get());
         return;
       }
       if (pendingElement != null && finallyPart != null && pendingScope != finallyPart && PsiTreeUtil.isAncestor(node,pendingElement,false)) {
-        addEdge(instruction,finallyRef.get());
+        myBuilder.addEdge(instruction,finallyRef.get());
         return;
       }
-      addPendingEdge(pendingScope,instruction);
+      myBuilder.addPendingEdge(pendingScope,instruction);
     }
   }
 );
