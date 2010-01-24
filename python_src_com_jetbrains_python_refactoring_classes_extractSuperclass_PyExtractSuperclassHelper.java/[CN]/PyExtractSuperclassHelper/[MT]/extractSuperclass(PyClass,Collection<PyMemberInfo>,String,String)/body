@@ -1,0 +1,31 @@
+{
+  final Set<String> superClasses=new HashSet<String>();
+  final List<PyFunction> methods=new ArrayList<PyFunction>();
+  for (  PyMemberInfo member : selectedMemberInfos) {
+    final PyElement element=member.getMember();
+    if (element instanceof PyFunction)     methods.add((PyFunction)element);
+ else     if (element instanceof PyClass)     superClasses.add(element.getName());
+ else     LOG.error("unmatched member class " + element.getClass());
+  }
+  final Project project=clazz.getProject();
+  final Ref<PyClass> newClassRef=new Ref<PyClass>();
+  CommandProcessor.getInstance().executeCommand(project,new Runnable(){
+    public void run(){
+      ApplicationManager.getApplication().runWriteAction(new Runnable(){
+        public void run(){
+          final PyElement[] elements=methods.toArray(new PyElement[methods.size()]);
+          final String text=PyClassRefactoringUtil.prepareClassText(null,elements,true,true,superBaseName) + "\n";
+          final PyClass newClass=PythonLanguage.getInstance().getElementGenerator().createFromText(project,PyClass.class,text);
+          newClassRef.set(newClass);
+          PyClassRefactoringUtil.moveSuperclasses(clazz,superClasses,newClass);
+          PyClassRefactoringUtil.addSuperclasses(project,clazz,Collections.singleton(superBaseName));
+          PyPsiUtils.removeElements(elements);
+          placeNewClass(project,newClass,clazz,targetFile);
+        }
+      }
+);
+    }
+  }
+,RefactoringBundle.message("extract.superclass.command.name",clazz.getName(),superBaseName),null);
+  return newClassRef.get();
+}
