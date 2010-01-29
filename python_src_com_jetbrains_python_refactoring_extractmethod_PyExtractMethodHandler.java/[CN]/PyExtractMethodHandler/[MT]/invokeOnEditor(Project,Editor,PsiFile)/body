@@ -1,0 +1,63 @@
+{
+  CommonRefactoringUtil.checkReadOnlyStatus(project,file);
+  PsiElement element1=null;
+  PsiElement element2=null;
+  final SelectionModel selectionModel=editor.getSelectionModel();
+  if (selectionModel.hasSelection()) {
+    element1=file.findElementAt(selectionModel.getSelectionStart());
+    element2=file.findElementAt(selectionModel.getSelectionEnd() - 1);
+  }
+ else {
+    final CaretModel caretModel=editor.getCaretModel();
+    final Document document=editor.getDocument();
+    int lineNumber=document.getLineNumber(caretModel.getOffset());
+    if ((lineNumber >= 0) && (lineNumber < document.getLineCount())) {
+      element1=file.findElementAt(document.getLineStartOffset(lineNumber));
+      element2=file.findElementAt(document.getLineEndOffset(lineNumber) - 1);
+    }
+  }
+  while (element1 != null && StringUtil.isEmptyOrSpaces(element1.getText()) || element1 instanceof PsiComment) {
+    element1=PsiTreeUtil.nextLeaf(element1);
+  }
+  while (element2 != null && StringUtil.isEmptyOrSpaces(element2.getText()) || element2 instanceof PsiComment) {
+    element2=PsiTreeUtil.prevLeaf(element2);
+  }
+  if (element1 == null || element2 == null) {
+    CommonRefactoringUtil.showErrorHint(project,editor,PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.using.selected.elements"),RefactoringBundle.message("extract.method.title"),"refactoring.extractMethod");
+    return;
+  }
+  final PsiElement[] statements=getStatementsRange(element1,element2);
+  if (statements != null) {
+    final ScopeOwner owner=PsiTreeUtil.getParentOfType(statements[0],ScopeOwner.class);
+    if (owner == null) {
+      return;
+    }
+    final CodeFragment fragment;
+    try {
+      fragment=PyCodeFragmentUtil.createCodeFragment(owner,element1,element2);
+    }
+ catch (    CannotCreateCodeFragmentException e) {
+      CommonRefactoringUtil.showErrorHint(project,editor,e.getMessage(),RefactoringBundle.message("extract.method.title"),"refactoring.extractMethod");
+      return;
+    }
+    PyExtractMethodUtil.extractFromStatements(project,editor,fragment,statements[0],statements[1]);
+    return;
+  }
+  final PsiElement expression=PyRefactoringUtil.getSelectedExpression(project,file,element1,element2);
+  if (expression != null) {
+    final ScopeOwner owner=PsiTreeUtil.getParentOfType(expression,ScopeOwner.class);
+    if (owner == null) {
+      return;
+    }
+    final CodeFragment fragment;
+    try {
+      fragment=PyCodeFragmentUtil.createCodeFragment(owner,element1,element2);
+    }
+ catch (    CannotCreateCodeFragmentException e) {
+      CommonRefactoringUtil.showErrorHint(project,editor,e.getMessage(),RefactoringBundle.message("extract.method.title"),"refactoring.extractMethod");
+      return;
+    }
+    PyExtractMethodUtil.extractFromExpression(project,editor,fragment,expression);
+  }
+  CommonRefactoringUtil.showErrorHint(project,editor,PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.using.selected.elements"),RefactoringBundle.message("extract.method.title"),"refactoring.extractMethod");
+}

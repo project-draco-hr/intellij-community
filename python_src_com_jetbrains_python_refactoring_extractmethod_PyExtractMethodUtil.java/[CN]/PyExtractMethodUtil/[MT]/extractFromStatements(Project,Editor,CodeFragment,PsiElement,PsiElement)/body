@@ -1,0 +1,66 @@
+{
+  if (!fragment.getOutputVariables().isEmpty() && fragment.isReturnInstructonInside()) {
+    CommonRefactoringUtil.showErrorHint(project,editor,"Cannot extract method with non empty output variables and return instructions inside",RefactoringBundle.message("error.title"),"refactoring.extractMethod");
+    return;
+  }
+  final Pair<String,VariableData[]> data=getNameAndVariableData(project,fragment,statement1);
+  if (data.first == null || data.second == null) {
+    return;
+  }
+  final List<PsiElement> elementsRange=PyPsiUtils.collectElements(statement1,statement2);
+  final String methodName=data.first;
+  final VariableData[] variableData=data.second;
+  if (fragment.getOutputVariables().isEmpty()) {
+    CommandProcessor.getInstance().executeCommand(project,new Runnable(){
+      public void run(){
+        ApplicationManager.getApplication().runWriteAction(new Runnable(){
+          public void run(){
+            final PyFunction generatedMethod=generateMethodFromElements(project,methodName,variableData,elementsRange);
+            insertGeneratedMethod(statement1,generatedMethod);
+            processParameters(project,generatedMethod,variableData);
+            final StringBuilder builder=new StringBuilder();
+            if (fragment.isReturnInstructonInside()) {
+              builder.append("return ");
+            }
+            builder.append(methodName);
+            builder.append("(").append(createCallArgsString(variableData)).append(")");
+            PsiElement callElement=PythonLanguage.getInstance().getElementGenerator().createFromText(project,PyCallExpression.class,builder.toString());
+            callElement=replaceElements(elementsRange,callElement);
+            setSelectionAndCaret(editor,callElement);
+          }
+        }
+);
+      }
+    }
+,"Extract method",null);
+  }
+ else {
+    CommandProcessor.getInstance().executeCommand(project,new Runnable(){
+      public void run(){
+        ApplicationManager.getApplication().runWriteAction(new Runnable(){
+          public void run(){
+            final PyFunction generatedMethod=generateMethodFromElements(project,methodName,variableData,elementsRange);
+            final StringBuilder builder=new StringBuilder();
+            for (            String s : fragment.getOutputVariables()) {
+              if (builder.length() != 0) {
+                builder.append(", ");
+              }
+              builder.append(s);
+            }
+            final PsiElement returnStatement=PythonLanguage.getInstance().getElementGenerator().createFromText(project,PyElement.class,"return " + builder.toString());
+            generatedMethod.getStatementList().add(returnStatement);
+            insertGeneratedMethod(statement1,generatedMethod);
+            processParameters(project,generatedMethod,variableData);
+            builder.append(" = ").append(methodName).append("(");
+            builder.append(createCallArgsString(variableData)).append(")");
+            PsiElement callElement=PythonLanguage.getInstance().getElementGenerator().createFromText(project,PyElement.class,builder.toString());
+            callElement=replaceElements(elementsRange,callElement);
+            setSelectionAndCaret(editor,callElement);
+          }
+        }
+);
+      }
+    }
+,"Extract method",null);
+  }
+}
