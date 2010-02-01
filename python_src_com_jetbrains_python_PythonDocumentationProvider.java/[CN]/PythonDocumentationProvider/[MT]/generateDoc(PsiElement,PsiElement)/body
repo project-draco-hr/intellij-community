@@ -5,30 +5,7 @@
   final ChainIterable<String> epilog_cat=new ChainIterable<String>();
   cat.add(prolog_cat).addWith(TagCode,doc_cat).add(epilog_cat);
   cat=wrapInTag("html",wrapInTag("body",cat));
-  boolean reassignment_marked=false;
-  if (element instanceof PyTargetExpression) {
-    if (!reassignment_marked) {
-      prolog_cat.addWith(TagSmall,$(PyBundle.message("QDOC.assigned.to.$0",element.getText())).add(BR));
-      reassignment_marked=true;
-    }
-    element=((PyTargetExpression)element).findAssignedValue();
-  }
-  if (element instanceof PyReferenceExpression) {
-    if (!reassignment_marked) {
-      prolog_cat.addWith(TagSmall,$(PyBundle.message("QDOC.assigned.to.$0",element.getText())).add(BR));
-      reassignment_marked=true;
-    }
-    element=((PyReferenceExpression)element).followAssignmentsChain();
-  }
-  if (element instanceof PyCallExpression) {
-    Pair<String,PyFunction> wrap_info=PyCallExpressionHelper.interpretAsStaticmethodOrClassmethodWrappingCall((PyCallExpression)element,originalElement);
-    if (wrap_info != null) {
-      String wrapper_name=wrap_info.getFirst();
-      PyFunction wrapped_func=wrap_info.getSecond();
-      prolog_cat.addWith(TagSmall,$(PyBundle.message("QDOC.wrapped.in.$0",wrapper_name)).add(BR));
-      element=wrapped_func;
-    }
-  }
+  element=resolveToDocStringOwner(element,originalElement,prolog_cat);
   if (element instanceof PyDocStringOwner) {
     String docString=null;
     PyStringLiteralExpression doc_expr=((PyDocStringOwner)element).getDocStringExpression();
@@ -42,44 +19,8 @@
       PyClass cls=fun.getContainingClass();
       if (cls != null)       doc_cat.addWith(TagSmall,$("class ",cls.getName(),BR));
       doc_cat.add(describeFunction(fun,TagItalic,BR,TagBold,LCombUp));
-      boolean not_found=true;
       if (docString == null) {
-        String meth_name=fun.getName();
-        if (cls != null && meth_name != null) {
-          for (          PyClass ancestor : cls.iterateAncestors()) {
-            PyFunction inherited=ancestor.findMethodByName(meth_name,false);
-            if (inherited != null) {
-              PyStringLiteralExpression doc_elt=inherited.getDocStringExpression();
-              if (doc_elt != null) {
-                String inherited_doc=doc_elt.getStringValue();
-                if (inherited_doc.length() > 1) {
-                  epilog_cat.add(BR).add(BR).add(PyBundle.message("QDOC.copied.from.$0.$1",ancestor.getName(),meth_name)).add(BR).add(BR).addWith(TagCode,$(inherited_doc));
-                  not_found=false;
-                  break;
-                }
-              }
-            }
-          }
-          if (not_found) {
-            if (PyNames.UnderscoredAttributes.contains(meth_name)) {
-              PyClassType objtype=PyBuiltinCache.getInstance(fun).getObjectType();
-              if (objtype != null) {
-                PyClass objcls=objtype.getPyClass();
-                if (objcls != null) {
-                  PyFunction obj_underscored=objcls.findMethodByName(meth_name,false);
-                  if (obj_underscored != null) {
-                    PyStringLiteralExpression predefined_doc_expr=obj_underscored.getDocStringExpression();
-                    String predefined_doc=predefined_doc_expr != null ? predefined_doc_expr.getStringValue() : null;
-                    if (predefined_doc != null && predefined_doc.length() > 1) {
-                      doc_cat.add(predefined_doc);
-                      epilog_cat.add(BR).add(BR).add(PyBundle.message("QDOC.copied.from.builtin"));
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
+        addInheritedDocString(fun,cls,doc_cat,epilog_cat);
       }
     }
  else     if (element instanceof PyFile) {
