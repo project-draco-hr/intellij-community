@@ -1,0 +1,33 @@
+{
+  PsiManager manager=right.getTreeParent().getPsi().getManager();
+  if (left.getElementType() == PyTokenTypes.END_OF_LINE_COMMENT) {
+    return createLineBreak(manager);
+  }
+  if (left.getPsi().isValid() && right.getPsi().isValid()) {
+    final PsiElement commonParent=PsiTreeUtil.findCommonParent(left.getPsi(),right.getPsi());
+    if (commonParent == null)     return null;
+    final PsiElement leftPrevAncestor=PsiTreeUtil.findPrevParent(commonParent,left.getPsi());
+    final PsiElement rightPrevAncestor=PsiTreeUtil.findPrevParent(commonParent,right.getPsi());
+    if (leftPrevAncestor instanceof PyFunction && rightPrevAncestor instanceof PyFunction) {
+      int leftIndent=PyPsiUtils.getElementIndentation(leftPrevAncestor);
+      int rightIndent=PyPsiUtils.getElementIndentation(rightPrevAncestor);
+      int maxIndent=Math.max(leftIndent,rightIndent);
+      return createWhitespace(manager,"\n" + StringUtil.repeatSymbol(' ',maxIndent));
+    }
+  }
+  if (right.getElementType() == PyTokenTypes.DEF_KEYWORD || right.getElementType() == PyTokenTypes.CLASS_KEYWORD) {
+    return createLineBreak(manager);
+  }
+  if (left.getElementType() == TokenType.WHITE_SPACE || right.getElementType() == TokenType.WHITE_SPACE) {
+    return null;
+  }
+  final PyStatement leftStatement=PsiTreeUtil.getParentOfType(left.getPsi(),PyStatement.class);
+  if (leftStatement != null && !PsiTreeUtil.isAncestor(leftStatement,right.getPsi(),false)) {
+    return createLineBreak(manager);
+  }
+  final Lexer lexer=new PythonIndentingLexer();
+  if (LanguageUtil.canStickTokensTogetherByLexer(left,right,lexer) == ParserDefinition.SpaceRequirements.MUST) {
+    return createSpace(manager);
+  }
+  return null;
+}
