@@ -1,0 +1,64 @@
+{
+  boolean parametersCanBeUnused=false;
+  if (owner instanceof PyFunction) {
+    parametersCanBeUnused=PySuperMethodsSearch.search(((PyFunction)owner)).findFirst() != null;
+  }
+  final ControlFlow flow=owner.getControlFlow();
+  final Instruction[] instructions=flow.getInstructions();
+  for (int i=0; i < instructions.length; i++) {
+    final Instruction instruction=instructions[i];
+    if (instruction instanceof ReadWriteInstruction) {
+      final String name=((ReadWriteInstruction)instruction).getName();
+      if (name == null) {
+        continue;
+      }
+      final PsiElement element=instruction.getElement();
+      if (PyImportStatementNavigator.getImportStatementByElement(element) != null) {
+        continue;
+      }
+      final ReadWriteInstruction.ACCESS access=((ReadWriteInstruction)instruction).getAccess();
+      if (access.isWriteAccess() && (parametersCanBeUnused || !(element != null && element.getParent() instanceof PyNamedParameter))) {
+        myUnusedElements.add(element);
+      }
+    }
+  }
+  for (int i=0; i < instructions.length; i++) {
+    final Instruction instruction=instructions[i];
+    if (instruction instanceof ReadWriteInstruction) {
+      final String name=((ReadWriteInstruction)instruction).getName();
+      if (name == null) {
+        continue;
+      }
+      final PsiElement element=instruction.getElement();
+      final ReadWriteInstruction.ACCESS access=((ReadWriteInstruction)instruction).getAccess();
+      if (access.isReadAccess()) {
+        int number=i;
+        if (access == ReadWriteInstruction.ACCESS.READWRITE) {
+          final PyAugAssignmentStatement augAssignmentStatement=PyAugAssignmentStatementNavigator.getStatementByTarget(element);
+          number=ControlFlowUtil.findInstructionNumberByElement(instructions,augAssignmentStatement);
+        }
+        if (element instanceof PyReferenceExpression) {
+          boolean outOfScope=false;
+          for (          ResolveResult result : ((PyReferenceExpression)element).multiResolve(false)) {
+            final PsiElement resolveElement=result.getElement();
+            if (!PsiTreeUtil.isAncestor(owner,resolveElement,false)) {
+              outOfScope=true;
+              myUnusedElements.remove(resolveElement);
+            }
+          }
+          if (outOfScope) {
+            continue;
+          }
+        }
+        PyControlFlowUtil.iterateWriteAccessFor(name,number,instructions,new Function<ReadWriteInstruction,PyControlFlowUtil.Operation>(){
+          public PyControlFlowUtil.Operation fun(          final ReadWriteInstruction rwInstr){
+            final PsiElement instrElement=rwInstr.getElement();
+            myUnusedElements.remove(instrElement);
+            return PyControlFlowUtil.Operation.CONTINUE;
+          }
+        }
+);
+      }
+    }
+  }
+}
