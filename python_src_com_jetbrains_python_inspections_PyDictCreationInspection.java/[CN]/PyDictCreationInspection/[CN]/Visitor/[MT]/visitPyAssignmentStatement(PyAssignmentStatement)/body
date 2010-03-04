@@ -1,2 +1,38 @@
 {
+  if (node.getAssignedValue() instanceof PyDictLiteralExpression) {
+    if (node.getTargets().length != 1) {
+      return;
+    }
+    String name=node.getTargets()[0].getName();
+    if (name == null) {
+      return;
+    }
+    PyStatement statement=PsiTreeUtil.getNextSiblingOfType(node,PyStatement.class);
+    DictCreationQuickFix quickFix=null;
+    boolean availableFix=false;
+    loop:     while (statement instanceof PyAssignmentStatement) {
+      PyAssignmentStatement assignmentStatement=(PyAssignmentStatement)statement;
+      for (      Pair<PyExpression,PyExpression> targetToValue : assignmentStatement.getTargetsToValuesMapping()) {
+        if (targetToValue.first instanceof PySubscriptionExpression) {
+          PySubscriptionExpression subscriptionExpression=(PySubscriptionExpression)targetToValue.first;
+          if (name.equals(subscriptionExpression.getOperand().getName()) && subscriptionExpression.getIndexExpression() != null) {
+            if (!availableFix) {
+              quickFix=new DictCreationQuickFix(node);
+              availableFix=true;
+            }
+            continue;
+          }
+        }
+        break loop;
+      }
+      if (quickFix == null) {
+        return;
+      }
+      quickFix.addStatement(assignmentStatement);
+      statement=PsiTreeUtil.getNextSiblingOfType(assignmentStatement,PyStatement.class);
+    }
+    if (availableFix) {
+      registerProblem(node,"This dictionary creation could be rewritten by dictionary literal",quickFix);
+    }
+  }
 }
