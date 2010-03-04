@@ -1,0 +1,30 @@
+{
+  final Process process=Runner.createProcess(myWorkingDir,true,Collections.<String,String>emptyMap(),myCommand,"-i");
+  final Charset outputEncoding=EncodingManager.getInstance().getDefaultCharset();
+  myProcessHandler=new ColoredProcessHandler(process,myCommand,outputEncoding){
+    @Override protected void textAvailable(    final String text,    final Key attributes){
+      if (!(text.startsWith(">>>") && attributes == ProcessOutputTypes.STDERR)) {
+        super.textAvailable(text,attributes);
+      }
+    }
+  }
+;
+  ProcessTerminatedListener.attach(myProcessHandler);
+  myConsoleView=new LanguageConsoleViewImpl(myProject,"title",PythonLanguage.getInstance());
+  myConsoleView.attachToProcess(myProcessHandler);
+  myConsoleView.addMessageFilter(new OutputConsoleFilter());
+  final Executor defaultExecutor=ExecutorRegistry.getInstance().getExecutorById(DefaultRunExecutor.EXECUTOR_ID);
+  final DefaultActionGroup toolbarActions=new DefaultActionGroup();
+  final ActionToolbar actionToolbar=ActionManager.getInstance().createActionToolbar(ActionPlaces.UNKNOWN,toolbarActions,false);
+  final JPanel panel=new JPanel(new BorderLayout());
+  panel.add(actionToolbar.getComponent(),BorderLayout.WEST);
+  panel.add(myConsoleView.getComponent(),BorderLayout.CENTER);
+  final RunContentDescriptor myDescriptor=new RunContentDescriptor(myConsoleView,myProcessHandler,panel,myConsoleTitle);
+  final AnAction[] actions=fillToolBarActions(toolbarActions,defaultExecutor,myDescriptor);
+  registerActionShortcuts(actions,getLanguageConsole().getConsoleEditor().getComponent());
+  registerActionShortcuts(actions,panel);
+  panel.updateUI();
+  ExecutionManager.getInstance(myProject).getContentManager().showRunContent(defaultExecutor,myDescriptor);
+  ((ConsoleViewImpl)myConsoleView).setEditorEnabled(false);
+  IdeFocusManager.getInstance(myProject).requestFocus(myConsoleView.getPreferredFocusableComponent(),true);
+}
