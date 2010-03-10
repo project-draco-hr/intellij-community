@@ -1,0 +1,39 @@
+{
+  return new PyInspectionVisitor(holder){
+    @Override public void visitPyReferenceExpression(    final PyReferenceExpression node){
+      if (PyCallExpressionNavigator.getPyCallExpressionByCallee(node) != null) {
+        return;
+      }
+      if (PyGlobalStatementNavigator.getPyGlobalStatementByArgument(node) != null) {
+        return;
+      }
+      final PyExpression qualifier=node.getQualifier();
+      if (qualifier != null) {
+        qualifier.accept(this);
+        return;
+      }
+      if (PyImportStatementNavigator.getImportStatementByElement(node) != null) {
+        return;
+      }
+      final ScopeOwner owner=PsiTreeUtil.getParentOfType(node,ScopeOwner.class);
+      if (owner == null) {
+        return;
+      }
+      final Scope scope=owner.getScope();
+      final String name=node.getReferencedName();
+      if (scope.isGlobal(name)) {
+        return;
+      }
+      final ScopeVariable variable=scope.getDeclaredVariable(node,name);
+      if (variable == null) {
+        if (owner instanceof PyClass || owner instanceof PyFunction) {
+          registerProblem(node,PyBundle.message("INSP.unbound.local.variable",node.getName()),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,null,new AddGlobalQuickFix());
+        }
+ else {
+          registerProblem(node,PyBundle.message("INSP.unbound.name.not.defined",node.getName()));
+        }
+      }
+    }
+  }
+;
+}
