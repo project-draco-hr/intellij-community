@@ -19,18 +19,38 @@
       if (owner == null) {
         return;
       }
-      final Scope scope=owner.getScope();
       final String name=node.getReferencedName();
-      if (scope.isGlobal(name)) {
+      final Scope scope=owner.getScope();
+      if (scope.isGlobal(name) || (!scope.containsDeclaration(name))) {
         return;
       }
       final ScopeVariable variable=scope.getDeclaredVariable(node,name);
       if (variable == null) {
-        if (owner instanceof PyClass || owner instanceof PyFunction) {
-          registerProblem(node,PyBundle.message("INSP.unbound.local.variable",node.getName()),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,null,new AddGlobalQuickFix());
+        boolean resolves2LocalVariable=false;
+        boolean resolve2Scope=true;
+        for (        ResolveResult result : node.multiResolve(true)) {
+          final PsiElement element=result.getElement();
+          if (element == null) {
+            continue;
+          }
+          if ("__builtin__.py".equals(element.getContainingFile().getName())) {
+            continue;
+          }
+          if (PyAssignmentStatementNavigator.getStatementByTarget(element) != null) {
+            resolves2LocalVariable=true;
+            resolve2Scope=PsiTreeUtil.isAncestor(owner,element,false);
+            break;
+          }
         }
+        if (resolves2LocalVariable) {
+          if (owner instanceof PyClass || owner instanceof PyFunction) {
+            registerProblem(node,PyBundle.message("INSP.unbound.local.variable",node.getName()),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,null,new AddGlobalQuickFix());
+          }
  else {
-          registerProblem(node,PyBundle.message("INSP.unbound.name.not.defined",node.getName()));
+            if (resolve2Scope) {
+              registerProblem(node,PyBundle.message("INSP.unbound.name.not.defined",node.getName()));
+            }
+          }
         }
       }
     }
