@@ -42,19 +42,27 @@
   myBuilder.processPending(new ControlFlowBuilder.PendingProcessor(){
     public void process(    final PsiElement pendingScope,    final Instruction instruction){
       final PsiElement pendingElement=instruction.getElement();
-      if (pendingElement instanceof PyRaiseStatement && PsiTreeUtil.isAncestor(tryPart,pendingElement,false)) {
+      if (pendingElement == null) {
+        myBuilder.addPendingEdge(pendingScope,instruction);
+        return;
+      }
+      if (PsiTreeUtil.isAncestor(tryPart,pendingElement,false) && PsiTreeUtil.getParentOfType(pendingElement,PyRaiseStatement.class) != null) {
         for (        Instruction rescueInstruction : exceptInstructions) {
           myBuilder.addEdge(instruction,rescueInstruction);
         }
+        myBuilder.addPendingEdge(pendingScope,instruction);
         return;
       }
-      if (pendingElement instanceof PyReturnStatement && !finallyRef.isNull() && PsiTreeUtil.isAncestor(node,pendingElement,false)) {
-        myBuilder.addEdge(instruction,finallyRef.get());
-        myBuilder.addPendingEdge(null,lastFinallyRef.get());
-        return;
+      if (PsiTreeUtil.isAncestor(tryPart,pendingElement,false)) {
+        for (        Instruction rescueInstruction : exceptInstructions) {
+          myBuilder.addEdge(instruction,rescueInstruction);
+        }
       }
-      if (pendingElement != null && finallyPart != null && pendingScope != finallyPart && PsiTreeUtil.isAncestor(node,pendingElement,false)) {
+      if (!finallyRef.isNull()) {
         myBuilder.addEdge(instruction,finallyRef.get());
+        if (!lastFinallyRef.isNull() && PsiTreeUtil.getParentOfType(pendingElement,PyReturnStatement.class,false) != null) {
+          myBuilder.addPendingEdge(null,lastFinallyRef.get());
+        }
         return;
       }
       myBuilder.addPendingEdge(pendingScope,instruction);
