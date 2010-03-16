@@ -1,2 +1,79 @@
 {
+  final PyExpression qualifier=getQualifier();
+  if (qualifier != null) {
+    PyType qualifierType=qualifier.getType();
+    ProcessingContext ctx=new ProcessingContext();
+    final Set<String> names_already=new HashSet<String>();
+    ctx.put(PyType.CTX_NAMES,names_already);
+    if (qualifierType != null) {
+      Collection<Object> variants=new ArrayList<Object>();
+      if (qualifier instanceof PyQualifiedExpression) {
+        Collection<PyExpression> attrs=collectAssignedAttributes((PyQualifiedExpression)qualifier);
+        variants.addAll(attrs);
+        for (        PyExpression ex : attrs) {
+          if (ex instanceof PyReferenceExpression) {
+            PyReferenceExpression refex=(PyReferenceExpression)ex;
+            names_already.add(refex.getReferencedName());
+          }
+ else           if (ex instanceof PyTargetExpression) {
+            PyTargetExpression targetExpr=(PyTargetExpression)ex;
+            names_already.add(targetExpr.getName());
+          }
+        }
+        Collections.addAll(variants,qualifierType.getCompletionVariants(this,ctx));
+        return variants.toArray();
+      }
+ else {
+        return qualifierType.getCompletionVariants(this,ctx);
+      }
+    }
+    return NO_VARIANTS;
+  }
+  if (PsiTreeUtil.getParentOfType(this,PyImportElement.class,PyFromImportStatement.class) != null) {
+    return ResolveImportUtil.suggestImportVariants(this);
+  }
+  final List<Object> ret=new ArrayList<Object>();
+  final VariantsProcessor processor=new VariantsProcessor();
+  PyResolveUtil.treeCrawlUp(processor,this);
+  PyResolveUtil.scanOuterContext(processor,this);
+  PyCallExpression call_expr=PsiTreeUtil.getParentOfType(this,PyCallExpression.class);
+  if (call_expr != null) {
+    PyExpression callee=call_expr.getCallee();
+    if (callee instanceof PyReferenceExpression) {
+      PsiElement def=((PyReferenceExpression)callee).resolve();
+      if (def instanceof PyFunction) {
+        addKeywordArgumentVariants((PyFunction)def,ret);
+      }
+ else       if (def instanceof PyClass) {
+        PyFunction init=((PyClass)def).findMethodByName(PyNames.INIT,true);
+        if (init != null) {
+          addKeywordArgumentVariants(init,ret);
+        }
+      }
+    }
+  }
+  CollectProcessor collect_proc;
+  collect_proc=new CollectProcessor(PyStarImportElement.class);
+  PyResolveUtil.treeCrawlUp(collect_proc,this);
+  List<PsiElement> stars=collect_proc.getResult();
+  for (  PsiElement star_elt : stars) {
+    final PyFromImportStatement from_import_stmt=(PyFromImportStatement)star_elt.getParent();
+    if (from_import_stmt != null) {
+      final PyReferenceExpression import_src=from_import_stmt.getImportSource();
+      if (import_src != null) {
+        processor.setNotice(import_src.getName());
+        PyResolveUtil.treeCrawlUp(processor,true,import_src.resolve());
+      }
+    }
+  }
+  processor.setNotice("__builtin__");
+  PyResolveUtil.treeCrawlUp(processor,true,PyBuiltinCache.getInstance(this).getBuiltinsFile());
+  PsiFile f=getContainingFile();
+  if (f instanceof PyFile) {
+    for (    String name : PyModuleType.getPossibleInstanceMembers()) {
+      ret.add(LookupElementBuilder.create(name).setIcon(Icons.FIELD_ICON));
+    }
+  }
+  ret.addAll(processor.getResultList());
+  return ret.toArray();
 }
