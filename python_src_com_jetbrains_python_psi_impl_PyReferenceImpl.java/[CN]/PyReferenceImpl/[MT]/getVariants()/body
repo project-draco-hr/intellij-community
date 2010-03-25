@@ -1,0 +1,54 @@
+{
+  if (PsiTreeUtil.getParentOfType(myElement,PyImportElement.class,PyFromImportStatement.class) != null) {
+    return ResolveImportUtil.suggestImportVariants(myElement);
+  }
+  final PyExpression qualifier=myElement.getQualifier();
+  if (qualifier != null) {
+    return getQualifiedReferenceVariants(qualifier);
+  }
+  final List<Object> ret=new ArrayList<Object>();
+  final PsiElement realContext=PyPsiUtils.getRealContext(myElement);
+  final VariantsProcessor processor=new VariantsProcessor();
+  PyResolveUtil.treeCrawlUp(processor,realContext);
+  PyResolveUtil.scanOuterContext(processor,realContext);
+  PyCallExpression call_expr=PsiTreeUtil.getParentOfType(myElement,PyCallExpression.class);
+  if (call_expr != null) {
+    PyExpression callee=call_expr.getCallee();
+    if (callee instanceof PyReferenceExpression) {
+      PsiElement def=((PyReferenceExpression)callee).getReference().resolve();
+      if (def instanceof PyFunction) {
+        addKeywordArgumentVariants((PyFunction)def,ret);
+      }
+ else       if (def instanceof PyClass) {
+        PyFunction init=((PyClass)def).findMethodByName(PyNames.INIT,true);
+        if (init != null) {
+          addKeywordArgumentVariants(init,ret);
+        }
+      }
+    }
+  }
+  CollectProcessor collect_proc;
+  collect_proc=new CollectProcessor(PyStarImportElement.class);
+  PyResolveUtil.treeCrawlUp(collect_proc,realContext);
+  List<PsiElement> stars=collect_proc.getResult();
+  for (  PsiElement star_elt : stars) {
+    final PyFromImportStatement from_import_stmt=(PyFromImportStatement)star_elt.getParent();
+    if (from_import_stmt != null) {
+      final PyReferenceExpression import_src=from_import_stmt.getImportSource();
+      if (import_src != null) {
+        processor.setNotice(import_src.getName());
+        PyResolveUtil.treeCrawlUp(processor,true,import_src.getReference().resolve());
+      }
+    }
+  }
+  processor.setNotice("__builtin__");
+  PyResolveUtil.treeCrawlUp(processor,true,PyBuiltinCache.getInstance(getElement()).getBuiltinsFile());
+  PsiFile f=realContext.getContainingFile();
+  if (f instanceof PyFile) {
+    for (    String name : PyModuleType.getPossibleInstanceMembers()) {
+      ret.add(LookupElementBuilder.create(name).setIcon(Icons.FIELD_ICON));
+    }
+  }
+  ret.addAll(processor.getResultList());
+  return ret.toArray();
+}

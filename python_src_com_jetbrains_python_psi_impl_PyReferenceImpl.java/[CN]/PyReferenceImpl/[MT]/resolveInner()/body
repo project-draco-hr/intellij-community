@@ -1,0 +1,50 @@
+{
+  ResultList ret=new ResultList();
+  final String referencedName=myElement.getReferencedName();
+  if (referencedName == null)   return ret;
+  if (PsiTreeUtil.getParentOfType(myElement,PyImportElement.class,PyFromImportStatement.class) != null) {
+    PsiElement target=ResolveImportUtil.resolveImportReference(myElement);
+    target=PyUtil.turnDirIntoInit(target);
+    if (target == null) {
+      ret.clear();
+      return ret;
+    }
+    ret.poke(target,RatedResolveResult.RATE_HIGH);
+    return ret;
+  }
+  final PyExpression qualifier=myElement.getQualifier();
+  if (qualifier != null) {
+    return resolveQualifiedReference(ret,referencedName,qualifier);
+  }
+  ResolveProcessor processor=new ResolveProcessor(referencedName);
+  final PsiElement realContext=PyPsiUtils.getRealContext(myElement);
+  PsiElement uexpr=PyResolveUtil.treeCrawlUp(processor,false,realContext,realContext.getContainingFile());
+  if ((uexpr != null)) {
+    if ((uexpr instanceof PyClass)) {
+      PyClass cls=(PyClass)uexpr;
+      if (isSuperClassExpression(cls)) {
+        ret.clear();
+        return ret;
+      }
+    }
+    for (    NameDefiner hit : processor.getDefiners()) {
+      ret.poke(hit,getRate(hit));
+    }
+  }
+  if (uexpr == null) {
+    PyType otype=PyBuiltinCache.getInstance(realContext).getObjectType();
+    if (otype != null)     uexpr=otype.resolveMember(myElement.getName());
+  }
+  if (uexpr == null) {
+    PyFile bfile=PyBuiltinCache.getInstance(realContext).getBuiltinsFile();
+    if (bfile != null) {
+      uexpr=bfile.getElementNamed(referencedName);
+    }
+  }
+  if (uexpr == null) {
+    uexpr=PyResolveUtil.scanOuterContext(new ResolveProcessor(referencedName),realContext);
+  }
+  uexpr=PyUtil.turnDirIntoInit(uexpr);
+  if (uexpr != null)   ret.poke(uexpr,getRate(uexpr));
+  return ret;
+}
