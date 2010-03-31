@@ -1,10 +1,14 @@
 {
   PyExpression callee=us.getCallee();
   PyFunction.Flag wrapped_flag=null;
+  boolean is_constructor_call=false;
   if (callee instanceof PyReferenceExpression) {
     PyReferenceExpression ref=(PyReferenceExpression)callee;
     PsiElement resolved=ref.followAssignmentsChain();
-    if (resolved instanceof PyClass)     resolved=((PyClass)resolved).findMethodByName(PyNames.INIT,true);
+    if (resolved instanceof PyClass) {
+      resolved=((PyClass)resolved).findInitOrNew(true);
+      is_constructor_call=true;
+    }
  else     if (resolved instanceof PyCallExpression) {
       PyCallExpression redefining_call=(PyCallExpression)resolved;
       Pair<String,PyFunction> wrapper_info=interpretAsStaticmethodOrClassmethodWrappingCall(redefining_call,us);
@@ -18,6 +22,9 @@
     if (resolved instanceof PyFunction) {
       EnumSet<PyFunction.Flag> flags=EnumSet.noneOf(PyFunction.Flag.class);
       int implicit_offset=getImplicitArgumentCount(us.getCallee(),(PyFunction)resolved,wrapped_flag,flags);
+      if (!is_constructor_call && PyNames.NEW.equals(((PyFunction)resolved).getName())) {
+        implicit_offset=Math.min(implicit_offset - 1,0);
+      }
       return new PyCallExpression.PyMarkedFunction((PyFunction)resolved,flags,implicit_offset);
     }
   }
