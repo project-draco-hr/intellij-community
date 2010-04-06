@@ -21,19 +21,27 @@
       }
     }
     if (sdk != null) {
-      final String[] urls=sdk.getRootProvider().getUrls(PythonSdkType.BUILTIN_ROOT_TYPE);
-      for (      String url : urls) {
-        if (url.contains(PythonSdkType.SKELETON_DIR_NAME)) {
-          final String builtins_url=url + "/" + ((PythonSdkType)sdk.getSdkType()).getBuiltinsFileName(sdk);
-          File builtins=new File(VfsUtil.urlToPath(builtins_url));
-          if (builtins.isFile() && builtins.canRead()) {
-            VirtualFile builtins_vfile=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(builtins);
-            if (builtins_vfile != null) {
-              PsiFile builtins_psifile=PsiManager.getInstance(project).findFile(builtins_vfile);
-              if (builtins_psifile instanceof PyFile) {
-                instance=new PyBuiltinCache((PyFile)builtins_psifile);
-                ourInstanceCache.put(instance_key,instance);
-                return instance;
+      SdkType sdk_type=sdk.getSdkType();
+      if (sdk_type instanceof PythonSdkType) {
+        final String[] urls=sdk.getRootProvider().getUrls(PythonSdkType.BUILTIN_ROOT_TYPE);
+        for (        String url : urls) {
+          if (url.contains(PythonSdkType.SKELETON_DIR_NAME)) {
+            final String builtins_url=url + "/" + ((PythonSdkType)sdk.getSdkType()).getBuiltinsFileName(sdk);
+            File builtins=new File(VfsUtil.urlToPath(builtins_url));
+            if (builtins.isFile() && builtins.canRead()) {
+              VirtualFile builtins_vfile=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(builtins);
+              if (builtins_vfile != null) {
+                PsiFile builtins_psifile=PsiManager.getInstance(project).findFile(builtins_vfile);
+                if (builtins_psifile instanceof PyFile) {
+                  instance=new PyBuiltinCache((PyFile)builtins_psifile);
+                  ourInstanceCache.put(instance_key,instance);
+                  if (!ourListenedProjects.contains(project)) {
+                    final MessageBusConnection connection=project.getMessageBus().connect();
+                    connection.subscribe(ProjectTopics.PROJECT_ROOTS,RESETTER);
+                    ourListenedProjects.add(project);
+                  }
+                  return instance;
+                }
               }
             }
           }
