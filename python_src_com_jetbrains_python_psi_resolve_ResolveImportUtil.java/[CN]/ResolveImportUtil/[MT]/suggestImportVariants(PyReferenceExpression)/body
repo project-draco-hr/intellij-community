@@ -5,14 +5,19 @@
   if (current_file != null)   current_file=current_file.getOriginalFile();
   int relative_level=0;
   final Set<String> names_already=new java.util.HashSet<String>();
+  int underscores=0;
+  String ref_name=partial_ref.getName();
+  if (ref_name.startsWith("__"))   underscores=2;
+ else   if (ref_name.startsWith("_"))   underscores=1;
+  final And<Object> filter=new And<Object>(new PyResolveUtil.FilterNameNotIn(names_already),new UnderscoreFilter(underscores));
   PyFromImportStatement from_import=PsiTreeUtil.getParentOfType(partial_ref,PyFromImportStatement.class);
   if (from_import != null && partial_ref.getParent() != from_import) {
     PyReferenceExpression src=from_import.getImportSource();
     if (src != null) {
       PsiElement mod_candidate=src.getReference().resolve();
       if (mod_candidate instanceof PyExpression) {
-        addImportedNames(from_import.getImportElements(),names_already);
-        final VariantsProcessor processor=new VariantsProcessor(partial_ref,new PyResolveUtil.FilterNameNotIn(names_already));
+        addImportedNames(from_import.getImportElements(),names_already,filter);
+        final VariantsProcessor processor=new VariantsProcessor(partial_ref,filter);
         PyResolveUtil.treeCrawlUp(processor,true,mod_candidate);
         variants.addAll(processor.getResultList());
         PyExpression module=(PyExpression)mod_candidate;
@@ -35,21 +40,22 @@
       if (relative_level > 0) {
         PsiDirectory relative_dir=stepBackFrom(current_file,relative_level);
         if (relative_dir != null) {
-          addImportedNames(from_import.getImportElements(),names_already);
-          fillFromDir(relative_dir,current_file,names_already,variants);
+          addImportedNames(from_import.getImportElements(),names_already,filter);
+          fillFromDir(relative_dir,current_file,filter,variants);
         }
       }
     }
   }
-  if (from_import != null)   addImportedNames(from_import.getImportElements(),names_already);
+  if (from_import != null)   addImportedNames(from_import.getImportElements(),names_already,filter);
  else {
+    names_already.add(PyNames.FUTURE_MODULE);
     PyImportStatement import_stmt=PsiTreeUtil.getParentOfType(partial_ref,PyImportStatement.class);
     if (import_stmt != null) {
-      addImportedNames(import_stmt.getImportElements(),names_already);
+      addImportedNames(import_stmt.getImportElements(),names_already,filter);
     }
   }
   if (current_file != null && relative_level == 0 && !isAbsoluteImportEnabledFor(current_file)) {
-    fillFromDir(current_file.getParent(),current_file,names_already,variants);
+    fillFromDir(current_file.getParent(),current_file,filter,variants);
   }
   if (relative_level == 0) {
     final CollectingRootVisitor visitor=new CollectingRootVisitor(partial_ref.getManager());
@@ -57,7 +63,7 @@
     if (module != null) {
       ModuleRootManager.getInstance(module).processOrder(new SdkRootVisitingPolicy(visitor),null);
       for (      String name : visitor.getResult()) {
-        if (PyNames.isIdentifier(name) && !names_already.contains(name))         variants.add(name);
+        if (PyNames.isIdentifier(name) && filter.value(name))         variants.add(name);
       }
     }
   }
