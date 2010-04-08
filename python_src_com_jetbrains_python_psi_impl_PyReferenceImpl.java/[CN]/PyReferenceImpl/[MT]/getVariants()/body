@@ -1,7 +1,9 @@
 {
   final List<Object> ret=new ArrayList<Object>();
   final PsiElement realContext=PyPsiUtils.getRealContext(myElement);
-  final VariantsProcessor processor=new VariantsProcessor(myElement);
+  final int underscores=PyUtil.getInitialUnderscores(myElement.getName());
+  final UnderscoreFilter filter=new UnderscoreFilter(underscores);
+  final VariantsProcessor processor=new VariantsProcessor(myElement,null,filter);
   PyResolveUtil.treeCrawlUp(processor,realContext);
   PyResolveUtil.scanOuterContext(processor,realContext);
   PyCallExpression call_expr=PsiTreeUtil.getParentOfType(myElement,PyCallExpression.class);
@@ -28,17 +30,20 @@
     if (from_import_stmt != null) {
       final PyReferenceExpression import_src=from_import_stmt.getImportSource();
       if (import_src != null) {
-        processor.setNotice(import_src.getName());
+        final String imported_name=import_src.getName();
+        processor.setNotice(imported_name);
         PyResolveUtil.treeCrawlUp(processor,true,import_src.getReference().resolve());
       }
     }
   }
   processor.setNotice("__builtin__");
   PyResolveUtil.treeCrawlUp(processor,true,PyBuiltinCache.getInstance(getElement()).getBuiltinsFile());
-  PsiFile f=realContext.getContainingFile();
-  if (f instanceof PyFile) {
-    for (    String name : PyModuleType.getPossibleInstanceMembers()) {
-      ret.add(LookupElementBuilder.create(name).setIcon(Icons.FIELD_ICON));
+  if (underscores >= 2) {
+    PsiFile f=realContext.getContainingFile();
+    if (f instanceof PyFile) {
+      for (      String name : PyModuleType.getPossibleInstanceMembers()) {
+        ret.add(LookupElementBuilder.create(name).setIcon(Icons.FIELD_ICON));
+      }
     }
   }
   ret.addAll(processor.getResultList());
