@@ -1,0 +1,31 @@
+{
+  if (indicator != null) {
+    indicator.setText("Generating skeletons of binary libs");
+  }
+  final String parent_dir=new File(binaryPath).getParent();
+  final ProcessOutput run_result=SdkUtil.getProcessOutput(parent_dir,new String[]{binaryPath,PythonHelpersLocator.getHelperPath(FIND_BINARIES)},getVirtualEnvAdditionalEnv(binaryPath),RUN_TIMEOUT);
+  try {
+    if (run_result.getExitCode() != 0)     throw new InvalidSdkException("Exit code");
+    for (    String line : run_result.getStdoutLines()) {
+      int cutpos=line.indexOf(' ');
+      if (cutpos < 0)       throw new InvalidSdkException("Bad output");
+      String modname=line.substring(0,cutpos);
+      String mod_fname=modname.replace(".",File.separator);
+      String fname=line.substring(cutpos + 1);
+      File f_orig=new File(fname);
+      File f_skel=new File(stubsRoot + File.separator + mod_fname+ ".py");
+      if (f_orig.lastModified() >= f_skel.lastModified()) {
+        if (indicator != null) {
+          indicator.setText2(modname);
+        }
+        LOG.info("Skeleton for " + modname);
+        generateSkeleton(binaryPath,stubsRoot,modname,Collections.<String>emptyList());
+      }
+    }
+  }
+ catch (  InvalidSdkException e) {
+    StringBuffer sb=new StringBuffer("failed to run ").append(FIND_BINARIES).append(", exit code ").append(run_result.getExitCode()).append(", stderr '");
+    for (    String err_line : run_result.getStderrLines())     sb.append(err_line).append("\n");
+    throw new InvalidSdkException(sb.toString());
+  }
+}
