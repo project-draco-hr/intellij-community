@@ -1,0 +1,36 @@
+{
+  final PyType pyType=getReferenceTypeFromProviders(target,context);
+  if (pyType != null) {
+    return pyType;
+  }
+  if (target instanceof PyTargetExpression && PyNames.NONE.equals(((PyTargetExpression)target).getName())) {
+    return PyNoneType.INSTANCE;
+  }
+  if (target instanceof PyFile) {
+    return new PyModuleType((PyFile)target);
+  }
+  if (target instanceof PyTargetExpression && context.allowDataFlow() && anchor != null) {
+    final ScopeOwner scopeOwner=PsiTreeUtil.getParentOfType(anchor,ScopeOwner.class);
+    if (scopeOwner != null) {
+      final PyElement[] defs=PyDefUseUtil.getLatestDefs(scopeOwner,(PyTargetExpression)target,anchor);
+      if (defs.length > 0) {
+        PyType type=getTypeIfExpr(defs[0],context);
+        for (int i=1; i < defs.length; i++) {
+          type=PyUnionType.union(type,getTypeIfExpr(defs[i],context));
+        }
+        return type;
+      }
+    }
+  }
+  if (target instanceof PyExpression) {
+    return ((PyExpression)target).getType(context);
+  }
+  if (target instanceof PyClass) {
+    return new PyClassType((PyClass)target,true);
+  }
+  if (target instanceof PsiDirectory) {
+    PsiFile file=((PsiDirectory)target).findFile(PyNames.INIT_DOT_PY);
+    if (file != null)     return getTypeFromTarget(file,context,anchor);
+  }
+  return null;
+}
