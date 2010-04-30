@@ -14,6 +14,7 @@
     String ref_name=myElement.getName();
     Condition<PsiElement> node_filter=new PyResolveUtil.FilterNameNotIn(names_already);
     Condition<String> underscore_filter=new PyUtil.UnderscoreFilter(PyUtil.getInitialUnderscores(ref_name));
+    boolean is_importing_from_a_module=false;
     PyFromImportStatement from_import=PsiTreeUtil.getParentOfType(myElement,PyFromImportStatement.class);
     if (from_import != null && myElement.getParent() != from_import) {
       PyReferenceExpression src=from_import.getImportSource();
@@ -22,6 +23,7 @@
         if (mod_candidate instanceof PyExpression) {
           addImportedNames(from_import.getImportElements(),names_already,underscore_filter);
           final VariantsProcessor processor=new VariantsProcessor(myElement,node_filter,underscore_filter);
+          processor.setPlainNamesOnly(true);
           PyResolveUtil.treeCrawlUp(processor,true,mod_candidate);
           variants.addAll(processor.getResultList());
           PyExpression module=(PyExpression)mod_candidate;
@@ -45,7 +47,7 @@
           PsiDirectory relative_dir=ResolveImportUtil.stepBackFrom(current_file,relative_level);
           if (relative_dir != null) {
             addImportedNames(from_import.getImportElements(),names_already,underscore_filter);
-            fillFromDir(relative_dir,current_file,underscore_filter,variants);
+            fillFromDir(relative_dir,current_file,underscore_filter,variants,null);
           }
         }
       }
@@ -56,7 +58,10 @@
         relative_level+=1;
         n=n.getTreePrev();
       }
-      if (from_import != null)       addImportedNames(from_import.getImportElements(),names_already,underscore_filter);
+      if (from_import != null) {
+        addImportedNames(from_import.getImportElements(),names_already,underscore_filter);
+        is_importing_from_a_module=true;
+      }
  else {
         names_already.add(PyNames.FUTURE_MODULE);
         PyImportStatement import_stmt=PsiTreeUtil.getParentOfType(myElement,PyImportStatement.class);
@@ -65,7 +70,7 @@
         }
       }
       if (current_file != null && (relative_level > 0 || !ResolveImportUtil.isAbsoluteImportEnabledFor(current_file))) {
-        fillFromDir(ResolveImportUtil.stepBackFrom(current_file,relative_level),current_file,underscore_filter,variants);
+        fillFromDir(ResolveImportUtil.stepBackFrom(current_file,relative_level),current_file,underscore_filter,variants,is_importing_from_a_module ? ImportKeywordHandler.INSTANCE : null);
       }
     }
     if (relative_level == 0) {
@@ -74,7 +79,10 @@
       if (module != null) {
         ModuleRootManager.getInstance(module).processOrder(new ResolveImportUtil.SdkRootVisitingPolicy(visitor),null);
         for (        String name : visitor.getResult()) {
-          if (PyNames.isIdentifier(name) && underscore_filter.value(name))           variants.add(name);
+          if (PyNames.isIdentifier(name) && underscore_filter.value(name)) {
+            if (is_importing_from_a_module)             variants.add(LookupElementBuilder.create(name).setInsertHandler(ImportKeywordHandler.INSTANCE));
+ else             variants.add(name);
+          }
         }
       }
     }
