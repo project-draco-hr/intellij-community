@@ -4,7 +4,7 @@
   boolean is_constructor_call=false;
   if (callee instanceof PyReferenceExpression) {
     PyReferenceExpression ref=(PyReferenceExpression)callee;
-    ResolveResult resolveResult=ref.followAssignmentsChain();
+    QualifiedResolveResult resolveResult=ref.followAssignmentsChain();
     PsiElement resolved=resolveResult.getElement();
     if (resolved instanceof PyClass) {
       resolved=((PyClass)resolved).findInitOrNew(true);
@@ -22,7 +22,14 @@
     }
     if (resolved instanceof PyFunction) {
       EnumSet<PyFunction.Flag> flags=EnumSet.noneOf(PyFunction.Flag.class);
-      int implicit_offset=getImplicitArgumentCount(us.getCallee(),(PyFunction)resolved,wrapped_flag,flags);
+      PyExpression last_qualifier=resolveResult.getLastQualifier();
+      final PyExpression call_reference=us.getCallee();
+      boolean is_by_instance=isByInstance(call_reference);
+      if (last_qualifier != null) {
+        PyType qualifier_type=last_qualifier.getType(TypeEvalContext.fast());
+        is_by_instance|=(qualifier_type != null && qualifier_type instanceof PyClassType && !((PyClassType)qualifier_type).isDefinition());
+      }
+      int implicit_offset=getImplicitArgumentCount(call_reference,(PyFunction)resolved,wrapped_flag,flags,is_by_instance);
       if (!is_constructor_call && PyNames.NEW.equals(((PyFunction)resolved).getName())) {
         implicit_offset=Math.min(implicit_offset - 1,0);
       }
