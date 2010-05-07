@@ -1,0 +1,34 @@
+{
+  final PsiElement element=params.getElementToSearch();
+  if (!(element instanceof PyElement)) {
+    return true;
+  }
+  final String name=ApplicationManager.getApplication().runReadAction(new Computable<String>(){
+    public String compute(){
+      return ((PyElement)element).getName();
+    }
+  }
+);
+  if (StringUtil.isEmpty(name)) {
+    return true;
+  }
+  SearchScope searchScope=params.getEffectiveSearchScope();
+  if (searchScope instanceof GlobalSearchScope) {
+    searchScope=GlobalSearchScope.getScopeRestrictedByFileTypes((GlobalSearchScope)searchScope,PythonFileType.INSTANCE);
+  }
+  final TextOccurenceProcessor processor=new TextOccurenceProcessor(){
+    public boolean execute(    PsiElement e,    int offsetInElement){
+      final PsiReference[] refs=e.getReferences();
+      for (      PsiReference ref : refs) {
+        if (ref.getRangeInElement().contains(offsetInElement)) {
+          if (ref.isReferenceTo(element)) {
+            return consumer.process(ref);
+          }
+        }
+      }
+      return true;
+    }
+  }
+;
+  return PsiManager.getInstance(element.getProject()).getSearchHelper().processElementsWithWord(processor,searchScope,name,UsageSearchContext.IN_STRINGS,true);
+}
