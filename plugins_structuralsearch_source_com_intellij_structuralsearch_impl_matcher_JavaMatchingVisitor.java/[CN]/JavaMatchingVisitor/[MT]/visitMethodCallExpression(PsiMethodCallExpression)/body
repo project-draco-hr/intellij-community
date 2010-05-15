@@ -1,0 +1,67 @@
+{
+  if (!(myMatchingVisitor.getElement() instanceof PsiMethodCallExpression)) {
+    myMatchingVisitor.setResult(false);
+    return;
+  }
+  final PsiMethodCallExpression mcall2=(PsiMethodCallExpression)myMatchingVisitor.getElement();
+  final PsiReferenceExpression mcallRef1=mcall.getMethodExpression();
+  final PsiReferenceExpression mcallRef2=mcall2.getMethodExpression();
+  final String mcallname1=mcallRef1.getReferenceName();
+  final String mcallname2=mcallRef2.getReferenceName();
+  boolean isTypedVar=myMatchingVisitor.getMatchContext().getPattern().isTypedVar(mcallRef1.getReferenceNameElement());
+  if (mcallname1 != null && !mcallname1.equals(mcallname2) && !isTypedVar) {
+    myMatchingVisitor.setResult(false);
+    return;
+  }
+  final PsiExpression qualifier=mcallRef1.getQualifierExpression();
+  final PsiExpression elementQualfier=mcallRef2.getQualifierExpression();
+  if (qualifier != null) {
+    if (elementQualfier != null) {
+      myMatchingVisitor.setResult(myMatchingVisitor.match(qualifier,elementQualfier));
+      if (!myMatchingVisitor.getResult())       return;
+    }
+ else {
+      MatchingHandler handler=myMatchingVisitor.getMatchContext().getPattern().getHandler(qualifier);
+      if (!(handler instanceof SubstitutionHandler) || ((SubstitutionHandler)handler).getMinOccurs() != 0) {
+        myMatchingVisitor.setResult(false);
+        return;
+      }
+ else {
+        SubstitutionHandler substitutionHandler=(SubstitutionHandler)handler;
+        if (substitutionHandler.getPredicate() != null) {
+          boolean isnot=false;
+          MatchPredicate _predicate=substitutionHandler.getPredicate();
+          ExprTypePredicate predicate=null;
+          if (_predicate instanceof NotPredicate) {
+            isnot=true;
+            _predicate=((NotPredicate)_predicate).getHandler();
+          }
+          if (_predicate instanceof ExprTypePredicate) {
+            predicate=(ExprTypePredicate)_predicate;
+          }
+          if (predicate != null) {
+            PsiMethod method=(PsiMethod)mcallRef2.resolve();
+            if (method != null) {
+              myMatchingVisitor.setResult(predicate.checkClass(method.getContainingClass(),myMatchingVisitor.getMatchContext()));
+              if (isnot)               myMatchingVisitor.setResult(!myMatchingVisitor.getResult());
+            }
+ else {
+              myMatchingVisitor.setResult(false);
+            }
+            if (!myMatchingVisitor.getResult())             return;
+          }
+        }
+      }
+    }
+  }
+ else   if (elementQualfier != null) {
+    myMatchingVisitor.setResult(false);
+    return;
+  }
+  myMatchingVisitor.setResult(matchSons(mcall.getArgumentList(),mcall2.getArgumentList()));
+  if (myMatchingVisitor.getResult() && isTypedVar) {
+    boolean res=myMatchingVisitor.getResult();
+    res&=myMatchingVisitor.handleTypedElement(mcallRef1.getReferenceNameElement(),mcallRef2.getReferenceNameElement());
+    myMatchingVisitor.setResult(res);
+  }
+}
