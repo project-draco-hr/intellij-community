@@ -15,6 +15,7 @@
     Condition<PsiElement> node_filter=new PyResolveUtil.FilterNameNotIn(names_already);
     Condition<String> underscore_filter=new PyUtil.UnderscoreFilter(PyUtil.getInitialUnderscores(ref_name));
     boolean is_importing_from_a_module=false;
+    boolean already_has_import_keyword=false;
     PyFromImportStatement from_import=PsiTreeUtil.getParentOfType(myElement,PyFromImportStatement.class);
     if (from_import != null && myElement.getParent() != from_import) {
       PyReferenceExpression src=from_import.getImportSource();
@@ -61,6 +62,15 @@
       if (from_import != null) {
         addImportedNames(from_import.getImportElements(),names_already,underscore_filter);
         is_importing_from_a_module=true;
+        ASTNode node=myElement.getNode();
+        while (node != null) {
+          final IElementType node_type=node.getElementType();
+          if (node_type == PyTokenTypes.IMPORT_KEYWORD) {
+            already_has_import_keyword=true;
+            break;
+          }
+          node=node.getTreeNext();
+        }
       }
  else {
         names_already.add(PyNames.FUTURE_MODULE);
@@ -70,7 +80,7 @@
         }
       }
       if (current_file != null && (relative_level > 0 || !ResolveImportUtil.isAbsoluteImportEnabledFor(current_file))) {
-        fillFromDir(ResolveImportUtil.stepBackFrom(current_file,relative_level),current_file,underscore_filter,variants,is_importing_from_a_module ? ImportKeywordHandler.INSTANCE : null);
+        fillFromDir(ResolveImportUtil.stepBackFrom(current_file,relative_level),current_file,underscore_filter,variants,is_importing_from_a_module && !already_has_import_keyword ? ImportKeywordHandler.INSTANCE : null);
       }
     }
     if (relative_level == 0) {
@@ -83,7 +93,9 @@
           if (PyNames.isIdentifier(name) && underscore_filter.value(name)) {
             if (is_importing_from_a_module) {
               LookupElementBuilder lookup_item=LookupElementBuilder.create(name);
-              if (!result.hasSubmodules())               lookup_item=lookup_item.setInsertHandler(ImportKeywordHandler.INSTANCE);
+              if (!result.hasSubmodules() && !already_has_import_keyword) {
+                lookup_item=lookup_item.setInsertHandler(ImportKeywordHandler.INSTANCE);
+              }
               variants.add(lookup_item);
             }
  else             variants.add(name);
