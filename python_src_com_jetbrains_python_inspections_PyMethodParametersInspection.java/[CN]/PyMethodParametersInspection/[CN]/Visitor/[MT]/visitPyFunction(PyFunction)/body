@@ -4,14 +4,25 @@
     PyParameterList plist=node.getParameterList();
     PyParameter[] params=plist.getParameters();
     Set<PyFunction.Flag> flags=PyUtil.detectDecorationsAndWrappersOf(node);
+    boolean is_special_metaclass_method=false;
+    PyClass type_cls=PyBuiltinCache.getInstance(node).getClass("type");
+    for (    PyClass ancestor_cls : ((PyClass)cap).iterateAncestors()) {
+      if (ancestor_cls == type_cls) {
+        is_special_metaclass_method=true;
+        break;
+      }
+    }
+    final String method_name=node.getName();
+    is_special_metaclass_method&=PyNames.INIT.equals(method_name) || "__call__".equals(method_name);
+    final boolean is_staticmethod=flags.contains(STATICMETHOD);
     if (params.length == 0) {
-      if (flags.contains(STATICMETHOD))       return;
+      if (is_staticmethod)       return;
       ASTNode name_node=node.getNameNode();
       if (name_node != null) {
         PsiElement open_paren=plist.getFirstChild();
         PsiElement close_paren=plist.getLastChild();
         if (open_paren != null && close_paren != null && "(".equals(open_paren.getText()) && ")".equals(close_paren.getText())) {
-          String paramName=flags.contains(CLASSMETHOD) ? "cls" : "self";
+          String paramName=flags.contains(CLASSMETHOD) || is_special_metaclass_method ? "cls" : "self";
           registerProblem(plist,PyBundle.message("INSP.must.have.first.parameter",paramName),ProblemHighlightType.GENERIC_ERROR,null,new AddSelfQuickFix(paramName));
         }
       }
@@ -27,18 +38,18 @@
             return;
           }
         }
-        if (flags.contains(CLASSMETHOD)) {
+        if (flags.contains(CLASSMETHOD) || is_special_metaclass_method) {
           String CLS="cls";
           if (!CLS.equals(pname)) {
             registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.usually.named.cls"),new RenameParameterQuickFix(CLS));
           }
         }
- else         if (!PyNames.CANONICAL_SELF.equals(pname) && !flags.contains(STATICMETHOD)) {
+ else         if (!PyNames.CANONICAL_SELF.equals(pname) && !is_staticmethod) {
           registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.usually.named.self"),new RenameParameterQuickFix(PyNames.CANONICAL_SELF));
         }
       }
  else {
-        if (!flags.contains(STATICMETHOD)) {
+        if (!is_staticmethod) {
           registerProblem(plist,PyBundle.message("INSP.first.param.must.not.be.tuple"));
         }
       }
