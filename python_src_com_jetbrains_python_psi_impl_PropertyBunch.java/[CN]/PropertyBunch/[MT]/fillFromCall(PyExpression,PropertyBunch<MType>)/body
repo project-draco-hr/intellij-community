@@ -1,0 +1,53 @@
+{
+  PyCallExpression call=findPropertyCallSite(source);
+  if (call != null) {
+    PyArgumentList arglist=call.getArgumentList();
+    if (arglist != null) {
+      PyArgumentList.AnalysisResult analysis=arglist.analyzeCall();
+      PyCallExpression.PyMarkedCallee marked_callee=analysis.getMarkedCallee();
+      if (marked_callee != null) {
+        PyParameter[] params=marked_callee.getCallable().getParameterList().getParameters();
+        List<Maybe<MType>> accessors=new ArrayList<Maybe<MType>>(3);
+        final Maybe<MType> unknown=new Maybe<MType>();
+        accessors.add(null);
+        accessors.add(null);
+        accessors.add(null);
+        final int offset=marked_callee.getImplicitOffset();
+        for (        Map.Entry<PyExpression,PyNamedParameter> entry : analysis.getPlainMappedParams().entrySet()) {
+          PyNamedParameter param=entry.getValue();
+          int n=ArrayUtil.indexOf(params,param) - offset;
+          if (n >= 0) {
+            if (n < 3) {
+              accessors.set(n,unknown);
+              PyExpression expr=entry.getKey();
+              if (expr instanceof PyReferenceExpression) {
+                PyReferenceExpression arg_ref=(PyReferenceExpression)expr;
+                if (arg_ref.getQualifier() == null)                 accessors.set(n,new Maybe<MType>(target.translate(arg_ref)));
+              }
+            }
+ else             if (n == 3) {
+              PyExpression expr=entry.getKey();
+              if (expr instanceof PyStringLiteralExpression) {
+                target.myDoc=((PyStringLiteralExpression)expr).getStringValue();
+              }
+            }
+          }
+        }
+        for (        PyNamedParameter param : analysis.getKwdMappedParams()) {
+          int n=ArrayUtil.indexOf(params,param) - offset;
+          if (n >= 0 && n < 3)           accessors.set(n,unknown);
+        }
+        for (        PyParameter param : analysis.getTupleMappedParams()) {
+          int n=ArrayUtil.indexOf(params,param) - offset;
+          if (n >= 0 && n < 3)           accessors.set(n,unknown);
+        }
+        for (int i=0; i < 3; i+=1)         if (accessors.get(i) == null)         accessors.set(i,new Maybe<MType>(null));
+        target.myGetter=accessors.get(0);
+        target.mySetter=accessors.get(1);
+        target.myDeleter=accessors.get(2);
+      }
+      return true;
+    }
+  }
+  return false;
+}

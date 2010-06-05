@@ -1,0 +1,54 @@
+{
+  Maybe<PyFunction> getter=none;
+  Maybe<PyFunction> setter=none;
+  Maybe<PyFunction> deleter=none;
+  String doc=null;
+  for (  PyFunction method : getMethods()) {
+    if (name.equals(method.getName())) {
+      PyDecoratorList decolist=method.getDecoratorList();
+      if (decolist != null) {
+        for (        PyDecorator deco : decolist.getDecorators()) {
+          PyQualifiedName deco_name=deco.getQualifiedName();
+          if (deco_name != null) {
+            if (deco_name.matches("property")) {
+              getter=new Maybe<PyFunction>(method);
+            }
+ else             if (deco_name.matches(name,"setter")) {
+              setter=new Maybe<PyFunction>(method);
+            }
+ else             if (deco_name.matches(name,"deleter")) {
+              deleter=new Maybe<PyFunction>(method);
+            }
+          }
+        }
+      }
+    }
+    if (getter != none && setter != none && deleter != none)     break;
+  }
+  if (getter != none || setter != none || deleter != none)   return new PropertyImpl(getter,setter,deleter,doc,null);
+  final PyClassStub stub=getStub();
+  if (stub != null) {
+    for (    StubElement substub : stub.getChildrenStubs()) {
+      if (substub.getStubType() == PyElementTypes.TARGET_EXPRESSION) {
+        final PyTargetExpressionStub target_stub=(PyTargetExpressionStub)substub;
+        PropertyStubStorage prop=target_stub.getPropertyPack();
+        if (prop != null && name.equals(target_stub.getName())) {
+          getter=prop.getGetter().isDefined() ? new Maybe<PyFunction>(findMethodByName(prop.getGetter().value(),true)) : unknown_call;
+          setter=prop.getSetter().isDefined() ? new Maybe<PyFunction>(findMethodByName(prop.getSetter().value(),true)) : unknown_call;
+          deleter=prop.getDeleter().isDefined() ? new Maybe<PyFunction>(findMethodByName(prop.getDeleter().value(),true)) : unknown_call;
+          doc=prop.getDoc();
+        }
+      }
+    }
+    if (getter != none || setter != none || deleter != none)     return new PropertyImpl(getter,setter,deleter,doc,null);
+  }
+ else {
+    for (    PyTargetExpression target : getClassAttributes()) {
+      if (name.equals(target.getName())) {
+        Property prop=PropertyImpl.fromTarget(target);
+        if (prop != null)         return prop;
+      }
+    }
+  }
+  return null;
+}
