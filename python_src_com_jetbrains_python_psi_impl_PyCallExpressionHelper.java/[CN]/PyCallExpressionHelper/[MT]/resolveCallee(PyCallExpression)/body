@@ -1,7 +1,7 @@
 {
+  PyFunction.Flag wrappedFlag=null;
+  boolean isConstructorCall=false;
   PyExpression callee=us.getCallee();
-  PyFunction.Flag wrapped_flag=null;
-  boolean is_constructor_call=false;
   PsiElement resolved;
   QualifiedResolveResult resolveResult=null;
   if (callee instanceof PyReferenceExpression) {
@@ -9,36 +9,40 @@
     resolveResult=ref.followAssignmentsChain();
     resolved=resolveResult.getElement();
   }
- else   resolved=callee;
+ else {
+    resolved=callee;
+  }
   if (resolved instanceof PyClass) {
     resolved=((PyClass)resolved).findInitOrNew(true);
-    is_constructor_call=true;
+    isConstructorCall=true;
   }
  else   if (resolved instanceof PyCallExpression) {
-    PyCallExpression redefining_call=(PyCallExpression)resolved;
-    Pair<String,PyFunction> wrapper_info=interpretAsStaticmethodOrClassmethodWrappingCall(redefining_call,us);
-    if (wrapper_info != null) {
-      resolved=wrapper_info.getSecond();
-      String wrapper_name=wrapper_info.getFirst();
-      if (PyNames.CLASSMETHOD.equals(wrapper_name))       wrapped_flag=PyFunction.Flag.CLASSMETHOD;
- else       if (PyNames.STATICMETHOD.equals(wrapper_name))       wrapped_flag=PyFunction.Flag.STATICMETHOD;
+    PyCallExpression redefiningCall=(PyCallExpression)resolved;
+    Pair<String,PyFunction> wrapperInfo=interpretAsStaticmethodOrClassmethodWrappingCall(redefiningCall,us);
+    if (wrapperInfo != null) {
+      resolved=wrapperInfo.getSecond();
+      String wrapper_name=wrapperInfo.getFirst();
+      if (PyNames.CLASSMETHOD.equals(wrapper_name)) {
+        wrappedFlag=PyFunction.Flag.CLASSMETHOD;
+      }
+ else       if (PyNames.STATICMETHOD.equals(wrapper_name))       wrappedFlag=PyFunction.Flag.STATICMETHOD;
     }
   }
   if (resolved instanceof Callable) {
     EnumSet<PyFunction.Flag> flags=EnumSet.noneOf(PyFunction.Flag.class);
-    PyExpression last_qualifier=resolveResult != null ? resolveResult.getLastQualifier() : null;
-    final PyExpression call_reference=us.getCallee();
-    boolean is_by_instance=isByInstance(call_reference);
-    if (last_qualifier != null) {
-      PyType qualifier_type=last_qualifier.getType(TypeEvalContext.fast());
+    PyExpression lastQualifier=resolveResult != null ? resolveResult.getLastQualifier() : null;
+    final PyExpression callReference=us.getCallee();
+    boolean is_by_instance=isByInstance(callReference);
+    if (lastQualifier != null) {
+      PyType qualifier_type=lastQualifier.getType(TypeEvalContext.fast());
       is_by_instance|=(qualifier_type != null && qualifier_type instanceof PyClassType && !((PyClassType)qualifier_type).isDefinition());
     }
     final Callable callable=(Callable)resolved;
-    int implicit_offset=getImplicitArgumentCount(call_reference,callable,wrapped_flag,flags,is_by_instance);
-    if (!is_constructor_call && PyNames.NEW.equals(callable.getName())) {
-      implicit_offset=Math.min(implicit_offset - 1,0);
+    int implicitOffset=getImplicitArgumentCount(callReference,callable,wrappedFlag,flags,is_by_instance);
+    if (!isConstructorCall && PyNames.NEW.equals(callable.getName())) {
+      implicitOffset=Math.min(implicitOffset - 1,0);
     }
-    return new PyCallExpression.PyMarkedCallee(callable,flags,implicit_offset,resolveResult != null ? resolveResult.isImplicit() : false);
+    return new PyCallExpression.PyMarkedCallee(callable,flags,implicitOffset,resolveResult != null ? resolveResult.isImplicit() : false);
   }
   return null;
 }
