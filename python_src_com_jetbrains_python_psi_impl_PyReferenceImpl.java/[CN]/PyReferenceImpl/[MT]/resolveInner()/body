@@ -15,6 +15,22 @@
   }
   if (roof == null)   roof=realContext.getContainingFile();
   PsiElement uexpr=PyResolveUtil.treeCrawlUp(processor,false,realContext,roof);
+  if (uexpr != null) {
+    if ((uexpr instanceof PyTargetExpression || uexpr instanceof PyNamedParameter) && myElement != null) {
+      final ScopeOwner scopeOwner=PsiTreeUtil.getParentOfType(myElement,ScopeOwner.class);
+      if (scopeOwner != null && scopeOwner == PsiTreeUtil.getStubOrPsiParentOfType(uexpr,ScopeOwner.class)) {
+        PyAugAssignmentStatement augAssignment=PsiTreeUtil.getParentOfType(myElement,PyAugAssignmentStatement.class);
+        try {
+          final PyElement[] defs=PyDefUseUtil.getLatestDefs(scopeOwner,(PyElement)uexpr,augAssignment != null ? augAssignment : myElement);
+          for (          PyElement e : defs) {
+            ret.add(new RatedResolveResult(RatedResolveResult.RATE_NORMAL + 1,e));
+          }
+        }
+ catch (        PyDefUseUtil.InstructionNotFoundException e) {
+        }
+      }
+    }
+  }
   if ((uexpr != null)) {
     if ((uexpr instanceof PyClass)) {
       PyClass cls=(PyClass)uexpr;
@@ -42,16 +58,6 @@
   }
   if (uexpr != null) {
     ret.add(new ImportedResolveResult(uexpr,getRate(uexpr),processor.getDefiners()));
-  }
-  if (uexpr == null) {
-    PyDecorator deco=PsiTreeUtil.getParentOfType(myElement,PyDecorator.class);
-    if (deco != null) {
-      PyClass cls=PsiTreeUtil.getParentOfType(deco,PyClass.class);
-      if (cls != null) {
-        Property prop=cls.findProperty(referencedName);
-        if (prop != null && prop.getGetter().isDefined())         ret.poke(prop.getGetter().value(),RatedResolveResult.RATE_NORMAL);
-      }
-    }
   }
   return ret;
 }
