@@ -2,24 +2,10 @@
   if (owner.getContainingFile() instanceof PyExpressionCodeFragment || PydevConsoleRunner.isInPydevConsole(owner)) {
     return;
   }
-  try {
-    owner.acceptChildren(new PyRecursiveElementVisitor(){
-      @Override public void visitPyCallExpression(      final PyCallExpression node){
-        if ("locals".equals(node.getCallee().getText())) {
-          throw new DontPerformException();
-        }
-      }
-      @Override public void visitPyFunction(      final PyFunction node){
-      }
-    }
-);
-  }
- catch (  DontPerformException e) {
-    return;
-  }
-  boolean parametersCanBeUnused=false;
+  if (callsLocals(owner))   return;
+  boolean parametersCanBeUnused=true;
   if (owner instanceof PyFunction) {
-    parametersCanBeUnused=PySuperMethodsSearch.search(((PyFunction)owner)).findFirst() != null;
+    parametersCanBeUnused=PySuperMethodsSearch.search(((PyFunction)owner)).findFirst() == null && PyOverridingMethodsSearch.search((PyFunction)owner,true).findFirst() == null;
   }
   final Scope scope=owner.getScope();
   final ControlFlow flow=owner.getControlFlow();
@@ -42,7 +28,7 @@
         continue;
       }
       final ReadWriteInstruction.ACCESS access=((ReadWriteInstruction)instruction).getAccess();
-      if (access.isWriteAccess() && (parametersCanBeUnused || !(element != null && element.getParent() instanceof PyNamedParameter))) {
+      if (access.isWriteAccess() && (parametersCanBeUnused || !isParameter(element))) {
         if (!myUsedElements.contains(element)) {
           myUnusedElements.add(element);
         }
