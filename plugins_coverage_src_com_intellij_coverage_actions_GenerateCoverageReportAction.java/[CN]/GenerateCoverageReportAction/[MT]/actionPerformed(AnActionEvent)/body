@@ -1,13 +1,23 @@
 {
   final DataContext dataContext=e.getDataContext();
   final Project project=PlatformDataKeys.PROJECT.getData(dataContext);
-  final CoverageSuiteImpl currentSuite=(CoverageSuiteImpl)CoverageDataManager.getInstance(project).getCurrentSuite();
+  final CoverageDataManager coverageDataManager=CoverageDataManager.getInstance(project);
+  final CoverageSuiteImpl currentSuite=(CoverageSuiteImpl)coverageDataManager.getCurrentSuite();
   final ExportToHTMLDialog dialog=new ExportToHTMLDialog(project,true);
   dialog.setTitle("Generate coverage report for: \'" + currentSuite.getPresentableName() + "\'");
   dialog.reset();
   dialog.show();
   if (!dialog.isOK())   return;
   dialog.apply();
-  final ExportToHTMLSettings settings=ExportToHTMLSettings.getInstance(project);
-  currentSuite.getRunner().generateReport(project,currentSuite.isTrackTestFolders(),currentSuite.getCoverageDataFileName(),settings.OUTPUT_DIRECTORY,settings.OPEN_IN_BROWSER);
+  try {
+    final File tempFile=File.createTempFile("temp","");
+    tempFile.deleteOnExit();
+    final ProjectData projectData=currentSuite.getCoverageData(coverageDataManager);
+    new SaveHook(tempFile,true,new IdeaClassFinder(project,currentSuite)).save(projectData);
+    final ExportToHTMLSettings settings=ExportToHTMLSettings.getInstance(project);
+    currentSuite.getRunner().generateReport(project,currentSuite.isTrackTestFolders(),tempFile.getCanonicalPath(),settings.OUTPUT_DIRECTORY,settings.OPEN_IN_BROWSER);
+  }
+ catch (  IOException e1) {
+    LOG.error(e1);
+  }
 }
