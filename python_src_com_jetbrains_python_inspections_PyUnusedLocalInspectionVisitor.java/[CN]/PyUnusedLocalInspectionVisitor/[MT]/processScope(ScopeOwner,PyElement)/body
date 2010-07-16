@@ -12,12 +12,17 @@
   final Instruction[] instructions=flow.getInstructions();
   for (int i=0; i < instructions.length; i++) {
     final Instruction instruction=instructions[i];
-    if (instruction instanceof ReadWriteInstruction) {
+    final PsiElement element=instruction.getElement();
+    if (element instanceof PyFunction && owner instanceof PyFunction) {
+      if (!myUsedElements.contains(element)) {
+        myUnusedElements.add(element);
+      }
+    }
+ else     if (instruction instanceof ReadWriteInstruction) {
       final String name=((ReadWriteInstruction)instruction).getName();
       if (name == null || "_".equals(name) || scope.isGlobal(name)) {
         continue;
       }
-      final PsiElement element=instruction.getElement();
       if (element == null || !PsiTreeUtil.isAncestor(node,element,false)) {
         continue;
       }
@@ -69,18 +74,32 @@
             continue;
           }
         }
-        PyControlFlowUtil.iterateWriteAccessFor(name,number,instructions,new Function<ReadWriteInstruction,PyControlFlowUtil.Operation>(){
-          public PyControlFlowUtil.Operation fun(          final ReadWriteInstruction rwInstr){
-            final PsiElement instrElement=rwInstr.getElement();
-            if (instrElement == null || !PsiTreeUtil.isAncestor(node,instrElement,false)) {
+        PyControlFlowUtil.iteratePrev(number,instructions,new Function<Instruction,PyControlFlowUtil.Operation>(){
+          public PyControlFlowUtil.Operation fun(          final Instruction inst){
+            final PsiElement element=inst.getElement();
+            if (element instanceof PyFunction) {
+              if (name.equals(((PyFunction)element).getName())) {
+                myUsedElements.add(element);
+                myUnusedElements.remove(element);
+                return PyControlFlowUtil.Operation.CONTINUE;
+              }
+            }
+ else             if (inst instanceof ReadWriteInstruction) {
+              final ReadWriteInstruction rwInstruction=(ReadWriteInstruction)inst;
+              if (!name.equals(rwInstruction.getName()) || !rwInstruction.getAccess().isWriteAccess()) {
+                return PyControlFlowUtil.Operation.NEXT;
+              }
+              if (element == null || !PsiTreeUtil.isAncestor(node,element,false)) {
+                return PyControlFlowUtil.Operation.CONTINUE;
+              }
+              myUsedElements.add(element);
+              myUnusedElements.remove(element);
+              if (PsiTreeUtil.getParentOfType(element,PyTryPart.class) != null) {
+                return PyControlFlowUtil.Operation.NEXT;
+              }
               return PyControlFlowUtil.Operation.CONTINUE;
             }
-            myUsedElements.add(instrElement);
-            myUnusedElements.remove(instrElement);
-            if (PsiTreeUtil.getParentOfType(instrElement,PyTryPart.class) != null) {
-              return PyControlFlowUtil.Operation.NEXT;
-            }
-            return PyControlFlowUtil.Operation.CONTINUE;
+            return PyControlFlowUtil.Operation.NEXT;
           }
         }
 );
