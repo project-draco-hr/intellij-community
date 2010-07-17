@@ -1,0 +1,101 @@
+{
+  nextResponse=null;
+  if (waitingForInput) {
+    inputReceived=command;
+    waitingForInput=false;
+  }
+ else {
+    ProgressManager.getInstance().runProcessWithProgressSynchronously(new Runnable(){
+      /** 
+ * Executes the needed command
+ * @return a Pair with (null, more) or (error, false)
+ * @throws XmlRpcException
+ */
+      private Pair<String,Boolean> exec() throws XmlRpcException {
+        Object execute=client.execute("addExec",new Object[]{command},TIMEOUT);
+        Object object;
+        if (execute instanceof Vector) {
+          object=((Vector)execute).get(0);
+        }
+ else         if (execute.getClass().isArray()) {
+          object=((Object[])execute)[0];
+        }
+ else {
+          object=execute;
+        }
+        boolean more;
+        String errorContents=null;
+        if (object instanceof Boolean) {
+          more=(Boolean)object;
+        }
+ else {
+          String str=object.toString();
+          String lower=str.toLowerCase();
+          if (lower.equals("true") || lower.equals("1")) {
+            more=true;
+          }
+ else           if (lower.equals("false") || lower.equals("0")) {
+            more=false;
+          }
+ else {
+            more=false;
+            errorContents=str;
+          }
+        }
+        return new Pair<String,Boolean>(errorContents,more);
+      }
+      public void run(){
+        boolean needInput=false;
+        try {
+          Pair<String,Boolean> executed=null;
+          int commAttempts=0;
+          while (true) {
+            executed=exec();
+            String refusedConnPattern="Failed to read servers response";
+            if (executed.first != null && executed.first.indexOf(refusedConnPattern) != -1) {
+              if (firstCommWorked) {
+                break;
+              }
+ else {
+                if (commAttempts < MAX_ATTEMPTS) {
+                  commAttempts+=1;
+                  Thread.sleep(250);
+                  executed=new Pair<String,Boolean>(stdErrReader.getAndClearContents(),executed.second);
+                  continue;
+                }
+ else {
+                  break;
+                }
+              }
+            }
+ else {
+              break;
+            }
+          }
+          firstCommWorked=true;
+          String errorContents=executed.first;
+          boolean more=executed.second;
+          if (errorContents == null) {
+            errorContents=stdErrReader.getAndClearContents();
+          }
+          nextResponse=new InterpreterResponse(stdOutReader.getAndClearContents(),errorContents,more,needInput);
+        }
+ catch (        Exception e) {
+          nextResponse=new InterpreterResponse("","Exception while pushing line to console:" + e.getMessage(),false,needInput);
+        }
+      }
+    }
+,"Pydev Console Communication",true,myProject);
+  }
+  while (nextResponse == null) {
+synchronized (lock2) {
+      try {
+        lock2.wait(20);
+      }
+ catch (      InterruptedException e) {
+        LOG.error(e);
+      }
+    }
+  }
+  onResponseReceived.call(nextResponse);
+}
