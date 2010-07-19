@@ -1,0 +1,37 @@
+{
+  final Object[] result=new Object[]{null};
+  this.impl.executeAsync(command,new Vector(Arrays.asList(args)),new AsyncCallback(){
+    public void handleError(    Exception error,    URL url,    String method){
+      result[0]=new Object[]{error.getMessage()};
+    }
+    public void handleResult(    Object recievedResult,    URL url,    String method){
+      result[0]=recievedResult;
+    }
+  }
+);
+  while (result[0] == null) {
+    try {
+      if (process != null) {
+        final String errStream=stdErrReader.getContents();
+        if (errStream.indexOf("sys.exit called. Interactive console finishing.") != -1) {
+          result[0]=new Object[]{errStream};
+          break;
+        }
+        int exitValue=process.exitValue();
+        result[0]=new Object[]{String.format("Console already exited with value: %s while waiting for an answer.\n" + "Error stream: " + errStream + "\n"+ "Output stream: "+ stdOutReader.getContents(),exitValue)};
+        break;
+      }
+    }
+ catch (    IllegalThreadStateException e) {
+synchronized (this) {
+        try {
+          wait(10);
+        }
+ catch (        InterruptedException e1) {
+          LOG.error(e1);
+        }
+      }
+    }
+  }
+  return result[0];
+}
