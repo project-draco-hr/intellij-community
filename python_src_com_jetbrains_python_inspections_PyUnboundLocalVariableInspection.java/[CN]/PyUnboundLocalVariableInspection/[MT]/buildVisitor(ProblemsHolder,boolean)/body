@@ -49,14 +49,45 @@
             break;
           }
         }
-        if (resolves2LocalVariable) {
-          if (owner instanceof PyClass || owner instanceof PyFunction) {
-            registerProblem(node,PyBundle.message("INSP.unbound.local.variable",node.getName()),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,null,new AddGlobalQuickFix());
-          }
- else {
-            if (resolve2Scope) {
-              registerProblem(node,PyBundle.message("INSP.unbound.name.not.defined",node.getName()));
+        if (!resolves2LocalVariable) {
+          return;
+        }
+        final Ref<Boolean> readAccessSeen=new Ref<Boolean>(false);
+        final Instruction[] instructions=owner.getControlFlow().getInstructions();
+        final int number=ControlFlowUtil.findInstructionNumberByElement(instructions,node);
+        PyControlFlowUtil.iteratePrev(number,instructions,new Function<Instruction,PyControlFlowUtil.Operation>(){
+          public PyControlFlowUtil.Operation fun(          final Instruction inst){
+            if (inst.num() == number) {
+              return PyControlFlowUtil.Operation.NEXT;
             }
+            if (inst instanceof ReadWriteInstruction) {
+              final ReadWriteInstruction rwInst=(ReadWriteInstruction)inst;
+              if (name.equals(rwInst.getName())) {
+                if (scope.getDeclaredVariable(inst.getElement(),name) != null) {
+                  return PyControlFlowUtil.Operation.BREAK;
+                }
+                if (rwInst.getAccess().isWriteAccess()) {
+                  return PyControlFlowUtil.Operation.CONTINUE;
+                }
+ else {
+                  readAccessSeen.set(true);
+                  return PyControlFlowUtil.Operation.BREAK;
+                }
+              }
+            }
+            return PyControlFlowUtil.Operation.NEXT;
+          }
+        }
+);
+        if (readAccessSeen.get()) {
+          return;
+        }
+        if (owner instanceof PyClass || owner instanceof PyFunction) {
+          registerProblem(node,PyBundle.message("INSP.unbound.local.variable",node.getName()),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,null,new AddGlobalQuickFix());
+        }
+ else {
+          if (resolve2Scope) {
+            registerProblem(node,PyBundle.message("INSP.unbound.name.not.defined",node.getName()));
           }
         }
       }
