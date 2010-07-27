@@ -1,33 +1,21 @@
 {
   final PsiElement element=instruction.getElement();
-  String name=null;
-  if (instruction instanceof ReadWriteInstruction && ((ReadWriteInstruction)instruction).getAccess().isWriteAccess()) {
-    name=((ReadWriteInstruction)instruction).getName();
+  if (element == null || !((PyFile)element.getContainingFile()).getLanguageLevel().isPy3K()) {
+    return processReducedMap(map,instruction,element);
   }
- else   if (element instanceof PyFunction) {
-    name=((PyFunction)element).getName();
-  }
-  if (name == null) {
-    return map;
-  }
-  final ScopeVariable variable=map.get(name);
-  final PsiElement parameterScope=ScopeUtil.getParameterScope(element);
-  if (parameterScope != null) {
-    final ScopeVariable scopeVariable=new ScopeVariableImpl(name,true,element);
-    map=map.asWritable();
-    map.put(name,scopeVariable);
-  }
- else {
-    final ScopeVariableImpl scopeVariable;
-    final boolean isParameter=variable != null && variable.isParameter();
-    if (variable == null) {
-      scopeVariable=new ScopeVariableImpl(name,isParameter,element);
+  final DFAMap<ScopeVariable> reducedMap=new DFAMap<ScopeVariable>();
+  for (  Map.Entry<String,ScopeVariable> entry : map.entrySet()) {
+    final ScopeVariable value=entry.getValue();
+    if (value.isParameter()) {
+      final PsiElement declaration=value.getDeclarations().iterator().next();
+      final PyExceptPart exceptPart=PyExceptPartNavigator.getPyExceptPartByTarget(declaration);
+      if (exceptPart != null) {
+        if (!PsiTreeUtil.isAncestor(exceptPart,element,false)) {
+          continue;
+        }
+      }
     }
- else {
-      scopeVariable=new ScopeVariableImpl(name,isParameter,variable.getDeclarations());
-    }
-    map=map.asWritable();
-    map.put(name,scopeVariable);
+    reducedMap.put(entry.getKey(),value);
   }
-  return map;
+  return processReducedMap(reducedMap,instruction,element);
 }
