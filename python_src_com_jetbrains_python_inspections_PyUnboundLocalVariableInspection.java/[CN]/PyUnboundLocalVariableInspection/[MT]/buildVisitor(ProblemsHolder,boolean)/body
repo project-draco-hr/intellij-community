@@ -43,21 +43,55 @@
               continue;
             }
           }
-          if (PyAssignmentStatementNavigator.getStatementByTarget(element) != null || PyForStatementNavigator.getPyForStatementByIterable(element) != null) {
+          if (PyAssignmentStatementNavigator.getStatementByTarget(element) != null || PyForStatementNavigator.getPyForStatementByIterable(element) != null || PyExceptPartNavigator.getPyExceptPartByTarget(element) != null) {
             resolves2LocalVariable=true;
             resolve2Scope=PsiTreeUtil.isAncestor(owner,element,false);
             break;
           }
         }
-        if (resolves2LocalVariable) {
-          if (owner instanceof PyClass || owner instanceof PyFunction) {
-            registerProblem(node,PyBundle.message("INSP.unbound.local.variable",node.getName()),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,null,new AddGlobalQuickFix());
+        if (!resolves2LocalVariable) {
+          return;
+        }
+        final Ref<Boolean> readAccessSeen=new Ref<Boolean>(false);
+        final Instruction[] instructions=owner.getControlFlow().getInstructions();
+        final int number=ControlFlowUtil.findInstructionNumberByElement(instructions,node);
+        ControlFlowUtil.iteratePrev(number,instructions,new Function<Instruction,ControlFlowUtil.Operation>(){
+          public ControlFlowUtil.Operation fun(          final Instruction inst){
+            if (inst.num() == number) {
+              return ControlFlowUtil.Operation.NEXT;
+            }
+            if (inst instanceof ReadWriteInstruction) {
+              final ReadWriteInstruction rwInst=(ReadWriteInstruction)inst;
+              if (name.equals(rwInst.getName())) {
+                if (scope.getDeclaredVariable(inst.getElement(),name) != null) {
+                  return ControlFlowUtil.Operation.BREAK;
+                }
+                if (rwInst.getAccess().isWriteAccess()) {
+                  return ControlFlowUtil.Operation.CONTINUE;
+                }
+ else {
+                  readAccessSeen.set(true);
+                  return ControlFlowUtil.Operation.BREAK;
+                }
+              }
+            }
+            return ControlFlowUtil.Operation.NEXT;
+          }
+        }
+);
+        if (readAccessSeen.get()) {
+          return;
+        }
+        if (resolve2Scope) {
+          if (owner instanceof PyFile) {
+            registerProblem(node,PyBundle.message("INSP.unbound.name.not.defined",node.getName()));
           }
  else {
-            if (resolve2Scope) {
-              registerProblem(node,PyBundle.message("INSP.unbound.name.not.defined",node.getName()));
-            }
+            registerProblem(node,PyBundle.message("INSP.unbound.local.variable",node.getName()),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,null,new AddGlobalQuickFix());
           }
+        }
+ else         if (owner instanceof PyFunction && PsiTreeUtil.getParentOfType(owner,PyClass.class,PyFile.class) instanceof PyFile) {
+          registerProblem(node,PyBundle.message("INSP.unbound.local.variable",node.getName()),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,null,new AddGlobalQuickFix());
         }
       }
     }
