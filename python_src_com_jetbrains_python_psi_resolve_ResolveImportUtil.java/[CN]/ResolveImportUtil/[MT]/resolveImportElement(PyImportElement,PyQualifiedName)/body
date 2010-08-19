@@ -1,33 +1,15 @@
 {
-  if (qName == null) {
-    return null;
-  }
-  final PsiFile file=import_element.getContainingFile().getOriginalFile();
-  final PyStatement importStatement=import_element.getContainingImportStatement();
-  boolean absolute_import_enabled=isAbsoluteImportEnabledFor(import_element);
-  PyQualifiedName moduleQName=null;
-  if (importStatement instanceof PyFromImportStatement) {
-    PyFromImportStatement from_import_statement=(PyFromImportStatement)importStatement;
-    moduleQName=from_import_statement.getImportSourceQName();
-    final int relative_level=from_import_statement.getRelativeLevel();
-    if (relative_level > 0 && moduleQName == null) {
-      return resolveChild(stepBackFrom(file,relative_level),qName.getComponents().get(0),file,false);
-    }
-    if (moduleQName != null) {
-      final List<PsiElement> candidates=resolveModule(moduleQName,file,absolute_import_enabled,relative_level);
-      for (      PsiElement candidate : candidates) {
-        PsiElement result=resolveChild(candidate,qName.getComponents().get(0),file,false);
-        if (result != null)         return result;
+  final List<PsiElement> psiElements=multiResolveImportElement(import_element,qName);
+  if (psiElements.size() > 1) {
+    for (    PsiElement element : psiElements) {
+      final PsiElement init=PyUtil.turnDirIntoInit(element);
+      if (init instanceof PsiFile) {
+        VirtualFile vFile=((PsiFile)init).getVirtualFile();
+        if (vFile != null && vFile.getLength() > 0) {
+          return element;
+        }
       }
     }
   }
- else   if (importStatement instanceof PyImportStatement) {
-    List<PsiElement> result=resolveModule(qName,file,absolute_import_enabled,0);
-    return result.isEmpty() ? null : result.get(0);
-  }
-  if (moduleQName != null) {
-    final List<PsiElement> importFrom=resolveModule(moduleQName,file,false,0);
-    return resolveForeignImport(import_element,StringUtil.join(qName.getComponents(),"."),importFrom.isEmpty() ? null : importFrom.get(0));
-  }
-  return null;
+  return psiElements.isEmpty() ? null : psiElements.get(0);
 }

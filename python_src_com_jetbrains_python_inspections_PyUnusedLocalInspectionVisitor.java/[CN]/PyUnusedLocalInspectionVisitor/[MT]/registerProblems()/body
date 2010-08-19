@@ -13,8 +13,10 @@
       registerWarning(((PyFunction)element).getNameIdentifier(),PyBundle.message("INSP.unused.locals.local.function.isnot.used",((PyFunction)element).getName()));
     }
  else {
-      final String name=element.getText();
+      String name=element.getText();
       if (element instanceof PyNamedParameter || element.getParent() instanceof PyNamedParameter) {
+        PyNamedParameter namedParameter=element instanceof PyNamedParameter ? (PyNamedParameter)element : (PyNamedParameter)element.getParent();
+        name=namedParameter.getName();
         if ("self".equals(name) && PyPsiUtils.isMethodContext(element)) {
           continue;
         }
@@ -24,14 +26,21 @@
             continue;
           }
         }
+        boolean isInitMethod=false;
+        PyClass containingClass=null;
         PyParameterList paramList=PsiTreeUtil.getParentOfType(element,PyParameterList.class);
         if (paramList != null && paramList.getParent() instanceof PyFunction) {
           PyFunction func=(PyFunction)paramList.getParent();
-          if (canHaveUnusedParameters(func,functionsWithInheritors)) {
+          containingClass=func.getContainingClass();
+          if (PyNames.INIT.equals(func.getName()) && containingClass != null) {
+            isInitMethod=true;
+          }
+ else           if (ignoreUnusedParameters(func,functionsWithInheritors)) {
             continue;
           }
         }
-        registerWarning(element,PyBundle.message("INSP.unused.locals.parameter.isnot.used",name));
+        LocalQuickFix[] fixes=isInitMethod ? new LocalQuickFix[]{new AddFieldQuickFix(name,containingClass,name)} : LocalQuickFix.EMPTY_ARRAY;
+        registerWarning(element,PyBundle.message("INSP.unused.locals.parameter.isnot.used",name),fixes);
       }
  else {
         if (myIgnoreTupleUnpacking && isTupleUnpacking(element)) {

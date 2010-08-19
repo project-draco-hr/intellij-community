@@ -1,0 +1,34 @@
+{
+  if (qName == null) {
+    return Collections.emptyList();
+  }
+  final PsiFile file=import_element.getContainingFile().getOriginalFile();
+  final PyStatement importStatement=import_element.getContainingImportStatement();
+  boolean absolute_import_enabled=isAbsoluteImportEnabledFor(import_element);
+  PyQualifiedName moduleQName=null;
+  if (importStatement instanceof PyFromImportStatement) {
+    PyFromImportStatement from_import_statement=(PyFromImportStatement)importStatement;
+    moduleQName=from_import_statement.getImportSourceQName();
+    final int relative_level=from_import_statement.getRelativeLevel();
+    if (relative_level > 0 && moduleQName == null) {
+      final PsiElement element=resolveChild(stepBackFrom(file,relative_level),qName.getComponents().get(0),file,false);
+      return element != null ? Collections.singletonList(element) : Collections.<PsiElement>emptyList();
+    }
+    if (moduleQName != null) {
+      final List<PsiElement> candidates=resolveModule(moduleQName,file,absolute_import_enabled,relative_level);
+      for (      PsiElement candidate : candidates) {
+        PsiElement result=resolveChild(candidate,qName.getComponents().get(0),file,false);
+        if (result != null)         return Collections.singletonList(result);
+      }
+    }
+  }
+ else   if (importStatement instanceof PyImportStatement) {
+    return resolveModule(qName,file,absolute_import_enabled,0);
+  }
+  if (moduleQName != null) {
+    final List<PsiElement> importFrom=resolveModule(moduleQName,file,false,0);
+    final PsiElement result=resolveForeignImport(import_element,StringUtil.join(qName.getComponents(),"."),importFrom.isEmpty() ? null : importFrom.get(0));
+    return result != null ? Collections.singletonList(result) : Collections.<PsiElement>emptyList();
+  }
+  return Collections.emptyList();
+}
