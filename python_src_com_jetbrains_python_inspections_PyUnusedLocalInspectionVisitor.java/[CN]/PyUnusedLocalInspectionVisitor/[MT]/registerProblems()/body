@@ -17,14 +17,31 @@
       String name=element.getText();
       if (element instanceof PyNamedParameter || element.getParent() instanceof PyNamedParameter) {
         PyNamedParameter namedParameter=element instanceof PyNamedParameter ? (PyNamedParameter)element : (PyNamedParameter)element.getParent();
-        name=namedParameter.getName();
-        if (("self".equals(name) || "cls".equals(name)) && PyPsiUtils.isMethodContext(element)) {
-          continue;
-        }
-        if ("cls".equals(name)) {
-          final Set<PyFunction.Flag> flagSet=PyUtil.detectDecorationsAndWrappersOf(PsiTreeUtil.getParentOfType(element,PyFunction.class));
-          if (flagSet.contains(PyFunction.Flag.CLASSMETHOD)) {
-            continue;
+        if (((PyParameterList)namedParameter.getParent()).getParameters()[0] == namedParameter) {
+          final PyFunction function=PsiTreeUtil.getParentOfType(element,PyFunction.class);
+          if (function != null) {
+            final PyClass clazzz=PsiTreeUtil.getParentOfType(function,PyClass.class);
+            if (clazzz != null) {
+              if ("self".equals(name)) {
+                continue;
+              }
+              if ("cls".equals(name)) {
+                final Set<PyFunction.Flag> flagSet=PyUtil.detectDecorationsAndWrappersOf(function);
+                if (flagSet.contains(PyFunction.Flag.CLASSMETHOD)) {
+                  continue;
+                }
+                boolean metaClass=false;
+                for (                PyClass superClass : clazzz.getSuperClasses()) {
+                  if ("Type".equals(superClass.getName())) {
+                    metaClass=true;
+                    break;
+                  }
+                }
+                if (metaClass) {
+                  continue;
+                }
+              }
+            }
           }
         }
         boolean isInitMethod=false;
