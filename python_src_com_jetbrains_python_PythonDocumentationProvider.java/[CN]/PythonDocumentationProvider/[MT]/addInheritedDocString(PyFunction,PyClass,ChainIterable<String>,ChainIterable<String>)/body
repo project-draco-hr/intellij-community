@@ -2,17 +2,35 @@
   boolean not_found=true;
   String meth_name=fun.getName();
   if (cls != null && meth_name != null) {
-    for (    PyClass ancestor : cls.iterateAncestors()) {
-      PyFunction inherited=ancestor.findMethodByName(meth_name,false);
+    final boolean is_constructor=PyNames.INIT.equals(meth_name);
+    Iterable<PyClass> classes=cls.iterateAncestors();
+    if (is_constructor) {
+      classes=new ChainIterable<PyClass>(cls).add(classes);
+    }
+    for (    PyClass ancestor : classes) {
+      PyStringLiteralExpression doc_elt=null;
+      PyFunction inherited=null;
+      boolean is_from_class=false;
+      if (is_constructor)       doc_elt=cls.getDocStringExpression();
+      if (doc_elt != null)       is_from_class=true;
+ else       inherited=ancestor.findMethodByName(meth_name,false);
       if (inherited != null) {
-        PyStringLiteralExpression doc_elt=inherited.getDocStringExpression();
-        if (doc_elt != null) {
-          String inherited_doc=doc_elt.getStringValue();
-          if (inherited_doc.length() > 1) {
-            epilog_cat.add(BR).add(BR).add(PyBundle.message("QDOC.copied.from.$0.$1",ancestor.getName(),meth_name)).add(BR).add(BR).addWith(TagCode,combUpDocString(inherited_doc));
-            not_found=false;
-            break;
+        doc_elt=inherited.getDocStringExpression();
+      }
+      if (doc_elt != null) {
+        String inherited_doc=doc_elt.getStringValue();
+        if (inherited_doc.length() > 1) {
+          epilog_cat.add(BR).add(BR);
+          String ancestor_name=ancestor.getName();
+          String marker=(cls == ancestor) ? LINK_TYPE_CLASS : LINK_TYPE_PARENT;
+          final String ancestor_link=$().addWith(new LinkWrapper(marker + ancestor_name),$(ancestor_name)).toString();
+          if (is_from_class)           epilog_cat.add(PyBundle.message("QDOC.copied.from.class.$0",ancestor_link));
+ else {
+            epilog_cat.add(PyBundle.message("QDOC.copied.from.$0.$1",ancestor_link,meth_name));
           }
+          epilog_cat.add(BR).add(BR).addWith(TagCode,combUpDocString(inherited_doc));
+          not_found=false;
+          break;
         }
       }
     }
