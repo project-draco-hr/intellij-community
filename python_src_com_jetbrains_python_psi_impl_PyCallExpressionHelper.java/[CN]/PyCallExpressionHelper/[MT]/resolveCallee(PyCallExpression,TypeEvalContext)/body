@@ -1,0 +1,48 @@
+{
+  PyFunction.Flag wrappedFlag=null;
+  boolean isConstructorCall=false;
+  PyExpression callee=us.getCallee();
+  PsiElement resolved;
+  QualifiedResolveResult resolveResult=null;
+  if (callee instanceof PyReferenceExpression) {
+    PyReferenceExpression ref=(PyReferenceExpression)callee;
+    resolveResult=ref.followAssignmentsChain(context);
+    resolved=resolveResult.getElement();
+  }
+ else {
+    resolved=callee;
+  }
+  if (resolved instanceof PyClass) {
+    resolved=((PyClass)resolved).findInitOrNew(true);
+    isConstructorCall=true;
+  }
+ else   if (resolved instanceof PyCallExpression) {
+    PyCallExpression redefiningCall=(PyCallExpression)resolved;
+    Pair<String,PyFunction> wrapperInfo=interpretAsStaticmethodOrClassmethodWrappingCall(redefiningCall,us);
+    if (wrapperInfo != null) {
+      resolved=wrapperInfo.getSecond();
+      String wrapper_name=wrapperInfo.getFirst();
+      if (PyNames.CLASSMETHOD.equals(wrapper_name)) {
+        wrappedFlag=PyFunction.Flag.CLASSMETHOD;
+      }
+ else       if (PyNames.STATICMETHOD.equals(wrapper_name))       wrappedFlag=PyFunction.Flag.STATICMETHOD;
+    }
+  }
+  if (resolved instanceof Callable) {
+    EnumSet<PyFunction.Flag> flags=EnumSet.noneOf(PyFunction.Flag.class);
+    PyExpression lastQualifier=resolveResult != null ? resolveResult.getLastQualifier() : null;
+    final PyExpression callReference=us.getCallee();
+    boolean is_by_instance=isByInstance(callReference,context);
+    if (lastQualifier != null) {
+      PyType qualifier_type=context.getType(lastQualifier);
+      is_by_instance|=(qualifier_type != null && qualifier_type instanceof PyClassType && !((PyClassType)qualifier_type).isDefinition());
+    }
+    final Callable callable=(Callable)resolved;
+    int implicitOffset=getImplicitArgumentCount(callReference,callable,wrappedFlag,flags,is_by_instance);
+    if (!isConstructorCall && PyNames.NEW.equals(callable.getName())) {
+      implicitOffset=Math.min(implicitOffset - 1,0);
+    }
+    return new PyCallExpression.PyMarkedCallee(callable,flags,implicitOffset,resolveResult != null ? resolveResult.isImplicit() : false);
+  }
+  return null;
+}
