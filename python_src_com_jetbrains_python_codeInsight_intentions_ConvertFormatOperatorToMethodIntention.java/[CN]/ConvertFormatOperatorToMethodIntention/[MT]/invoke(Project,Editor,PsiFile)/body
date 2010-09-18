@@ -1,20 +1,24 @@
 {
   PyBinaryExpression element=PsiTreeUtil.getParentOfType(file.findElementAt(editor.getCaretModel().getOffset()),PyBinaryExpression.class,false);
   PyElementGenerator elementGenerator=PyElementGenerator.getInstance(project);
-  final PyExpression rightExpression=element.getRightExpression();
+  final PyExpression rightExpression=sure(element).getRightExpression();
   if (rightExpression == null) {
     return;
   }
-  String text="";
-  if (rightExpression instanceof PyParenthesizedExpression) {
-    final PyExpression containedExpression=((PyParenthesizedExpression)rightExpression).getContainedExpression();
-    if (containedExpression != null) {
-      text=containedExpression.getText();
-    }
-  }
+  PyExpression rhs=rightExpression;
+  while (rhs instanceof PyParenthesizedExpression)   rhs=((PyParenthesizedExpression)rhs).getContainedExpression();
+  String param_text=sure(rhs).getText();
+  final PyStringLiteralExpression leftExpression=(PyStringLiteralExpression)element.getLeftExpression();
+  StringBuilder target=convertFormat(leftExpression);
+  String separator="";
+  Pair<String,PsiElement> crop=collectWhitespace(leftExpression);
+  String maybe_separator=crop.getFirst();
+  if (!"".equals(maybe_separator) && !" ".equals(maybe_separator))   separator=maybe_separator;
  else {
-    text=rightExpression.getText();
+    crop=collectWhitespace(crop.getSecond());
+    maybe_separator=crop.getFirst();
+    if (!"".equals(maybe_separator) && !" ".equals(maybe_separator))     separator=maybe_separator;
   }
-  String targetText=convertFormat((PyStringLiteralExpression)element.getLeftExpression()) + ".format(" + text+ ")";
-  element.replace(elementGenerator.createExpressionFromText(targetText));
+  target.append(separator).append(".format(").append(param_text).append(")");
+  element.replace(elementGenerator.createExpressionFromText(target.toString()));
 }
