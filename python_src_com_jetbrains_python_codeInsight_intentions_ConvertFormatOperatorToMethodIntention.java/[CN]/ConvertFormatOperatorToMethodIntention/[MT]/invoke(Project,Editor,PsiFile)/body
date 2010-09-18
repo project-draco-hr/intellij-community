@@ -9,7 +9,8 @@
   while (rhs instanceof PyParenthesizedExpression)   rhs=((PyParenthesizedExpression)rhs).getContainedExpression();
   String param_text=sure(rhs).getText();
   final PyStringLiteralExpression leftExpression=(PyStringLiteralExpression)element.getLeftExpression();
-  StringBuilder target=convertFormat(leftExpression);
+  Pair<StringBuilder,Boolean> converted=convertFormat(leftExpression);
+  StringBuilder target=converted.getFirst();
   String separator="";
   Pair<String,PsiElement> crop=collectWhitespace(leftExpression);
   String maybe_separator=crop.getFirst();
@@ -19,6 +20,29 @@
     maybe_separator=crop.getFirst();
     if (!"".equals(maybe_separator) && !" ".equals(maybe_separator))     separator=maybe_separator;
   }
-  target.append(separator).append(".format(").append(param_text).append(")");
+  target.append(separator).append(".format");
+  if (rhs instanceof PyDictLiteralExpression)   target.append("(**").append(param_text).append(")");
+ else   if (rhs instanceof PyCallExpression) {
+    final PyCallExpression call_expression=(PyCallExpression)rhs;
+    final PyExpression callee=call_expression.getCallee();
+    if (callee instanceof PyReferenceExpression) {
+      PsiElement maybe_dict=((PyReferenceExpression)callee).getReference().resolve();
+      if (maybe_dict instanceof PyFunction) {
+        PyFunction dict_init=(PyFunction)maybe_dict;
+        if (PyNames.INIT.equals(dict_init.getName())) {
+          final PyClassType dict_type=PyBuiltinCache.getInstance(file).getDictType();
+          if (dict_type != null && dict_type.getPyClass() == dict_init.getContainingClass()) {
+            target.append(sure(sure(call_expression.getArgumentList()).getNode()).getChars());
+          }
+        }
+ else {
+          target.append("(");
+          if (converted.getSecond())           target.append("**");
+          target.append(param_text).append(")");
+        }
+      }
+    }
+  }
+ else   target.append("(").append(param_text).append(")");
   element.replace(elementGenerator.createExpressionFromText(target.toString()));
 }
