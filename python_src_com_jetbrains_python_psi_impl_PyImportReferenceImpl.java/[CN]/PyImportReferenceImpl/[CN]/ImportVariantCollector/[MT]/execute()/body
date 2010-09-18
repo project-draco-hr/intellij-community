@@ -1,0 +1,76 @@
+{
+  int relative_level=0;
+  Condition<PsiElement> node_filter=new PyResolveUtil.FilterNameNotIn(myNamesAlready);
+  InsertHandler<LookupElement> insertHandler=null;
+  PyFromImportStatement from_import=PsiTreeUtil.getParentOfType(myElement,PyFromImportStatement.class);
+  if (from_import != null && myElement.getParent() != from_import) {
+    PyReferenceExpression src=from_import.getImportSource();
+    if (src != null) {
+      PsiElement mod_candidate=src.getReference().resolve();
+      if (mod_candidate instanceof PyExpression) {
+        addImportedNames(from_import.getImportElements());
+        final VariantsProcessor processor=new VariantsProcessor(myElement,node_filter,myUnderscoreFilter);
+        processor.setPlainNamesOnly(true);
+        PyResolveUtil.treeCrawlUp(processor,true,mod_candidate);
+        myObjects.addAll(processor.getResultList());
+        PyExpression module=(PyExpression)mod_candidate;
+        PyType qualifierType=module.getType(TypeEvalContext.fast());
+        if (qualifierType != null) {
+          ProcessingContext ctx=new ProcessingContext();
+          for (          Object ex : myObjects) {
+            if (ex instanceof PyReferenceExpression) {
+              myNamesAlready.add(((PyReferenceExpression)ex).getReferencedName());
+            }
+          }
+          ctx.put(PyType.CTX_NAMES,myNamesAlready);
+          Collections.addAll(myObjects,qualifierType.getCompletionVariants(myElement.getName(),myElement,ctx));
+        }
+        return myObjects.toArray();
+      }
+    }
+ else {
+      relative_level=from_import.getRelativeLevel();
+      if (relative_level > 0) {
+        PsiDirectory relative_dir=ResolveImportUtil.stepBackFrom(myCurrentFile,relative_level);
+        if (relative_dir != null) {
+          addImportedNames(from_import.getImportElements());
+          fillFromDir(relative_dir,null);
+        }
+      }
+    }
+  }
+ else {
+    ASTNode n=myElement.getNode().getTreePrev();
+    while (n != null && n.getElementType() == PyTokenTypes.DOT) {
+      relative_level+=1;
+      n=n.getTreePrev();
+    }
+    if (from_import != null) {
+      addImportedNames(from_import.getImportElements());
+      if (!alreadyHasImportKeyword()) {
+        insertHandler=ImportKeywordHandler.INSTANCE;
+      }
+    }
+ else {
+      myNamesAlready.add(PyNames.FUTURE_MODULE);
+      PyImportStatement import_stmt=PsiTreeUtil.getParentOfType(myElement,PyImportStatement.class);
+      if (import_stmt != null) {
+        addImportedNames(import_stmt.getImportElements());
+      }
+    }
+    if (myCurrentFile != null && (relative_level > 0 || !ResolveImportUtil.isAbsoluteImportEnabledFor(myCurrentFile))) {
+      PyQualifiedName thisQName=ResolveImportUtil.findShortestImportableQName(myCurrentFile.getContainingDirectory());
+      if (thisQName == null) {
+        fillFromDir(ResolveImportUtil.stepBackFrom(myCurrentFile,relative_level),insertHandler);
+      }
+ else {
+        thisQName=thisQName.removeTail(relative_level);
+        fillFromQName(thisQName,insertHandler);
+      }
+    }
+  }
+  if (relative_level == 0) {
+    fillFromQName(PyQualifiedName.fromComponents(),insertHandler);
+  }
+  return ArrayUtil.toObjectArray(myObjects);
+}
