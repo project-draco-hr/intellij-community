@@ -4,43 +4,34 @@
     return (PyClass)clazz.getParent().addBefore(newClass,clazz);
   }
   PsiFile psiFile=null;
-  final PsiDirectory psiDir;
-  if (file == null) {
-    final String filename;
-    final String path;
-    if (targetFile.endsWith(PythonFileType.INSTANCE.getDefaultExtension())) {
-      path=PathUtil.getParentPath(targetFile);
-      filename=PathUtil.getFileName(targetFile);
+  try {
+    if (file == null) {
+      final String filename;
+      final String path;
+      if (targetFile.endsWith(PythonFileType.INSTANCE.getDefaultExtension())) {
+        path=PathUtil.getParentPath(targetFile);
+        filename=PathUtil.getFileName(targetFile);
+      }
+ else {
+        path=targetFile;
+        filename=PyNames.INIT_DOT_PY;
+      }
+      psiFile=placeFile(project,path,filename);
+    }
+ else     if (file.isDirectory()) {
+      psiFile=placeFile(project,file.getPath(),PyNames.INIT_DOT_PY);
     }
  else {
-      path=targetFile;
-      filename=constructFilename(newClass);
-    }
-    try {
-      final boolean shouldCreateInit=VirtualFileManager.getInstance().findFileByUrl(VfsUtil.pathToUrl(path)) == null;
-      final VirtualFile dir=VfsUtil.createDirectoryIfMissing(path);
-      psiDir=dir != null ? PsiManager.getInstance(project).findDirectory(dir) : null;
-      psiFile=psiDir != null ? psiDir.createFile(filename) : null;
-      createInitIfNeeded(psiDir,shouldCreateInit,NameSuggestorUtil.toUnderscoreCase(newClass.getName()));
-    }
- catch (    IOException e) {
-      LOG.error(e);
+      psiFile=PsiManager.getInstance(project).findFile(file);
     }
   }
- else   if (file.isDirectory()) {
-    psiDir=PsiManager.getInstance(project).findDirectory(file);
-    final String filename=constructFilename(newClass);
-    LOG.assertTrue(psiDir != null);
-    psiFile=psiDir.findFile(filename);
-    psiFile=psiFile != null ? psiFile : psiDir.createFile(filename);
-    if ((file.findChild(PyNames.INIT_DOT_PY)) == null) {
-      createInitIfNeeded(psiDir,true,NameSuggestorUtil.toUnderscoreCase(newClass.getName()));
-    }
-  }
- else {
-    psiFile=PsiManager.getInstance(project).findFile(file);
+ catch (  IOException e) {
+    LOG.error(e);
   }
   LOG.assertTrue(psiFile != null);
+  if (psiFile.getLastChild() != null) {
+    psiFile.add(PyElementGenerator.getInstance(project).createFromText(LanguageLevel.PYTHON24,PsiWhiteSpace.class,"\n\n"));
+  }
   newClass=(PyClass)psiFile.add(newClass);
   PyClassRefactoringUtil.insertImport(clazz,Collections.singleton(newClass));
   return newClass;
