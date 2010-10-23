@@ -1,4 +1,5 @@
 {
+  if (node.getParent() instanceof PyClass)   return;
   PyArgumentList.AnalysisResult result=node.analyzeCall(context);
   if (!result.isImplicitlyResolved()) {
     for (    Map.Entry<PyExpression,EnumSet<PyArgumentList.ArgFlag>> arg_entry : result.getArgumentFlags().entrySet()) {
@@ -20,6 +21,9 @@
         if (flags.contains(PyArgumentList.ArgFlag.IS_UNMAPPED)) {
           holder.registerProblem(arg,PyBundle.message("INSP.unexpected.arg"));
         }
+        if (flags.contains(PyArgumentList.ArgFlag.IS_TOO_LONG)) {
+          holder.registerProblem(arg,"More arguments than positional parameters left");
+        }
       }
     }
     ASTNode our_node=node.getNode();
@@ -31,5 +35,28 @@
         }
       }
     }
+  }
+  for (  PyExpression arg : node.getArguments()) {
+    if (arg instanceof PyStarArgument) {
+      PyExpression content=PyUtil.peelArgument(PsiTreeUtil.findChildOfType(arg,PyExpression.class));
+      PyType inside_type=context.getType(content);
+      if (inside_type != null) {
+        if (((PyStarArgument)arg).isKeyword()) {
+          if (!isMappingType(inside_type)) {
+            holder.registerProblem(arg,"Expected a dictionary, got " + inside_type.getName());
+          }
+        }
+ else {
+          if (!isSequenceType(inside_type)) {
+            holder.registerProblem(arg,"Expected a sequence, got " + inside_type.getName());
+          }
+        }
+      }
+    }
+  }
+  if (result.getMarkedCallee() == null) {
+    PsiElement marked=node;
+    while (marked != null && marked.getTextRange().isEmpty())     marked=marked.getParent();
+    if (marked != null)     holder.registerProblem(node,PyBundle.message("INSP.cannot.analyze"),ProblemHighlightType.INFO);
   }
 }
