@@ -1,5 +1,5 @@
 {
-  TypeEvalContext type_context=TypeEvalContext.fast();
+  if (type_context == null)   type_context=TypeEvalContext.fast();
   myMarkedCallee=resolved_callee;
   List<PyExpression> unmatched_args=new LinkedList<PyExpression>();
   Collections.addAll(unmatched_args,arguments);
@@ -78,6 +78,12 @@
           if (arg instanceof PyParenthesizedExpression) {
             mapped_args.add(arg);
           }
+ else {
+            PyType arg_type=type_context.getType(arg);
+            if (arg_type != null && arg_type.isBuiltin() && "list".equals(arg_type.getName())) {
+              mapped_args.add(arg);
+            }
+          }
           unmatched_arg_iter.previous();
           MyParamVisitor visitor=new MyParamVisitor(unmatched_arg_iter,this);
           visitor.enterTuple(t_par.getAsTuple());
@@ -105,6 +111,7 @@
     }
     i+=1;
   }
+  boolean seen_named_args=false;
   Map<String,PyNamedParameter> parameter_by_name=new HashMap<String,PyNamedParameter>();
   for (  PyParameter par : parameters) {
     PyNamedParameter n_par=par.getAsNamed();
@@ -124,8 +131,10 @@
           mapped_args.add(arg);
         }
       }
+      seen_named_args=true;
     }
   }
+  boolean tuple_arg_not_exhausted=false;
   if (cnt < parameters.length && cnt < positional_index && myTupleArg != null) {
     PyType tuple_arg_type=null;
     if (type_context != null) {
@@ -158,7 +167,7 @@
       i+=1;
     }
     if (tuple_length_known && i <= tuple_length) {
-      markArgument(myTupleArg,PyArgumentList.ArgFlag.IS_TOO_LONG);
+      tuple_arg_not_exhausted=true;
     }
   }
   if (tuple_par != null) {
@@ -174,10 +183,18 @@
       }
     }
   }
-  if (myTupleArg != null && !mapped_args.contains(myTupleArg) && tuple_par != null) {
-    myTupleMappedParams.add(tuple_par);
-    mapped_args.add(myTupleArg);
+  if (myTupleArg != null && tuple_par != null) {
+    if (!mapped_args.contains(myTupleArg)) {
+      myTupleMappedParams.add(tuple_par);
+      mapped_args.add(myTupleArg);
+    }
+ else     if (!seen_named_args && tuple_arg_not_exhausted) {
+      myTupleMappedParams.add(tuple_par);
+      mapped_args.add(myTupleArg);
+      tuple_arg_not_exhausted=false;
+    }
   }
+  if (tuple_arg_not_exhausted)   markArgument(myTupleArg,PyArgumentList.ArgFlag.IS_TOO_LONG);
   if (myKwdArg != null) {
     for (    PyParameter par : parameters) {
       PyNamedParameter n_par=par.getAsNamed();
