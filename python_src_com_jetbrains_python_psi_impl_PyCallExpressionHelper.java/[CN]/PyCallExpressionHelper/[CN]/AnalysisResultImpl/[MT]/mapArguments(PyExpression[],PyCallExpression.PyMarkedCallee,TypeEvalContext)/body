@@ -135,26 +135,37 @@
     }
   }
   boolean tuple_arg_not_exhausted=false;
+  boolean tuple_dup_found=false;
   if (cnt < parameters.length && cnt < positional_index && myTupleArg != null) {
     PyType tuple_arg_type=null;
     if (type_context != null) {
       tuple_arg_type=type_context.getType(PsiTreeUtil.getChildOfType(myTupleArg,PyExpression.class));
     }
-    int tuple_length=-1;
-    boolean tuple_length_known=false;
+    int tuple_length;
+    boolean tuple_length_known;
     if (tuple_arg_type instanceof PyTupleType) {
       tuple_length=((PyTupleType)tuple_arg_type).getElementCount();
       tuple_length_known=true;
     }
-    i=1;
-    while (cnt < parameters.length && cnt < positional_index) {
+ else {
+      tuple_length=2000000;
+      tuple_length_known=false;
+    }
+    int mapped_params_count=0;
+    while (cnt < parameters.length && cnt < positional_index && mapped_params_count < tuple_length) {
       PyParameter par=parameters[cnt];
       if (par instanceof PySingleStarParameter)       break;
       PyNamedParameter n_par=par.getAsNamed();
       if (slots.containsKey(n_par)) {
         final PyExpression arg_here=slots.get(n_par);
-        final boolean over_tuple_length=tuple_length_known && i > tuple_length;
-        if (over_tuple_length || arg_here != null) {
+        if (arg_here != null) {
+          if (tuple_length_known) {
+            final EnumSet<PyArgumentList.ArgFlag> flags=myArgFlags.get(arg_here);
+            if (flags == null || flags.isEmpty()) {
+              markArgument(arg_here,PyArgumentList.ArgFlag.IS_DUP);
+              tuple_dup_found=true;
+            }
+          }
           break;
         }
  else         if (n_par != null) {
@@ -164,9 +175,9 @@
         }
       }
       cnt+=1;
-      i+=1;
+      mapped_params_count+=1;
     }
-    if (tuple_length_known && i <= tuple_length) {
+    if (tuple_length_known && (mapped_params_count < tuple_length) || mapped_params_count == 0) {
       tuple_arg_not_exhausted=true;
     }
   }
@@ -194,7 +205,9 @@
       tuple_arg_not_exhausted=false;
     }
   }
-  if (tuple_arg_not_exhausted)   markArgument(myTupleArg,PyArgumentList.ArgFlag.IS_TOO_LONG);
+  if (tuple_arg_not_exhausted && !tuple_dup_found) {
+    markArgument(myTupleArg,PyArgumentList.ArgFlag.IS_TOO_LONG);
+  }
   if (myKwdArg != null) {
     for (    PyParameter par : parameters) {
       PyNamedParameter n_par=par.getAsNamed();
