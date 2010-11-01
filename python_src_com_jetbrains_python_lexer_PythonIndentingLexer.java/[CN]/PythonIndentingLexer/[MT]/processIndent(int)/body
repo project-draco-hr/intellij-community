@@ -1,6 +1,7 @@
 {
   int lastIndent=myIndentStack.peek();
   int indent=getNextLineIndent();
+  myLastNewLineIndent=indent;
   if (getBaseTokenType() == PyTokenTypes.END_OF_LINE_COMMENT) {
     indent=lastIndent;
   }
@@ -14,10 +15,26 @@
     while (indent < lastIndent) {
       myIndentStack.pop();
       lastIndent=myIndentStack.peek();
+      int insertIndex=myTokenQueue.size();
+      int dedentOffset=whiteSpaceStart;
       if (indent > lastIndent) {
         myTokenQueue.add(new PendingToken(PyTokenTypes.INCONSISTENT_DEDENT,whiteSpaceStart,whiteSpaceStart));
+        insertIndex++;
       }
-      myTokenQueue.add(new PendingToken(PyTokenTypes.DEDENT,whiteSpaceStart,whiteSpaceStart));
+ else {
+        while (insertIndex > 0 && myTokenQueue.get(insertIndex - 1) instanceof PendingCommentToken) {
+          final PendingCommentToken commentToken=(PendingCommentToken)myTokenQueue.get(insertIndex - 1);
+          if (commentToken.getIndent() != indent) {
+            break;
+          }
+          insertIndex--;
+          if (insertIndex > 1 && myTokenQueue.get(insertIndex - 1).getType() == PyTokenTypes.LINE_BREAK && myTokenQueue.get(insertIndex - 2) instanceof PendingCommentToken) {
+            insertIndex--;
+          }
+          dedentOffset=commentToken.getStart();
+        }
+      }
+      myTokenQueue.add(insertIndex,new PendingToken(PyTokenTypes.DEDENT,dedentOffset,dedentOffset));
     }
     myTokenQueue.add(new PendingToken(PyTokenTypes.LINE_BREAK,whiteSpaceStart,whiteSpaceEnd));
   }
