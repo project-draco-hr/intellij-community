@@ -9,7 +9,9 @@
   if (indent > lastIndent) {
     myIndentStack.push(indent);
     myTokenQueue.add(new PendingToken(PyTokenTypes.LINE_BREAK,whiteSpaceStart,whiteSpaceEnd));
-    myTokenQueue.add(new PendingToken(PyTokenTypes.INDENT,whiteSpaceEnd,whiteSpaceEnd));
+    int insertIndex=skipPrecedingCommentsWithIndent(indent,myTokenQueue.size() - 1);
+    int indentOffset=insertIndex == myTokenQueue.size() ? whiteSpaceEnd : myTokenQueue.get(insertIndex).getStart();
+    myTokenQueue.add(insertIndex,new PendingToken(PyTokenTypes.INDENT,indentOffset,indentOffset));
   }
  else   if (indent < lastIndent) {
     while (indent < lastIndent) {
@@ -22,17 +24,10 @@
         insertIndex++;
       }
  else {
-        while (insertIndex > 0 && myTokenQueue.get(insertIndex - 1) instanceof PendingCommentToken) {
-          final PendingCommentToken commentToken=(PendingCommentToken)myTokenQueue.get(insertIndex - 1);
-          if (commentToken.getIndent() != indent) {
-            break;
-          }
-          insertIndex--;
-          if (insertIndex > 1 && myTokenQueue.get(insertIndex - 1).getType() == PyTokenTypes.LINE_BREAK && myTokenQueue.get(insertIndex - 2) instanceof PendingCommentToken) {
-            insertIndex--;
-          }
-          dedentOffset=commentToken.getStart();
-        }
+        insertIndex=skipPrecedingCommentsWithIndent(indent,insertIndex);
+      }
+      if (insertIndex != myTokenQueue.size()) {
+        dedentOffset=myTokenQueue.get(insertIndex).getStart();
       }
       myTokenQueue.add(insertIndex,new PendingToken(PyTokenTypes.DEDENT,dedentOffset,dedentOffset));
     }
