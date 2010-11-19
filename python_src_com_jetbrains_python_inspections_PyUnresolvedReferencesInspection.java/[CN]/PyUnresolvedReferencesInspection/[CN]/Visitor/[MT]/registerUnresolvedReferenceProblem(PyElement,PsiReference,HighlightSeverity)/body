@@ -5,7 +5,7 @@
   final PsiElement ref_element=reference.getElement();
   final boolean ref_is_importable=SyntaxMatchers.IN_IMPORT.search(ref_element) == null && IN_GLOBAL.search(ref_element) == null;
   final List<LocalQuickFix> actions=new ArrayList<LocalQuickFix>(2);
-  HintAction hint_action=null;
+  HintAction hintAction=null;
   if (ref_text.length() <= 0)   return;
   if (reference.getElement() instanceof PyReferenceExpression) {
     PyReferenceExpression refex=(PyReferenceExpression)reference.getElement();
@@ -22,15 +22,6 @@
       severity=HighlightSeverity.INFO;
       String errmsg=PyBundle.message("INSP.module.$0.not.found",ref_text);
       description_buf.append(errmsg);
-    }
-    if (ref_is_importable) {
-      LocalQuickFix import_fix=PythonReferenceImporter.proposeImportFix(node,ref_text);
-      if (import_fix != null) {
-        actions.add(import_fix);
-        if (import_fix instanceof HintAction) {
-          hint_action=((HintAction)import_fix);
-        }
-      }
     }
   }
   if (reference instanceof PsiReferenceEx) {
@@ -81,7 +72,20 @@
     }
     if (!marked_qualified) {
       description_buf.append(PyBundle.message("INSP.unresolved.ref.$0",ref_text));
-      if (ref_element != null && ref_is_importable && hint_action == null) {
+      if (ref_is_importable) {
+        ImportFromExistingFix importFix=PythonReferenceImporter.proposeImportFix(node,ref_text);
+        if (importFix != null) {
+          if ((isCall(node) || !importFix.hasOnlyFunctions()) && PyCodeInsightSettings.getInstance().SHOW_IMPORT_POPUP) {
+            final AutoImportHintAction autoImportHintAction=new AutoImportHintAction(importFix);
+            actions.add(autoImportHintAction);
+            hintAction=autoImportHintAction;
+          }
+ else {
+            actions.add(importFix);
+          }
+        }
+      }
+      if (ref_element != null && ref_is_importable && hintAction == null) {
         final AddImportAction addImportAction=new AddImportAction(reference);
         if (addImportAction.hasSomethingToImport(ref_element.getContainingFile())) {
           actions.add(addImportAction);
