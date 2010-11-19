@@ -10,7 +10,7 @@
     boolean unresolved;
     if (reference instanceof PsiPolyVariantReference) {
       final PsiPolyVariantReference poly=(PsiPolyVariantReference)reference;
-      final ResolveResult[] resolveResults=poly.multiResolve(false);
+      final ResolveResult[] resolveResults=poly.multiResolve(true);
       unresolved=(resolveResults.length == 0);
       for (      ResolveResult resolveResult : resolveResults) {
         if (resolveResult instanceof ImportedResolveResult) {
@@ -22,6 +22,23 @@
       unresolved=(reference.resolve() == null);
     }
     if (unresolved) {
+      PyClass containedClass=null;
+      PsiElement parent=node.getParent();
+      while (!(parent instanceof PyFile)) {
+        if (parent instanceof PyClass) {
+          containedClass=(PyClass)parent;
+          break;
+        }
+        parent=parent.getParent();
+      }
+      if (containedClass != null) {
+        for (        PyTargetExpression target : containedClass.getInstanceAttributes()) {
+          if (node.getName().equals(target.getName())) {
+            registerProblem(node,"Unresolved reference. Possibly missed self",new UnresolvedReferenceQuickFix());
+            return;
+          }
+        }
+      }
       registerUnresolvedReferenceProblem(node,reference,severity);
       if (node.getParent() instanceof PyImportElement) {
         myAllImports.remove(node.getParent());
