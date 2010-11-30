@@ -1,10 +1,32 @@
 {
   if (!CodeInsightUtilBase.preparePsiElementForWrite(myElement))   return;
-  PyElementGenerator elementGenerator=PyElementGenerator.getInstance(project);
-  PyFunction function=elementGenerator.createFromText(LanguageLevel.forElement(myElement),PyFunction.class,"def " + myElement.getText() + "():\n  pass");
+  PyFunctionBuilder functionBuilder=new PyFunctionBuilder(myReference.getText());
+  for (  PyExpression param : myElement.getArgumentList().getArguments()) {
+    if (param instanceof PyKeywordArgument) {
+      functionBuilder.parameter(((PyKeywordArgument)param).getKeyword());
+    }
+ else     if (param instanceof PyReferenceExpression) {
+      PyReferenceExpression refex=(PyReferenceExpression)param;
+      functionBuilder.parameter(refex.getReferencedName());
+    }
+ else {
+      functionBuilder.parameter("param");
+    }
+  }
+  PyFunction function=functionBuilder.buildFunction(project);
   PyStatement statement=PsiTreeUtil.getParentOfType(myElement,PyStatement.class);
   if (statement != null) {
     PsiElement parent=statement.getParent();
-    if (parent != null)     parent.addBefore(function,statement);
+    if (parent != null)     function=(PyFunction)parent.addBefore(function,statement);
   }
+  function=CodeInsightUtilBase.forcePsiPostprocessAndRestoreElement(function);
+  final TemplateBuilder builder=TemplateBuilderFactory.getInstance().createTemplateBuilder(function);
+  ParamHelper.walkDownParamArray(function.getParameterList().getParameters(),new ParamHelper.ParamVisitor(){
+    public void visitNamedParameter(    PyNamedParameter param,    boolean first,    boolean last){
+      builder.replaceElement(param,param.getName());
+    }
+  }
+);
+  builder.replaceElement(function.getStatementList(),"pass");
+  builder.run();
 }
