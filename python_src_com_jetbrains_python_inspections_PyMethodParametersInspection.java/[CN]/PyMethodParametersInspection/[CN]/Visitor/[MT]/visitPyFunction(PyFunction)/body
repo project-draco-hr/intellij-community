@@ -1,28 +1,17 @@
 {
-  PsiElement cap=PyUtil.getConcealingParent(node);
-  if (cap instanceof PyClass) {
+  PyUtil.MethodFlags flags=PyUtil.MethodFlags.of(node);
+  if (flags != null) {
     PyParameterList plist=node.getParameterList();
     PyParameter[] params=plist.getParameters();
-    Set<PyFunction.Flag> flags=PyUtil.detectDecorationsAndWrappersOf(node);
-    boolean isMetaclassMethod=false;
-    PyClass type_cls=PyBuiltinCache.getInstance(node).getClass("type");
-    for (    PyClass ancestor_cls : ((PyClass)cap).iterateAncestors()) {
-      if (ancestor_cls == type_cls) {
-        isMetaclassMethod=true;
-        break;
-      }
-    }
     final String method_name=node.getName();
-    boolean isSpecialMetaclassMethod=isMetaclassMethod && among(method_name,PyNames.INIT,"__call__");
-    final boolean is_staticmethod=flags.contains(STATICMETHOD);
     if (params.length == 0) {
-      if (is_staticmethod)       return;
+      if (flags.isStaticMethod())       return;
       ASTNode name_node=node.getNameNode();
       if (name_node != null) {
         PsiElement open_paren=plist.getFirstChild();
         PsiElement close_paren=plist.getLastChild();
         if (open_paren != null && close_paren != null && "(".equals(open_paren.getText()) && ")".equals(close_paren.getText())) {
-          String paramName=flags.contains(CLASSMETHOD) || isMetaclassMethod ? "cls" : "self";
+          String paramName=flags.isClassMethod() || flags.isMetaclassMethod() ? "cls" : "self";
           registerProblem(plist,PyBundle.message("INSP.must.have.first.parameter",paramName),ProblemHighlightType.GENERIC_ERROR,null,new AddSelfQuickFix(paramName));
         }
       }
@@ -32,33 +21,31 @@
       if (first_param != null) {
         String pname=first_param.getText();
         @NonNls String[] mangled={"eslf","sself","elf","felf","slef","seelf","slf","sslf","sefl","sellf","sef","seef"};
-        for (        String typo : mangled) {
-          if (typo.equals(pname)) {
-            registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.probably.mistyped.self"),new RenameParameterQuickFix(PyNames.CANONICAL_SELF));
-            return;
-          }
+        if (PyUtil.among(pname,mangled)) {
+          registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.probably.mistyped.self"),new RenameParameterQuickFix(PyNames.CANONICAL_SELF));
+          return;
         }
         String CLS="cls";
-        if (isMetaclassMethod && PyNames.NEW.equals(method_name)) {
+        if (flags.isMetaclassMethod() && PyNames.NEW.equals(method_name)) {
           final String[] POSSIBLE_PARAM_NAMES={"typ","meta"};
-          if (!among(pname,POSSIBLE_PARAM_NAMES)) {
+          if (!PyUtil.among(pname,POSSIBLE_PARAM_NAMES)) {
             registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.usually.named.$0",POSSIBLE_PARAM_NAMES[0]),new RenameParameterQuickFix(POSSIBLE_PARAM_NAMES[0]));
           }
         }
- else         if (flags.contains(CLASSMETHOD) || isSpecialMetaclassMethod || PyNames.NEW.equals(method_name)) {
+ else         if (flags.isClassMethod() || flags.isSpecialMetaclassMethod() || PyNames.NEW.equals(method_name)) {
           if (!CLS.equals(pname)) {
             registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.usually.named.$0",CLS),new RenameParameterQuickFix(CLS));
           }
         }
- else         if (!is_staticmethod && !first_param.isPositionalContainer() && !PyNames.CANONICAL_SELF.equals(pname)) {
-          if (isMetaclassMethod && CLS.equals(pname)) {
+ else         if (!flags.isStaticMethod() && !first_param.isPositionalContainer() && !PyNames.CANONICAL_SELF.equals(pname)) {
+          if (flags.isMetaclassMethod() && CLS.equals(pname)) {
             return;
           }
           registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.usually.named.self"),new RenameParameterQuickFix(PyNames.CANONICAL_SELF));
         }
       }
  else {
-        if (!is_staticmethod) {
+        if (!flags.isStaticMethod()) {
           registerProblem(plist,PyBundle.message("INSP.first.param.must.not.be.tuple"));
         }
       }
