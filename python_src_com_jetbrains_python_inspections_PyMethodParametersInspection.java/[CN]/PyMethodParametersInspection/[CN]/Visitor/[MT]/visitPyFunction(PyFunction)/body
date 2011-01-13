@@ -4,6 +4,8 @@
     PyParameterList plist=node.getParameterList();
     PyParameter[] params=plist.getParameters();
     final String method_name=node.getName();
+    final String CLS="cls";
+    final String MCS="mcs";
     if (params.length == 0) {
       if (flags.isStaticMethod())       return;
       ASTNode name_node=node.getNameNode();
@@ -11,7 +13,13 @@
         PsiElement open_paren=plist.getFirstChild();
         PsiElement close_paren=plist.getLastChild();
         if (open_paren != null && close_paren != null && "(".equals(open_paren.getText()) && ")".equals(close_paren.getText())) {
-          String paramName=flags.isClassMethod() || flags.isMetaclassMethod() ? "cls" : "self";
+          String paramName;
+          if (flags.isMetaclassMethod()) {
+            if (flags.isClassMethod())             paramName=MCS;
+ else             paramName=CLS;
+          }
+ else           if (flags.isClassMethod())           paramName=CLS;
+ else           paramName=PyNames.CANONICAL_SELF;
           registerProblem(plist,PyBundle.message("INSP.must.have.first.parameter",paramName),ProblemHighlightType.GENERIC_ERROR,null,new AddSelfQuickFix(paramName));
         }
       }
@@ -25,14 +33,16 @@
           registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.probably.mistyped.self"),new RenameParameterQuickFix(PyNames.CANONICAL_SELF));
           return;
         }
-        String CLS="cls";
-        if (flags.isMetaclassMethod() && PyNames.NEW.equals(method_name)) {
-          final String[] POSSIBLE_PARAM_NAMES={"typ","meta"};
-          if (!PyUtil.among(pname,POSSIBLE_PARAM_NAMES)) {
-            registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.usually.named.$0",POSSIBLE_PARAM_NAMES[0]),new RenameParameterQuickFix(POSSIBLE_PARAM_NAMES[0]));
+        if (flags.isMetaclassMethod()) {
+          String expected_name;
+          if (PyNames.NEW.equals(method_name) || flags.isClassMethod())           expected_name=MCS;
+ else           if (flags.isSpecialMetaclassMethod())           expected_name=CLS;
+ else           expected_name=PyNames.CANONICAL_SELF;
+          if (!expected_name.equals(pname)) {
+            registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.usually.named.$0",expected_name),new RenameParameterQuickFix(expected_name));
           }
         }
- else         if (flags.isClassMethod() || flags.isSpecialMetaclassMethod() || PyNames.NEW.equals(method_name)) {
+ else         if (flags.isClassMethod() || PyNames.NEW.equals(method_name)) {
           if (!CLS.equals(pname)) {
             registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.usually.named.$0",CLS),new RenameParameterQuickFix(CLS));
           }
