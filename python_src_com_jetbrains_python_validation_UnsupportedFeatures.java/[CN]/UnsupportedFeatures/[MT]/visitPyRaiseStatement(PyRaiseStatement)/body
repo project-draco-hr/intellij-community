@@ -1,28 +1,12 @@
 {
   super.visitPyRaiseStatement(node);
-  final PyExpression[] expressions=node.getExpressions();
-  if (expressions.length > 0) {
-    if (expressions.length < 2) {
-      return;
-    }
-    if (isPy3K(node)) {
-      if (expressions.length == 3) {
-        getHolder().createWarningAnnotation(node,"Python 3 does not support this syntax").registerFix(new ReplaceRaiseStatementIntention());
-        return;
-      }
-      PsiElement element=expressions[0].getNextSibling();
-      while (element instanceof PsiWhiteSpace) {
-        element=element.getNextSibling();
-      }
-      if (element != null && ",".equals(element.getText())) {
-        getHolder().createWarningAnnotation(node,"Python 3 does not support this syntax").registerFix(new ReplaceRaiseStatementIntention());
-      }
-    }
+  boolean hasProblem=UnsupportedFeaturesUtil.raiseHasNoArgs(node,LanguageLevel.forElement(node));
+  if (hasProblem) {
+    getHolder().createErrorAnnotation(node,"raise with no arguments can only be used in an except block");
   }
- else   if (isPy3K(node)) {
-    final PyExceptPart exceptPart=PsiTreeUtil.getParentOfType(node,PyExceptPart.class);
-    if (exceptPart == null) {
-      getHolder().createErrorAnnotation(node,"raise with no arguments can only be used in an except block");
-    }
+  hasProblem=UnsupportedFeaturesUtil.raiseHasMoreThenOneArg(node,LanguageLevel.forElement(node));
+  if (hasProblem) {
+    final String message="Python 3 does not support this syntax";
+    getHolder().createWarningAnnotation(node,message).registerFix(createIntention(node,message,new ReplaceRaiseStatementQuickFix()));
   }
 }
