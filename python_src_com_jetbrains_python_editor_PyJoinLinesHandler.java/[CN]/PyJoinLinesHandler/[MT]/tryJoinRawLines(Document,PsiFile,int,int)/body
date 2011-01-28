@@ -1,0 +1,28 @@
+{
+  if (!(file instanceof PyFile))   return CANNOT_JOIN;
+  int i=start - 1;
+  CharSequence text=document.getCharsSequence();
+  if (i >= 0 && text.charAt(i) == '\\')   i-=1;
+  while (i >= 0 && text.charAt(i) == ' ' || text.charAt(i) == '\t')   i-=1;
+  if (i < 0)   return CANNOT_JOIN;
+  PsiElement left_element=file.findElementAt(i);
+  PsiElement right_element=file.findElementAt(end);
+  if (left_element != null && right_element != null) {
+    PyExpression left_expr=PsiTreeUtil.getParentOfType(left_element,PyExpression.class);
+    if (left_expr instanceof PsiFile)     return CANNOT_JOIN;
+    PyExpression right_expr=PsiTreeUtil.getParentOfType(right_element,PyExpression.class);
+    if (right_expr instanceof PsiFile)     return CANNOT_JOIN;
+    Joiner[] joiners={new OpenBracketJoiner(),new CloseBracketJoiner(),new StmtJoiner(),new StringLiteralJoiner(),new BinaryExprJoiner(),new ListLikeExprJoiner()};
+    Request request=new Request(document,left_element,left_expr,right_element,right_expr);
+    for (    Joiner joiner : joiners) {
+      Result res=joiner.join(request);
+      if (res != null) {
+        final int cut_start=i + 1 - res.getCutFromLeft();
+        document.deleteString(cut_start,end + res.getCutIntoRight());
+        document.insertString(cut_start,res.getInsert());
+        return cut_start + res.getCursorOffset();
+      }
+    }
+  }
+  return CANNOT_JOIN;
+}
