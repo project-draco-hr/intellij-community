@@ -1,0 +1,40 @@
+{
+  CompiledPattern pattern=myGlobalVisitor.getContext().getPattern();
+  if (myGlobalVisitor.getCodeBlockLevel() == 0) {
+    initTopLevelElement(element);
+    return;
+  }
+  if (canBePatternVariable(element) && pattern.isRealTypedVar(element)) {
+    myGlobalVisitor.handle(element);
+    final MatchingHandler handler=pattern.getHandler(element);
+    handler.setFilter(new NodeFilter(){
+      public boolean accepts(      PsiElement other){
+        return canBePatternVariableValue(other);
+      }
+    }
+);
+    super.visitElement(element);
+    return;
+  }
+  super.visitElement(element);
+  if (myGlobalVisitor.getContext().getSearchHelper().doOptimizing() && element instanceof LeafElement) {
+    ParserDefinition parserDefinition=LanguageParserDefinitions.INSTANCE.forLanguage(element.getLanguage());
+    if (parserDefinition != null) {
+      String text=element.getText();
+      IElementType elementType=((LeafElement)element).getElementType();
+      GlobalCompilingVisitor.OccurenceKind kind=null;
+      if (parserDefinition.getCommentTokens().contains(elementType)) {
+        kind=GlobalCompilingVisitor.OccurenceKind.COMMENT;
+      }
+ else       if (parserDefinition.getStringLiteralElements().contains(elementType)) {
+        kind=GlobalCompilingVisitor.OccurenceKind.LITERAL;
+      }
+ else       if (StringUtil.isJavaIdentifier(text)) {
+        kind=GlobalCompilingVisitor.OccurenceKind.CODE;
+      }
+      if (kind != null) {
+        myGlobalVisitor.processPatternStringWithFragments(text,kind);
+      }
+    }
+  }
+}

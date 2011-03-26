@@ -1,0 +1,50 @@
+{
+  element.accept(new MyCompilingVisitor(globalVisitor));
+  element.accept(new PsiRecursiveElementVisitor(){
+    @Override public void visitElement(    PsiElement element){
+      super.visitElement(element);
+      if (isLexicalNode(element)) {
+        return;
+      }
+      CompiledPattern pattern=globalVisitor.getContext().getPattern();
+      MatchingHandler handler=pattern.getHandler(element);
+      if (!(handler instanceof SubstitutionHandler) && !(handler instanceof TopLevelMatchingHandler) && !(handler instanceof LightTopLevelMatchingHandler)) {
+        pattern.setHandler(element,new SkippingHandler(handler));
+      }
+      if (handler instanceof LightTopLevelMatchingHandler) {
+        MatchingHandler delegate=((LightTopLevelMatchingHandler)handler).getDelegate();
+        if (!(delegate instanceof SubstitutionHandler)) {
+          pattern.setHandler(element,new LightTopLevelMatchingHandler(new SkippingHandler(delegate)));
+        }
+      }
+    }
+  }
+);
+  final Language baseLanguage=element.getContainingFile().getLanguage();
+  globalVisitor.getContext().getPattern().setStrategy(new MatchingStrategy(){
+    @Override public boolean continueMatching(    PsiElement start){
+      Language language=start.getLanguage();
+      PsiFile file=start.getContainingFile();
+      if (file != null) {
+        Language fileLanguage=file.getLanguage();
+        if (fileLanguage.isKindOf(language)) {
+          language=fileLanguage;
+        }
+      }
+      return language == baseLanguage;
+    }
+    @Override public boolean shouldSkip(    PsiElement element,    PsiElement elementToMatchWith){
+      if (element == null || elementToMatchWith == null) {
+        return false;
+      }
+      if (element.getClass() == elementToMatchWith.getClass()) {
+        return false;
+      }
+      if (element.getFirstChild() == null && element.getTextLength() == 0 && !(element instanceof LeafElement)) {
+        return true;
+      }
+      return false;
+    }
+  }
+);
+}
