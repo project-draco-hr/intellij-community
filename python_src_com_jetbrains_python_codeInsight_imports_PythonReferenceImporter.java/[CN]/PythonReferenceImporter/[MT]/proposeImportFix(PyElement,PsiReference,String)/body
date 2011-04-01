@@ -1,6 +1,6 @@
 {
   PsiFile existing_import_file=null;
-  ImportFromExistingFix fix=new ImportFromExistingFix(node,reference,ref_text,!PyCodeInsightSettings.getInstance().PREFER_FROM_IMPORT);
+  AutoImportQuickFix fix=new AutoImportQuickFix(node,reference,ref_text,!PyCodeInsightSettings.getInstance().PREFER_FROM_IMPORT);
   Set<String> seen_file_names=new HashSet<String>();
   CollectProcessor import_prc=new CollectProcessor(IS_IMPORT_STATEMENT);
   PyResolveUtil.treeCrawlUp(import_prc,node);
@@ -30,21 +30,22 @@
   List<PsiElement> symbols=new ArrayList<PsiElement>();
   symbols.addAll(PyClassNameIndex.find(ref_text,project,true));
   GlobalSearchScope scope=PyClassNameIndex.projectWithLibrariesScope(project);
-  symbols.addAll(PyFunctionNameIndex.find(ref_text,project,scope));
+  if (!isQualifier(node)) {
+    symbols.addAll(PyFunctionNameIndex.find(ref_text,project,scope));
+  }
   symbols.addAll(PyVariableNameIndex.find(ref_text,project,scope));
-  symbols.addAll(findImportableModules(node.getContainingFile(),ref_text,project,scope));
+  if (!isCall(node)) {
+    symbols.addAll(findImportableModules(node.getContainingFile(),ref_text,project,scope));
+  }
   if (symbols.size() > 0) {
     for (    PsiElement symbol : symbols) {
       if (isTopLevel(symbol)) {
         PsiFileSystemItem srcfile=symbol instanceof PsiFileSystemItem ? ((PsiFileSystemItem)symbol).getParent() : symbol.getContainingFile();
         if (srcfile != null && srcfile != existing_import_file && srcfile != node.getContainingFile()) {
-          VirtualFile vfile=srcfile.getVirtualFile();
-          if (vfile != null) {
-            String import_path=ResolveImportUtil.findShortestImportableName(node,vfile);
-            if (import_path != null && !seen_file_names.contains(import_path)) {
-              fix.addImport(symbol,srcfile,import_path,proposeAsName(node.getContainingFile(),ref_text,import_path));
-              seen_file_names.add(import_path);
-            }
+          PyQualifiedName import_path=ResolveImportUtil.findCanonicalImportPath(symbol,node);
+          if (import_path != null && !seen_file_names.contains(import_path.toString())) {
+            fix.addImport(symbol,srcfile,import_path,proposeAsName(node.getContainingFile(),ref_text,import_path));
+            seen_file_names.add(import_path.toString());
           }
         }
       }
