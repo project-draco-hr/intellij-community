@@ -3,6 +3,10 @@
     CommonRefactoringUtil.showErrorHint(project,editor,"Cannot perform refactoring from expression with local variables modifications and return instructions inside code fragment",RefactoringBundle.message("error.title"),"refactoring.extractMethod");
     return;
   }
+  PyFunction function=PsiTreeUtil.getParentOfType(statement1,PyFunction.class);
+  final PyUtil.MethodFlags flags=function == null ? null : PyUtil.MethodFlags.of(function);
+  final boolean isClassMethod=flags != null && flags.isClassMethod();
+  final boolean isStaticMethod=flags != null && flags.isStaticMethod();
   final List<PsiElement> elementsRange=PyPsiUtils.collectElements(statement1,statement2);
   if (elementsRange.isEmpty()) {
     return;
@@ -18,16 +22,17 @@
       public void run(){
         ApplicationManager.getApplication().runWriteAction(new Runnable(){
           public void run(){
-            PyFunction generatedMethod=generateMethodFromElements(project,methodName,variableData,elementsRange);
+            PyFunction generatedMethod=generateMethodFromElements(project,methodName,variableData,elementsRange,flags);
             generatedMethod=insertGeneratedMethod(statement1,generatedMethod);
-            final boolean isMethod=PyPsiUtils.isMethodContext(elementsRange.get(0));
-            processParameters(project,generatedMethod,variableData,isMethod);
+            final PsiElement firstElement=elementsRange.get(0);
+            final boolean isMethod=PyPsiUtils.isMethodContext(firstElement);
+            processParameters(project,generatedMethod,variableData,isMethod,isClassMethod,isStaticMethod);
             final StringBuilder builder=new StringBuilder();
             if (fragment.isReturnInstructionInside()) {
               builder.append("return ");
             }
             if (isMethod) {
-              appendSelf(elementsRange.get(0),builder);
+              appendSelf(firstElement,builder,isStaticMethod);
             }
             builder.append(methodName);
             builder.append("(").append(createCallArgsString(variableData)).append(")");
@@ -56,14 +61,14 @@
             final List<PsiElement> newMethodElements=new ArrayList<PsiElement>(elementsRange);
             final PsiElement returnStatement=PyElementGenerator.getInstance(project).createFromText(LanguageLevel.getDefault(),PyElement.class,"return " + builder.toString());
             newMethodElements.add(returnStatement);
-            PyFunction generatedMethod=generateMethodFromElements(project,methodName,variableData,newMethodElements);
+            PyFunction generatedMethod=generateMethodFromElements(project,methodName,variableData,newMethodElements,flags);
             generatedMethod=(PyFunction)CodeStyleManager.getInstance(project).reformat(generatedMethod);
             generatedMethod=insertGeneratedMethod(statement1,generatedMethod);
             final boolean isMethod=PyPsiUtils.isMethodContext(elementsRange.get(0));
-            processParameters(project,generatedMethod,variableData,isMethod);
+            processParameters(project,generatedMethod,variableData,isMethod,isClassMethod,isStaticMethod);
             builder.append(" = ");
             if (isMethod) {
-              appendSelf(elementsRange.get(0),builder);
+              appendSelf(elementsRange.get(0),builder,isStaticMethod);
             }
             builder.append(methodName).append("(");
             builder.append(createCallArgsString(variableData)).append(")");
