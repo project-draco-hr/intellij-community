@@ -1,0 +1,61 @@
+{
+  final ExtractMethodValidator validator=new PyExtractMethodValidator(element,project);
+  if (ApplicationManager.getApplication().isUnitTestMode()) {
+    String name=System.getProperty(NAME);
+    if (name == null) {
+      name="foo";
+    }
+    final String error=validator.check(name);
+    if (error != null) {
+      if (ApplicationManager.getApplication().isUnitTestMode()) {
+        throw new CommonRefactoringUtil.RefactoringErrorHintException(error);
+      }
+      final StringBuilder builder=new StringBuilder();
+      builder.append(error).append(". ").append(RefactoringBundle.message("do.you.wish.to.continue"));
+      if (Messages.showOkCancelDialog(builder.toString(),RefactoringBundle.message("warning.title"),Messages.getWarningIcon()) != 0) {
+        throw new CommonRefactoringUtil.RefactoringErrorHintException(error);
+      }
+    }
+    final List<AbstractVariableData> data=new ArrayList<AbstractVariableData>();
+    for (    String in : fragment.getInputVariables()) {
+      final AbstractVariableData d=new AbstractVariableData();
+      d.name=in + "_new";
+      d.originalName=in;
+      d.passAsParameter=true;
+      data.add(d);
+    }
+    return Pair.create(name,data.toArray(new AbstractVariableData[data.size()]));
+  }
+  final boolean isMethod=PyPsiUtils.isMethodContext(element);
+  final ExtractMethodDecorator decorator=new ExtractMethodDecorator(){
+    public String createMethodPreview(    final String methodName,    final AbstractVariableData[] variableDatas){
+      final StringBuilder builder=new StringBuilder();
+      if (isClassMethod) {
+        builder.append("cls");
+      }
+ else       if (isMethod && !isStaticMethod) {
+        builder.append("self");
+      }
+      for (      AbstractVariableData variableData : variableDatas) {
+        if (variableData.passAsParameter) {
+          if (builder.length() != 0) {
+            builder.append(", ");
+          }
+          builder.append(variableData.name);
+        }
+      }
+      builder.insert(0,"(");
+      builder.insert(0,methodName);
+      builder.insert(0,"def ");
+      builder.append(")");
+      return builder.toString();
+    }
+  }
+;
+  final AbstractExtractMethodDialog dialog=new AbstractExtractMethodDialog(project,"method_name",fragment,validator,decorator);
+  dialog.show();
+  if (!dialog.isOK()) {
+    return Pair.create(null,null);
+  }
+  return Pair.create(dialog.getMethodName(),dialog.getVariableData());
+}
