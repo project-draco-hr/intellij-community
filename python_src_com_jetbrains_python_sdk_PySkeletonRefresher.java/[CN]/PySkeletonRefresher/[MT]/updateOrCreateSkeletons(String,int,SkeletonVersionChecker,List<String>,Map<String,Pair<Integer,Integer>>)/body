@@ -3,7 +3,7 @@
   Iterator<String> bin_iter=binaries.iterator();
   bin_iter.next();
   while (bin_iter.hasNext()) {
-    if (indicator != null)     indicator.checkCanceled();
+    checkCanceled();
     String line=bin_iter.next();
     int cutpos=line.indexOf(' ');
     if (cutpos < 0)     LOG.error("Bad binaries line: '" + line + "', SDK "+ binaryPath);
@@ -11,9 +11,9 @@
       String module_name=line.substring(0,cutpos);
       String module_lib_name=line.substring(cutpos + 1);
       final String module_path=module_name.replace('.','/');
-      File skeleton_file=new File(skeletonsRoot,module_path + ".py");
+      File skeleton_file=new File(mySkeletonsPath,module_path + ".py");
       if (!skeleton_file.exists()) {
-        skeleton_file=new File(new File(skeletonsRoot,module_path),PyNames.INIT_DOT_PY);
+        skeleton_file=new File(new File(mySkeletonsPath,module_path),PyNames.INIT_DOT_PY);
       }
       File lib_file=new File(module_lib_name);
       Matcher matcher=getParseHeader(skeleton_file);
@@ -26,10 +26,18 @@
       if (!must_rebuild) {
         must_rebuild=(lib_file.exists() && skeleton_file.exists() && lib_file.lastModified() > skeleton_file.lastModified());
       }
+      if (blacklist != null) {
+        Pair<Integer,Integer> version_info=blacklist.get(module_lib_name);
+        if (version_info != null) {
+          int failed_generator_version=version_info.getFirst();
+          int failed_timestamp=version_info.getSecond();
+          must_rebuild&=failed_generator_version < generator_version || failed_timestamp < lib_file.lastModified();
+        }
+      }
       if (must_rebuild) {
-        if (indicator != null)         indicator.setText2(module_name);
+        indicateMinor(module_name);
         LOG.info("Skeleton for " + module_name);
-        if (!generateSkeleton(binaryPath,skeletonsRoot,module_name,module_lib_name,Collections.<String>emptyList())) {
+        if (!generateSkeleton(binaryPath,mySkeletonsPath,module_name,module_lib_name,Collections.<String>emptyList())) {
           error_list.add(module_name);
         }
       }
