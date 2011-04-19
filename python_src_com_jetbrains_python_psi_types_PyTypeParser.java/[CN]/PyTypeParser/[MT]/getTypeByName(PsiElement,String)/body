@@ -2,12 +2,25 @@
   if (type == null) {
     return null;
   }
+  type=type.trim();
+  if (type.endsWith(".")) {
+    type=type.substring(0,type.length() - 1);
+  }
+  if (type.equals("None")) {
+    return PyNoneType.INSTANCE;
+  }
   if (type.startsWith("(") && type.endsWith(")")) {
     return parseTupleType(anchor,type.substring(1,type.length() - 1));
+  }
+  if (type.contains(" or ")) {
+    return parseUnionType(anchor,type);
   }
   final PyBuiltinCache builtinCache=PyBuiltinCache.getInstance(anchor);
   if (type.equals("string")) {
     return builtinCache.getStrType();
+  }
+  if (type.equals("boolean")) {
+    return builtinCache.getBoolType();
   }
   if (type.equals("file object")) {
     return builtinCache.getObjectType("file");
@@ -33,6 +46,24 @@
     final PyClass aClass=((PyFile)anchorFile).findTopLevelClass(type);
     if (aClass != null) {
       return new PyClassType(aClass,false);
+    }
+  }
+  if (StringUtil.isJavaIdentifier(type)) {
+    final Collection<PyClass> classes=PyClassNameIndex.find(type,anchor.getProject(),true);
+    if (classes.size() == 1) {
+      return new PyClassType(classes.iterator().next(),false);
+    }
+  }
+  if (CharMatcher.JAVA_LETTER_OR_DIGIT.or(CharMatcher.is('.')).matchesAllOf(type)) {
+    int pos=type.lastIndexOf('.');
+    if (pos > 0) {
+      String shortName=type.substring(pos + 1);
+      final Collection<PyClass> classes=PyClassNameIndex.find(shortName,anchor.getProject(),true);
+      for (      PyClass aClass : classes) {
+        if (type.equals(aClass.getQualifiedName())) {
+          return new PyClassType(aClass,false);
+        }
+      }
     }
   }
   return null;
