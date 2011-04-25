@@ -1,29 +1,59 @@
 {
-  myBuilder.startNode(node);
   PyExpression prevCondition=null;
-  for (  ComprhIfComponent component : node.getIfComponents()) {
-    final PyExpression condition=component.getTest();
-    if (condition != null) {
+  myBuilder.startNode(node);
+  List<Instruction> iterators=new ArrayList<Instruction>();
+  for (  ComprehensionComponent component : node.getComponents()) {
+    if (component instanceof ComprhForComponent) {
+      final ComprhForComponent c=(ComprhForComponent)component;
+      final PyExpression iteratedList=c.getIteratedList();
+      final PyExpression iteratorVariable=c.getIteratorVariable();
+      if (prevCondition != null) {
+        myBuilder.startConditionalNode(iteratedList,prevCondition,true);
+        prevCondition=null;
+      }
+ else {
+        myBuilder.startNode(iteratedList);
+      }
+      iteratedList.accept(this);
+      for (      Instruction i : iterators) {
+        myBuilder.addEdge(myBuilder.prevInstruction,i);
+      }
+      myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
+      final Instruction iterator=myBuilder.startNode(iteratorVariable);
+      iteratorVariable.accept(this);
+      iterators.add(iterator);
+    }
+ else     if (component instanceof ComprhIfComponent) {
+      final ComprhIfComponent c=(ComprhIfComponent)component;
+      final PyExpression condition=c.getTest();
+      if (condition == null) {
+        continue;
+      }
+      if (prevCondition != null) {
+        myBuilder.startConditionalNode(condition,prevCondition,true);
+      }
+ else {
+        myBuilder.startNode(condition);
+      }
       condition.accept(this);
-      final Instruction head=myBuilder.prevInstruction;
-      final Instruction prevInstruction=prevCondition != null ? myBuilder.startConditionalNode(condition,prevCondition,true) : myBuilder.startNode(condition);
       prevCondition=condition;
-      myBuilder.prevInstruction=head;
-      myBuilder.addPendingEdge(node,head);
-      myBuilder.prevInstruction=prevInstruction;
+      for (      Instruction i : iterators) {
+        myBuilder.addEdge(myBuilder.prevInstruction,i);
+      }
+      myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
     }
-  }
-  for (  ComprhForComponent forComponent : node.getForComponents()) {
-    final PyExpression iteratedList=forComponent.getIteratedList();
-    if (prevCondition != null) {
-      myBuilder.startConditionalNode(iteratedList,prevCondition,true);
-      prevCondition=null;
-    }
-    iteratedList.accept(this);
-    forComponent.getIteratorVariable().accept(this);
   }
   final PyExpression result=node.getResultExpression();
   if (result != null) {
+    if (prevCondition != null) {
+      myBuilder.startConditionalNode(result,prevCondition,true);
+    }
+ else {
+      myBuilder.startNode(result);
+    }
     result.accept(this);
+    for (    Instruction i : iterators) {
+      myBuilder.addEdge(myBuilder.prevInstruction,i);
+    }
   }
 }
