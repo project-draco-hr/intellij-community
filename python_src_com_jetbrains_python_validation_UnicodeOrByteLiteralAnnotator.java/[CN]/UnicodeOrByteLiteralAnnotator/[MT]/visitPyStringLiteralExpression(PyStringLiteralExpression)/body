@@ -1,13 +1,60 @@
 {
   List<ASTNode> literal_nodes=expr.getStringNodes();
   for (  ASTNode node : literal_nodes) {
-    CharSequence chars=node.getChars();
-    if (chars.length() > 0) {
-      char first_char=Character.toLowerCase(chars.charAt(0));
+    int start=node.getStartOffset();
+    CharSequence text=node.getChars();
+    int length=text.length();
+    if (length > 0) {
+      char first_char=Character.toLowerCase(text.charAt(0));
       boolean is_unicode=isDefaultUnicode(expr);
       is_unicode|=(first_char == 'u');
       is_unicode&=(first_char != 'b');
-      if (is_unicode)       getHolder().createInfoAnnotation(node,null).setTextAttributes(PyHighlighter.PY_UNICODE_STRING);
+      if (is_unicode) {
+        getHolder().createInfoAnnotation(node,null).setTextAttributes(PyHighlighter.PY_UNICODE_STRING);
+      }
+      Matcher n_matcher=N_ESC_PATTERN.matcher(text);
+      int pos=0;
+      while (pos < length) {
+        while (pos < length && text.charAt(pos) != '\\')         pos+=1;
+        if (pos < length) {
+          if (pos < length - 1) {
+            char escaped_char=text.charAt(pos + 1);
+            if (ALLOWED_ESCAPES.indexOf(escaped_char) >= 0) {
+              if (escaped_char == 'x') {
+                int span=4;
+                checkHexEscape(start,text,length,pos,span);
+              }
+ else               if (is_unicode && escaped_char == 'u') {
+                int span=6;
+                checkHexEscape(start,text,length,pos,span);
+              }
+ else               if (is_unicode && escaped_char == 'U') {
+                int span=10;
+                checkHexEscape(start,text,length,pos,span);
+              }
+ else               if (is_unicode && escaped_char == 'N') {
+                if (n_matcher.find(pos + 1)) {
+                  if (n_matcher.group(1).endsWith("}"))                   markAsValidEscape(start + pos,start + n_matcher.end(1));
+ else                   markAsInvalidEscape(start + pos,start + n_matcher.end(1));
+                }
+ else                 markAsInvalidEscape(start + pos,start + pos + 2);
+              }
+ else               if (escaped_char >= '0' && escaped_char <= '7') {
+                int span=4;
+                if (pos < length - span) {
+                  int end_pos=pos + span;
+                  if (allOctal(text,pos + 2,end_pos))                   markAsValidEscape(start + pos,start + end_pos);
+ else                   markAsInvalidEscape(start + pos,start + end_pos);
+                }
+              }
+ else {
+                if (is_unicode || "UuN".indexOf(escaped_char) < 0)                 markAsValidEscape(start + pos,start + pos + 2);
+              }
+            }
+          }
+        }
+        pos+=1;
+      }
     }
   }
 }
