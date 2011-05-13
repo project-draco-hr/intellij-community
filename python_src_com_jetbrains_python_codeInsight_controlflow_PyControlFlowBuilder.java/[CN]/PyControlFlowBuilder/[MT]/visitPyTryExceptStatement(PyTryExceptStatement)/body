@@ -37,24 +37,37 @@
     lastFinallyInstruction=myBuilder.prevInstruction;
     myBuilder.addPendingEdge(finallyPart,lastFinallyInstruction);
   }
+  for (  Instruction instruction : myBuilder.instructions) {
+    final PsiElement e=instruction.getElement();
+    if (e == null || !canRaiseExceptions(instruction)) {
+      continue;
+    }
+    if (PsiTreeUtil.isAncestor(tryPart,e,true)) {
+      for (      Instruction inst : exceptInstructions) {
+        myBuilder.addEdge(instruction,inst);
+      }
+      if (finallyPart != null) {
+        myBuilder.addEdge(instruction,finallyInstruction);
+      }
+    }
+    if (finallyPart != null) {
+      for (      PyExceptPart exceptPart : node.getExceptParts()) {
+        if (PsiTreeUtil.isAncestor(exceptPart,e,true)) {
+          myBuilder.addEdge(instruction,finallyInstruction);
+        }
+      }
+      if (PsiTreeUtil.isAncestor(elsePart,e,true)) {
+        myBuilder.addEdge(instruction,finallyInstruction);
+      }
+    }
+  }
   final Ref<Instruction> finallyRef=new Ref<Instruction>(finallyInstruction);
   final Ref<Instruction> lastFinallyRef=new Ref<Instruction>(lastFinallyInstruction);
   myBuilder.processPending(new ControlFlowBuilder.PendingProcessor(){
-    @SuppressWarnings({"ConstantConditions"}) public void process(    final PsiElement pendingScope,    final Instruction instruction){
+    public void process(    final PsiElement pendingScope,    final Instruction instruction){
       final PsiElement pendingElement=instruction.getElement();
-      if (isRaiseInstruction(pendingElement) && PsiTreeUtil.isAncestor(tryPart,pendingElement,false)) {
-        for (        Instruction inst : exceptInstructions) {
-          myBuilder.addEdge(instruction,inst);
-        }
-        if (finallyPart != null) {
-          myBuilder.addEdge(instruction,finallyRef.get());
-        }
+      if (pendingElement == null) {
         return;
-      }
- else       if (pendingElement != null && PsiTreeUtil.isAncestor(tryPart,pendingElement,false)) {
-        for (        Instruction inst : exceptInstructions) {
-          myBuilder.addEdge(instruction,inst);
-        }
       }
       final boolean isPending=PsiTreeUtil.isAncestor(node,pendingElement,false) && (finallyPart == null || !PsiTreeUtil.isAncestor(finallyPart,pendingElement,false));
       if (!finallyRef.isNull() && isPending) {
