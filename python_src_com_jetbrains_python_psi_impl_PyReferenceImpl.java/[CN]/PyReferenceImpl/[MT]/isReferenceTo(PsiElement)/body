@@ -9,6 +9,11 @@
   if (element instanceof PsiNamedElement) {
     final String elementName=((PsiNamedElement)element).getName();
     if ((Comparing.equal(myElement.getReferencedName(),elementName) || PyNames.INIT.equals(elementName)) && !haveQualifiers(element)) {
+      if (isGlobal(element,elementName)) {
+        element=transitiveResolve(element);
+      }
+      final ScopeOwner ourScopeOwner=ScopeUtil.getScopeOwner(getElement());
+      final ScopeOwner theirScopeOwner=ScopeUtil.getScopeOwner(element);
       if (element instanceof PyParameter || element instanceof PyTargetExpression) {
         PsiElement ourContainer=PsiTreeUtil.getParentOfType(getElement(),PsiNamedElement.class,PyLambdaExpression.class,PyComprehensionElement.class);
         PsiElement theirContainer=PsiTreeUtil.getParentOfType(element,PsiNamedElement.class,PyLambdaExpression.class,PyComprehensionElement.class);
@@ -17,16 +22,15 @@
             return true;
           }
           if (PsiTreeUtil.isAncestor(theirContainer,ourContainer,true)) {
-            ScopeOwner ourScopeOwner=PsiTreeUtil.getParentOfType(getElement(),ScopeOwner.class);
-            ScopeOwner theirScopeOwner=PsiTreeUtil.getParentOfType(element,ScopeOwner.class);
             if (ourScopeOwner != theirScopeOwner) {
               boolean shadowsName=false;
-              while (ourScopeOwner != theirScopeOwner && ourScopeOwner != null) {
-                if (ControlFlowCache.getScope(ourScopeOwner).containsDeclaration(elementName)) {
+              ScopeOwner owner=ourScopeOwner;
+              while (owner != theirScopeOwner && owner != null) {
+                if (ControlFlowCache.getScope(owner).containsDeclaration(elementName)) {
                   shadowsName=true;
                   break;
                 }
-                ourScopeOwner=PsiTreeUtil.getParentOfType(ourScopeOwner,ScopeOwner.class);
+                owner=ScopeUtil.getScopeOwner(owner);
               }
               if (!shadowsName) {
                 return true;
@@ -35,17 +39,19 @@
           }
         }
       }
-      final PsiElement resolveResult=resolve();
+      final PsiElement resolveResult=(isGlobal(getElement(),elementName)) ? transitiveResolve(getElement()) : resolve();
       if (resolveResult == element) {
         return true;
       }
-      if (!haveQualifiers(element)) {
-        final ScopeOwner ourScope=PsiTreeUtil.getParentOfType(getElement(),ScopeOwner.class);
-        final ScopeOwner theirScope=PsiTreeUtil.getParentOfType(element,ScopeOwner.class);
-        if (ourScope != null && ControlFlowCache.getScope(ourScope).isGlobal(elementName) && PsiTreeUtil.isAncestor(theirScope,ourScope,false)) {
+      if (!haveQualifiers(element) && ourScopeOwner != null && theirScopeOwner != null) {
+        final boolean ourIsGlobal=ControlFlowCache.getScope(ourScopeOwner).isGlobal(elementName);
+        final boolean theirIsGlobal=ControlFlowCache.getScope(theirScopeOwner).isGlobal(elementName);
+        final PsiFile ourFile=getElement().getContainingFile();
+        final PsiFile theirFile=element.getContainingFile();
+        if (ourIsGlobal && theirIsGlobal && ourFile == theirFile) {
           return true;
         }
-        if (theirScope != null && ControlFlowCache.getScope(theirScope).isGlobal(elementName) && PsiTreeUtil.isAncestor(ourScope,theirScope,false)) {
+        if (theirIsGlobal && ScopeUtil.getScopeOwner(resolveResult) == ourFile) {
           return true;
         }
       }
