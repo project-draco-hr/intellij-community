@@ -1,32 +1,43 @@
 {
   if (index >= prefixSequence.length) {
-    final List<PsiElement> elements=doCompile(project,options,pattern,new ArrayPrefixProvider(prefixSequence),context);
+    final LinkedList<PsiElement> elements=doCompile(project,options,pattern,new ArrayPrefixProvider(prefixSequence),context);
     if (elements.size() == 0) {
       return elements;
     }
-    final PsiElement parent=elements.get(0);
-    final PsiElement last=elements.get(elements.size() - 1);
-    return !containsErrorElementBeforeOffset(parent,last.getTextRange().getEndOffset() - 1) ? elements : null;
+    final PsiElement parent=elements.getFirst().getParent();
+    final PsiElement last=elements.getLast();
+    final int[] varEndOffsets=findAllTypedVarOffsets(parent.getContainingFile(),substitutionPatterns);
+    final int patternEndOffset=last.getTextRange().getEndOffset();
+    return checkErrorElements(parent,patternEndOffset,patternEndOffset,varEndOffsets,false) != Boolean.TRUE ? elements : null;
   }
+  String[] alternativeVariant=null;
   for (  String applicablePrefix : applicablePrefixes) {
     prefixSequence[index]=applicablePrefix;
-    List<PsiElement> elements=doCompile(project,options,pattern,new ArrayPrefixProvider(prefixSequence),context);
+    LinkedList<PsiElement> elements=doCompile(project,options,pattern,new ArrayPrefixProvider(prefixSequence),context);
     if (elements.size() == 0) {
       return elements;
     }
-    final PsiFile file=elements.get(0).getContainingFile();
+    final PsiFile file=elements.getFirst().getContainingFile();
     if (file == null) {
       return elements;
     }
-    final int[] endOffsets=findAllTypedVarOffsets(file,substitutionPatterns);
-    final int offset=endOffsets[index];
-    if (containsErrorElementBeforeOffset(file,offset)) {
+    final int[] varEndOffsets=findAllTypedVarOffsets(file,substitutionPatterns);
+    final int offset=varEndOffsets[index];
+    final int patternEndOffset=elements.getLast().getTextRange().getEndOffset();
+    final Boolean result=checkErrorElements(file,offset,patternEndOffset,varEndOffsets,false);
+    if (result == Boolean.TRUE) {
       continue;
     }
-    elements=compileByPrefixes(project,options,pattern,context,applicablePrefixes,substitutionPatterns,prefixSequence,index + 1);
-    if (elements != null) {
-      return elements;
+    if (result == Boolean.FALSE || (result == null && alternativeVariant == null)) {
+      final List<PsiElement> finalElements=compileByPrefixes(project,options,pattern,context,applicablePrefixes,substitutionPatterns,prefixSequence,index + 1);
+      if (finalElements != null) {
+        if (result == Boolean.FALSE) {
+          return finalElements;
+        }
+        alternativeVariant=new String[prefixSequence.length];
+        System.arraycopy(prefixSequence,0,alternativeVariant,0,prefixSequence.length);
+      }
     }
   }
-  return null;
+  return alternativeVariant != null ? compileByPrefixes(project,options,pattern,context,applicablePrefixes,substitutionPatterns,alternativeVariant,index + 1) : null;
 }
