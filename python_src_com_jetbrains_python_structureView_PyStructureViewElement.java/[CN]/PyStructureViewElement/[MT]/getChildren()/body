@@ -2,7 +2,7 @@
   final Set<PyElement> childrenElements=new LinkedHashSet<PyElement>();
   myElement.acceptChildren(new PyElementVisitor(){
     @Override public void visitElement(    PsiElement element){
-      if (isWorthyClassItem(element)) {
+      if (element instanceof PyClass || element instanceof PyFunction || (!(myElement instanceof PyClass) && isWorthyItem(element))) {
         childrenElements.add((PyElement)element);
       }
  else {
@@ -11,36 +11,50 @@
     }
   }
 );
-  StructureViewTreeElement[] children=new StructureViewTreeElement[childrenElements.size()];
-  int i=0;
+  final Collection<StructureViewTreeElement> children=new ArrayList<StructureViewTreeElement>();
   for (  PyElement element : childrenElements) {
-    Visibility vis=Visibility.NORMAL;
+    final Visibility vis;
     if (PsiTreeUtil.getParentOfType(element,PyFunction.class) != null) {
       vis=Visibility.INVISIBLE;
     }
  else {
-      String name=element.getName();
-      if (name != null && name.startsWith("__")) {
-        if (PyNames.UnderscoredAttributes.contains(name)) {
-          vis=Visibility.PREDEFINED;
-        }
- else {
-          vis=Visibility.PRIVATE;
-        }
-      }
+      vis=getVisibilityByName(element.getName());
     }
-    children[i]=new PyStructureViewElement(element,vis);
+    final PyStructureViewElement e=new PyStructureViewElement(element,vis);
+    children.add(e);
     if (element instanceof PyClass && element.isValid()) {
       PyClass the_exception=PyBuiltinCache.getInstance(element).getClass("Exception");
       final PyClass cls=(PyClass)element;
       for (      PyClass anc : cls.iterateAncestorClasses()) {
         if (anc == the_exception) {
-          ((PyStructureViewElement)(children[i])).setIcon(Icons.EXCEPTION_CLASS_ICON);
+          e.setIcon(Icons.EXCEPTION_CLASS_ICON);
           break;
         }
       }
     }
-    i+=1;
   }
-  return children;
+  final Collection<PyTargetExpression> attrs=new ArrayList<PyTargetExpression>();
+  if (myElement instanceof PyClass) {
+    final PyClass c=(PyClass)myElement;
+    final Comparator<PyTargetExpression> comparator=new Comparator<PyTargetExpression>(){
+      @Override public int compare(      PyTargetExpression e1,      PyTargetExpression e2){
+        final String n1=e1.getName();
+        final String n2=e2.getName();
+        return (n1 != null && n2 != null) ? n1.compareTo(n2) : 0;
+      }
+    }
+;
+    final List<PyTargetExpression> instanceAttrs=c.getInstanceAttributes();
+    final List<PyTargetExpression> classAttrs=c.getClassAttributes();
+    Collections.sort(instanceAttrs,comparator);
+    Collections.sort(classAttrs,comparator);
+    attrs.addAll(classAttrs);
+    attrs.addAll(instanceAttrs);
+  }
+  for (  PyTargetExpression e : attrs) {
+    if (e.isValid()) {
+      children.add(new PyStructureViewElement(e,getVisibilityByName(e.getName())));
+    }
+  }
+  return children.toArray(new StructureViewTreeElement[children.size()]);
 }
