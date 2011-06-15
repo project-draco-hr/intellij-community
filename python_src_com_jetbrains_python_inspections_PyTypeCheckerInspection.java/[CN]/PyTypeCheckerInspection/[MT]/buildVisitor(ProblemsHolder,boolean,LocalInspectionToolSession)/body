@@ -1,0 +1,47 @@
+{
+  if (LOG.isDebugEnabled()) {
+    session.putUserData(TIME_KEY,System.nanoTime());
+  }
+  return new PyInspectionVisitor(holder){
+    @Override public void visitPyCallExpression(    PyCallExpression node){
+      List<PyFunction> functions=new ArrayList<PyFunction>();
+      final PyExpression callee=node.getCallee();
+      if (callee instanceof PyReferenceExpression) {
+        ResolveResult[] results=((PyReferenceExpression)callee).getReference().multiResolve(false);
+        for (        ResolveResult result : results) {
+          if (!(result instanceof ImplicitResolveResult)) {
+            PsiElement e=result.getElement();
+            if (e instanceof PyFunction) {
+              functions.add((PyFunction)e);
+            }
+          }
+        }
+      }
+      if (!functions.isEmpty()) {
+        PyFunction fun=functions.get(0);
+        final TypeEvalContext fastContext=TypeEvalContext.fast();
+        final TypeEvalContext slowContext=TypeEvalContext.slow();
+        final TypeEvalContext context=fun.getContainingFile() == node.getContainingFile() ? slowContext : fastContext;
+        final PyArgumentList args=node.getArgumentList();
+        if (args != null) {
+          final PyArgumentList.AnalysisResult res=args.analyzeCall(context);
+          final Map<PyExpression,PyNamedParameter> mapped=res.getPlainMappedParams();
+          for (          Map.Entry<PyExpression,PyNamedParameter> entry : mapped.entrySet()) {
+            final PyNamedParameter p=entry.getValue();
+            if (p.isPositionalContainer() || p.isKeywordContainer()) {
+              continue;
+            }
+            final PyType argType=entry.getKey().getType(slowContext);
+            final PyType paramType=p.getType(context);
+            if (argType != null && paramType != null) {
+              if (!match(paramType,argType,context)) {
+                registerProblem(entry.getKey(),String.format("Expected type '%s', got '%s' instead",PythonDocumentationProvider.getTypeName(paramType,context),PythonDocumentationProvider.getTypeName(argType,slowContext)));
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+;
+}
