@@ -2,9 +2,11 @@
   super.visitPyCallExpression(node);
   final PyExpression callee=node.getCallee();
   if (callee != null && !PyNames.CLASS.equals(callee.getName())) {
-    final PsiReference ref=callee.getReference();
-    if (ref != null && ref.resolve() instanceof PyClass) {
-      return;
+    if (callee instanceof PyReferenceExpression) {
+      final QualifiedResolveResult result=((PyReferenceExpression)callee).followAssignmentsChain(myTypeEvalContext);
+      if (result.isValidResult() && result.getElement() instanceof PyClass) {
+        return;
+      }
     }
     PyType calleeType=myTypeEvalContext.getType(callee);
     if (calleeType instanceof PyClassType) {
@@ -13,11 +15,11 @@
       if (isMethodType(node,classType)) {
         return;
       }
-      if (cls != null && !cls.isSubclass(PyNames.CALLABLE)) {
+      if (cls != null && !PyABCUtil.isSubclass(cls,PyNames.CALLABLE)) {
         registerProblem(node,String.format("'%s' object is not callable",cls.getName()));
       }
     }
- else     if (calleeType != null) {
+ else     if (calleeType != null && !(calleeType instanceof PyTypeReference)) {
       registerProblem(node,String.format("'%s' is not callable",callee.getName()));
     }
   }
