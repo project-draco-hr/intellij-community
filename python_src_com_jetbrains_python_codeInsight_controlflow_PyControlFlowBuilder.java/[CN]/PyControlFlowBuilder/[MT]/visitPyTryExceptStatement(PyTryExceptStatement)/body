@@ -3,39 +3,28 @@
   final PyTryPart tryPart=node.getTryPart();
   myBuilder.startNode(tryPart);
   tryPart.accept(this);
-  final Instruction lastBlockInstruction=myBuilder.prevInstruction;
   final PyElsePart elsePart=node.getElsePart();
   if (elsePart != null) {
     myBuilder.startNode(elsePart);
     elsePart.accept(this);
-    myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
   }
- else {
-    myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
-  }
+  myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
   final ArrayList<Instruction> exceptInstructions=new ArrayList<Instruction>();
-  final List<Pair<PsiElement,Instruction>> myPending=myBuilder.pending;
+  final List<Pair<PsiElement,Instruction>> pending=myBuilder.pending;
   myBuilder.pending=new ArrayList<Pair<PsiElement,Instruction>>();
   for (  PyExceptPart exceptPart : node.getExceptParts()) {
-    myBuilder.prevInstruction=lastBlockInstruction;
-    final Instruction exceptInstruction=new InstructionImpl(myBuilder,exceptPart);
-    myBuilder.addNode(exceptInstruction);
-    exceptInstructions.add(exceptInstruction);
-    exceptPart.accept(this);
-    myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
+    final Instruction exceptInstrcution=addBlockConnectedViaPending(exceptPart,node);
+    exceptInstructions.add(exceptInstrcution);
   }
-  for (  Pair<PsiElement,Instruction> pair : myPending) {
+  for (  Pair<PsiElement,Instruction> pair : pending) {
     myBuilder.addPendingEdge(pair.first,pair.second);
   }
   final PyFinallyPart finallyPart=node.getFinallyPart();
   Instruction finallyInstruction=null;
   Instruction lastFinallyInstruction=null;
   if (finallyPart != null) {
-    myBuilder.flowAbrupted();
-    finallyInstruction=myBuilder.startNode(finallyPart);
-    finallyPart.accept(this);
+    finallyInstruction=addBlockConnectedViaPending(finallyPart,node);
     lastFinallyInstruction=myBuilder.prevInstruction;
-    myBuilder.addPendingEdge(finallyPart,lastFinallyInstruction);
   }
   for (  Instruction instruction : myBuilder.instructions) {
     final PsiElement e=instruction.getElement();
@@ -73,10 +62,6 @@
       if (!finallyRef.isNull() && isPending) {
         myBuilder.addEdge(instruction,finallyRef.get());
         myBuilder.addPendingEdge(null,lastFinallyRef.get());
-        return;
-      }
-      if (finallyPart != null && pendingScope != finallyPart && isPending) {
-        myBuilder.addEdge(instruction,finallyRef.get());
         return;
       }
       myBuilder.addPendingEdge(pendingScope,instruction);
