@@ -3,84 +3,107 @@
   final PyTryPart tryPart=node.getTryPart();
   myBuilder.startNode(tryPart);
   tryPart.accept(this);
-  final Instruction lastBlockInstruction=myBuilder.prevInstruction;
   final PyElsePart elsePart=node.getElsePart();
   if (elsePart != null) {
     myBuilder.startNode(elsePart);
     elsePart.accept(this);
-    myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
   }
- else {
-    myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
-  }
+  myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
   final ArrayList<Instruction> exceptInstructions=new ArrayList<Instruction>();
-  final List<Pair<PsiElement,Instruction>> myPending=myBuilder.pending;
-  myBuilder.pending=new ArrayList<Pair<PsiElement,Instruction>>();
+  storeAndClearPending();
   for (  PyExceptPart exceptPart : node.getExceptParts()) {
-    myBuilder.prevInstruction=lastBlockInstruction;
-    final Instruction exceptInstruction=new InstructionImpl(myBuilder,exceptPart);
-    myBuilder.addNode(exceptInstruction);
-    exceptInstructions.add(exceptInstruction);
+    myBuilder.flowAbrupted();
+    final Instruction exceptInstrcution=myBuilder.startNode(exceptPart);
     exceptPart.accept(this);
     myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
+    exceptInstructions.add(exceptInstrcution);
   }
-  for (  Pair<PsiElement,Instruction> pair : myPending) {
-    myBuilder.addPendingEdge(pair.first,pair.second);
-  }
+  restorePending();
+  final List<Instruction> normalExits=new ArrayList<Instruction>();
   final PyFinallyPart finallyPart=node.getFinallyPart();
-  Instruction finallyInstruction=null;
-  Instruction lastFinallyInstruction=null;
+  final Instruction finallyFailInstruction;
+  if (finallyPart != null) {
+    myBuilder.processPending(new ControlFlowBuilder.PendingProcessor(){
+      public void process(      final PsiElement pendingScope,      final Instruction instruction){
+        final PsiElement pendingElement=instruction.getElement();
+        if (pendingElement != null) {
+          final boolean isPending=PsiTreeUtil.isAncestor(node,pendingElement,false) && !PsiTreeUtil.isAncestor(finallyPart,pendingElement,false);
+          if (isPending && pendingScope != null) {
+            normalExits.add(instruction);
+          }
+ else {
+            myBuilder.addPendingEdge(pendingScope,instruction);
+          }
+        }
+      }
+    }
+);
+  }
   if (finallyPart != null) {
     myBuilder.flowAbrupted();
-    finallyInstruction=myBuilder.startNode(finallyPart);
+    finallyFailInstruction=myBuilder.startNode(finallyPart);
     finallyPart.accept(this);
-    lastFinallyInstruction=myBuilder.prevInstruction;
-    myBuilder.addPendingEdge(finallyPart,lastFinallyInstruction);
+    myBuilder.addPendingEdge(null,myBuilder.prevInstruction);
+  }
+ else {
+    finallyFailInstruction=null;
   }
   for (  Instruction instruction : myBuilder.instructions) {
     final PsiElement e=instruction.getElement();
     if (e == null || !canRaiseExceptions(instruction)) {
       continue;
     }
-    if (PsiTreeUtil.isAncestor(tryPart,e,true)) {
+    if (PsiTreeUtil.getParentOfType(e,PyTryPart.class,true) == tryPart) {
       for (      Instruction inst : exceptInstructions) {
         myBuilder.addEdge(instruction,inst);
       }
       if (finallyPart != null) {
-        myBuilder.addEdge(instruction,finallyInstruction);
+        myBuilder.addEdge(instruction,finallyFailInstruction);
       }
     }
     if (finallyPart != null) {
       for (      PyExceptPart exceptPart : node.getExceptParts()) {
         if (PsiTreeUtil.isAncestor(exceptPart,e,true)) {
-          myBuilder.addEdge(instruction,finallyInstruction);
+          myBuilder.addEdge(instruction,finallyFailInstruction);
         }
       }
       if (PsiTreeUtil.isAncestor(elsePart,e,true)) {
-        myBuilder.addEdge(instruction,finallyInstruction);
+        myBuilder.addEdge(instruction,finallyFailInstruction);
       }
     }
   }
-  final Ref<Instruction> finallyRef=new Ref<Instruction>(finallyInstruction);
-  final Ref<Instruction> lastFinallyRef=new Ref<Instruction>(lastFinallyInstruction);
-  myBuilder.processPending(new ControlFlowBuilder.PendingProcessor(){
-    public void process(    final PsiElement pendingScope,    final Instruction instruction){
-      final PsiElement pendingElement=instruction.getElement();
-      if (pendingElement == null) {
-        return;
+  if (finallyPart != null) {
+    myBuilder.processPending(new ControlFlowBuilder.PendingProcessor(){
+      @Override public void process(      PsiElement pendingScope,      Instruction instruction){
+        final PsiElement e=instruction.getElement();
+        if (e != null) {
+          if (PsiTreeUtil.isAncestor(finallyPart,e,false)) {
+            myBuilder.addPendingEdge(null,instruction);
+          }
+ else           if (pendingScope == null && PsiTreeUtil.isAncestor(node,e,false)) {
+            myBuilder.addEdge(instruction,finallyFailInstruction);
+          }
+ else {
+            myBuilder.addPendingEdge(pendingScope,instruction);
+          }
+        }
       }
-      final boolean isPending=PsiTreeUtil.isAncestor(node,pendingElement,false) && (finallyPart == null || !PsiTreeUtil.isAncestor(finallyPart,pendingElement,false));
-      if (!finallyRef.isNull() && isPending) {
-        myBuilder.addEdge(instruction,finallyRef.get());
-        myBuilder.addPendingEdge(null,lastFinallyRef.get());
-        return;
-      }
-      if (finallyPart != null && pendingScope != finallyPart && isPending) {
-        myBuilder.addEdge(instruction,finallyRef.get());
-        return;
-      }
-      myBuilder.addPendingEdge(pendingScope,instruction);
     }
-  }
 );
+    final Instruction finallyInstruction;
+    if (node.getExceptParts().length == 0 && !normalExits.isEmpty()) {
+      storeAndClearPending();
+      myBuilder.flowAbrupted();
+      Instruction finallySuccessInstruction=myBuilder.startNode(finallyPart);
+      finallyPart.accept(this);
+      restorePending();
+      finallyInstruction=finallySuccessInstruction;
+    }
+ else {
+      finallyInstruction=finallyFailInstruction;
+    }
+    for (    Instruction instr : normalExits) {
+      myBuilder.addEdge(instr,finallyInstruction);
+    }
+  }
 }
