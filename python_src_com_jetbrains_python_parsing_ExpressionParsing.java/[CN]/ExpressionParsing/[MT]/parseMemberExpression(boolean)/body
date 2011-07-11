@@ -34,8 +34,10 @@
       }
  else       if (tokenType == PyTokenTypes.LBRACKET) {
         myBuilder.advanceLexer();
+        PsiBuilder.Marker sliceOrTupleStart=myBuilder.mark();
         PsiBuilder.Marker sliceItemStart=myBuilder.mark();
         if (atToken(PyTokenTypes.COLON)) {
+          sliceOrTupleStart.drop();
           PsiBuilder.Marker sliceMarker=myBuilder.mark();
           sliceMarker.done(PyElementTypes.EMPTY_EXPRESSION);
           parseSliceEnd(expr,sliceItemStart);
@@ -43,13 +45,22 @@
  else {
           parseSingleExpression(false);
           if (atToken(PyTokenTypes.COLON)) {
+            sliceOrTupleStart.drop();
             parseSliceEnd(expr,sliceItemStart);
           }
  else           if (atToken(PyTokenTypes.COMMA)) {
             sliceItemStart.done(PyElementTypes.SLICE_ITEM);
-            parseSliceListTail(expr);
+            if (!parseSliceListTail(expr,sliceOrTupleStart)) {
+              sliceOrTupleStart.rollbackTo();
+              if (!parseTupleExpression(false,false,false)) {
+                myBuilder.error("tuple expression expected");
+              }
+              checkMatches(PyTokenTypes.RBRACKET,message("PARSE.expected.rbracket"));
+              expr.done(PyElementTypes.SUBSCRIPTION_EXPRESSION);
+            }
           }
  else {
+            sliceOrTupleStart.drop();
             sliceItemStart.drop();
             checkMatches(PyTokenTypes.RBRACKET,message("PARSE.expected.rbracket"));
             expr.done(PyElementTypes.SUBSCRIPTION_EXPRESSION);
