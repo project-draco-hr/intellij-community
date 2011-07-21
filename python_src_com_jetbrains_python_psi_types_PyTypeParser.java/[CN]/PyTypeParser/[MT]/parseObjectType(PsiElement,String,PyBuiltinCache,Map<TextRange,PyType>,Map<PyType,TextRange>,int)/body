@@ -1,0 +1,56 @@
+{
+  final TextRange whole=new TextRange(offset,offset + type.length());
+  final PyClassType classType=builtinCache.getObjectType(type);
+  if (classType != null) {
+    types.put(whole,classType);
+    return classType;
+  }
+  final PsiFile anchorFile=anchor.getContainingFile();
+  if (anchorFile instanceof PyFile) {
+    final PyClass aClass=((PyFile)anchorFile).findTopLevelClass(type);
+    if (aClass != null) {
+      final PyType t=new PyClassType(aClass,false);
+      types.put(whole,t);
+      return t;
+    }
+  }
+  if (StringUtil.isJavaIdentifier(type)) {
+    final Collection<PyClass> classes=PyClassNameIndex.find(type,anchor.getProject(),true);
+    if (classes.size() == 1) {
+      final PyType t=new PyClassType(classes.iterator().next(),false);
+      types.put(whole,t);
+      return t;
+    }
+  }
+  if (CharMatcher.JAVA_LETTER_OR_DIGIT.or(CharMatcher.is('.')).or(CharMatcher.is('_')).matchesAllOf(type)) {
+    final List<TextRange> ranges=splitRanges(type,".");
+    final TextRange classRange=!ranges.isEmpty() ? ranges.remove(ranges.size() - 1) : new TextRange(0,type.length());
+    if (!ranges.isEmpty()) {
+      final TextRange first=ranges.get(0);
+      for (      TextRange range : ranges) {
+        final PyQualifiedName moduleName=PyQualifiedName.fromDottedString(first.union(range).substring(type));
+        final PyType t=new PyImportedModuleType(new PyImportedModule(anchor.getContainingFile(),moduleName));
+        types.put(range.shiftRight(offset),t);
+      }
+    }
+    final String shortName=classRange.substring(type);
+    final Collection<PyClass> classes=PyClassNameIndex.find(shortName,anchor.getProject(),true);
+    for (    PyClass aClass : classes) {
+      if (type.equals(aClass.getQualifiedName())) {
+        final PyType t=new PyClassType(aClass,false);
+        types.put(classRange.shiftRight(offset),t);
+        fullRanges.put(t,whole);
+        return t;
+      }
+    }
+    for (    PyClass aClass : classes) {
+      if (aClass.getQualifiedName().startsWith("_")) {
+        final PyType t=new PyClassType(aClass,false);
+        types.put(classRange.shiftRight(offset),t);
+        fullRanges.put(t,whole);
+        return t;
+      }
+    }
+  }
+  return null;
+}
