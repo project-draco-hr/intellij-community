@@ -3,9 +3,9 @@
     session.putUserData(TIME_KEY,System.nanoTime());
   }
   return new PyInspectionVisitor(holder){
+    final TypeEvalContext fastContext=TypeEvalContext.fast();
+    final TypeEvalContext slowContext=TypeEvalContext.slow();
     @Override public void visitPyCallExpression(    PyCallExpression node){
-      final TypeEvalContext fastContext=TypeEvalContext.fast();
-      final TypeEvalContext slowContext=TypeEvalContext.slow();
       List<PyFunction> functions=new ArrayList<PyFunction>();
       final PyExpression callee=node.getCallee();
       if (callee instanceof PyReferenceExpression) {
@@ -28,12 +28,35 @@
             }
             final PyType argType=entry.getKey().getType(slowContext);
             final PyType paramType=p.getType(context);
-            if (argType != null && paramType != null) {
-              if (!match(paramType,argType,context)) {
-                registerProblem(entry.getKey(),String.format("Expected type '%s', got '%s' instead",PythonDocumentationProvider.getTypeName(paramType,context),PythonDocumentationProvider.getTypeName(argType,slowContext)));
-              }
+            checkTypes(paramType,argType,entry.getKey(),context);
+          }
+        }
+      }
+    }
+    @Override public void visitPyBinaryExpression(    PyBinaryExpression node){
+      final PsiReference ref=node.getReference(PyResolveContext.noImplicits().withTypeEvalContext(slowContext));
+      final PyExpression arg=node.getRightExpression();
+      if (ref != null && arg != null) {
+        final PsiElement resolved=ref.resolve();
+        if (resolved instanceof PyFunction) {
+          final PyFunction fun=(PyFunction)resolved;
+          final PyParameter[] parameters=fun.getParameterList().getParameters();
+          if (parameters.length == 2) {
+            final TypeEvalContext context=fun.getContainingFile() == node.getContainingFile() ? slowContext : fastContext;
+            final PyNamedParameter p=parameters[1].getAsNamed();
+            if (p != null) {
+              final PyType argType=arg.getType(slowContext);
+              final PyType paramType=p.getType(context);
+              checkTypes(paramType,argType,arg,context);
             }
           }
+        }
+      }
+    }
+    private void checkTypes(    PyType superType,    PyType subType,    PsiElement node,    TypeEvalContext context){
+      if (subType != null && superType != null) {
+        if (!PyTypeChecker.match(superType,subType,context)) {
+          registerProblem(node,String.format("Expected type '%s', got '%s' instead",PythonDocumentationProvider.getTypeName(superType,context),PythonDocumentationProvider.getTypeName(subType,slowContext)));
         }
       }
     }
