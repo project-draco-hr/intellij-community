@@ -2,14 +2,14 @@
   final StringBuilder description_buf=new StringBuilder("");
   final String text=reference.getElement().getText();
   final String ref_text=reference.getRangeInElement().substring(text);
-  final PsiElement ref_element=reference.getElement();
-  final boolean ref_is_importable=PythonReferenceImporter.isImportable(ref_element);
+  final PsiElement element=reference.getElement();
+  final boolean ref_is_importable=PythonReferenceImporter.isImportable(element);
   final List<LocalQuickFix> actions=new ArrayList<LocalQuickFix>(2);
   if (ref_text.length() <= 0)   return;
-  if (reference.getElement() instanceof PyReferenceExpression) {
-    PyReferenceExpression refex=(PyReferenceExpression)reference.getElement();
-    String refname=refex.getReferencedName();
-    if (myIgnoredIdentifiers.contains(refname)) {
+  final String refname=(element instanceof PyQualifiedExpression) ? ((PyQualifiedExpression)element).getReferencedName() : ref_text;
+  if (element instanceof PyReferenceExpression) {
+    PyReferenceExpression refex=(PyReferenceExpression)element;
+    if (myIgnoredIdentifiers.contains(refname) || PyNames.COMPARISON_OPERATORS.contains(refname)) {
       return;
     }
     if (refex.getQualifier() != null) {
@@ -50,7 +50,7 @@
           }
         }
       }
-      PyCallExpression callExpression=PsiTreeUtil.getParentOfType(ref_element,PyCallExpression.class);
+      PyCallExpression callExpression=PsiTreeUtil.getParentOfType(element,PyCallExpression.class);
       if (callExpression != null)       actions.add(new UnresolvedRefCreateFunctionQuickFix(callExpression,refex));
     }
     if (PyModuleType.getPossibleInstanceMembers().contains(refname))     return;
@@ -61,8 +61,7 @@
     }
   }
   if (reference instanceof DocStringParameterReference) {
-    String refname=reference.getCanonicalText();
-    if (myIgnoredIdentifiers.contains(refname))     return;
+    if (myIgnoredIdentifiers.contains(reference.getCanonicalText()))     return;
   }
   if (reference instanceof PsiReferenceEx) {
     final String s=((PsiReferenceEx)reference).getUnresolvedDescription();
@@ -70,10 +69,14 @@
   }
   if (description_buf.length() == 0) {
     boolean marked_qualified=false;
-    if (reference.getElement() instanceof PyQualifiedExpression) {
-      final PyExpression qexpr=((PyQualifiedExpression)reference.getElement()).getQualifier();
-      if (qexpr != null) {
-        PyType qtype=myTypeEvalContext.getType(qexpr);
+    if (element instanceof PyQualifiedExpression) {
+      final PyQualifiedExpression qexpr=(PyQualifiedExpression)element;
+      if (PyNames.COMPARISON_OPERATORS.contains(qexpr.getReferencedName())) {
+        return;
+      }
+      final PyExpression qualifier=qexpr.getQualifier();
+      if (qualifier != null) {
+        PyType qtype=myTypeEvalContext.getType(qualifier);
         if (qtype != null) {
           if (qtype instanceof PyNoneType || qtype instanceof PyTypeReference || (qtype instanceof PyUnionType && ((PyUnionType)qtype).isWeak())) {
             return;
@@ -88,13 +91,18 @@
                 return;
               }
               if (!PyBuiltinCache.getInstance(node).hasInBuiltins(cls)) {
-                if (reference.getElement().getParent() instanceof PyCallExpression) {
+                if (element.getParent() instanceof PyCallExpression) {
                   actions.add(new AddMethodQuickFix(ref_text,(PyClassType)qtype));
                 }
  else                 actions.add(new AddFieldQuickFix(ref_text,cls,"None"));
               }
             }
-            description_buf.append(PyBundle.message("INSP.unresolved.ref.$0.for.class.$1",ref_text,qtype.getName()));
+            if (reference instanceof PyOperatorReferenceImpl) {
+              description_buf.append(PyBundle.message("INSP.unresolved.operator.ref",qtype.getName(),refname,((PyOperatorReferenceImpl)reference).getReadableOperatorName()));
+            }
+ else {
+              description_buf.append(PyBundle.message("INSP.unresolved.ref.$0.for.class.$1",ref_text,qtype.getName()));
+            }
             marked_qualified=true;
           }
  else           if (qtype instanceof PyModuleType) {
@@ -112,7 +120,7 @@
     }
     if (!marked_qualified) {
       description_buf.append(PyBundle.message("INSP.unresolved.ref.$0",ref_text));
-      if (ref_text.equals("true") || ref_text.equals("false"))       actions.add(new UnresolvedRefTrueFalseQuickFix(ref_element));
+      if (ref_text.equals("true") || ref_text.equals("false"))       actions.add(new UnresolvedRefTrueFalseQuickFix(element));
       if (ref_is_importable) {
         AutoImportQuickFix importFix=PythonReferenceImporter.proposeImportFix(node,reference,ref_text);
         if (importFix != null) {
@@ -125,10 +133,10 @@
           }
         }
       }
-      if (ref_text.length() > 2 && Character.isUpperCase(ref_text.charAt(0)) && !Character.isUpperCase(ref_text.charAt(1)) && PsiTreeUtil.getParentOfType(ref_element,PyImportStatementBase.class) == null) {
-        PsiElement anchor=reference.getElement();
-        if (reference.getElement() instanceof PyQualifiedExpression) {
-          final PyExpression qexpr=((PyQualifiedExpression)reference.getElement()).getQualifier();
+      if (ref_text.length() > 2 && Character.isUpperCase(ref_text.charAt(0)) && !Character.isUpperCase(ref_text.charAt(1)) && PsiTreeUtil.getParentOfType(element,PyImportStatementBase.class) == null) {
+        PsiElement anchor=element;
+        if (element instanceof PyQualifiedExpression) {
+          final PyExpression qexpr=((PyQualifiedExpression)element).getQualifier();
           if (qexpr != null) {
             final PyType type=myTypeEvalContext.getType(qexpr);
             if (type instanceof PyModuleType) {
