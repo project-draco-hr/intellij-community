@@ -1,58 +1,12 @@
 {
   super.visitPyElement(node);
-  for (  final PsiReference reference : node.getReferences()) {
-    if (reference.isSoft())     continue;
-    HighlightSeverity severity=HighlightSeverity.ERROR;
-    if (reference instanceof PsiReferenceEx) {
-      severity=((PsiReferenceEx)reference).getUnresolvedHighlightSeverity(myTypeEvalContext);
-      if (severity == null)       continue;
-    }
-    PyExceptPart guard=getImportErrorGuard(node);
-    if (guard != null) {
-      final PyImportElement importElement=PsiTreeUtil.getParentOfType(node,PyImportElement.class);
-      if (importElement != null) {
-        Collection<PsiElement> allWrites=ScopeUtil.getReadWriteElements(importElement.getVisibleName(),ScopeUtil.getScopeOwner(importElement),false,true);
-        Collection<PsiElement> writesInsideGuard=new ArrayList<PsiElement>();
-        for (        PsiElement write : allWrites) {
-          if (PsiTreeUtil.isAncestor(guard,write,false)) {
-            writesInsideGuard.add(write);
-          }
-        }
-        if (writesInsideGuard.isEmpty()) {
-          final PyTargetExpression asElement=importElement.getAsNameElement();
-          final PyElement toHighlight=asElement != null ? asElement : node;
-          registerProblem(toHighlight,PyBundle.message("INSP.try.except.import.error",importElement.getVisibleName()),ProblemHighlightType.LIKE_UNKNOWN_SYMBOL,null);
-        }
-      }
-      return;
-    }
-    if (node instanceof PyQualifiedExpression) {
-      final PyQualifiedExpression qExpr=(PyQualifiedExpression)node;
-      final PyExpression qualifier=qExpr.getQualifier();
-      final String name=node.getName();
-      if (qualifier != null && name != null && isGuardedByHasattr(qualifier,name)) {
-        return;
-      }
-    }
-    boolean unresolved;
-    if (reference instanceof PsiPolyVariantReference) {
-      final PsiPolyVariantReference poly=(PsiPolyVariantReference)reference;
-      final ResolveResult[] resolveResults=poly.multiResolve(false);
-      unresolved=(resolveResults.length == 0);
-      for (      ResolveResult resolveResult : resolveResults) {
-        if (resolveResult instanceof ImportedResolveResult) {
-          myUsedImports.addAll(((ImportedResolveResult)resolveResult).getNameDefiners());
-        }
-      }
-    }
+  if (node instanceof PyReferenceOwner) {
+    final PyResolveContext resolveContext=PyResolveContext.noImplicits().withTypeEvalContext(myTypeEvalContext);
+    processReference(node,((PyReferenceOwner)node).getReference(resolveContext));
+  }
  else {
-      unresolved=(reference.resolve() == null);
-    }
-    if (unresolved) {
-      registerUnresolvedReferenceProblem(node,reference,severity);
-      if (node.getParent() instanceof PyImportElement) {
-        myAllImports.remove(node.getParent());
-      }
+    for (    final PsiReference reference : node.getReferences()) {
+      processReference(node,reference);
     }
   }
 }
