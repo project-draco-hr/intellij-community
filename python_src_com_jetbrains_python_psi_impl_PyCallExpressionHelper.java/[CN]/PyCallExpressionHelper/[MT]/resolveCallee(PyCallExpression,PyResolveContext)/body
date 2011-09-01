@@ -29,16 +29,17 @@
     }
   }
   if (resolved instanceof Callable) {
-    EnumSet<PyFunction.Flag> flags=EnumSet.noneOf(PyFunction.Flag.class);
+    Set<PyFunction.Flag> flags=resolved instanceof PyFunction ? PyUtil.detectDecorationsAndWrappersOf((PyFunction)resolved) : EnumSet.noneOf(PyFunction.Flag.class);
+    if (wrappedFlag != null) {
+      flags.add(PyFunction.Flag.WRAPPED);
+      flags.add(wrappedFlag);
+    }
     List<PyExpression> qualifiers=resolveResult != null ? resolveResult.getQualifiers() : Collections.<PyExpression>emptyList();
-    boolean is_by_instance=isConstructorCall || isQualifiedByInstance((Callable)resolved,qualifiers,resolveContext.getTypeEvalContext()) || resolved instanceof PyBoundFunction;
+    boolean isByInstance=isConstructorCall || isQualifiedByInstance((Callable)resolved,qualifiers,resolveContext.getTypeEvalContext()) || resolved instanceof PyBoundFunction;
     PyExpression lastQualifier=qualifiers != null && qualifiers.isEmpty() ? null : qualifiers.get(qualifiers.size() - 1);
     boolean isByClass=lastQualifier == null ? false : isQualifiedByClass((Callable)resolved,lastQualifier,resolveContext.getTypeEvalContext());
     final Callable callable=(Callable)resolved;
-    int implicitOffset=getImplicitArgumentCount(callable,wrappedFlag,flags,is_by_instance,isByClass);
-    if (!isConstructorCall && PyNames.NEW.equals(callable.getName())) {
-      implicitOffset=Math.min(implicitOffset - 1,0);
-    }
+    int implicitOffset=getImplicitArgumentCount(callable,flags,isConstructorCall,isByInstance,isByClass);
     implicitOffset=implicitOffset < 0 ? 0 : implicitOffset;
     return new PyCallExpression.PyMarkedCallee(callable,flags,implicitOffset,resolveResult != null ? resolveResult.isImplicit() : false);
   }
