@@ -4,13 +4,23 @@
   if (PydevConsoleRunner.isInPydevConsole(node)) {
     return parseConsoleCode(node,languageLevel);
   }
-  final Lexer lexer=new PythonIndentingLexer();
-  final Project project=chameleon.getPsi().getProject();
-  final PsiBuilderFactory factory=PsiBuilderFactory.getInstance();
-  final PsiBuilder builder=factory.createBuilder(project,chameleon,lexer,getLanguage(),chameleon.getChars());
-  final PyParser parser=new PyParser(languageLevel);
-  if (languageLevel == LanguageLevel.PYTHON26 && node.getPsi().getContainingFile().getName().equals("__builtin__.py")) {
-    parser.setFutureFlag(StatementParsing.FUTURE.PRINT_FUNCTION);
+  final PsiElement psi=node.getPsi();
+  if (psi != null) {
+    final Project project=psi.getProject();
+    final PsiBuilderFactory factory=PsiBuilderFactory.getInstance();
+    final Language language=getLanguage();
+    final ParserDefinition parserDefinition=LanguageParserDefinitions.INSTANCE.forLanguage(language);
+    final Lexer lexer=parserDefinition.createLexer(project);
+    final PsiParser parser=parserDefinition.createParser(project);
+    final PsiBuilder builder=factory.createBuilder(project,node,lexer,language,node.getChars());
+    if (parser instanceof PyParser) {
+      final PyParser pythonParser=(PyParser)parser;
+      pythonParser.setLanguageLevel(languageLevel);
+      if (languageLevel == LanguageLevel.PYTHON26 && psi.getContainingFile().getName().equals("__builtin__.py")) {
+        pythonParser.setFutureFlag(StatementParsing.FUTURE.PRINT_FUNCTION);
+      }
+    }
+    return parser.parse(this,builder).getFirstChildNode();
   }
-  return parser.parse(this,builder).getFirstChildNode();
+  return null;
 }
