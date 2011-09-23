@@ -1,0 +1,44 @@
+{
+  PsiElement element=file.findElementAt(editor.getCaretModel().getOffset());
+  final PyFunction srcFunction=PsiTreeUtil.getParentOfType(element,PyFunction.class);
+  final PyClass srcClass=PsiTreeUtil.getParentOfType(element,PyClass.class);
+  if (srcClass == null && srcFunction == null)   return;
+  final CreateTestDialog d=new CreateTestDialog(project);
+  if (srcClass != null) {
+    d.setClassName("Test" + StringUtil.capitalize(srcClass.getName()));
+    d.setFileName("test_" + StringUtil.decapitalize(srcClass.getName()) + ".py");
+    PsiDirectory dir=file.getContainingDirectory();
+    if (dir != null)     d.setTargetDir(dir.getVirtualFile().getPath());
+    if (srcFunction != null) {
+      d.methodsSize(1);
+      d.addMethod("test_" + srcFunction.getName(),0);
+    }
+ else {
+      d.methodsSize(srcClass.getMethods().length);
+      int i=0;
+      for (      PyFunction f : srcClass.getMethods()) {
+        d.addMethod("test_" + f.getName(),i);
+        ++i;
+      }
+    }
+  }
+ else {
+    d.setClassName("Test" + StringUtil.capitalize(srcFunction.getName()));
+    d.setFileName("test_" + StringUtil.decapitalize(srcFunction.getName()) + ".py");
+    PsiDirectory dir=file.getContainingDirectory();
+    if (dir != null)     d.setTargetDir(dir.getVirtualFile().getPath());
+    d.methodsSize(1);
+    d.addMethod("test_" + srcFunction.getName(),0);
+  }
+  d.show();
+  if (!d.isOK())   return;
+  CommandProcessor.getInstance().executeCommand(project,new Runnable(){
+    @Override public void run(){
+      final PyTestGenerator generator=new PyTestGenerator();
+      PsiFile e=(PsiFile)generator.generateTest(project,d);
+      final PsiDocumentManager documentManager=PsiDocumentManager.getInstance(project);
+      documentManager.commitAllDocuments();
+    }
+  }
+,CodeInsightBundle.message("intention.create.test"),this);
+}

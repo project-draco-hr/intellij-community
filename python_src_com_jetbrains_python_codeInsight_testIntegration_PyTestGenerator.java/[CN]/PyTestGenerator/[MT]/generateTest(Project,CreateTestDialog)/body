@@ -1,0 +1,54 @@
+{
+  return PostprocessReformattingAspect.getInstance(project).postponeFormattingInside(new Computable<PsiElement>(){
+    public PsiElement compute(){
+      return ApplicationManager.getApplication().runWriteAction(new Computable<PsiElement>(){
+        public PsiElement compute(){
+          try {
+            IdeDocumentHistory.getInstance(project).includeCurrentPlaceAsChangePlace();
+            String dirName=dialog.getTargetDir();
+            Properties defaultProperties=FileTemplateManager.getInstance().getDefaultProperties();
+            Properties properties=new Properties(defaultProperties);
+            properties.setProperty(FileTemplate.ATTRIBUTE_NAME,dirName);
+            VirtualFile templatesFolder=VfsUtil.createDirectoryIfMissing(dialog.getTargetDir());
+            PsiDirectory dir=PsiManager.getInstance(project).findDirectory(templatesFolder);
+            String fileName=dialog.getFileName();
+            if (!fileName.endsWith(".py"))             fileName=fileName + "." + PythonFileType.INSTANCE.getDefaultExtension();
+            VirtualFile file=LocalFileSystem.getInstance().findFileByPath(dialog.getTargetDir() + "/" + dialog.getFileName());
+            StringBuilder fileText=new StringBuilder();
+            fileText.append("class ").append(dialog.getClassName()).append("(TestCase):\n  ");
+            List<String> methods=dialog.getMethods();
+            if (methods.size() == 0)             fileText.append("pass\n");
+            for (            String method : methods)             fileText.append("def ").append(method).append("(self):\n    self.assertFalse()\n\n");
+            PsiFile psiFile=null;
+            if (file != null) {
+              psiFile=PsiManager.getInstance(project).findFile(file);
+              AddImportHelper.addImportFrom(psiFile,"unittest","TestCase",null,AddImportHelper.ImportPriority.BUILTIN);
+              PyElement e=PyElementGenerator.getInstance(project).createFromText(LanguageLevel.forElement(psiFile),PyClass.class,fileText.toString());
+              psiFile.addAfter(e,psiFile.getLastChild());
+            }
+ else {
+              String importString="from unittest import TestCase\n\n";
+              psiFile=PsiFileFactory.getInstance(project).createFileFromText(fileName,importString + fileText.toString());
+              dir.add(psiFile);
+            }
+            final VirtualFile virtualFile=psiFile.getVirtualFile();
+            if (virtualFile != null) {
+              FileEditorManager.getInstance(dir.getProject()).openFile(virtualFile,true);
+            }
+            return psiFile;
+          }
+ catch (          IncorrectOperationException e) {
+            LOG.warn(e);
+            return null;
+          }
+catch (          IOException e) {
+            LOG.warn(e);
+            return null;
+          }
+        }
+      }
+);
+    }
+  }
+);
+}
