@@ -1,0 +1,49 @@
+{
+  final Set<Sdk> sdksToUpdate=new HashSet<Sdk>();
+  for (  Module module : ModuleManager.getInstance(project).getModules()) {
+    final Sdk sdk=PythonSdkType.findPythonSdk(module);
+    if (sdk != null) {
+      final SdkType sdkType=sdk.getSdkType();
+      if (sdkType instanceof PythonSdkType && !myAlreadyUpdated.contains(sdk.getHomePath())) {
+        sdksToUpdate.add(sdk);
+      }
+    }
+  }
+  if (!sdksToUpdate.isEmpty()) {
+    ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+      public void run(){
+        if (delay > 0) {
+          try {
+            Thread.sleep(delay);
+          }
+ catch (          InterruptedException ignore) {
+          }
+        }
+        ApplicationManager.getApplication().invokeLater(new Runnable(){
+          @Override public void run(){
+            ProgressManager.getInstance().run(new Task.Backgroundable(project,PyBundle.message("sdk.gen.updating.skels"),false){
+              @Override public void run(              @NotNull ProgressIndicator indicator){
+                for (                final Sdk sdk : sdksToUpdate) {
+                  PythonSdkType.refreshSkeletonsOfSDK(sdk);
+                  long start_time=System.currentTimeMillis();
+                  final List<String> sysPath=PythonSdkType.getSysPath(sdk.getHomePath());
+                  ApplicationManager.getApplication().invokeLater(new Runnable(){
+                    @Override public void run(){
+                      updateSdkPath(sdk,sysPath);
+                    }
+                  }
+);
+                  LOG.info("Updating sys.path took " + (System.currentTimeMillis() - start_time) + " ms");
+                  myAlreadyUpdated.add(sdk.getHomePath());
+                }
+              }
+            }
+);
+          }
+        }
+);
+      }
+    }
+);
+  }
+}
