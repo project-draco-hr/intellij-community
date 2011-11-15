@@ -1,4 +1,10 @@
 {
+  int offset=caretOffset.get();
+  if (editor instanceof EditorWindow) {
+    file=InjectedLanguageUtil.getTopLevelFile(file);
+    editor=InjectedLanguageUtil.getTopLevelEditor(editor);
+    offset=editor.getCaretModel().getOffset();
+  }
   if (!(file instanceof PyFile)) {
     return Result.Continue;
   }
@@ -8,12 +14,13 @@
   }
   Document doc=editor.getDocument();
   PsiDocumentManager.getInstance(file.getProject()).commitDocument(doc);
-  final int offset=caretOffset.get();
   final PsiElement element=file.findElementAt(offset);
   CodeInsightSettings codeInsightSettings=CodeInsightSettings.getInstance();
   if (codeInsightSettings.JAVADOC_STUB_ON_ENTER) {
     PsiElement comment=element;
-    if (comment == null && offset != 0)     comment=file.findElementAt(offset - 1);
+    if (comment == null && offset != 0) {
+      comment=file.findElementAt(offset - 1);
+    }
     int expectedStringStart=editor.getCaretModel().getOffset() - 3;
     if (PythonDocCommentUtil.atDocCommentStart(comment,expectedStringStart)) {
       insertDocStringStub(editor,comment);
@@ -27,16 +34,20 @@
     final PsiElement prevElement=file.findElementAt(offset - 1);
     if (prevElement == element)     return Result.Continue;
   }
-  if (PyTokenTypes.TRIPLE_NODES.contains(element.getNode().getElementType()) || element.getNode().getElementType() == PyTokenTypes.DOCSTRING)   return Result.Continue;
+  if (PyTokenTypes.TRIPLE_NODES.contains(element.getNode().getElementType()) || element.getNode().getElementType() == PyTokenTypes.DOCSTRING) {
+    return Result.Continue;
+  }
   PyStringLiteralExpression string=PsiTreeUtil.findElementOfClassAtOffset(file,offset,PyStringLiteralExpression.class,false);
   if (string != null && string.getTextOffset() < offset) {
     String stringText=element.getText();
     int prefixLength=PyStringLiteralExpressionImpl.getPrefixLength(stringText);
-    if (string.getTextOffset() + prefixLength >= offset)     return Result.Continue;
+    if (string.getTextOffset() + prefixLength >= offset) {
+      return Result.Continue;
+    }
     if ("\\".equals(doc.getText(TextRange.create(offset - 1,offset))))     return Result.Continue;
     String quote=element.getText().substring(prefixLength,prefixLength + 1);
     doc.insertString(offset,quote + " \\" + quote);
-    caretOffset.set(offset + 3);
+    caretOffset.set(caretOffset.get() + 3);
     return Result.Continue;
   }
   if (!PyCodeInsightSettings.getInstance().INSERT_BACKSLASH_ON_WRAP) {
@@ -90,7 +101,7 @@
   }
   if (wrappableAfter == null || wrappableBefore != wrappableAfter) {
     doc.insertString(offset,"\\");
-    caretOffset.set(offset + 1);
+    caretOffset.set(caretOffset.get() + 1);
   }
   return Result.Continue;
 }
