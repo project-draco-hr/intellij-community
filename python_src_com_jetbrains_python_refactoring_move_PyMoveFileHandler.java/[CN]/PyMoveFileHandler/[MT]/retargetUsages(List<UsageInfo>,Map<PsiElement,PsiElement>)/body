@@ -1,0 +1,32 @@
+{
+  final Set<PsiFile> updatedFiles=new HashSet<PsiFile>();
+  for (  UsageInfo usage : usages) {
+    final PsiElement element=usage.getElement();
+    if (element != null) {
+      final PsiNamedElement newElement=element.getCopyableUserData(REFERENCED_ELEMENT);
+      element.putCopyableUserData(REFERENCED_ELEMENT,null);
+      if (newElement != null) {
+        final PsiFile file=element.getContainingFile();
+        final PyImportStatementBase importStmt=PsiTreeUtil.getParentOfType(usage.getElement(),PyImportStatementBase.class);
+        if (importStmt != null) {
+          PyClassRefactoringUtil.updateImportOfElement(importStmt,newElement);
+          final PyQualifiedName newElementName=ResolveImportUtil.findCanonicalImportPath(newElement,element);
+          replaceWithQualifiedExpression(element,newElementName);
+          updatedFiles.add(file);
+        }
+ else         if (element instanceof PyReferenceExpression) {
+          final PyQualifiedName newElementName=PyQualifiedName.fromComponents(PyClassRefactoringUtil.getOriginalName(newElement));
+          replaceWithQualifiedExpression(element,newElementName);
+          PyClassRefactoringUtil.insertImport(element,newElement,null);
+          updatedFiles.add(file);
+        }
+      }
+    }
+  }
+  if (!updatedFiles.isEmpty()) {
+    final PyImportOptimizer optimizer=new PyImportOptimizer();
+    for (    PsiFile file : updatedFiles) {
+      optimizer.processFile(file).run();
+    }
+  }
+}
