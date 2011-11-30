@@ -1,11 +1,25 @@
 {
-  final PsiReference ref=node.getReference(PyResolveContext.noImplicits().withTypeEvalContext(myTypeEvalContext));
+  final PsiPolyVariantReference ref=node.getReference(resolveWithoutImplicits());
   if (ref != null) {
-    final PsiElement resolved=ref.resolve();
-    if (resolved instanceof PyFunction) {
-      final PyFunction fun=(PyFunction)resolved;
-      final PyExpression arg=PyNames.isRightOperatorName(fun.getName()) ? node.getLeftExpression() : node.getRightExpression();
-      checkSingleArgumentFunction(fun,arg);
+    final ResolveResult[] results=ref.multiResolve(false);
+    String error=null;
+    PyExpression arg=null;
+    for (    ResolveResult result : results) {
+      final PsiElement resolved=result.getElement();
+      if (resolved instanceof PyFunction) {
+        final PyFunction fun=(PyFunction)resolved;
+        arg=PyNames.isRightOperatorName(fun.getName()) ? node.getLeftExpression() : node.getRightExpression();
+        error=checkSingleArgumentFunction(fun,arg,false);
+        if (error == null) {
+          return;
+        }
+      }
+ else {
+        return;
+      }
+    }
+    if (error != null) {
+      registerProblem(arg,error);
     }
   }
 }
