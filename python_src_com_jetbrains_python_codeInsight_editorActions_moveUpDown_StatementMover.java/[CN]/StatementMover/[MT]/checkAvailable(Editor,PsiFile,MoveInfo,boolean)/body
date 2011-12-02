@@ -1,2 +1,51 @@
 {
+  if (!(file instanceof PyFile))   return false;
+  if (!super.checkAvailable(editor,file,info,down))   return false;
+  if (editor.getSelectionModel().hasSelection()) {
+    return false;
+  }
+  Document document=editor.getDocument();
+  String lineToMove=document.getText(new TextRange(getLineStartSafeOffset(document,info.toMove.startLine),getLineStartSafeOffset(document,info.toMove.endLine)));
+  if (StringUtil.isEmptyOrSpaces(lineToMove)) {
+    info.toMove2=info.toMove;
+    return true;
+  }
+  myStatementListToAddPass=null;
+  myStatementListToAddPassAfter=null;
+  myStatementToDecreaseIndent=null;
+  myStatementToIncreaseIndent=null;
+  myStatementToAddLinebreak=null;
+  myStatementPartToRemovePass=null;
+  myStatementToMove=findStatement(editor,file,info);
+  if (myStatementToMove == null)   return false;
+  if (myStatementToMove instanceof PyPassStatement || myStatementToMove instanceof PyBreakStatement || myStatementToMove instanceof PyContinueStatement) {
+    info.toMove2=info.toMove;
+    return true;
+  }
+  if (isFirstOrLastStatement(down)) {
+    info.toMove2=info.toMove;
+    return true;
+  }
+  expandLineRangeToStatement(info,editor,down,file);
+  boolean theSameLevel=isTheSameIndentLevel(info,editor,file,down);
+  if (isMoveOut(info,editor,file,down)) {
+    myStatementToDecreaseIndent=myStatementToMove;
+    if (down)     info.toMove2=new LineRange(myStatementToMove);
+  }
+  if (isMoveToCompound(info,editor,file,down)) {
+    if (isMoveToEmptyLine(editor,info))     return true;
+    myStatementToIncreaseIndent=myStatementToMove;
+    if (!down)     info.toMove2=new LineRange(myStatementToMove);
+  }
+  PyStatementPart statementPart=PsiTreeUtil.getParentOfType(myStatementToMove,PyStatementPart.class,false);
+  if (statementPart != null) {
+    PyStatementList statementList=statementPart.getStatementList();
+    if (statementList != null && statementList.getStatements().length == 1) {
+      if (theSameLevel) {
+        myStatementListToAddPassAfter=statementList;
+      }
+ else       myStatementListToAddPass=statementList;
+    }
+  }
+  return true;
 }
