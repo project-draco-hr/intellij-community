@@ -18,9 +18,24 @@
   myStatementPartToRemovePass=null;
   myStatementToMove=findStatement(editor,file,info);
   if (myStatementToMove == null)   return false;
-  if (myStatementToMove instanceof PyPassStatement || myStatementToMove instanceof PyBreakStatement || myStatementToMove instanceof PyContinueStatement) {
+  if (myStatementToMove instanceof PyPassStatement) {
     info.toMove2=info.toMove;
     return true;
+  }
+  if (myStatementToMove instanceof PyBreakStatement || myStatementToMove instanceof PyContinueStatement) {
+    PyLoopStatement parent=PsiTreeUtil.getParentOfType(myStatementToMove,PyLoopStatement.class);
+    if (parent != null) {
+      PyStatementPart part=PsiTreeUtil.getChildOfType(parent,PyStatementPart.class);
+      if (part != null && part.getStatementList() != null) {
+        PyStatementList statementList=part.getStatementList();
+        if (statementList != null && statementList.getStatements().length > 0) {
+          if ((statementList.getStatements()[0] == myStatementToMove && !down) || (statementList.getStatements()[statementList.getStatements().length - 1] == myStatementToMove && down)) {
+            info.toMove2=info.toMove;
+            return true;
+          }
+        }
+      }
+    }
   }
   if (isFirstOrLastStatement(down)) {
     info.toMove2=info.toMove;
@@ -38,14 +53,13 @@
     if (range.startLine == 0 && !down)     return false;
     if (range.endLine >= maxLine && down)     return false;
   }
-  if (isMoveToCompound(info,editor,file,down)) {
-    if (isMoveToEmptyLine(editor,info))     return true;
+  if (isMoveToCompound(info,editor,file,down) && !moveToEmptyLine) {
     myStatementToIncreaseIndent=myStatementToMove;
     if (!down)     info.toMove2=new LineRange(myStatementToMove);
   }
-  PyStatementPart statementPart=PsiTreeUtil.getParentOfType(myStatementToMove,PyStatementPart.class,false);
-  if (statementPart != null) {
-    PyStatementList statementList=statementPart.getStatementList();
+  PyElement statementPart=getStatementParts(info,editor,file,down).first;
+  if (statementPart instanceof PyStatementPart) {
+    PyStatementList statementList=((PyStatementPart)statementPart).getStatementList();
     if (statementList != null && statementList.getStatements().length == 1) {
       if (theSameLevel) {
         myStatementListToAddPassAfter=statementList;
