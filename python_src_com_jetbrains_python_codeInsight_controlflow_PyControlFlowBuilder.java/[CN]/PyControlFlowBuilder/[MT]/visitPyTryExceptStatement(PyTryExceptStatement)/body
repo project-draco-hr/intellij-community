@@ -9,17 +9,20 @@
     elsePart.accept(this);
   }
   myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
-  final ArrayList<Instruction> exceptInstructions=new ArrayList<Instruction>();
-  resetPendingBackup();
+  final List<Instruction> exceptInstructions=emptyMutableList();
+  List<Pair<PsiElement,Instruction>> pendingBackup=emptyMutableList();
   for (  PyExceptPart exceptPart : node.getExceptParts()) {
-    backupAndClearPending();
+    pendingBackup.addAll(myBuilder.pending);
+    myBuilder.pending=emptyMutableList();
     myBuilder.flowAbrupted();
     final Instruction exceptInstrcution=myBuilder.startNode(exceptPart);
     exceptPart.accept(this);
     myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
     exceptInstructions.add(exceptInstrcution);
   }
-  restorePending();
+  for (  Pair<PsiElement,Instruction> pair : pendingBackup) {
+    myBuilder.addPendingEdge(pair.first,pair.second);
+  }
   final List<Instruction> normalExits=new ArrayList<Instruction>();
   final PyFinallyPart finallyPart=node.getFinallyPart();
   final Instruction finallyFailInstruction;
@@ -94,12 +97,15 @@
 );
     final Instruction finallyInstruction;
     if (!normalExits.isEmpty()) {
-      resetPendingBackup();
-      backupAndClearPending();
+      pendingBackup=emptyMutableList();
+      pendingBackup.addAll(myBuilder.pending);
+      myBuilder.pending=emptyMutableList();
       myBuilder.flowAbrupted();
       Instruction finallySuccessInstruction=myBuilder.startNode(finallyPart);
       finallyPart.accept(this);
-      restorePending();
+      for (      Pair<PsiElement,Instruction> pair : pendingBackup) {
+        myBuilder.addPendingEdge(pair.first,pair.second);
+      }
       finallyInstruction=finallySuccessInstruction;
     }
  else {
