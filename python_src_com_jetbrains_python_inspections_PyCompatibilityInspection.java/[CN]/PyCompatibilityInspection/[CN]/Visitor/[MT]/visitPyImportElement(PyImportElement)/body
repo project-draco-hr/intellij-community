@@ -1,0 +1,33 @@
+{
+  PyIfStatement ifParent=PsiTreeUtil.getParentOfType(importElement,PyIfStatement.class);
+  if (ifParent != null)   return;
+  int len=0;
+  String moduleName="";
+  StringBuilder message=new StringBuilder("Python version ");
+  PyTryExceptStatement tryExceptStatement=PsiTreeUtil.getParentOfType(importElement,PyTryExceptStatement.class);
+  if (tryExceptStatement != null) {
+    PyExceptPart[] parts=tryExceptStatement.getExceptParts();
+    for (    PyExceptPart part : parts) {
+      if (part.getExceptClass() != null && part.getExceptClass().getText().equals("ImportError")) {
+        return;
+      }
+    }
+  }
+  PyQualifiedName sourceName=null;
+  PyFromImportStatement fromImportStatement=PsiTreeUtil.getParentOfType(importElement,PyFromImportStatement.class);
+  if (fromImportStatement != null) {
+    sourceName=fromImportStatement.getImportSourceQName();
+  }
+  for (int i=0; i != myVersionsToProcess.size(); ++i) {
+    LanguageLevel languageLevel=myVersionsToProcess.get(i);
+    final PyQualifiedName qName=importElement.getImportedQName();
+    if (qName != null && !qName.matches("builtins") && !qName.matches("__builtin__")) {
+      if (sourceName != null)       moduleName=sourceName.append(qName.toString()).toString();
+ else       moduleName=qName.toString();
+      if (UnsupportedFeaturesUtil.MODULES.get(languageLevel).contains(moduleName)) {
+        len=appendLanguageLevel(message,len,languageLevel);
+      }
+    }
+  }
+  commonRegisterProblem(message," not have module " + moduleName,len,importElement,null);
+}
