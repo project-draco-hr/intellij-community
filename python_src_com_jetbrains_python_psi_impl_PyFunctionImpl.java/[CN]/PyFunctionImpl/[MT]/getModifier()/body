@@ -1,0 +1,44 @@
+{
+  String deconame=getClassOrStaticMethodDecorator();
+  if (PyNames.CLASSMETHOD.equals(deconame)) {
+    return CLASSMETHOD;
+  }
+ else   if (PyNames.STATICMETHOD.equals(deconame)) {
+    return STATICMETHOD;
+  }
+  PyClass cls=getContainingClass();
+  if (cls != null && PyNames.NEW.equals(getName()) && cls.isNewStyleClass()) {
+    return STATICMETHOD;
+  }
+  if (getStub() != null) {
+    return getWrappersFromStub();
+  }
+  String func_name=getName();
+  if (func_name != null) {
+    PyAssignmentStatement assignment=PsiTreeUtil.getNextSiblingOfType(this,PyAssignmentStatement.class);
+    if (assignment != null) {
+      for (      Pair<PyExpression,PyExpression> pair : assignment.getTargetsToValuesMapping()) {
+        PyExpression value=pair.getSecond();
+        if (value instanceof PyCallExpression) {
+          PyExpression target=pair.getFirst();
+          if (target instanceof PyTargetExpression && func_name.equals(target.getName())) {
+            Pair<String,PyFunction> interpreted=interpretAsStaticmethodOrClassmethodWrappingCall((PyCallExpression)value,this);
+            if (interpreted != null) {
+              PyFunction original=interpreted.getSecond();
+              if (original == this) {
+                String wrapper_name=interpreted.getFirst();
+                if (PyNames.CLASSMETHOD.equals(wrapper_name)) {
+                  return CLASSMETHOD;
+                }
+ else                 if (PyNames.STATICMETHOD.equals(wrapper_name)) {
+                  return STATICMETHOD;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
