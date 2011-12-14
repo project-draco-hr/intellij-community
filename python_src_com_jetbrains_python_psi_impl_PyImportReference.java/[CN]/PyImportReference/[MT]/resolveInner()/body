@@ -2,26 +2,25 @@
   ResolveResultList ret=new ResolveResultList();
   final String referencedName=myElement.getReferencedName();
   if (referencedName == null)   return ret;
-  int default_submodule_rate=RatedResolveResult.RATE_HIGH;
+  int defaultSubmoduleRate=RatedResolveResult.RATE_HIGH;
   final PyImportElement import_elt=PsiTreeUtil.getParentOfType(myElement,PyImportElement.class);
   if (import_elt != null) {
     if (ret.poke(ResolveImportUtil.findImportedNameInsideModule(import_elt,referencedName),RatedResolveResult.RATE_HIGH)) {
-      default_submodule_rate=RatedResolveResult.RATE_NORMAL;
+      defaultSubmoduleRate=RatedResolveResult.RATE_NORMAL;
     }
   }
-  List<PsiElement> targets=ResolveImportUtil.resolveImportReference(myElement);
-  for (  PsiElement target : targets) {
-    target=PyUtil.turnDirIntoInit(target);
-    if (target != null) {
-      int rate=default_submodule_rate;
-      if (target instanceof PyFile) {
-        VirtualFile vFile=((PyFile)target).getVirtualFile();
-        if (vFile != null && vFile.getLength() == 0) {
-          rate-=100;
-        }
-      }
-      ret.poke(target,rate);
-    }
+  final PyElement parent=PsiTreeUtil.getParentOfType(myElement,PyImportElement.class,PyFromImportStatement.class);
+  List<PsiElement> targets;
+  final PyQualifiedName qname=myElement.asQualifiedName();
+  if (parent instanceof PyImportElement) {
+    targets=ResolveImportUtil.multiResolveImportElement((PyImportElement)parent,qname);
   }
+ else   if (parent instanceof PyFromImportStatement) {
+    targets=ResolveImportUtil.resolveFromOrForeignImport((PyFromImportStatement)parent,qname);
+  }
+ else {
+    return ret;
+  }
+  addRatedResults(ret,defaultSubmoduleRate,targets);
   return ret;
 }
