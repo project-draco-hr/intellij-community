@@ -1,10 +1,12 @@
 {
+  final String text=reference.getElement().getText();
+  final String refText=reference.getRangeInElement().substring(text);
   final Module module=ModuleUtil.findModuleForPsiElement(node);
   if (module != null && PythonSdkType.findPythonSdk(module) == null) {
     return null;
   }
   PsiFile existing_import_file=null;
-  AutoImportQuickFix fix=new AutoImportQuickFix(node,reference,ref_text,!PyCodeInsightSettings.getInstance().PREFER_FROM_IMPORT);
+  AutoImportQuickFix fix=new AutoImportQuickFix(node,reference,refText,!PyCodeInsightSettings.getInstance().PREFER_FROM_IMPORT);
   Set<String> seen_file_names=new HashSet<String>();
   CollectProcessor import_prc=new CollectProcessor(IS_IMPORT_STATEMENT);
   PyResolveUtil.treeCrawlUp(import_prc,node);
@@ -19,7 +21,7 @@
             PyFile dst_file=(PyFile)dst;
             String name=ielt.getImportReference().getReferencedName();
             seen_file_names.add(name);
-            PsiElement res=dst_file.findExportedName(ref_text);
+            PsiElement res=dst_file.findExportedName(refText);
             if (res != null && !(res instanceof PyFile) && !(res instanceof PyImportElement) && dst_file.equals(res.getContainingFile())) {
               existing_import_file=dst_file;
               fix.addImport(res,dst_file,ielt);
@@ -32,14 +34,14 @@
   ProgressManager.checkCanceled();
   Project project=node.getProject();
   List<PsiElement> symbols=new ArrayList<PsiElement>();
-  symbols.addAll(PyClassNameIndex.find(ref_text,project,true));
+  symbols.addAll(PyClassNameIndex.find(refText,project,true));
   GlobalSearchScope scope=PyClassNameIndex.projectWithLibrariesScope(project);
   if (!isQualifier(node)) {
-    symbols.addAll(PyFunctionNameIndex.find(ref_text,project,scope));
+    symbols.addAll(PyFunctionNameIndex.find(refText,project,scope));
   }
-  symbols.addAll(PyVariableNameIndex.find(ref_text,project,scope));
+  symbols.addAll(PyVariableNameIndex.find(refText,project,scope));
   if (!isCall(node)) {
-    symbols.addAll(findImportableModules(node.getContainingFile(),ref_text,project,scope));
+    symbols.addAll(findImportableModules(node.getContainingFile(),refText,project,scope));
   }
   if (symbols.size() > 0) {
     for (    PsiElement symbol : symbols) {
@@ -48,7 +50,7 @@
         if (srcfile != null && srcfile != existing_import_file && srcfile != node.getContainingFile() && (ImportFromExistingAction.isRoot(project,srcfile) || PyNames.isIdentifier(FileUtil.getNameWithoutExtension(srcfile.getName())))) {
           PyQualifiedName import_path=ResolveImportUtil.findCanonicalImportPath(srcfile,node);
           if (import_path != null && !seen_file_names.contains(import_path.toString())) {
-            fix.addImport(symbol,srcfile,import_path,proposeAsName(node.getContainingFile(),ref_text,import_path));
+            fix.addImport(symbol,srcfile,import_path,proposeAsName(node.getContainingFile(),refText,import_path));
             seen_file_names.add(import_path.toString());
           }
         }
@@ -56,7 +58,7 @@
     }
   }
   for (  PyImportCandidateProvider provider : Extensions.getExtensions(PyImportCandidateProvider.EP_NAME)) {
-    provider.addImportCandidates(reference,ref_text,fix);
+    provider.addImportCandidates(reference,refText,fix);
   }
   if (fix.getCandidatesCount() > 0) {
     fix.sortCandidates();
