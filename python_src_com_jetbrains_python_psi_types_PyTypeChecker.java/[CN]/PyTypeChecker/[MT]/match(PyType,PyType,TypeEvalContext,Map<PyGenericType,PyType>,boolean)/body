@@ -12,17 +12,17 @@
     return true;
   }
   if (expected instanceof PyTypeReference) {
-    return match(((PyTypeReference)expected).resolve(null,context),actual,context,resolveReferences);
+    return match(((PyTypeReference)expected).resolve(null,context),actual,context,substitutions,resolveReferences);
   }
   if (actual instanceof PyTypeReference) {
-    return match(expected,((PyTypeReference)actual).resolve(null,context),context,false);
+    return match(expected,((PyTypeReference)actual).resolve(null,context),context,substitutions,false);
   }
   if (isUnknown(actual)) {
     return true;
   }
   if (actual instanceof PyUnionType) {
     for (    PyType m : ((PyUnionType)actual).getMembers()) {
-      if (!match(expected,m,context,resolveReferences)) {
+      if (!match(expected,m,context,substitutions,resolveReferences)) {
         return false;
       }
     }
@@ -30,7 +30,7 @@
   }
   if (expected instanceof PyUnionType) {
     for (    PyType t : ((PyUnionType)expected).getMembers()) {
-      if (match(t,actual,context,resolveReferences)) {
+      if (match(t,actual,context,substitutions,resolveReferences)) {
         return true;
       }
     }
@@ -45,7 +45,7 @@
       }
       final PyType superElementType=((PyCollectionType)expected).getElementType(context);
       final PyType subElementType=((PyCollectionType)actual).getElementType(context);
-      return match(superElementType,subElementType,context,resolveReferences);
+      return match(superElementType,subElementType,context,substitutions,resolveReferences);
     }
  else     if (expected instanceof PyTupleType && actual instanceof PyTupleType) {
       final PyTupleType superTupleType=(PyTupleType)expected;
@@ -55,7 +55,7 @@
       }
  else {
         for (int i=0; i < superTupleType.getElementCount(); i++) {
-          if (!match(superTupleType.getElementType(i),subTupleType.getElementType(i),context,resolveReferences)) {
+          if (!match(superTupleType.getElementType(i),subTupleType.getElementType(i),context,substitutions,resolveReferences)) {
             return false;
           }
         }
@@ -71,6 +71,17 @@
   }
   if (expected.equals(actual)) {
     return true;
+  }
+  if (expected instanceof PyGenericType && substitutions != null) {
+    final PyGenericType generic=(PyGenericType)expected;
+    final PyType subst=substitutions.get(generic);
+    if (subst != null) {
+      return match(subst,actual,context,substitutions,resolveReferences);
+    }
+ else {
+      substitutions.put(generic,actual);
+      return true;
+    }
   }
   final String superName=expected.getName();
   final String subName=actual.getName();
