@@ -1,23 +1,37 @@
 {
   List<AbstractTreeNode> children=new ArrayList<AbstractTreeNode>();
   if (node instanceof CoverageListNode) {
-    Object val=node.getValue();
+    final Object val=node.getValue();
     if (val instanceof PsiClass)     return Collections.emptyList();
     if (val instanceof PsiPackage) {
-      boolean found=isInCoverageScope((PsiPackage)val,suitesBundle);
+      boolean found=ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
+        public Boolean compute(){
+          return isInCoverageScope((PsiPackage)val,suitesBundle);
+        }
+      }
+);
       if (!stateBean.myFlattenPackages) {
         collectSubPackages(children,(PsiPackage)val,suitesBundle,stateBean);
       }
+      final PsiClass[] classes=ApplicationManager.getApplication().runReadAction(new Computable<PsiClass[]>(){
+        public PsiClass[] compute(){
+          return ((PsiPackage)val).getClasses();
+        }
+      }
+);
       if (found) {
-        final PsiClass[] classes=((PsiPackage)val).getClasses();
         for (        PsiClass aClass : classes) {
           children.add(new CoverageListNode(aClass,suitesBundle,stateBean));
         }
       }
  else {
-        final PsiClass[] classes=((PsiPackage)val).getClasses();
-        for (        PsiClass aClass : classes) {
-          final String classFQName=aClass.getQualifiedName();
+        for (        final PsiClass aClass : classes) {
+          final String classFQName=ApplicationManager.getApplication().runReadAction(new Computable<String>(){
+            public String compute(){
+              return aClass.getQualifiedName();
+            }
+          }
+);
           for (          CoverageSuite suite : suitesBundle.getSuites()) {
             if (((JavaCoverageSuite)suite).isClassFiltered(classFQName)) {
               children.add(new CoverageListNode(aClass,suitesBundle,stateBean));
