@@ -18,28 +18,8 @@
       final ScopeOwner ourScopeOwner=ScopeUtil.getScopeOwner(getElement());
       final ScopeOwner theirScopeOwner=ScopeUtil.getScopeOwner(element);
       if (element instanceof PyParameter || element instanceof PyTargetExpression || element instanceof CythonVariable) {
-        PsiElement ourContainer=PsiTreeUtil.getParentOfType(getElement(),ScopeOwner.class,PyComprehensionElement.class);
-        PsiElement theirContainer=PsiTreeUtil.getParentOfType(element,ScopeOwner.class,PyComprehensionElement.class);
-        if (ourContainer != null) {
-          if (ourContainer == theirContainer) {
-            return true;
-          }
-          if (PsiTreeUtil.isAncestor(theirContainer,ourContainer,true)) {
-            if (ourScopeOwner != theirScopeOwner) {
-              boolean shadowsName=false;
-              ScopeOwner owner=ourScopeOwner;
-              while (owner != theirScopeOwner && owner != null) {
-                if (ControlFlowCache.getScope(owner).containsDeclaration(elementName)) {
-                  shadowsName=true;
-                  break;
-                }
-                owner=ScopeUtil.getScopeOwner(owner);
-              }
-              if (!shadowsName) {
-                return true;
-              }
-            }
-          }
+        if (resolvesToSameLocal(element,elementName,ourScopeOwner,theirScopeOwner)) {
+          return true;
         }
       }
       final PsiElement resolveResult=(isGlobal(getElement(),elementName)) ? transitiveResolve(getElement()) : resolve();
@@ -47,16 +27,10 @@
         return true;
       }
       if (!haveQualifiers(element) && ourScopeOwner != null && theirScopeOwner != null) {
-        final boolean ourIsGlobal=ControlFlowCache.getScope(ourScopeOwner).isGlobal(elementName);
-        final boolean theirIsGlobal=ControlFlowCache.getScope(theirScopeOwner).isGlobal(elementName);
-        final PsiFile ourFile=getElement().getContainingFile();
-        final PsiFile theirFile=element.getContainingFile();
-        if (ourIsGlobal && theirIsGlobal && ourFile == theirFile) {
-          return true;
-        }
-        if (theirIsGlobal && ScopeUtil.getScopeOwner(resolveResult) == ourFile) {
-          return true;
-        }
+        if (resolvesToSameGlobal(element,elementName,ourScopeOwner,theirScopeOwner,resolveResult))         return true;
+      }
+      if (resolvesToWrapper(element,resolveResult)) {
+        return true;
       }
       return false;
     }
