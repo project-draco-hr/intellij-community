@@ -8,16 +8,56 @@
   if (containingClass != null && PsiTreeUtil.isAncestor(containingClass.getSuperClassExpressionList(),myElement,false)) {
     realContext=containingClass;
   }
+  PsiElement uexpr=null;
   PsiElement roof=findResolveRoof(referencedName,realContext);
-  PsiElement uexpr=PyResolveUtil.treeCrawlUp(processor,false,realContext,roof);
-  if ((uexpr != null)) {
-    for (    PsiElement hit : processor.getDefiners()) {
-      ret.poke(hit,getRate(hit));
+  if (Registry.is("python.new.style.resolve")) {
+    ScopeOwner scopeOwner=ScopeUtil.getResolveScopeOwner(realContext);
+    if (scopeOwner != null) {
+      final List<ReadWriteInstruction> defs=PyDefUseUtil.getLatestDefs(scopeOwner,referencedName,myElement,false);
+      if (!defs.isEmpty()) {
+        for (        ReadWriteInstruction def : defs) {
+          addResolvedElement(ret,referencedName,def.getElement());
+        }
+        return ret;
+      }
+      final Scope scope=ControlFlowCache.getScope(scopeOwner);
+      checkStarDeclarations(ret,referencedName,scope);
+      if (!ret.isEmpty()) {
+        return ret;
+      }
+      while (true) {
+        scopeOwner=PsiTreeUtil.getParentOfType(scopeOwner,ScopeOwner.class);
+        if (scopeOwner == null) {
+          break;
+        }
+        final Scope parentScope=ControlFlowCache.getScope(scopeOwner);
+        final PsiElement declaration=parentScope.getDeclaration(referencedName);
+        if (declaration != null) {
+          addResolvedElement(ret,referencedName,declaration);
+        }
+ else {
+          checkStarDeclarations(ret,referencedName,parentScope);
+        }
+        if (!ret.isEmpty()) {
+          return ret;
+        }
+        if (scopeOwner == roof) {
+          break;
+        }
+      }
     }
-    uexpr=PyUtil.turnDirIntoInit(uexpr);
   }
- else   if (!processor.getDefiners().isEmpty()) {
-    ret.add(new ImportedResolveResult(null,RatedResolveResult.RATE_LOW - 1,processor.getDefiners()));
+ else {
+    uexpr=PyResolveUtil.treeCrawlUp(processor,false,realContext,roof);
+    if ((uexpr != null)) {
+      for (      PsiElement hit : processor.getDefiners()) {
+        ret.poke(hit,getRate(hit));
+      }
+      uexpr=PyUtil.turnDirIntoInit(uexpr);
+    }
+ else     if (!processor.getDefiners().isEmpty()) {
+      ret.add(new ImportedResolveResult(null,RatedResolveResult.RATE_LOW - 1,processor.getDefiners()));
+    }
   }
   PyBuiltinCache builtins_cache=PyBuiltinCache.getInstance(realContext);
   if (uexpr == null) {
