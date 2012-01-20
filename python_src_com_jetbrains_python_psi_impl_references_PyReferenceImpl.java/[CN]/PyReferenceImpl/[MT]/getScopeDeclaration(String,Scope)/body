@@ -1,0 +1,37 @@
+{
+  PsiElement element=scope.getNamedElement(name);
+  if (element != null) {
+    return new ScopeDeclaration(null,element);
+  }
+  element=scope.getImplicitElement(name);
+  if (element != null) {
+    return new ScopeDeclaration(null,element);
+  }
+  for (  NameDefiner definer : scope.getNameDefiners()) {
+    element=definer.getElementNamed(name);
+    if (element != null) {
+      return new ScopeDeclaration(definer,element);
+    }
+ else     if (definer instanceof PyImportElement) {
+      final PyImportElement importElement=(PyImportElement)definer;
+      final PyQualifiedName qname=importElement.getImportedQName();
+      if (qname != null && qname.getComponentCount() > 1 && name.equals(qname.getLastComponent()) && PyNames.INIT_DOT_PY.equals(importElement.getContainingFile().getName())) {
+        final PsiElement packageElement=ResolveImportUtil.resolveImportElement(importElement,qname.removeLastComponent());
+        if (PyUtil.turnDirIntoInit(packageElement) == importElement.getContainingFile()) {
+          element=PyUtil.turnDirIntoInit(ResolveImportUtil.resolveImportElement(importElement));
+          return new ScopeDeclaration(definer,element);
+        }
+      }
+      String definedName=importElement.getAsName();
+      if (definedName == null) {
+        if (qname != null && qname.getComponentCount() == 1) {
+          definedName=qname.getComponents().get(0);
+        }
+      }
+      if (name.equals(definedName)) {
+        return new ScopeDeclaration(definer,null);
+      }
+    }
+  }
+  return null;
+}

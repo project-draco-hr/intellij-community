@@ -11,40 +11,38 @@
   PsiElement uexpr=null;
   PsiElement roof=findResolveRoof(referencedName,realContext);
   if (Registry.is("python.new.style.resolve")) {
-    ScopeOwner scopeOwner=ScopeUtil.getResolveScopeOwner(realContext);
-    if (scopeOwner != null) {
-      final List<ReadWriteInstruction> defs=PyDefUseUtil.getLatestDefs(scopeOwner,referencedName,myElement,false);
-      if (!defs.isEmpty()) {
-        for (        ReadWriteInstruction def : defs) {
-          addResolvedElement(ret,referencedName,def.getElement());
-        }
-        return ret;
-      }
-      final Scope scope=ControlFlowCache.getScope(scopeOwner);
-      checkStarDeclarations(ret,referencedName,scope);
-      if (!ret.isEmpty()) {
-        return ret;
-      }
-      while (true) {
-        scopeOwner=PsiTreeUtil.getParentOfType(scopeOwner,ScopeOwner.class);
-        if (scopeOwner == null) {
-          break;
-        }
-        final Scope parentScope=ControlFlowCache.getScope(scopeOwner);
-        final PsiElement declaration=parentScope.getDeclaration(referencedName);
-        if (declaration != null) {
-          addResolvedElement(ret,referencedName,declaration);
-        }
- else {
-          checkStarDeclarations(ret,referencedName,parentScope);
-        }
-        if (!ret.isEmpty()) {
+    final ScopeOwner originalOwner=ScopeUtil.getResolveScopeOwner(realContext);
+    ScopeOwner owner=originalOwner;
+    while (owner != null) {
+      if (!(owner instanceof PyClass) || owner == originalOwner) {
+        final Scope scope=ControlFlowCache.getScope(owner);
+        final ScopeDeclaration scopeDeclaration=getScopeDeclaration(referencedName,scope);
+        if (scopeDeclaration != null) {
+          NameDefiner definer=scopeDeclaration.getNameDefiner();
+          PsiElement element=scopeDeclaration.getElement();
+          if (owner == originalOwner && definer == null) {
+            final List<ReadWriteInstruction> defs=PyDefUseUtil.getLatestDefs(owner,referencedName,myElement,false);
+            if (!defs.isEmpty()) {
+              for (              ReadWriteInstruction def : defs) {
+                element=def.getElement();
+                if (element instanceof NameDefiner && !(element instanceof PsiNamedElement)) {
+                  definer=(NameDefiner)element;
+                  element=definer.getElementNamed(referencedName);
+                }
+                addResolvedElement(ret,definer,element);
+              }
+              return ret;
+            }
+            break;
+          }
+          addResolvedElement(ret,definer,element);
           return ret;
         }
-        if (scopeOwner == roof) {
-          break;
-        }
       }
+      if (owner == roof) {
+        break;
+      }
+      owner=ScopeUtil.getScopeOwner(owner);
     }
   }
  else {
