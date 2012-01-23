@@ -8,83 +8,64 @@
     addResolvedElement(ret,null,myElement);
     return ret;
   }
-  PsiElement realContext=PyPsiUtils.getRealContext(myElement);
-  final ResolveProcessor processor=new ResolveProcessor(referencedName);
-  PsiElement uexpr=null;
+  final PsiElement realContext=PyPsiUtils.getRealContext(myElement);
   final PsiElement roof=findResolveRoof(referencedName,realContext);
   final ScopeOwner originalOwner=ScopeUtil.getResolveScopeOwner(realContext);
-  if (Registry.is("python.new.style.resolve")) {
-    ScopeOwner owner=originalOwner;
-    if (isGlobalOrNonlocal) {
-      final ScopeOwner outerScopeOwner=ScopeUtil.getScopeOwner(owner);
-      if (outerScopeOwner != null) {
-        owner=outerScopeOwner;
-      }
+  ScopeOwner owner=originalOwner;
+  if (isGlobalOrNonlocal) {
+    final ScopeOwner outerScopeOwner=ScopeUtil.getScopeOwner(owner);
+    if (outerScopeOwner != null) {
+      owner=outerScopeOwner;
     }
-    while (owner != null) {
-      if (!(owner instanceof PyClass) || owner == originalOwner) {
-        final Scope scope=ControlFlowCache.getScope(owner);
-        final ScopeDeclaration scopeDeclaration=getScopeDeclaration(referencedName,scope);
-        if (scopeDeclaration != null) {
-          NameDefiner definer=scopeDeclaration.getNameDefiner();
-          PsiElement element=scopeDeclaration.getElement();
-          if (owner == originalOwner && definer == null) {
-            final List<ReadWriteInstruction> defs=PyDefUseUtil.getLatestDefs(owner,referencedName,myElement,false);
-            if (!defs.isEmpty()) {
-              for (              ReadWriteInstruction def : defs) {
-                element=def.getElement();
-                final PyComprehensionElement elementComprh=PsiTreeUtil.getParentOfType(element,PyComprehensionElement.class);
-                if (elementComprh != null && elementComprh != PsiTreeUtil.getParentOfType(myElement,PyComprehensionElement.class)) {
-                  continue;
-                }
-                if (element instanceof NameDefiner && !(element instanceof PsiNamedElement)) {
-                  definer=(NameDefiner)element;
-                  element=definer.getElementNamed(referencedName);
-                }
-                addResolvedElement(ret,definer,element);
+  }
+  while (owner != null) {
+    if (!(owner instanceof PyClass) || owner == originalOwner) {
+      final Scope scope=ControlFlowCache.getScope(owner);
+      final ScopeDeclaration scopeDeclaration=getScopeDeclaration(referencedName,scope);
+      if (scopeDeclaration != null) {
+        NameDefiner definer=scopeDeclaration.getNameDefiner();
+        PsiElement element=scopeDeclaration.getElement();
+        if (owner == originalOwner && definer == null) {
+          final List<ReadWriteInstruction> defs=PyDefUseUtil.getLatestDefs(owner,referencedName,myElement,false);
+          if (!defs.isEmpty()) {
+            for (            ReadWriteInstruction def : defs) {
+              element=def.getElement();
+              final PyComprehensionElement elementComprh=PsiTreeUtil.getParentOfType(element,PyComprehensionElement.class);
+              if (elementComprh != null && elementComprh != PsiTreeUtil.getParentOfType(myElement,PyComprehensionElement.class)) {
+                continue;
               }
-              return ret;
+              if (element instanceof NameDefiner && !(element instanceof PsiNamedElement)) {
+                definer=(NameDefiner)element;
+                element=definer.getElementNamed(referencedName);
+              }
+              addResolvedElement(ret,definer,element);
             }
- else             if (!isCythonLevel(myElement)) {
-              break;
-            }
+            return ret;
           }
-          addResolvedElement(ret,definer,element);
-          return ret;
+ else           if (!isCythonLevel(myElement)) {
+            break;
+          }
         }
+        addResolvedElement(ret,definer,element);
+        return ret;
       }
-      if (owner == roof) {
-        break;
-      }
-      owner=ScopeUtil.getScopeOwner(owner);
     }
+    if (owner == roof) {
+      break;
+    }
+    owner=ScopeUtil.getScopeOwner(owner);
   }
- else {
-    uexpr=PyResolveUtil.treeCrawlUp(processor,false,realContext,roof);
-    if ((uexpr != null)) {
-      for (      PsiElement hit : processor.getDefiners()) {
-        ret.poke(hit,getRate(hit));
-      }
-      uexpr=PyUtil.turnDirIntoInit(uexpr);
-    }
- else     if (!processor.getDefiners().isEmpty()) {
-      ret.add(new ImportedResolveResult(null,RatedResolveResult.RATE_LOW - 1,processor.getDefiners()));
-    }
+  PyBuiltinCache builtinsCache=PyBuiltinCache.getInstance(realContext);
+  PyType otype=builtinsCache.getObjectType();
+  if (otype != null) {
+    ret.addAll(otype.resolveMember(myElement.getName(),null,AccessDirection.READ,myContext));
   }
-  PyBuiltinCache builtins_cache=PyBuiltinCache.getInstance(realContext);
-  if (uexpr == null) {
-    PyType otype=builtins_cache.getObjectType();
-    if (otype != null) {
-      ret.addAll(otype.resolveMember(myElement.getName(),null,AccessDirection.READ,myContext));
-    }
-  }
-  if (uexpr == null) {
-    PyFile bfile=builtins_cache.getBuiltinsFile();
-    if (bfile != null) {
-      uexpr=bfile.getElementNamed(referencedName);
-      if (uexpr == null && "__builtins__".equals(referencedName)) {
-        uexpr=bfile;
-      }
+  PsiElement uexpr=null;
+  PyFile bfile=builtinsCache.getBuiltinsFile();
+  if (bfile != null) {
+    uexpr=bfile.getElementNamed(referencedName);
+    if (uexpr == null && "__builtins__".equals(referencedName)) {
+      uexpr=bfile;
     }
   }
   if (uexpr == null && CythonLanguageDialect.isInsideCythonFile(realContext)) {
@@ -100,7 +81,7 @@
     }
   }
   if (uexpr != null) {
-    ret.add(new ImportedResolveResult(uexpr,getRate(uexpr),processor.getDefiners()));
+    ret.add(new ImportedResolveResult(uexpr,getRate(uexpr),Collections.<PsiElement>emptyList()));
   }
   return ret;
 }
