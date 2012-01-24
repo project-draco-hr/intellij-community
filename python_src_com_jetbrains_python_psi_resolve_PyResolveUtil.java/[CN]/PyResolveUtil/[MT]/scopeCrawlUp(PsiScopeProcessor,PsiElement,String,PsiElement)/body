@@ -1,0 +1,33 @@
+{
+  final PsiElement realContext=PyPsiUtils.getRealContext(element);
+  final ScopeOwner originalOwner=ScopeUtil.getResolveScopeOwner(realContext);
+  ScopeOwner owner=originalOwner;
+  final PsiElement parent=element.getParent();
+  final boolean isGlobalOrNonlocal=parent instanceof PyGlobalStatement || parent instanceof PyNonlocalStatement;
+  if (isGlobalOrNonlocal) {
+    final ScopeOwner outerScopeOwner=ScopeUtil.getScopeOwner(owner);
+    if (outerScopeOwner != null) {
+      owner=outerScopeOwner;
+    }
+  }
+  while (owner != null) {
+    if (!(owner instanceof PyClass) || owner == originalOwner) {
+      final Scope scope=ControlFlowCache.getScope(owner);
+      PsiElement resolved=scope.getNamedElement(name);
+      if (resolved != null) {
+        if (!processor.execute(resolved,ResolveState.initial())) {
+          return;
+        }
+      }
+      for (      NameDefiner definer : scope.getNameDefiners()) {
+        if (!processor.execute(definer,ResolveState.initial())) {
+          return;
+        }
+      }
+    }
+    if (owner == roof) {
+      return;
+    }
+    owner=ScopeUtil.getScopeOwner(owner);
+  }
+}
