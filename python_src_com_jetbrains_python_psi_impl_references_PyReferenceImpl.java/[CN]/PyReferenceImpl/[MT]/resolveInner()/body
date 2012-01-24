@@ -1,63 +1,40 @@
 {
-  ResolveResultList ret=new ResolveResultList();
+  final ResolveResultList ret=new ResolveResultList();
   final String referencedName=myElement.getReferencedName();
   if (referencedName == null)   return ret;
-  ResolveProcessor processor=new ResolveProcessor(referencedName);
-  PsiElement realContext=PyPsiUtils.getRealContext(myElement);
-  PyClass containingClass=PsiTreeUtil.getParentOfType(realContext,PyClass.class);
-  if (containingClass != null && PsiTreeUtil.isAncestor(containingClass.getSuperClassExpressionList(),myElement,false)) {
-    realContext=containingClass;
+  if (myElement instanceof PyTargetExpression) {
+    if (PsiTreeUtil.getParentOfType(myElement,PyComprehensionElement.class) != null) {
+      ret.poke(myElement,getRate(myElement));
+      return ret;
+    }
   }
-  PsiElement uexpr=null;
+  final ResolveProcessor processor=new ResolveProcessor(referencedName);
+  final PsiElement realContext=PyPsiUtils.getRealContext(myElement);
   PsiElement roof=findResolveRoof(referencedName,realContext);
-  if (Registry.is("python.new.style.resolve")) {
-    ScopeOwner scopeOwner=ScopeUtil.getResolveScopeOwner(realContext);
-    if (scopeOwner != null) {
-      final List<ReadWriteInstruction> defs=PyDefUseUtil.getLatestDefs(scopeOwner,referencedName,myElement,false);
-      if (!defs.isEmpty()) {
-        for (        ReadWriteInstruction def : defs) {
-          addResolvedElement(ret,referencedName,def.getElement());
+  PyResolveUtil.scopeCrawlUp(processor,myElement,referencedName,roof);
+  PsiElement uexpr=processor.getResult();
+  final List<PsiElement> definers=processor.getDefiners();
+  if (uexpr != null) {
+    if (definers.isEmpty()) {
+      final ScopeOwner originalOwner=ScopeUtil.getResolveScopeOwner(realContext);
+      final ScopeOwner owner=ScopeUtil.getScopeOwner(uexpr);
+      if (owner != null && owner == originalOwner) {
+        final ResolveResultList latest=resolveToLatestDefs(owner,myElement,referencedName);
+        if (!latest.isEmpty()) {
+          return latest;
         }
-        return ret;
-      }
-      final Scope scope=ControlFlowCache.getScope(scopeOwner);
-      checkStarDeclarations(ret,referencedName,scope);
-      if (!ret.isEmpty()) {
-        return ret;
-      }
-      while (true) {
-        scopeOwner=PsiTreeUtil.getParentOfType(scopeOwner,ScopeOwner.class);
-        if (scopeOwner == null) {
-          break;
-        }
-        final Scope parentScope=ControlFlowCache.getScope(scopeOwner);
-        final PsiElement declaration=parentScope.getDeclaration(referencedName);
-        if (declaration != null) {
-          addResolvedElement(ret,referencedName,declaration);
-        }
- else {
-          checkStarDeclarations(ret,referencedName,parentScope);
-        }
-        if (!ret.isEmpty()) {
-          return ret;
-        }
-        if (scopeOwner == roof) {
-          break;
+        if (!isCythonLevel(myElement)) {
+          uexpr=null;
         }
       }
     }
+    for (    PsiElement hit : processor.getDefiners()) {
+      ret.poke(hit,getRate(hit));
+    }
+    uexpr=PyUtil.turnDirIntoInit(uexpr);
   }
- else {
-    uexpr=PyResolveUtil.treeCrawlUp(processor,false,realContext,roof);
-    if ((uexpr != null)) {
-      for (      PsiElement hit : processor.getDefiners()) {
-        ret.poke(hit,getRate(hit));
-      }
-      uexpr=PyUtil.turnDirIntoInit(uexpr);
-    }
- else     if (!processor.getDefiners().isEmpty()) {
-      ret.add(new ImportedResolveResult(null,RatedResolveResult.RATE_LOW - 1,processor.getDefiners()));
-    }
+ else   if (!processor.getDefiners().isEmpty()) {
+    ret.add(new ImportedResolveResult(null,RatedResolveResult.RATE_LOW,processor.getDefiners()));
   }
   PyBuiltinCache builtins_cache=PyBuiltinCache.getInstance(realContext);
   if (uexpr == null) {
@@ -74,10 +51,6 @@
         uexpr=bfile;
       }
     }
-  }
-  if (uexpr == null && !(myElement instanceof PyTargetExpression)) {
-    final PsiElement outerContextElement=PyResolveUtil.scanOuterContext(new ResolveProcessor(referencedName),realContext);
-    uexpr=PyUtil.turnDirIntoInit(outerContextElement);
   }
   if (uexpr == null && CythonLanguageDialect.isInsideCythonFile(realContext)) {
     final CythonFile implicit=CythonResolveUtil.findImplicitDefinitionFile(realContext);
