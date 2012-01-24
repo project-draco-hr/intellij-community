@@ -1,24 +1,48 @@
 {
-  final Map<String,PsiElement> declarations=new HashMap<String,PsiElement>();
-  final List<NameDefiner> starDeclarations=new ArrayList<NameDefiner>();
+  final Map<String,PsiNamedElement> namedElements=new HashMap<String,PsiNamedElement>();
+  final List<NameDefiner> nameDefiners=new ArrayList<NameDefiner>();
+  final List<Scope> nestedScopes=new ArrayList<Scope>();
+  final Set<String> globals=new HashSet<String>();
+  final Set<String> nonlocals=new HashSet<String>();
   myFlowOwner.acceptChildren(new PyRecursiveElementVisitor(){
-    @Override public void visitPyFunction(    PyFunction node){
-      declarations.put(node.getName(),node);
+    @Override public void visitPyTargetExpression(    PyTargetExpression node){
+      final PsiElement parent=node.getParent();
+      if (node.getQualifier() == null && !(parent instanceof PyImportElement)) {
+        super.visitPyTargetExpression(node);
+      }
     }
-    @Override public void visitPyClass(    PyClass node){
-      declarations.put(node.getName(),node);
+    @Override public void visitPyGlobalStatement(    PyGlobalStatement node){
+      for (      PyTargetExpression expression : node.getGlobals()) {
+        globals.add(expression.getReferencedName());
+      }
+      super.visitPyGlobalStatement(node);
+    }
+    @Override public void visitPyNonlocalStatement(    PyNonlocalStatement node){
+      for (      PyTargetExpression expression : node.getVariables()) {
+        nonlocals.add(expression.getReferencedName());
+      }
+      super.visitPyNonlocalStatement(node);
     }
     @Override public void visitPyElement(    PyElement node){
       if (node instanceof PsiNamedElement) {
-        declarations.put(node.getName(),node);
+        namedElements.put(node.getName(),(PsiNamedElement)node);
       }
-      super.visitPyElement(node);
-    }
-    @Override public void visitPyStarImportElement(    PyStarImportElement node){
-      starDeclarations.add(node);
+      if (node instanceof NameDefiner && !(node instanceof PsiNamedElement || node instanceof PyAssignmentStatement || node instanceof PyParameterList)) {
+        nameDefiners.add((NameDefiner)node);
+      }
+      if (node instanceof ScopeOwner) {
+        final Scope scope=ControlFlowCache.getScope((ScopeOwner)node);
+        nestedScopes.add(scope);
+      }
+ else {
+        super.visitPyElement(node);
+      }
     }
   }
 );
-  myDeclarations=declarations;
-  myStarDeclarations=starDeclarations;
+  myNamedElements=namedElements;
+  myNameDefiners=nameDefiners;
+  myNestedScopes=nestedScopes;
+  myGlobals=globals;
+  myNonlocals=nonlocals;
 }
