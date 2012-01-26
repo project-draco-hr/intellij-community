@@ -1,0 +1,34 @@
+{
+  final ProjectData data=bundle.getCoverageData();
+  if (data == null)   return;
+  final Module module=ModuleUtil.findModuleForPsiElement(psiClass);
+  if (module != null) {
+    final boolean isInTests=ProjectRootManager.getInstance(module.getProject()).getFileIndex().isInTestSourceContent(psiClass.getContainingFile().getVirtualFile());
+    final CompilerModuleExtension moduleExtension=CompilerModuleExtension.getInstance(module);
+    final VirtualFile outputPath=isInTests ? moduleExtension.getCompilerOutputPathForTests() : moduleExtension.getCompilerOutputPath();
+    Map<String,PackageCoverageInfo> packageCoverageMap=new HashMap<String,PackageCoverageInfo>();
+    Map<String,PackageCoverageInfo> flattenPackageCoverageMap=new HashMap<String,PackageCoverageInfo>();
+    if (outputPath != null) {
+      final String qualifiedName=psiClass.getQualifiedName();
+      if (qualifiedName == null)       return;
+      final String packageVMName=StringUtil.getPackageName(qualifiedName).replace('.','/');
+      final VirtualFile packageRoot=outputPath.findFileByRelativePath(packageVMName);
+      if (packageRoot != null) {
+        Map<String,ClassCoverageInfo> toplevelClassCoverage=new HashMap<String,ClassCoverageInfo>();
+        for (        VirtualFile child : packageRoot.getChildren()) {
+          if (child.getFileType().equals(StdFileTypes.CLASS)) {
+            final String childName=child.getNameWithoutExtension();
+            final String classFqVMName=packageVMName.length() > 0 ? packageVMName + "/" + childName : childName;
+            final String toplevelClassSrcFQName=getSourceToplevelFQName(classFqVMName);
+            if (toplevelClassSrcFQName.equals(qualifiedName)) {
+              collectClassCoverageInformation(child,new PackageCoverageInfo(),data,toplevelClassCoverage,classFqVMName.replace("/","."),toplevelClassSrcFQName);
+            }
+          }
+        }
+        for (        ClassCoverageInfo coverageInfo : toplevelClassCoverage.values()) {
+          annotator.annotateClass(qualifiedName,coverageInfo);
+        }
+      }
+    }
+  }
+}
