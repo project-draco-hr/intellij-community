@@ -5,8 +5,38 @@
       return ResolveResultList.to(element);
     }
   }
-  Sdk sdk=ModuleUtil.findModuleForPsiElement(myModule) != null ? null : PyBuiltinCache.findSdkForNonModuleFile(myModule);
-  final PsiElement result=ResolveImportUtil.resolveChild(myModule,name,myModule,null,sdk,false,true);
-  if (result != null)   return ResolveResultList.to(result);
+  final PsiElement attribute=myModule.getElementNamed(name);
+  if (attribute != null) {
+    return ResolveResultList.to(attribute);
+  }
+  if (location != null && isPackage(myModule)) {
+    final PsiFile file=location.getContainingFile();
+    if (file instanceof PyFile) {
+      final PyQualifiedName packageQName=ResolveImportUtil.findCanonicalImportPath(myModule,location);
+      if (packageQName != null) {
+        final List<PyImportElement> imports=((PyFile)file).getImportTargets();
+        for (        PyImportElement importElement : imports) {
+          final PyStatement stmt=importElement.getContainingImportStatement();
+          PyQualifiedName importedQName=null;
+          if (stmt instanceof PyFromImportStatement) {
+            importedQName=((PyFromImportStatement)stmt).getImportSourceQName();
+          }
+ else           if (stmt instanceof PyImportStatement) {
+            importedQName=importElement.getImportedQName();
+          }
+          final PyQualifiedName submoduleQName=packageQName.append(name);
+          if (importedQName != null && importedQName.matchesPrefix(submoduleQName)) {
+            final PsiElement submodule=ResolveImportUtil.resolveChild(myModule,name,myModule,null,null,false,true);
+            if (submodule != null) {
+              final ResolveResultList results=new ResolveResultList();
+              results.poke(submodule,RatedResolveResult.RATE_NORMAL);
+              results.add(new ImportedResolveResult(submodule,RatedResolveResult.RATE_LOW,Collections.<PsiElement>singletonList(importElement)));
+              return results;
+            }
+          }
+        }
+      }
+    }
+  }
   return Collections.emptyList();
 }
