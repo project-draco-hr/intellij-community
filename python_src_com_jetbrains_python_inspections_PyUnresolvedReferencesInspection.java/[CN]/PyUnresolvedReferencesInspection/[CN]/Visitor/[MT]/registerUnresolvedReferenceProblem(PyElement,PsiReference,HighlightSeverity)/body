@@ -97,5 +97,28 @@
   PsiElement point=node.getLastChild();
   if (point == null)   point=node;
   TextRange range=reference.getRangeInElement().shiftRight(-point.getStartOffsetInParent());
+  if (reference instanceof PyImportReference) {
+    final PyQualifiedName qname=PyQualifiedName.fromDottedString(refname);
+    final List<String> components=qname.getComponents();
+    if (!components.isEmpty()) {
+      final String packageName=components.get(0);
+      final Module module=ModuleUtil.findModuleForPsiElement(node);
+      final Sdk sdk=PythonSdkType.findPythonSdk(module);
+      if (module != null && sdk != null) {
+        final Map<String,String> pyPIPackages=PyPIPackageUtil.getPyPIPackages(node.getProject());
+        boolean found=false;
+        for (        String s : pyPIPackages.keySet()) {
+          if (s.compareToIgnoreCase(packageName) == 0) {
+            found=true;
+          }
+        }
+        if (found) {
+          final List<PyRequirement> requirements=Collections.singletonList(new PyRequirement(packageName));
+          final String name="Install package " + packageName;
+          actions.add(new PyPackageRequirementsInspection.InstallRequirementsFix(name,module,sdk,requirements));
+        }
+      }
+    }
+  }
   registerProblem(point,description,hl_type,null,range,actions.toArray(new LocalQuickFix[actions.size()]));
 }
