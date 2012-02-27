@@ -1,11 +1,48 @@
 {
-  CommandLineArgumentsProvider provider=myCommandLineArgumentsProvider;
-  final Process server=Runner.createProcess(getWorkingDir(),provider.getAdditionalEnvs(),provider.getArguments());
-  try {
-    myPydevConsoleCommunication=new PydevConsoleCommunication(getProject(),myPorts[0],server,myPorts[1]);
+  if (mySdk.getSdkAdditionalData() instanceof PythonRemoteSdkAdditionalData) {
+    PythonRemoteInterpreterManager manager=PythonRemoteInterpreterManager.getInstance();
+    if (manager != null) {
+      try {
+        PythonRemoteSdkAdditionalData data=(PythonRemoteSdkAdditionalData)mySdk.getSdkAdditionalData();
+        GeneralCommandLine commandLine=new GeneralCommandLine(myCommandLineArgumentsProvider.getArguments());
+        commandLine.getParametersList().set(1,PythonRemoteInterpreterManager.toSystemDependent(new File(data.getPyCharmHelpersPath(),PYDEV_PYDEVCONSOLE_PY).getPath(),PySourcePosition.isWindowsPath(data.getInterpreterPath())));
+        commandLine.getParametersList().set(2,"0");
+        commandLine.getParametersList().set(3,"0");
+        myCommandLine=commandLine.getCommandLineString();
+        PyRemoteSshProcess server=manager.createRemoteProcess(getProject(),data,commandLine);
+        try {
+          Scanner s=new Scanner(server.getInputStream());
+          Thread.sleep(1000);
+          int port=s.nextInt();
+          int port2=s.nextInt();
+          server.addTunnelLocal(myPorts[0],data.getHost(),port);
+          server.addTunnelRemote(port2,"localhost",myPorts[1]);
+        }
+ catch (        Exception e) {
+        }
+        try {
+          myPydevConsoleCommunication=new PydevConsoleCommunication(getProject(),myPorts[0],server,myPorts[1]);
+          return server;
+        }
+ catch (        Exception e) {
+          throw new ExecutionException(e.getMessage());
+        }
+      }
+ catch (      PyRemoteInterpreterException e) {
+        throw new ExecutionException("Can't start remote console",e);
+      }
+    }
+    throw new PythonRemoteInterpreterManager.PyRemoteInterpreterExecutionException();
   }
- catch (  Exception e) {
-    throw new ExecutionException(e.getMessage());
+ else {
+    myCommandLine=myCommandLineArgumentsProvider.getCommandLineString();
+    final Process server=Runner.createProcess(getWorkingDir(),myCommandLineArgumentsProvider.getAdditionalEnvs(),myCommandLineArgumentsProvider.getArguments());
+    try {
+      myPydevConsoleCommunication=new PydevConsoleCommunication(getProject(),myPorts[0],server,myPorts[1]);
+    }
+ catch (    Exception e) {
+      throw new ExecutionException(e.getMessage());
+    }
+    return server;
   }
-  return server;
 }
