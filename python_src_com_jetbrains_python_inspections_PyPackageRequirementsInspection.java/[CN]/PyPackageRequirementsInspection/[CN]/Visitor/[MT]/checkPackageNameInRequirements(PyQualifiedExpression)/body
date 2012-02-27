@@ -1,8 +1,8 @@
 {
   final List<PyExpression> expressions=PyResolveUtil.unwindQualifiers(importedExpression);
   if (!expressions.isEmpty()) {
-    final PyExpression packageReference=expressions.get(0);
-    final String packageName=packageReference.getName();
+    final PyExpression packageReferenceExpression=expressions.get(0);
+    final String packageName=packageReferenceExpression.getName();
     if (packageName != null && !myIgnoredPackages.contains(packageName)) {
       final Collection<String> stdlibPackages=PyStdlibUtil.getPackages();
       if (stdlibPackages != null) {
@@ -12,7 +12,7 @@
           }
         }
       }
-      final Module module=ModuleUtil.findModuleForPsiElement(packageReference);
+      final Module module=ModuleUtil.findModuleForPsiElement(packageReferenceExpression);
       if (module != null) {
         final List<PyRequirement> requirements=PyPackageManager.getRequirements(module);
         if (requirements != null) {
@@ -21,14 +21,18 @@
               return;
             }
           }
-          final PyQualifiedName packageQName=PyQualifiedName.fromComponents(packageName);
-          for (          String name : PyPackageUtil.getPackageNames(module)) {
-            final PyQualifiedName qname=PyQualifiedName.fromDottedString(name);
-            if (qname.matchesPrefix(packageQName)) {
-              return;
+          final PsiReference reference=packageReferenceExpression.getReference();
+          if (reference != null) {
+            final PsiElement element=reference.resolve();
+            if (element != null) {
+              final PsiFile file=element.getContainingFile();
+              final VirtualFile virtualFile=file.getVirtualFile();
+              if (ModuleUtil.moduleContainsFile(module,virtualFile,false)) {
+                return;
+              }
             }
           }
-          registerProblem(packageReference,String.format("Package '%s' is not listed in project requirements",packageName),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,null,new AddToRequirementsFix(module,packageName,LanguageLevel.forElement(importedExpression)),new IgnoreRequirementFix(packageName));
+          registerProblem(packageReferenceExpression,String.format("Package '%s' is not listed in project requirements",packageName),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,null,new AddToRequirementsFix(module,packageName,LanguageLevel.forElement(importedExpression)),new IgnoreRequirementFix(packageName));
         }
       }
     }
