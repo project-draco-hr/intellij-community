@@ -1,46 +1,12 @@
 {
-  final String PROGRESS_TITLE="Installing requirements";
-  ProgressManager.getInstance().run(new Task.Backgroundable(project,PROGRESS_TITLE,false){
-    @Override public void run(    @NotNull ProgressIndicator indicator){
-      final Sdk sdk=PythonSdkType.findPythonSdk(myModule);
-      if (sdk != null) {
-        final PyPackageManager manager=PyPackageManager.getInstance(sdk);
-        indicator.setText(PROGRESS_TITLE + "...");
-        final Ref<Notification> notificationRef=new Ref<Notification>(null);
-        final String PACKAGING_GROUP_ID="Packaging";
-        final Application application=ApplicationManager.getApplication();
-        setRunningPackagingTasks(myModule,true);
-        try {
-          manager.install(myUnsatisfied);
-          final String msg="Packages installed successfully";
-          notificationRef.set(new Notification(PACKAGING_GROUP_ID,msg,String.format("Installed packages: " + requirementsToString(myUnsatisfied)),NotificationType.INFORMATION));
-        }
- catch (        final PyExternalProcessException e) {
-          final String msg="Install packages failed";
-          final String description=String.format("<html>\n" + "  <p>Error occured when installing packages. The following command was executed:</p>\n" + "  <br/>\n"+ "  <p><code>%s %s</code></p>\n"+ "  <br/>\n"+ "  <p>The error output of the command:</p>\n"+ "  <br/>\n"+ "  <pre><code>%s</code></pre>\n"+ "</html>",e.getName(),StringUtil.join(e.getArgs()," "),e.getMessage());
-          notificationRef.set(new Notification(PACKAGING_GROUP_ID,msg,"Error occured when installing packages. <a href=\"xxx\">Details...</a>",NotificationType.ERROR,new NotificationListener(){
-            @Override public void hyperlinkUpdate(            @NotNull Notification notification,            @NotNull HyperlinkEvent event){
-              Messages.showErrorDialog(myProject,description,StringUtil.capitalize(msg));
-              notification.expire();
-            }
-          }
-));
-        }
- finally {
-          setRunningPackagingTasks(myModule,false);
-          application.invokeLater(new Runnable(){
-            @Override public void run(){
-              PythonSdkType.getInstance().setupSdkPaths(sdk);
-              final Notification notification=notificationRef.get();
-              if (notification != null) {
-                notification.notify(project);
-              }
-            }
-          }
-);
-        }
-      }
+  final PyPackageManager.UI ui=new PyPackageManager.UI(project,mySdk,new PyPackageManager.UI.Listener(){
+    @Override public void started(){
+      setRunningPackagingTasks(myModule,true);
+    }
+    @Override public void finished(    @Nullable PyExternalProcessException exception){
+      setRunningPackagingTasks(myModule,false);
     }
   }
 );
+  ui.install(myUnsatisfied,Collections.<String>emptyList());
 }

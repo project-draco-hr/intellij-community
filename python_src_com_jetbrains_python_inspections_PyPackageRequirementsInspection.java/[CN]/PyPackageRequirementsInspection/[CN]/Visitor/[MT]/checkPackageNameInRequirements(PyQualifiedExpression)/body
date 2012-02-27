@@ -1,0 +1,36 @@
+{
+  final List<PyExpression> expressions=PyResolveUtil.unwindQualifiers(importedExpression);
+  if (!expressions.isEmpty()) {
+    final PyExpression packageReference=expressions.get(0);
+    final String packageName=packageReference.getName();
+    if (packageName != null && !myIgnoredPackages.contains(packageName)) {
+      final Collection<String> stdlibPackages=PyStdlibUtil.getPackages();
+      if (stdlibPackages != null) {
+        for (        String name : stdlibPackages) {
+          if (packageName.equals(name)) {
+            return;
+          }
+        }
+      }
+      final Module module=ModuleUtil.findModuleForPsiElement(packageReference);
+      if (module != null) {
+        final List<PyRequirement> requirements=PyPackageManager.getRequirements(module);
+        if (requirements != null) {
+          for (          PyRequirement req : requirements) {
+            if (packageName.equalsIgnoreCase(req.getName())) {
+              return;
+            }
+          }
+          final PyQualifiedName packageQName=PyQualifiedName.fromComponents(packageName);
+          for (          String name : PyPackageUtil.getPackageNames(module)) {
+            final PyQualifiedName qname=PyQualifiedName.fromDottedString(name);
+            if (qname.matchesPrefix(packageQName)) {
+              return;
+            }
+          }
+          registerProblem(packageReference,String.format("Package '%s' is not listed in project requirements",packageName),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,null,new AddToRequirementsFix(module,packageName,LanguageLevel.forElement(importedExpression)),new IgnoreRequirementFix(packageName));
+        }
+      }
+    }
+  }
+}
