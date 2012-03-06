@@ -1,0 +1,46 @@
+{
+  Map<String,List<PyFunction>> grouped=new HashMap<String,List<PyFunction>>();
+  for (  PyFunction method : getMethods()) {
+    final String methodName=method.getName();
+    if (name == null || name.equals(methodName)) {
+      List<PyFunction> bucket=grouped.get(methodName);
+      if (bucket == null) {
+        bucket=new SmartList<PyFunction>();
+        grouped.put(methodName,bucket);
+      }
+      bucket.add(method);
+    }
+  }
+  for (  Map.Entry<String,List<PyFunction>> entry : grouped.entrySet()) {
+    Maybe<PyFunction> getter=NONE;
+    Maybe<PyFunction> setter=NONE;
+    Maybe<PyFunction> deleter=NONE;
+    String doc=null;
+    final String decoratorName=entry.getKey();
+    for (    PyFunction method : entry.getValue()) {
+      PyDecoratorList decolist=method.getDecoratorList();
+      if (decolist != null) {
+        for (        PyDecorator deco : decolist.getDecorators()) {
+          final PyQualifiedName qname=deco.getQualifiedName();
+          if (qname != null) {
+            if (qname.matches(PyNames.PROPERTY)) {
+              getter=new Maybe<PyFunction>(method);
+            }
+ else             if (useAdvancedSyntax && qname.matches(decoratorName,"setter")) {
+              setter=new Maybe<PyFunction>(method);
+            }
+ else             if (useAdvancedSyntax && qname.matches(decoratorName,"deleter")) {
+              deleter=new Maybe<PyFunction>(method);
+            }
+          }
+        }
+      }
+      if (getter != NONE && setter != NONE && deleter != NONE)       break;
+    }
+    if (getter != NONE || setter != NONE || deleter != NONE) {
+      final PropertyImpl prop=new PropertyImpl(decoratorName,getter,setter,deleter,doc,null);
+      if (filter == null || filter.process(prop))       return prop;
+    }
+  }
+  return null;
+}
