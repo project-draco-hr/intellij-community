@@ -4,36 +4,20 @@
       return;
     }
     final PyExpression target=node.getTargets()[0];
-    String name=target.getName();
+    final String name=target.getName();
     if (name == null) {
       return;
     }
     PyStatement statement=PsiTreeUtil.getNextSiblingOfType(node,PyStatement.class);
-    DictCreationQuickFix quickFix=null;
-    boolean availableFix=false;
-    loop:     while (statement instanceof PyAssignmentStatement) {
-      PyAssignmentStatement assignmentStatement=(PyAssignmentStatement)statement;
-      for (      Pair<PyExpression,PyExpression> targetToValue : assignmentStatement.getTargetsToValuesMapping()) {
-        if (targetToValue.first instanceof PySubscriptionExpression) {
-          PySubscriptionExpression subscriptionExpression=(PySubscriptionExpression)targetToValue.first;
-          if (name.equals(subscriptionExpression.getOperand().getName()) && subscriptionExpression.getIndexExpression() != null && !referencesTarget(targetToValue.second,target)) {
-            if (!availableFix) {
-              quickFix=new DictCreationQuickFix(node);
-              availableFix=true;
-            }
-            continue;
-          }
-        }
-        break loop;
+    while (statement instanceof PyAssignmentStatement) {
+      final PyAssignmentStatement assignmentStatement=(PyAssignmentStatement)statement;
+      final List<Pair<PyExpression,PyExpression>> targets=getDictTargets(target,name,assignmentStatement);
+      if (targets == null)       return;
+      if (!targets.isEmpty()) {
+        registerProblem(node,"This dictionary creation could be rewritten as a dictionary literal",new DictCreationQuickFix(node));
+        break;
       }
-      if (quickFix == null) {
-        return;
-      }
-      quickFix.addStatement(assignmentStatement);
       statement=PsiTreeUtil.getNextSiblingOfType(assignmentStatement,PyStatement.class);
-    }
-    if (availableFix) {
-      registerProblem(node,"This dictionary creation could be rewritten as a dictionary literal",quickFix);
     }
   }
 }
