@@ -1,3 +1,50 @@
 {
-  return treeCrawlUp(processor,false,elt);
+  if (elt == null || !elt.isValid())   return null;
+  PsiElement seeker=elt;
+  PsiElement cap=PyUtil.getConcealingParent(elt);
+  PyFunction capFunction=cap != null ? PsiTreeUtil.getParentOfType(cap,PyFunction.class,false) : null;
+  final boolean is_outside_param_list=PsiTreeUtil.getParentOfType(elt,PyParameterList.class) == null;
+  do {
+    ProgressManager.checkCanceled();
+    seeker=getPrevNodeOf(seeker,processor);
+    if ((seeker instanceof NameDefiner) && ((NameDefiner)seeker).mustResolveOutside() && PsiTreeUtil.isAncestor(seeker,elt,true)) {
+      seeker=getPrevNodeOf(seeker,processor);
+    }
+    while (true) {
+      PsiElement local_cap=PyUtil.getConcealingParent(seeker);
+      if (local_cap == null)       break;
+      if (local_cap == cap)       break;
+      if ((cap != null) && PsiTreeUtil.isAncestor(local_cap,cap,true))       break;
+      if ((local_cap != elt) && ((cap == null) || !PsiTreeUtil.isAncestor(local_cap,cap,true))) {
+        if (local_cap instanceof NameDefiner) {
+          seeker=local_cap;
+        }
+ else {
+          seeker=getPrevNodeOf(local_cap,processor);
+        }
+      }
+ else {
+        break;
+      }
+    }
+    if (is_outside_param_list && refersFromMethodToClass(capFunction,seeker))     continue;
+    if (seeker instanceof PyComprehensionElement && !PsiTreeUtil.isAncestor(seeker,elt,false)) {
+      continue;
+    }
+    if (seeker != null) {
+      if (!processor.execute(seeker,ResolveState.initial())) {
+        if (processor instanceof ResolveProcessor) {
+          return ((ResolveProcessor)processor).getResult();
+        }
+ else {
+          return seeker;
+        }
+      }
+    }
+  }
+ while (seeker != null);
+  if (processor instanceof ResolveProcessor) {
+    return ((ResolveProcessor)processor).getResult();
+  }
+  return null;
 }

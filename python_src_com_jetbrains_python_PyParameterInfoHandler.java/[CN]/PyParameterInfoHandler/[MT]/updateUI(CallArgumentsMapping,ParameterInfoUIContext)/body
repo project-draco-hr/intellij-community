@@ -1,2 +1,136 @@
 {
+  if (prev_result == null)   return;
+  final PyArgumentList arglist=prev_result.getArgumentList();
+  if (!arglist.isValid())   return;
+  CallArgumentsMapping result=arglist.analyzeCall(PyResolveContext.noImplicits());
+  PyMarkedCallee marked=result.getMarkedCallee();
+  if (marked == null)   return;
+  final Callable callable=marked.getCallable();
+  final List<PyParameter> raw_params=Arrays.asList(callable.getParameterList().getParameters());
+  final List<PyNamedParameter> n_param_list=new ArrayList<PyNamedParameter>(raw_params.size());
+  final List<String> hint_texts=new ArrayList<String>(raw_params.size());
+  final Map<PyNamedParameter,Integer> param_indexes=new HashMap<PyNamedParameter,Integer>();
+  final Map<Integer,EnumSet<ParameterInfoUIContextEx.Flag>> hint_flags=new HashMap<Integer,EnumSet<ParameterInfoUIContextEx.Flag>>();
+  ParamHelper.walkDownParamArray(callable.getParameterList().getParameters(),new ParamHelper.ParamWalker(){
+    public void enterTupleParameter(    PyTupleParameter param,    boolean first,    boolean last){
+      hint_flags.put(hint_texts.size(),EnumSet.noneOf(ParameterInfoUIContextEx.Flag.class));
+      hint_texts.add("(");
+    }
+    public void leaveTupleParameter(    PyTupleParameter param,    boolean first,    boolean last){
+      hint_flags.put(hint_texts.size(),EnumSet.noneOf(ParameterInfoUIContextEx.Flag.class));
+      if (last)       hint_texts.add(")");
+ else       hint_texts.add("), ");
+    }
+    public void visitNamedParameter(    PyNamedParameter param,    boolean first,    boolean last){
+      n_param_list.add(param);
+      StringBuilder strb=new StringBuilder();
+      strb.append(param.getRepr(true));
+      if (!last)       strb.append(", ");
+      int hint_index=hint_texts.size();
+      param_indexes.put(param,hint_index);
+      hint_flags.put(hint_index,EnumSet.noneOf(ParameterInfoUIContextEx.Flag.class));
+      hint_texts.add(strb.toString());
+    }
+    public void visitSingleStarParameter(    PySingleStarParameter param,    boolean first,    boolean last){
+      hint_flags.put(hint_texts.size(),EnumSet.noneOf(ParameterInfoUIContextEx.Flag.class));
+      if (last)       hint_texts.add("*");
+ else       hint_texts.add("*, ");
+    }
+  }
+);
+  final int current_param_offset=context.getCurrentParameterIndex();
+  for (int i=0; i < marked.getImplicitOffset(); i+=1) {
+    hint_flags.get(param_indexes.get(n_param_list.get(i))).add(ParameterInfoUIContextEx.Flag.DISABLE);
+  }
+  boolean can_offer_next=true;
+  int last_param_index=marked.getImplicitOffset();
+  final List<PyExpression> flat_args=PyUtil.flattenedParensAndLists(arglist.getArguments());
+  for (  PyExpression arg : flat_args) {
+    final boolean must_highlight=arg.getTextRange().contains(current_param_offset);
+    PsiElement seeker=arg;
+    while (seeker != arglist && seeker != null && !result.getPlainMappedParams().containsKey(seeker)) {
+      seeker=seeker.getParent();
+    }
+    if (seeker instanceof PyExpression) {
+      PyNamedParameter param=result.getPlainMappedParams().get((PyExpression)seeker);
+      last_param_index=Math.max(last_param_index,raw_params.indexOf(param));
+      if (must_highlight && param != null) {
+        final Integer param_index=param_indexes.get(param);
+        if (param_index < hint_flags.size()) {
+          hint_flags.get(param_index).add(ParameterInfoUIContextEx.Flag.HIGHLIGHT);
+          can_offer_next=false;
+        }
+      }
+    }
+ else     if (arg == result.getTupleArg()) {
+      for (      PyNamedParameter tpar : result.getTupleMappedParams()) {
+        last_param_index=Math.max(last_param_index,raw_params.indexOf(tpar));
+        final Integer param_index=param_indexes.get(tpar);
+        if (must_highlight && param_index != null && param_index < hint_flags.size()) {
+          hint_flags.get(param_index).add(ParameterInfoUIContextEx.Flag.HIGHLIGHT);
+          can_offer_next=false;
+        }
+      }
+    }
+ else     if (arg == result.getKwdArg()) {
+      for (      PyNamedParameter tpar : result.getKwdMappedParams()) {
+        last_param_index=Math.max(last_param_index,raw_params.indexOf(tpar));
+        final Integer param_index=param_indexes.get(tpar);
+        if (must_highlight && param_index != null && param_index < hint_flags.size()) {
+          hint_flags.get(param_index).add(ParameterInfoUIContextEx.Flag.HIGHLIGHT);
+          can_offer_next=false;
+        }
+      }
+    }
+ else {
+      List<PyNamedParameter> nparams=result.getNestedMappedParams().get(arg);
+      if (nparams != null) {
+        for (        PyNamedParameter tpar : nparams) {
+          last_param_index=Math.max(last_param_index,raw_params.indexOf(tpar));
+          final Integer param_index=param_indexes.get(tpar);
+          if (must_highlight && param_index != null && param_index < hint_flags.size()) {
+            hint_flags.get(param_index).add(ParameterInfoUIContextEx.Flag.HIGHLIGHT);
+            can_offer_next=false;
+          }
+        }
+      }
+    }
+  }
+  if (can_offer_next) {
+    int highlight_index=Integer.MAX_VALUE;
+    PyNamedParameter parameter=n_param_list.get(last_param_index);
+    if (last_param_index < raw_params.size() - 1 || flat_args.size() == 0) {
+      if (flat_args.isEmpty())       highlight_index=marked.getImplicitOffset();
+ else {
+        if (parameter.isPositionalContainer())         highlight_index=last_param_index;
+ else         highlight_index=last_param_index + 1;
+      }
+    }
+ else     if (last_param_index == raw_params.size() - 1) {
+      if (parameter.isPositionalContainer() || parameter.isKeywordContainer())       highlight_index=last_param_index;
+    }
+    if (highlight_index < n_param_list.size()) {
+      hint_flags.get(param_indexes.get(n_param_list.get(highlight_index))).add(ParameterInfoUIContextEx.Flag.HIGHLIGHT);
+    }
+  }
+  final String NO_PARAMS_MSG="<No parameters>";
+  String[] hints=ArrayUtil.toStringArray(hint_texts);
+  if (context instanceof ParameterInfoUIContextEx) {
+    final ParameterInfoUIContextEx pic=(ParameterInfoUIContextEx)context;
+    EnumSet<ParameterInfoUIContextEx.Flag>[] flags=new EnumSet[hint_flags.size()];
+    for (int i=0; i < flags.length; i+=1)     flags[i]=hint_flags.get(i);
+    if (hints.length < 1) {
+      hints=new String[]{NO_PARAMS_MSG};
+      flags=new EnumSet[]{EnumSet.of(ParameterInfoUIContextEx.Flag.DISABLE)};
+    }
+    pic.setupUIComponentPresentation(hints,flags,context.getDefaultParameterColor());
+  }
+ else {
+    StringBuilder signatureBuilder=new StringBuilder();
+    if (hints.length > 1) {
+      for (      String s : hints)       signatureBuilder.append(s);
+    }
+ else     signatureBuilder.append(NO_PARAMS_MSG);
+    context.setupUIComponentPresentation(signatureBuilder.toString(),-1,0,false,false,false,context.getDefaultParameterColor());
+  }
 }
