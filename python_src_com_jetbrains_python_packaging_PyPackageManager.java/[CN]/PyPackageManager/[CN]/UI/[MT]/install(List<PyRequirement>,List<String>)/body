@@ -1,18 +1,27 @@
 {
   final String progressTitle;
   final String successTitle;
-  if (requirements.size() == 1) {
-    final PyRequirement req=requirements.get(0);
-    progressTitle=String.format("Installing package '%s'",req);
-    successTitle=String.format("Package '%s' installed successfully",req);
-  }
- else {
-    progressTitle="Installing packages";
-    successTitle="Packages installed successfully";
-  }
-  run(new ExternalRunnable(){
-    @Override public void run() throws PyExternalProcessException {
-      PyPackageManager.getInstance(mySdk).install(requirements,extraArgs);
+  progressTitle="Installing packages";
+  successTitle="Packages installed successfully";
+  run(new MultiExternalRunnable(){
+    @Override public List<PyExternalProcessException> run(    @NotNull ProgressIndicator indicator){
+      final int size=requirements.size();
+      final List<PyExternalProcessException> exceptions=new ArrayList<PyExternalProcessException>();
+      final PyPackageManager manager=PyPackageManager.getInstance(mySdk);
+      for (int i=0; i < size; i++) {
+        final PyRequirement requirement=requirements.get(i);
+        if (myListener != null) {
+          indicator.setText(String.format("Installing package '%s'...",requirement));
+          indicator.setFraction((double)i / size);
+        }
+        try {
+          manager.install(list(requirement),extraArgs);
+        }
+ catch (        PyExternalProcessException e) {
+          exceptions.add(e);
+        }
+      }
+      return exceptions;
     }
   }
 ,progressTitle,successTitle,"Installed packages: " + PyPackageUtil.requirementsToString(requirements),"Install packages failed");
