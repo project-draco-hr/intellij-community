@@ -1,0 +1,36 @@
+{
+  String moduleName=binaryItem.getModule();
+  final File skeleton=getSkeleton(moduleName,getSkeletonsPath());
+  Matcher matcher=getParseHeader(skeleton);
+  boolean mustRebuild=true;
+  if (matcher != null && matcher.matches()) {
+    int fileVersion=fromVersionString(matcher.group(2));
+    int requiredVersion=myVersionChecker.getRequiredVersion(moduleName);
+    mustRebuild=fileVersion < requiredVersion;
+  }
+  if (!mustRebuild) {
+    mustRebuild=(skeleton.exists() && binaryItem.lastModified() > skeleton.lastModified());
+  }
+  if (myBlacklist != null) {
+    Pair<Integer,Long> versionInfo=myBlacklist.get(binaryItem.getPath());
+    if (versionInfo != null) {
+      int failedGeneratorVersion=versionInfo.getFirst();
+      long failedTimestamp=versionInfo.getSecond();
+      mustRebuild&=failedGeneratorVersion < myGeneratorVersion || failedTimestamp < binaryItem.lastModified();
+      if (!mustRebuild) {
+        errorList.add(new UpdateResult(moduleName,binaryItem.getPath(),binaryItem.lastModified(),false));
+      }
+    }
+  }
+  if (mustRebuild) {
+    indicateMinor(moduleName);
+    if (myPregeneratedSkeletons != null && copyPregeneratedSkeleton(moduleName)) {
+      return true;
+    }
+    LOG.info("Skeleton for " + moduleName);
+    if (!generateSkeleton(moduleName,binaryItem.getPath(),null)) {
+      errorList.add(new UpdateResult(moduleName,binaryItem.getPath(),binaryItem.lastModified(),true));
+    }
+  }
+  return false;
+}
