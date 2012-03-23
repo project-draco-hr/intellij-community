@@ -1,0 +1,42 @@
+{
+  final Map<String,List<String>> errors=new TreeMap<String,List<String>>();
+  final List<String> failed_sdks=new SmartList<String>();
+  final ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
+  List<String> sdk_errors;
+  final String homePath=sdk.getHomePath();
+  if (skeletonsPath == null) {
+    LOG.info("Could not find skeletons path for SDK path " + homePath);
+  }
+ else {
+    LOG.info("Refreshing skeletons for " + homePath);
+    SkeletonVersionChecker checker=new SkeletonVersionChecker(0);
+    sdk_errors=new PySkeletonRefresher(sdk,skeletonsPath,indicator).regenerateSkeletons(project,checker,migrationFlag);
+    if (sdk_errors.size() > 0) {
+      String sdk_name=sdk.getName();
+      List<String> known_errors=errors.get(sdk_name);
+      if (known_errors == null) {
+        errors.put(sdk_name,sdk_errors);
+      }
+ else {
+        known_errors.addAll(sdk_errors);
+      }
+    }
+  }
+  if (failed_sdks.size() > 0 || errors.size() > 0) {
+    int module_errors=0;
+    for (    String sdk_name : errors.keySet())     module_errors+=errors.get(sdk_name).size();
+    String message;
+    if (failed_sdks.size() > 0) {
+      message=PyBundle.message("sdk.errorlog.$0.mods.fail.in.$1.sdks.$2.completely",module_errors,errors.size(),failed_sdks.size());
+    }
+ else {
+      message=PyBundle.message("sdk.errorlog.$0.mods.fail.in.$1.sdks",module_errors,errors.size());
+    }
+    Notifications.Bus.notify(new Notification(SKELETONS_TOPIC,PyBundle.message("sdk.some.skeletons.failed"),message,NotificationType.WARNING,new NotificationListener(){
+      @Override public void hyperlinkUpdate(      @NotNull Notification notification,      @NotNull HyperlinkEvent event){
+        new SkeletonErrorsDialog(errors,failed_sdks).setVisible(true);
+      }
+    }
+));
+  }
+}
