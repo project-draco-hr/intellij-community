@@ -33,6 +33,33 @@
     cmdline.add(homePath);
     cmdline.add(helperPath);
     cmdline.addAll(args);
-    return PySdkUtil.getProcessOutput(parentDir,ArrayUtil.toStringArray(cmdline),TIMEOUT);
+    final boolean canCreate=FileUtil.ensureCanCreateFile(new File(mySdk.getHomePath()));
+    if (!canCreate && !SystemInfo.isWindows && askForSudo) {
+      try {
+        final ProcessOutput result=ExecUtil.sudoAndGetOutput(StringUtil.join(cmdline," "),"Please enter your password to uninstall system packages: ");
+        if (result.getExitCode() != 0) {
+          final String stdout=result.getStdout();
+          String message=result.getStderr();
+          if (message.trim().isEmpty()) {
+            message=stdout;
+          }
+          throw new PyExternalProcessException(result.getExitCode(),helper,args,message);
+        }
+        return result;
+      }
+ catch (      InterruptedException e) {
+        throw new PyExternalProcessException(ERROR_INTERRUPTED,helper,args,e.getMessage());
+      }
+catch (      ExecutionException e) {
+        throw new PyExternalProcessException(ERROR_EXECUTION,helper,args,e.getMessage());
+      }
+catch (      ScriptException e) {
+        throw new PyExternalProcessException(ERROR_TOOL_NOT_FOUND,helper,args,e.getMessage());
+      }
+catch (      IOException e) {
+        throw new PyExternalProcessException(ERROR_ACCESS_DENIED,helper,args,e.getMessage());
+      }
+    }
+ else     return PySdkUtil.getProcessOutput(parentDir,ArrayUtil.toStringArray(cmdline),TIMEOUT);
   }
 }
