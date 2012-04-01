@@ -1,26 +1,34 @@
 {
   PsiElement element=descriptor.getPsiElement();
   if (element instanceof PyAssignmentStatement && element.isWritable()) {
-    PyAssignmentStatement statement=(PyAssignmentStatement)element;
-    PyExpression target=statement.getLeftHandSideExpression();
-    PyBinaryExpression expression=(PyBinaryExpression)statement.getAssignedValue();
+    final PyAssignmentStatement statement=(PyAssignmentStatement)element;
+    final PyExpression target=statement.getLeftHandSideExpression();
+    final PyBinaryExpression expression=(PyBinaryExpression)statement.getAssignedValue();
+    if (expression == null)     return;
     PyExpression leftExpression=expression.getLeftExpression();
     PyExpression rightExpression=expression.getRightExpression();
-    if (rightExpression.getText().equals(target.getText())) {
-      PyExpression tmp=rightExpression;
-      rightExpression=leftExpression;
-      leftExpression=tmp;
-    }
-    List<PsiComment> comments=PsiTreeUtil.getChildrenOfTypeAsList(statement,PsiComment.class);
-    if (leftExpression != null && (leftExpression instanceof PyReferenceExpression || leftExpression instanceof PySubscriptionExpression)) {
-      if (leftExpression.getText().equals(target.getText())) {
-        if (rightExpression instanceof PyNumericLiteralExpression || rightExpression instanceof PyStringLiteralExpression || rightExpression instanceof PyReferenceExpression|| isPercentage(rightExpression)|| isCompound(rightExpression)|| isMathOperation(rightExpression,expression.getOperator())) {
-          PyElementGenerator elementGenerator=PyElementGenerator.getInstance(project);
-          StringBuilder stringBuilder=new StringBuilder();
-          stringBuilder.append(target.getText()).append(" ").append(expression.getPsiOperator().getText()).append("= ").append(rightExpression.getText());
-          PyAugAssignmentStatementImpl augAssignment=elementGenerator.createFromText(LanguageLevel.forElement(element),PyAugAssignmentStatementImpl.class,stringBuilder.toString());
-          for (          PsiComment comment : comments)           augAssignment.add(comment);
-          statement.replace(augAssignment);
+    if (rightExpression instanceof PyParenthesizedExpression)     rightExpression=((PyParenthesizedExpression)rightExpression).getContainedExpression();
+    if (target != null && rightExpression != null) {
+      final String targetText=target.getText();
+      final String rightText=rightExpression.getText();
+      if (rightText.equals(targetText)) {
+        final PyExpression tmp=rightExpression;
+        rightExpression=leftExpression;
+        leftExpression=tmp;
+      }
+      final List<PsiComment> comments=PsiTreeUtil.getChildrenOfTypeAsList(statement,PsiComment.class);
+      if ((leftExpression instanceof PyReferenceExpression || leftExpression instanceof PySubscriptionExpression)) {
+        if (leftExpression.getText().equals(targetText)) {
+          if (rightExpression instanceof PyNumericLiteralExpression || rightExpression instanceof PyStringLiteralExpression || rightExpression instanceof PyReferenceExpression|| isPercentage(rightExpression)|| isCompound(rightExpression)|| isMathOperation(rightExpression,expression.getOperator())) {
+            final PyElementGenerator elementGenerator=PyElementGenerator.getInstance(project);
+            final StringBuilder stringBuilder=new StringBuilder();
+            final PsiElement psiOperator=expression.getPsiOperator();
+            if (psiOperator == null)             return;
+            stringBuilder.append(targetText).append(" ").append(psiOperator.getText()).append("= ").append(rightText);
+            final PyAugAssignmentStatementImpl augAssignment=elementGenerator.createFromText(LanguageLevel.forElement(element),PyAugAssignmentStatementImpl.class,stringBuilder.toString());
+            for (            PsiComment comment : comments)             augAssignment.add(comment);
+            statement.replace(augAssignment);
+          }
         }
       }
     }
