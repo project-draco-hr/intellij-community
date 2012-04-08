@@ -1,2 +1,82 @@
 {
+  if (anchor == null || !anchor.isValid()) {
+    return null;
+  }
+  final String trimmed=DocStringUtil.trimDocString(type);
+  offset+=type.indexOf(trimmed);
+  type=trimmed;
+  final TextRange whole=new TextRange(offset,offset + type.length());
+  if (type.equals("None")) {
+    final PyType t=PyNoneType.INSTANCE;
+    types.put(whole,t);
+    return t;
+  }
+  if (type.startsWith("(") && type.endsWith(")")) {
+    return parseTupleType(anchor,type.substring(1,type.length() - 1),types,fullRanges,offset + 1);
+  }
+  if (type.contains(" or ")) {
+    return parseUnionType(anchor,type,types,fullRanges,offset);
+  }
+  final PyBuiltinCache builtinCache=PyBuiltinCache.getInstance(anchor);
+  if (type.equals("unknown")) {
+    return null;
+  }
+  if (type.equals("string")) {
+    PyType t=builtinCache.getStringType(LanguageLevel.forElement(anchor));
+    types.put(whole,t);
+    return t;
+  }
+  if (type.equals("str")) {
+    final PyType t=builtinCache.getStrType();
+    types.put(whole,t);
+    return t;
+  }
+  if (type.equals("bytes")) {
+    final PyType t=builtinCache.getBytesType(LanguageLevel.forElement(anchor));
+    types.put(whole,t);
+    return t;
+  }
+  if (type.equals("unicode")) {
+    final PyType t=builtinCache.getUnicodeType(LanguageLevel.forElement(anchor));
+    types.put(whole,t);
+    return t;
+  }
+  if (type.equals("boolean")) {
+    final PyType t=builtinCache.getBoolType();
+    types.put(whole,t);
+    return t;
+  }
+  if (type.equals("file object")) {
+    final PyType t=builtinCache.getObjectType("file");
+    types.put(whole,t);
+    return t;
+  }
+  if (type.equals("dictionary")) {
+    final PyType t=builtinCache.getObjectType("dict");
+    types.put(whole,t);
+    return t;
+  }
+  if (type.startsWith("dict from")) {
+    return parseDictFromToType(anchor,type,types,fullRanges,offset);
+  }
+  if (type.equals("integer") || (type.equals("long") && LanguageLevel.forElement(anchor).isPy3K())) {
+    final PyType t=builtinCache.getIntType();
+    types.put(whole,t);
+    return t;
+  }
+  if (type.length() == 1 && 'T' <= type.charAt(0) && type.charAt(0) <= 'Z') {
+    return new PyGenericType(type);
+  }
+  final Matcher m=PARAMETRIZED_CLASS.matcher(type);
+  if (m.matches()) {
+    final PyType objType=parseObjectType(anchor,m.group(1),builtinCache,types,fullRanges,offset + m.start(1));
+    final PyType elementType=parse(anchor,m.group(2),types,fullRanges,offset + m.start(2));
+    if (objType != null) {
+      if (objType instanceof PyClassType && elementType != null) {
+        return new PyCollectionTypeImpl(((PyClassType)objType).getPyClass(),false,elementType);
+      }
+      return objType;
+    }
+  }
+  return parseObjectType(anchor,type,builtinCache,types,fullRanges,offset);
 }
