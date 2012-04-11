@@ -1,0 +1,39 @@
+{
+  EditorFactoryListener editorFactoryListener=new EditorFactoryListener(){
+    public void editorCreated(    @NotNull EditorFactoryEvent event){
+synchronized (myLock) {
+        if (myIsProjectClosing)         return;
+      }
+      final Editor editor=event.getEditor();
+      if (editor.getProject() != myProject)       return;
+      ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+        @Override public void run(){
+          CoverageDataManagerImpl.this.editorCreated(editor);
+        }
+      }
+);
+    }
+    public void editorReleased(    @NotNull EditorFactoryEvent event){
+      final Editor editor=event.getEditor();
+      if (editor.getProject() != myProject)       return;
+      final SrcFileAnnotator fileAnnotator;
+synchronized (ANNOTATORS_LOCK) {
+        fileAnnotator=myAnnotators.remove(editor);
+      }
+      if (fileAnnotator != null) {
+        fileAnnotator.editorReleased();
+      }
+    }
+  }
+;
+  EditorFactory.getInstance().addEditorFactoryListener(editorFactoryListener,myProject);
+  ProjectManagerAdapter projectManagerListener=new ProjectManagerAdapter(){
+    public void projectClosing(    Project project){
+synchronized (myLock) {
+        myIsProjectClosing=true;
+      }
+    }
+  }
+;
+  ProjectManager.getInstance().addProjectManagerListener(myProject,projectManagerListener);
+}

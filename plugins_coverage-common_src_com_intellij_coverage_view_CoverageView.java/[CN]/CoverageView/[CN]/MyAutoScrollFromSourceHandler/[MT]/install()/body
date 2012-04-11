@@ -1,0 +1,34 @@
+{
+  final MessageBusConnection connection=myProject.getMessageBus().connect(myProject);
+  connection.subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER,new FileEditorManagerAdapter(){
+    public void selectionChanged(    final FileEditorManagerEvent event){
+      final FileEditor newEditor=event.getNewEditor();
+      if (newEditor == null)       return;
+      myAutoscrollAlarm.cancelAllRequests();
+      myAutoscrollAlarm.addRequest(new Runnable(){
+        public void run(){
+          if (myProject.isDisposed() || !CoverageView.this.isShowing())           return;
+          if (myStateBean.myAutoScrollFromSource) {
+            final VirtualFile file=FileEditorManagerEx.getInstanceEx(myProject).getFile(newEditor);
+            if (file != null) {
+              if (canSelect(file)) {
+                PsiElement e=null;
+                if (newEditor instanceof TextEditor) {
+                  final int offset=((TextEditor)newEditor).getEditor().getCaretModel().getOffset();
+                  PsiDocumentManager.getInstance(myProject).commitAllDocuments();
+                  final PsiFile psiFile=PsiManager.getInstance(myProject).findFile(file);
+                  if (psiFile != null) {
+                    e=psiFile.findElementAt(offset);
+                  }
+                }
+                myBuilder.select(e != null ? e : file);
+              }
+            }
+          }
+        }
+      }
+,300,ModalityState.NON_MODAL);
+    }
+  }
+);
+}
