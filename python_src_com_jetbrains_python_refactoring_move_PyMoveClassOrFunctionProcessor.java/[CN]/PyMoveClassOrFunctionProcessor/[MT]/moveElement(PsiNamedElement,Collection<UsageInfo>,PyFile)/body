@@ -1,41 +1,16 @@
 {
-  final PsiFile oldFile=element.getContainingFile();
+  final PsiFile file=element.getContainingFile();
   PyClassRefactoringUtil.rememberNamedReferences(element);
   final PsiNamedElement newElement=(PsiNamedElement)(destination.add(element));
   for (  UsageInfo usage : usages) {
     final PsiElement usageElement=usage.getElement();
-    if (usageElement instanceof PyQualifiedExpression) {
-      PyQualifiedExpression expr=(PyQualifiedExpression)usageElement;
-      if (element instanceof PyClass && PyNames.INIT.equals(expr.getName())) {
-        continue;
-      }
-      if (expr.getQualifier() != null) {
-        final PsiElement newExpr=expr.replace(new PyReferenceExpressionImpl(expr.getNameElement()));
-        PyClassRefactoringUtil.insertImport(newExpr,newElement,null,true);
-      }
-    }
-    if (usageElement instanceof PyStringLiteralExpression) {
-      for (      PsiReference ref : usageElement.getReferences()) {
-        if (ref instanceof DocStringTypeReference && ref.isReferenceTo(element)) {
-          ref.bindToElement(newElement);
-        }
-      }
-    }
- else {
-      final PyImportStatementBase importStmt=PsiTreeUtil.getParentOfType(usageElement,PyImportStatementBase.class);
-      if (importStmt != null) {
-        PyClassRefactoringUtil.updateImportOfElement(importStmt,newElement);
-      }
-      if (usage.getFile() == oldFile && (usageElement == null || !PsiTreeUtil.isAncestor(element,usageElement,false))) {
-        PyClassRefactoringUtil.insertImport(element,newElement);
-      }
-      if (usageElement != null && resolvesToLocalStarImport(usageElement)) {
-        PyClassRefactoringUtil.insertImport(usageElement,newElement);
-        new PyImportOptimizer().processFile(usageElement.getContainingFile()).run();
-      }
+    if (usageElement != null) {
+      updateUsage(usageElement,element,newElement);
     }
   }
   PyClassRefactoringUtil.restoreNamedReferences(newElement,element);
   element.delete();
-  new PyImportOptimizer().processFile(oldFile).run();
+  if (file != null) {
+    optimizeImports(file);
+  }
 }
