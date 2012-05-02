@@ -1,0 +1,60 @@
+{
+  myUpgradeButton.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      final int[] rows=myPackagesTable.getSelectedRows();
+      final Sdk selectedSdk=mySelectedSdk;
+      if (selectedSdk != null) {
+        final List<PyRequirement> requirements=new ArrayList<PyRequirement>();
+        for (        int row : rows) {
+          final Object pyPackage=myPackagesTableModel.getValueAt(row,0);
+          if (pyPackage instanceof PyPackage) {
+            final String packageName=((PyPackage)pyPackage).getName();
+            final Object currentVersion=myPackagesTableModel.getValueAt(row,1);
+            PyPIPackageUtil.INSTANCE.usePackageReleases(packageName,new AsyncCallback(){
+              @Override public void handleResult(              Object result,              URL url,              String method){
+                final List<String> releases=(List<String>)result;
+                PyPIPackageUtil.INSTANCE.addPackageReleases(packageName,releases);
+                if (releases.isEmpty() || PyRequirement.VERSION_COMPARATOR.compare((String)currentVersion,releases.get(0)) < 0) {
+                  requirements.add(new PyRequirement(packageName));
+                }
+                ApplicationManager.getApplication().invokeLater(new Runnable(){
+                  @Override public void run(){
+                    PyPackageManager.UI ui=new PyPackageManager.UI(myProject,selectedSdk,new PyPackageManager.UI.Listener(){
+                      @Override public void started(){
+                        myPackagesTable.setPaintBusy(true);
+                      }
+                      @Override public void finished(                      final List<PyExternalProcessException> exceptions){
+                        myPackagesTable.clearSelection();
+                        updatePackages(selectedSdk);
+                        myPackagesTable.setPaintBusy(false);
+                        if (exceptions.isEmpty()) {
+                          myNotificationArea.showSuccess("Package successfully upgraded");
+                        }
+ else {
+                          myNotificationArea.showError("Upgrade packages failed. <a href=\"xxx\">Details...</a>","Upgrade Packages Failed",PyPackageManager.UI.createDescription(exceptions,"Upgrade packages failed."));
+                        }
+                      }
+                    }
+);
+                    ui.install(requirements,Collections.singletonList("-U"));
+                  }
+                }
+,ModalityState.any());
+              }
+              @Override public void handleError(              Exception exception,              URL url,              String method){
+                ApplicationManager.getApplication().invokeLater(new Runnable(){
+                  @Override public void run(){
+                    Messages.showErrorDialog("Error occurred. Please, check your internet connection.","Upgrade Package Failed.");
+                  }
+                }
+,ModalityState.any());
+              }
+            }
+);
+          }
+        }
+      }
+    }
+  }
+);
+}

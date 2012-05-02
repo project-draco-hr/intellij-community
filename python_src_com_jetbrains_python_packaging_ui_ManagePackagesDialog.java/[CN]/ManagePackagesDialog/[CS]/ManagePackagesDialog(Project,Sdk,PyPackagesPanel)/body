@@ -1,0 +1,79 @@
+{
+  super(false);
+  myInstallToUser.setEnabled(!PythonSdkType.isVirtualEnv(sdk));
+  myInstallToUser.setSelected(false);
+  myPackageListPanel=packageListPanel;
+  init();
+  final JBTable table=myPackageListPanel.getPackagesTable();
+  setTitle("Available Packages");
+  myPackagesModel=new PackagesModel(project);
+  myPackages=new JBList();
+  myNotificationArea=new PyPackagesNotificationPanel(project);
+  myNotificationsAreaPlaceholder.add(myNotificationArea.getComponent(),BorderLayout.CENTER);
+  final AnActionButton reloadButton=new AnActionButton("Reload List of Packages",IconLoader.getIcon("/vcs/refresh.png")){
+    @Override public void actionPerformed(    AnActionEvent e){
+      myPackages.setPaintBusy(true);
+      final Application application=ApplicationManager.getApplication();
+      application.executeOnPooledThread(new Runnable(){
+        @Override public void run(){
+          try {
+            final PyPackageService service=PyPackageService.getInstance();
+            PyPIPackageUtil.INSTANCE.updatePyPICache(service);
+            service.LAST_TIME_CHECKED=System.currentTimeMillis();
+            myPackages.setPaintBusy(false);
+          }
+ catch (          IOException e) {
+            application.invokeLater(new Runnable(){
+              @Override public void run(){
+                Messages.showErrorDialog("Failed to update package list. Please, check your internet connection.","Update Package List Failed");
+                myPackages.setPaintBusy(false);
+              }
+            }
+,ModalityState.stateForComponent(myPackages));
+          }
+        }
+      }
+);
+    }
+  }
+;
+  myPackagesPanel=ToolbarDecorator.createDecorator(this.myPackages).disableAddAction().disableUpDownActions().disableRemoveAction().addExtraAction(reloadButton).createPanel();
+  myPackagesPanel.setPreferredSize(new Dimension(400,-1));
+  mySplitPane.setLeftComponent(myPackagesPanel);
+  myPackages.setModel(myPackagesModel);
+  myPackages.addListSelectionListener(new MyPackageSelectionListener());
+  if (myInstallToUser.isEnabled())   myInstallToUser.setSelected(PyPackageService.getInstance().useUserSite(sdk.getHomePath()));
+  myInstallToUser.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent event){
+      PyPackageService.getInstance().addSdkToUserSite(sdk.getHomePath(),myInstallToUser.isSelected());
+    }
+  }
+);
+  myOptionsCheckBox.setEnabled(false);
+  myVersionCheckBox.setEnabled(false);
+  myVersionCheckBox.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent event){
+      myVersionComboBox.setEnabled(myVersionCheckBox.isSelected());
+    }
+  }
+);
+  UiNotifyConnector.doWhenFirstShown(myPackages,new Runnable(){
+    @Override public void run(){
+      initModel();
+    }
+  }
+);
+  myOptionsCheckBox.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent event){
+      myOptionsField.setEnabled(myOptionsCheckBox.isSelected());
+    }
+  }
+);
+  myInstallButton.setEnabled(false);
+  myDescriptionTextArea.addHyperlinkListener(new MyHyperlinkListener());
+  addInstallAction(sdk,project,table);
+  myInstalledPackages=new HashSet<String>();
+  updateInstalledNames(table);
+  addManageAction();
+  myInstallToUser.setText("Install to user's site packages directory (" + PyPackageManager.getUserSite() + ")");
+}
