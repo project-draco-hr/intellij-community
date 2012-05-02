@@ -1,0 +1,35 @@
+{
+  if (usage instanceof PyQualifiedExpression) {
+    PyQualifiedExpression expr=(PyQualifiedExpression)usage;
+    if (oldElement instanceof PyClass && PyNames.INIT.equals(expr.getName())) {
+      return;
+    }
+    if (expr.getQualifier() != null) {
+      final PsiElement newExpr=expr.replace(new PyReferenceExpressionImpl(expr.getNameElement()));
+      PyClassRefactoringUtil.insertImport(newExpr,newElement,null,true);
+    }
+  }
+  if (usage instanceof PyStringLiteralExpression) {
+    for (    PsiReference ref : usage.getReferences()) {
+      if (ref instanceof DocStringTypeReference && ref.isReferenceTo(oldElement)) {
+        ref.bindToElement(newElement);
+      }
+    }
+  }
+ else {
+    final PyImportStatementBase importStmt=getImportStatementByElement(usage);
+    if (importStmt != null) {
+      PyClassRefactoringUtil.updateImportOfElement(importStmt,newElement);
+    }
+    final PsiFile usageFile=usage.getContainingFile();
+    if (usageFile == oldElement.getContainingFile() && !PsiTreeUtil.isAncestor(oldElement,usage,false)) {
+      PyClassRefactoringUtil.insertImport(oldElement,newElement);
+    }
+    if (resolvesToLocalStarImport(usage)) {
+      PyClassRefactoringUtil.insertImport(usage,newElement);
+      if (usageFile != null) {
+        optimizeImports(usageFile);
+      }
+    }
+  }
+}
