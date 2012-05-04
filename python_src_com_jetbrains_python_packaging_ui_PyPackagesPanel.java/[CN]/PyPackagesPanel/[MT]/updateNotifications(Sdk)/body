@@ -1,0 +1,53 @@
+{
+  final Application application=ApplicationManager.getApplication();
+  application.executeOnPooledThread(new Runnable(){
+    @Override public void run(){
+      PyExternalProcessException exc=null;
+      try {
+        myHasDistribute=PyPackageManager.getInstance(selectedSdk).findPackage(PyPackageManager.PACKAGE_DISTRIBUTE) != null;
+        if (!myHasDistribute)         myHasDistribute=PyPackageManager.getInstance(selectedSdk).findPackage(PyPackageManager.PACKAGE_SETUPTOOLS) != null;
+        myHasPip=PyPackageManager.getInstance(selectedSdk).findPackage(PyPackageManager.PACKAGE_PIP) != null;
+      }
+ catch (      PyExternalProcessException e) {
+        exc=e;
+      }
+      final PyExternalProcessException externalProcessException=exc;
+      application.invokeLater(new Runnable(){
+        @Override public void run(){
+          if (selectedSdk == mySelectedSdk) {
+            final PythonSdkFlavor flavor=PythonSdkFlavor.getFlavor(selectedSdk);
+            final boolean invalid=PythonSdkType.isInvalid(selectedSdk);
+            boolean allowCreateVirtualEnv=!(PythonSdkType.isRemote(selectedSdk) || flavor instanceof IronPythonSdkFlavor) && myNotificationArea.hasLinkHandler(CREATE_VENV);
+            final String createVirtualEnvLink="<a href=\"" + CREATE_VENV + "\">create new VirtualEnv</a>";
+            myNotificationArea.hide();
+            if (!invalid) {
+              String text=null;
+              if (externalProcessException != null) {
+                text=externalProcessException.getMessage();
+                allowCreateVirtualEnv&=externalProcessException.getRetcode() == PyPackageManager.ERROR_NO_PACKAGING_TOOLS;
+              }
+ else               if (!myHasDistribute) {
+                text="Python package management tools not found. <a href=\"" + INSTALL_DISTRIBUTE + "\">Install 'distribute'</a>";
+              }
+ else               if (!myHasPip) {
+                text="Python packaging tool 'pip' not found. <a href=\"" + INSTALL_PIP + "\">Install 'pip'</a>";
+              }
+              if (StringUtil.isEmptyOrSpaces(text) && externalProcessException != null) {
+                text="Python packaging tool 'pip' not found. <a href=\"" + INSTALL_PIP + "\">Install 'pip'</a>";
+              }
+              if (text != null) {
+                if (allowCreateVirtualEnv) {
+                  text+=" or " + createVirtualEnvLink;
+                }
+                myNotificationArea.showWarning(text);
+              }
+            }
+            myInstallButton.setEnabled(!invalid && externalProcessException == null && myHasPip);
+          }
+        }
+      }
+,ModalityState.any());
+    }
+  }
+);
+}

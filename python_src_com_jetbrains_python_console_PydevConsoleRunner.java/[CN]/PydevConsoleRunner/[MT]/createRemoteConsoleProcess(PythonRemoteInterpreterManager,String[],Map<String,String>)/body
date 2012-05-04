@@ -1,0 +1,39 @@
+{
+  PythonRemoteSdkAdditionalData data=(PythonRemoteSdkAdditionalData)mySdk.getSdkAdditionalData();
+  GeneralCommandLine commandLine=new GeneralCommandLine(command);
+  commandLine.setEnvParams(envs);
+  commandLine.getParametersList().set(1,PythonRemoteInterpreterManager.toSystemDependent(new File(data.getPyCharmHelpersPath(),PYDEV_PYDEVCONSOLE_PY).getPath(),PySourcePosition.isWindowsPath(data.getInterpreterPath())));
+  commandLine.getParametersList().set(2,"0");
+  commandLine.getParametersList().set(3,"0");
+  myCommandLine=commandLine.getCommandLineString();
+  PyRemoteSshProcess remoteProcess=manager.createRemoteProcess(getProject(),data,commandLine,false);
+  Scanner s=new Scanner(remoteProcess.getInputStream());
+  boolean received=false;
+  long started=System.currentTimeMillis();
+  while (!received && (System.currentTimeMillis() - started < 2000)) {
+    try {
+      int port=s.nextInt();
+      int port2=s.nextInt();
+      received=true;
+      remoteProcess.addLocalTunnel(myPorts[0],data.getHost(),port);
+      remoteProcess.addRemoteTunnel(port2,"localhost",myPorts[1]);
+    }
+ catch (    Exception e) {
+      try {
+        Thread.sleep(200);
+      }
+ catch (      InterruptedException e1) {
+      }
+    }
+  }
+  if (!received) {
+    throw new ExecutionException("Couldn't get remote ports for console connection.");
+  }
+  try {
+    myPydevConsoleCommunication=new PydevConsoleCommunication(getProject(),myPorts[0],remoteProcess,myPorts[1]);
+    return remoteProcess;
+  }
+ catch (  Exception e) {
+    throw new ExecutionException(e.getMessage());
+  }
+}
