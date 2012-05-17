@@ -1,81 +1,22 @@
 {
   final int start=startInScope.getTextOffset();
   final int end=endInScope.getTextOffset() + endInScope.getTextLength();
-  owner.acceptChildren(new PyRecursiveElementVisitor(){
-    @Override public void visitPyClass(    final PyClass node){
-      if (CodeFragmentUtil.getPosition(node,start,end) == Position.INSIDE) {
-        throw new CannotCreateCodeFragmentException(PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.when.class.declaration.inside"));
-      }
-    }
-    @Override public void visitPyFunction(    final PyFunction node){
-      if (CodeFragmentUtil.getPosition(node,start,end) == Position.INSIDE) {
-        throw new CannotCreateCodeFragmentException(PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.when.function.declaration.inside"));
-      }
-    }
-    @Override public void visitPyFromImportStatement(    PyFromImportStatement node){
-      if (CodeFragmentUtil.getPosition(node,start,end) == Position.INSIDE) {
-        throw new CannotCreateCodeFragmentException(PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.when.from.import.inside"));
-      }
-    }
+  final ControlFlow flow=ControlFlowCache.getControlFlow(owner);
+  if (flow == null) {
+    throw new CannotCreateCodeFragmentException("Cannot determine execution flow for the code fragment");
   }
-);
-  final HashSet<Instruction> outerInstructions=new HashSet<Instruction>();
-  boolean returnInstructionInside=false;
-  final Instruction[] flow=ControlFlowCache.getControlFlow(owner).getInstructions();
-  for (  Instruction instruction : flow) {
-    final PsiElement element=instruction.getElement();
-    if (element != null && CodeFragmentUtil.elementFit(element,start,end)) {
-      if (element instanceof PyReturnStatement) {
-        returnInstructionInside=true;
-      }
-      if (element instanceof PyBreakStatement && !CodeFragmentUtil.elementFit(((PyBreakStatement)element).getLoopStatement(),start,end)) {
-        throw new CannotCreateCodeFragmentException(PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.no.corresponding.loop.for.break"));
-      }
-      if (element instanceof PyContinueStatement && !CodeFragmentUtil.elementFit(((PyContinueStatement)element).getLoopStatement(),start,end)) {
-        throw new CannotCreateCodeFragmentException(PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.no.corresponding.loop.for.continue"));
-      }
-      for (      Instruction next : instruction.allSucc()) {
-        if (next instanceof ConditionalInstruction) {
-          continue;
-        }
-        if (next instanceof ReadWriteInstruction && ((ReadWriteInstruction)next).getAccess().isAssertTypeAccess()) {
-          continue;
-        }
-        final PsiElement nextElement=next.getElement();
-        if (nextElement != null && PyBinaryExpressionNavigator.getBinaryExpressionByOperand(nextElement) != null) {
-          continue;
-        }
-        if (nextElement instanceof PyExceptPart) {
-          continue;
-        }
-        if (nextElement == null && PsiTreeUtil.getParentOfType(element,PyRaiseStatement.class) != null) {
-          continue;
-        }
-        if (!CodeFragmentUtil.elementFit(nextElement,start,end)) {
-          outerInstructions.add(next);
-        }
-      }
-    }
-  }
-  if (outerInstructions.size() > 2) {
+  final List<Instruction> subGraph=getFragmentSubGraph(flow,start,end);
+  final AnalysisResult subGraphAnalysis=analyseSubGraph(subGraph,start,end);
+  if (subGraphAnalysis.regularExits > 0 && subGraphAnalysis.returns > 0) {
     throw new CannotCreateCodeFragmentException(PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.when.execution.flow.is.interrupted"));
   }
-  if (outerInstructions.size() == 2) {
-    boolean errorFound=true;
-    for (    Instruction outerInstruction : outerInstructions) {
-      final PsiElement element=outerInstruction.getElement();
-      if (element != null && (PyForStatementNavigator.getPyForStatementByIterable(element) != null || PyForStatementNavigator.getPyForStatementByBody(element) != null)) {
-        if (!returnInstructionInside) {
-          errorFound=false;
-          break;
-        }
-      }
-    }
-    if (errorFound) {
-      throw new CannotCreateCodeFragmentException(PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.when.execution.flow.is.interrupted"));
-    }
+  if (subGraphAnalysis.targetInstructions > 1) {
+    throw new CannotCreateCodeFragmentException(PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.when.execution.flow.is.interrupted"));
+  }
+  if (subGraphAnalysis.starImports > 0) {
+    throw new CannotCreateCodeFragmentException(PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.when.from.import.inside"));
   }
   final PyCodeFragmentBuilder builder=new PyCodeFragmentBuilder(owner,start,end);
   owner.acceptChildren(builder);
-  return new CodeFragment(builder.inElements,builder.outElements,returnInstructionInside);
+  return new CodeFragment(builder.inElements,builder.outElements,subGraphAnalysis.returns > 0);
 }
