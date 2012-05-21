@@ -5,7 +5,8 @@
   if (flow == null) {
     throw new CannotCreateCodeFragmentException("Cannot determine execution flow for the code fragment");
   }
-  final List<Instruction> subGraph=getFragmentSubGraph(flow,start,end);
+  final List<Instruction> graph=Arrays.asList(flow.getInstructions());
+  final List<Instruction> subGraph=getFragmentSubGraph(graph,start,end);
   final AnalysisResult subGraphAnalysis=analyseSubGraph(subGraph,start,end);
   if (subGraphAnalysis.regularExits > 0 && subGraphAnalysis.returns > 0) {
     throw new CannotCreateCodeFragmentException(PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.when.execution.flow.is.interrupted"));
@@ -16,7 +17,22 @@
   if (subGraphAnalysis.starImports > 0) {
     throw new CannotCreateCodeFragmentException(PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.when.from.import.inside"));
   }
-  final PyCodeFragmentBuilder builder=new PyCodeFragmentBuilder(owner,start,end);
-  owner.acceptChildren(builder);
-  return new CodeFragment(builder.inElements,builder.outElements,subGraphAnalysis.returns > 0);
+  final Set<String> inputNames=new HashSet<String>();
+  for (  PsiElement element : filterElementsInScope(getInputElements(subGraph,graph),owner)) {
+    final String name=getName(element);
+    if (name != null) {
+      if (PyPsiUtils.isMethodContext(element) && "self".equals(name)) {
+        continue;
+      }
+      inputNames.add(name);
+    }
+  }
+  final Set<String> outputNames=new HashSet<String>();
+  for (  PsiElement element : getOutputElements(subGraph,graph)) {
+    final String name=getName(element);
+    if (name != null) {
+      outputNames.add(name);
+    }
+  }
+  return new CodeFragment(inputNames,outputNames,subGraphAnalysis.returns > 0);
 }
