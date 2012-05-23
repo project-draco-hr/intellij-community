@@ -8,24 +8,22 @@
   final List<Instruction> graph=Arrays.asList(flow.getInstructions());
   final List<Instruction> subGraph=getFragmentSubGraph(graph,start,end);
   final AnalysisResult subGraphAnalysis=analyseSubGraph(subGraph,start,end);
-  if (subGraphAnalysis.regularExits > 0 && subGraphAnalysis.returns > 0) {
-    throw new CannotCreateCodeFragmentException(PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.when.execution.flow.is.interrupted"));
-  }
-  if (subGraphAnalysis.targetInstructions > 1) {
+  if ((subGraphAnalysis.regularExits > 0 && subGraphAnalysis.returns > 0) || subGraphAnalysis.targetInstructions > 1 || subGraphAnalysis.outerLoopBreaks > 0) {
     throw new CannotCreateCodeFragmentException(PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.when.execution.flow.is.interrupted"));
   }
   if (subGraphAnalysis.starImports > 0) {
     throw new CannotCreateCodeFragmentException(PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.when.from.import.inside"));
   }
   final Set<String> globalWrites=getGlobalWrites(subGraph,owner);
+  final Set<String> nonlocalWrites=getNonlocalWrites(subGraph,owner);
   final Set<String> inputNames=new HashSet<String>();
   for (  PsiElement element : filterElementsInScope(getInputElements(subGraph,graph),owner)) {
     final String name=getName(element);
     if (name != null) {
-      if (PyPsiUtils.isMethodContext(element) && "self".equals(name)) {
+      if (resolvesToBoundMethodParameter(element)) {
         continue;
       }
-      if (globalWrites.contains(name)) {
+      if (globalWrites.contains(name) || nonlocalWrites.contains(name)) {
         continue;
       }
       inputNames.add(name);
@@ -35,9 +33,11 @@
   for (  PsiElement element : getOutputElements(subGraph,graph)) {
     final String name=getName(element);
     if (name != null) {
+      if (globalWrites.contains(name) || nonlocalWrites.contains(name)) {
+        continue;
+      }
       outputNames.add(name);
-      globalWrites.remove(name);
     }
   }
-  return new PyCodeFragment(inputNames,outputNames,globalWrites,subGraphAnalysis.returns > 0);
+  return new PyCodeFragment(inputNames,outputNames,globalWrites,nonlocalWrites,subGraphAnalysis.returns > 0);
 }
