@@ -1,8 +1,9 @@
 {
+  final Object object=item.getObject();
   if (!myPlainNamesOnly) {
-    if (!mySuppressParentheses && item.getObject() instanceof PyFunction && ((PyFunction)item.getObject()).getProperty() == null && !isSingleArgDecoratorCall(myContext,(PyFunction)item.getObject())) {
+    if (!mySuppressParentheses && object instanceof PyFunction && ((PyFunction)object).getProperty() == null && !isSingleArgDecoratorCall(myContext,(PyFunction)object)) {
       item=item.withInsertHandler(PyFunctionInsertHandler.INSTANCE);
-      final PyParameterList parameterList=((PyFunction)item.getObject()).getParameterList();
+      final PyParameterList parameterList=((PyFunction)object).getParameterList();
       final String params=StringUtil.join(parameterList.getParameters(),new Function<PyParameter,String>(){
         @Override public String fun(        PyParameter pyParameter){
           return pyParameter.getText();
@@ -11,12 +12,44 @@
 ,", ");
       item=item.withTailText("(" + params + ")");
     }
- else     if (item.getObject() instanceof PyClass) {
+ else     if (object instanceof PyClass) {
       item=item.withInsertHandler(PyClassInsertHandler.INSTANCE);
     }
   }
-  if (myNotice != null) {
-    return setItemNotice(item,myNotice);
+  String source=null;
+  if (object instanceof PsiElement) {
+    final PsiElement element=(PsiElement)object;
+    PyClass cls=null;
+    if (element instanceof PyFunction) {
+      cls=((PyFunction)element).getContainingClass();
+    }
+ else     if (element instanceof PyTargetExpression) {
+      final PyTargetExpression expr=(PyTargetExpression)element;
+      if (expr.getQualifier() != null || ScopeUtil.getScopeOwner(expr) instanceof PyClass) {
+        cls=expr.getContainingClass();
+      }
+    }
+ else     if (element instanceof PyClass) {
+      final ScopeOwner owner=ScopeUtil.getScopeOwner(element);
+      if (owner instanceof PyClass) {
+        cls=(PyClass)owner;
+      }
+    }
+    if (cls != null) {
+      source=cls.getName();
+    }
+ else     if (myContext == null || !PyUtil.inSameFile(myContext,element)) {
+      PyQualifiedName path=ResolveImportUtil.findCanonicalImportPath(element,null);
+      if (path != null) {
+        if (element instanceof PyFile) {
+          path=path.removeLastComponent();
+        }
+        source=path.toString();
+      }
+    }
+  }
+  if (source != null) {
+    item=item.withTypeText(source);
   }
   return item;
 }
