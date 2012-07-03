@@ -1,0 +1,68 @@
+{
+  final RunnerAndConfigurationSettings settings=RunManager.getInstance(project).createRunConfiguration("test",factory);
+  AbstractPythonTestRunConfiguration config=(AbstractPythonTestRunConfiguration)settings.getConfiguration();
+  config.setSdkHome(sdkHome);
+  config.setScriptName(getScriptPath());
+  config.setWorkingDirectory(getWorkingFolder());
+  PythonSdkFlavor sdk=PythonSdkFlavor.getFlavor(sdkHome);
+  if (sdk instanceof JythonSdkFlavor) {
+    config.setInterpreterOptions(JythonSdkFlavor.getPythonPathCmdLineArgument(Lists.<String>newArrayList(getWorkingFolder())));
+  }
+ else {
+    PythonEnvUtil.addToPythonPath(config.getEnvs(),getWorkingFolder());
+  }
+  configure(config);
+  new WriteAction(){
+    @Override protected void run(    Result result) throws Throwable {
+      RunManagerEx.getInstanceEx(project).addConfiguration(settings,false);
+      RunManagerEx.getInstanceEx(project).setSelectedConfiguration(settings);
+      Assert.assertSame(settings,RunManagerEx.getInstanceEx(project).getSelectedConfiguration());
+    }
+  }
+.execute();
+  final ProgramRunner runner=ProgramRunnerUtil.getRunner(DefaultRunExecutor.EXECUTOR_ID,settings);
+  Assert.assertTrue(runner.canRun(DefaultRunExecutor.EXECUTOR_ID,config));
+  final ExecutionEnvironment env=new ExecutionEnvironment(runner,settings,project);
+  final Executor executor=DefaultRunExecutor.getRunExecutorInstance();
+  before();
+  final com.intellij.util.concurrency.Semaphore s=new com.intellij.util.concurrency.Semaphore();
+  s.down();
+  myOutput=new StringBuilder();
+  UIUtil.invokeAndWaitIfNeeded(new Runnable(){
+    public void run(){
+      try {
+        runner.execute(executor,env,new ProgramRunner.Callback(){
+          @Override public void processStarted(          RunContentDescriptor descriptor){
+            myDescriptor=descriptor;
+            myProcessHandler=myDescriptor.getProcessHandler();
+            myProcessHandler.addProcessListener(new ProcessAdapter(){
+              @Override public void onTextAvailable(              ProcessEvent event,              Key outputType){
+                myOutput.append(event.getText());
+              }
+            }
+);
+            myConsoleView=(com.intellij.execution.testframework.sm.runner.ui.SMTRunnerConsoleView)descriptor.getExecutionConsole();
+            myTestProxy=myConsoleView.getResultsViewer().getTestsRootNode();
+            myConsoleView.getResultsViewer().addEventsListener(new TestResultsViewer.SMEventsAdapter(){
+              @Override public void onTestingFinished(              TestResultsViewer sender){
+                s.up();
+              }
+            }
+);
+          }
+        }
+);
+      }
+ catch (      Exception e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+);
+  Assert.assertTrue(s.waitFor(60000));
+  XDebuggerTestUtil.waitForSwing();
+  assertFinished();
+  Assert.assertTrue(output(),allTestsCount() > 0);
+  after();
+  disposeProcess(myProcessHandler);
+}

@@ -1,0 +1,59 @@
+{
+  final Project project=getProject();
+  SdkType sdkType=PythonSdkType.getInstance();
+  final Sdk sdk=new ProjectJdkImpl("Python Test Sdk " + sdkHome,sdkType){
+    @Override public String getHomePath(){
+      return sdkHome;
+    }
+    @Override public String getVersionString(){
+      return "Python 2 Mock SDK";
+    }
+  }
+;
+  setProcessCanTerminate(false);
+  PydevConsoleRunner consoleRunner=PydevConsoleRunner.create(project,sdk,PyConsoleType.PYTHON,getWorkingFolder());
+  before();
+  mySemaphore0=new Semaphore(0);
+  consoleRunner.addConsoleListener(new PydevConsoleRunner.ConsoleListener(){
+    @Override public void handleConsoleInitialized(    LanguageConsoleViewImpl consoleView){
+      mySemaphore0.release();
+    }
+  }
+);
+  consoleRunner.run();
+  waitFor(mySemaphore0);
+  mySemaphore=new Semaphore(0);
+  myConsoleView=consoleRunner.getConsoleView();
+  myProcessHandler=(PyConsoleProcessHandler)consoleRunner.getProcessHandler();
+  myExecuteHandler=(PydevConsoleExecuteActionHandler)consoleRunner.getConsoleExecuteActionHandler();
+  myCommunication=consoleRunner.getPydevConsoleCommunication();
+  myCommunication.addCommunicationListener(new ConsoleCommunicationListener(){
+    @Override public void executionFinished(){
+      mySemaphore.release();
+    }
+    @Override public void inputRequested(){
+    }
+  }
+);
+  myProcessHandler.addProcessListener(new ProcessAdapter(){
+    @Override public void processTerminated(    ProcessEvent event){
+      if (event.getExitCode() != 0 && !myProcessCanTerminate) {
+        Assert.fail("Process terminated unexpectedly\n" + output());
+      }
+    }
+  }
+);
+  OutputPrinter myOutputPrinter=null;
+  if (shouldPrintOutput) {
+    myOutputPrinter=new OutputPrinter();
+    myOutputPrinter.start();
+  }
+  waitForOutput("PyDev console");
+  testing();
+  after();
+  setProcessCanTerminate(true);
+  if (myOutputPrinter != null) {
+    myOutputPrinter.stop();
+  }
+  disposeConsole();
+}

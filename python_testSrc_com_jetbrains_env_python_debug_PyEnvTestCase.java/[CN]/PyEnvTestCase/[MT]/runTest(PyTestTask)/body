@@ -1,0 +1,50 @@
+{
+  if (notEnvConfiguration()) {
+    System.out.println("Running under teamcity but not by Env configuration. Skipping.");
+    return;
+  }
+  List<String> roots=getPythonRoots();
+  if (roots.size() == 0) {
+    String msg=getTestName(false) + ": environments are not defined. Skipping. \nSpecify either " + PYCHARM_PYTHON_ENVS+ " or "+ PYCHARM_PYTHON_VIRTUAL_ENVS+ " environment variable.";
+    LOG.warn(msg);
+    System.out.println(msg);
+    return;
+  }
+  boolean wasExecuted=false;
+  List<String> passedRoots=Lists.newArrayList();
+  for (  String env : roots) {
+    if (!isSuitableForTask(loadEnvTags(env),testTask)) {
+      continue;
+    }
+    try {
+      testTask.setUp();
+      wasExecuted=true;
+      if (isJython(env)) {
+        testTask.useLongTimeout();
+      }
+ else {
+        testTask.useNormalTimeout();
+      }
+      final String executable=PythonSdkType.getPythonExecutable(env);
+      if (executable == null) {
+        throw new RuntimeException("Cannot find Python interpreter in " + env);
+      }
+      testTask.runTestOn(executable);
+      passedRoots.add(env);
+    }
+ catch (    Throwable e) {
+      throw new RuntimeException(joinStrings(passedRoots,"Tests passed environments: ") + "Test failed on environment " + env,e);
+    }
+ finally {
+      try {
+        testTask.tearDown();
+      }
+ catch (      Exception e) {
+        e.printStackTrace();
+      }
+    }
+  }
+  if (!wasExecuted) {
+    throw new RuntimeException("test" + getTestName(false) + " was not executed.\n"+ joinStrings(roots,"All roots: "));
+  }
+}
