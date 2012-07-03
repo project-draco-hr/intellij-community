@@ -1,0 +1,72 @@
+{
+  final ConfigurationFactory factory=getFactory();
+  if (factory == null) {
+    final Module module=myFixture.getModule();
+    final DjangoManageTask task=new DjangoManageTask(module,DjangoBundle.message("manage.run.tab.name"),mySdk);
+    task.setWorkingDirectory(getWorkingFolder());
+    task.setRunnerScript(PythonHelpersLocator.getHelperPath("pycharm/django_manage.py"));
+    final ImmutableList.Builder<String> parametersString=new ImmutableList.Builder<String>().add("validate").add(getTestDataPath());
+    task.setParameters(parametersString.build());
+    myProcessHandler=task.createProcess();
+    myOutput=new StringBuilder();
+    myProcessHandler.addProcessListener(new ProcessAdapter(){
+      @Override public void onTextAvailable(      ProcessEvent event,      Key outputType){
+        myOutput.append(event.getText());
+      }
+    }
+);
+    UIUtil.invokeAndWaitIfNeeded(new Runnable(){
+      public void run(){
+        final Project project=myFixture.getProject();
+        new RunContentExecutor(project,myProcessHandler).withFilter(new PythonTracebackFilter(project)).run();
+      }
+    }
+);
+    s.up();
+  }
+ else {
+    final Project project=getProject();
+    final RunnerAndConfigurationSettings settings=RunManager.getInstance(project).createRunConfiguration("test",factory);
+    final AbstractPythonRunConfiguration config=(AbstractPythonRunConfiguration)settings.getConfiguration();
+    config.setSdkHome(sdkHome);
+    config.setWorkingDirectory(getWorkingFolder());
+    configure(config);
+    new WriteAction(){
+      @Override protected void run(      Result result) throws Throwable {
+        RunManagerEx.getInstanceEx(project).addConfiguration(settings,false);
+        RunManagerEx.getInstanceEx(project).setSelectedConfiguration(settings);
+        Assert.assertSame(settings,RunManagerEx.getInstanceEx(project).getSelectedConfiguration());
+      }
+    }
+.execute();
+    final ProgramRunner runner=ProgramRunnerUtil.getRunner(DefaultRunExecutor.EXECUTOR_ID,settings);
+    Assert.assertTrue(runner.canRun(DefaultRunExecutor.EXECUTOR_ID,config));
+    final ExecutionEnvironment env=new ExecutionEnvironment(runner,settings,project);
+    final Executor executor=DefaultRunExecutor.getRunExecutorInstance();
+    UIUtil.invokeAndWaitIfNeeded(new Runnable(){
+      public void run(){
+        try {
+          runner.execute(executor,env,new ProgramRunner.Callback(){
+            @Override public void processStarted(            RunContentDescriptor descriptor){
+              myDescriptor=descriptor;
+              myProcessHandler=myDescriptor.getProcessHandler();
+              myProcessHandler.addProcessListener(new ProcessAdapter(){
+                @Override public void onTextAvailable(                ProcessEvent event,                Key outputType){
+                  myOutput.append(event.getText());
+                }
+              }
+);
+              myConsoleView=myDescriptor.getExecutionConsole();
+              s.up();
+            }
+          }
+);
+        }
+ catch (        Exception e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+);
+  }
+}
