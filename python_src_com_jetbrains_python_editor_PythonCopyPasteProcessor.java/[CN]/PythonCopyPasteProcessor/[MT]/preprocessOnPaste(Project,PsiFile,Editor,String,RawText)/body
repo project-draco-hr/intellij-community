@@ -12,7 +12,30 @@
     final int lineNumber=document.getLineNumber(caretOffset);
     final int offset=getLineStartSafeOffset(document,lineNumber);
     final PsiElement element1=PsiUtilCore.getElementAtOffset(file,offset);
+    boolean moved=false;
     if (element instanceof PsiWhiteSpace && element == element1) {
+      final PsiElement prevSibling=element.getPrevSibling();
+      PyStatementList statementList=null;
+      if (prevSibling instanceof PyFunction) {
+        statementList=((PyFunction)prevSibling).getStatementList();
+      }
+ else       if (prevSibling instanceof PyClass) {
+        statementList=((PyClass)prevSibling).getStatementList();
+      }
+      if (statementList != null) {
+        final PsiElement lastChild=statementList.getLastChild();
+        if (lastChild != null) {
+          final PsiElement whiteSpace=lastChild.getPrevSibling();
+          if (whiteSpace instanceof PsiWhiteSpace) {
+            int relatedOffset=whiteSpace.getTextRange().getEndOffset();
+            final int indent=relatedOffset - getLineStartSafeOffset(document,document.getLineNumber(relatedOffset));
+            if (caretOffset > indent && document.getTextLength() > offset + indent) {
+              caretModel.moveToOffset(offset + indent);
+              moved=true;
+            }
+          }
+        }
+      }
       final List<String> strings=StringUtil.split(element.getText(),"\n");
       if (StringUtil.countChars(element.getText(),'\n') > 2) {
         newText=text + " ";
@@ -23,7 +46,7 @@
  else {
         newText=text + "\n";
         if (!strings.isEmpty())         newText+=strings.get(strings.size() - 1);
-        if (!element.getText().endsWith("\n"))         caretModel.moveToOffset(element.getTextRange().getEndOffset());
+        if (!element.getText().endsWith("\n") && !moved)         caretModel.moveToOffset(element.getTextRange().getEndOffset());
       }
     }
   }
