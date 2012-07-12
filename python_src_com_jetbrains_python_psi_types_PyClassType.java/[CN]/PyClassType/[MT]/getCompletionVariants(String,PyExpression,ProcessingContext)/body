@@ -16,15 +16,22 @@
     namesAlready=new HashSet<String>();
   }
   List<Object> ret=new ArrayList<Object>();
+  boolean suppressParentheses=context.get(CTX_SUPPRESS_PARENTHESES) != null;
+  addOwnClassMembers(location,namesAlready,suppressParentheses,ret);
+  addInheritedMembers(prefix,location,namesAlready,context,ret);
   for (  PyClassMembersProvider provider : Extensions.getExtensions(PyClassMembersProvider.EP_NAME)) {
     for (    PyDynamicMember member : provider.getMembers(this)) {
       final String name=member.getName();
-      ret.add(LookupElementBuilder.create(name).withIcon(member.getIcon()).withTypeText(getName()));
+      if (!namesAlready.contains(name)) {
+        LookupElementBuilder lookupElementBuilder=LookupElementBuilder.create(name).withIcon(member.getIcon()).withTypeText(getName());
+        if (member.isFunction()) {
+          lookupElementBuilder=lookupElementBuilder.withInsertHandler(ParenthesesInsertHandler.NO_PARAMETERS);
+          lookupElementBuilder.withTailText("()");
+        }
+        ret.add(lookupElementBuilder);
+      }
     }
   }
-  boolean suppressParentheses=context.get(CTX_SUPPRESS_PARENTHESES) != null;
-  addOwnClassMembers(location,namesAlready,suppressParentheses,ret);
-  addInheritedMembers(prefix,location,context,ret);
   if (!myClass.isNewStyleClass()) {
     final PyBuiltinCache cache=PyBuiltinCache.getInstance(myClass);
     final PyClassType classobjType=cache.getOldstyleClassobjType();
