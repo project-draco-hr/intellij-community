@@ -1,0 +1,82 @@
+{
+  ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+    public void run(){
+      if (delay > 0) {
+        try {
+          Thread.sleep(delay);
+        }
+ catch (        InterruptedException ignore) {
+        }
+      }
+      final TestRunnerService runnerService=TestRunnerService.getInstance(project);
+      if (!runnerService.getProjectConfiguration().isEmpty())       return;
+      ApplicationManager.getApplication().invokeLater(new Runnable(){
+        @Override public void run(){
+          final Module[] modules=ModuleManager.getInstance(project).getModules();
+          for (          Module module : modules) {
+            final PyFile setupPy=PyPackageUtil.findSetupPy(module);
+            if (setupPy == null)             continue;
+            final PyCallExpression setupCall=PyPackageUtil.findSetupCall(setupPy);
+            if (setupCall == null)             continue;
+            for (            PyExpression arg : setupCall.getArguments()) {
+              if (arg instanceof PyKeywordArgument) {
+                final PyKeywordArgument kwarg=(PyKeywordArgument)arg;
+                if ("test_loader".equals(kwarg.getKeyword()) || "test_suite".equals(kwarg.getKeyword())) {
+                  final PyExpression value=kwarg.getValueExpression();
+                  if (value instanceof PyStringLiteralExpression) {
+                    final String stringValue=((PyStringLiteralExpression)value).getStringValue();
+                    if (stringValue.contains(PyNames.NOSE_TEST)) {
+                      runnerService.setProjectConfiguration(PythonTestConfigurationsModel.PYTHONS_NOSETEST_NAME);
+                      return;
+                    }
+                    if (stringValue.contains(PyNames.PY_TEST)) {
+                      runnerService.setProjectConfiguration(PythonTestConfigurationsModel.PY_TEST_NAME);
+                      return;
+                    }
+                    if (stringValue.contains(PyNames.AT_TEST)) {
+                      runnerService.setProjectConfiguration(PythonTestConfigurationsModel.PYTHONS_ATTEST_NAME);
+                      return;
+                    }
+                  }
+                }
+              }
+            }
+          }
+          final Collection<VirtualFile> filenames=FilenameIndex.getAllFilesByExt(project,PythonFileType.INSTANCE.getDefaultExtension(),GlobalSearchScope.projectScope(project));
+          for (          VirtualFile file : filenames) {
+            if (file.getName().startsWith("test")) {
+              final PsiFile psiFile=PsiManager.getInstance(project).findFile(file);
+              if (psiFile instanceof PyFile) {
+                final List<PyImportElement> importTargets=((PyFile)psiFile).getImportTargets();
+                for (                PyImportElement importElement : importTargets) {
+                  if (PyNames.NOSE_TEST.equals(importElement.getText())) {
+                    runnerService.setProjectConfiguration(PythonTestConfigurationsModel.PYTHONS_NOSETEST_NAME);
+                    return;
+                  }
+                  if (PyNames.PY_TEST.equals(importElement.getText())) {
+                    runnerService.setProjectConfiguration(PythonTestConfigurationsModel.PY_TEST_NAME);
+                    return;
+                  }
+                  if (PyNames.AT_TEST.equals(importElement.getText())) {
+                    runnerService.setProjectConfiguration(PythonTestConfigurationsModel.PYTHONS_ATTEST_NAME);
+                    return;
+                  }
+                }
+              }
+            }
+          }
+          runnerService.setProjectConfiguration(PythonTestConfigurationsModel.PYTHONS_UNITTEST_NAME);
+          final Sdk sdk=ProjectRootManager.getInstance(project).getProjectSdk();
+          if (sdk != null) {
+            String sdkHome=sdk.getHomePath();
+            if (VFSTestFrameworkListener.isTestFrameworkInstalled(sdkHome,VFSTestFrameworkListener.NOSETESTSEARCHER))             runnerService.setProjectConfiguration(PythonTestConfigurationsModel.PYTHONS_NOSETEST_NAME);
+ else             if (VFSTestFrameworkListener.isTestFrameworkInstalled(sdkHome,VFSTestFrameworkListener.PYTESTSEARCHER))             runnerService.setProjectConfiguration(PythonTestConfigurationsModel.PY_TEST_NAME);
+ else             if (VFSTestFrameworkListener.isTestFrameworkInstalled(sdkHome,VFSTestFrameworkListener.ATTESTSEARCHER))             runnerService.setProjectConfiguration(PythonTestConfigurationsModel.PYTHONS_ATTEST_NAME);
+          }
+        }
+      }
+,ModalityState.any());
+    }
+  }
+);
+}
