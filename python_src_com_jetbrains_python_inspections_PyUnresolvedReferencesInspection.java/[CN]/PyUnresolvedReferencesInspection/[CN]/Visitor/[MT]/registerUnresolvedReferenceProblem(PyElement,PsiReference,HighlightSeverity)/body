@@ -10,9 +10,27 @@
   final List<LocalQuickFix> actions=new ArrayList<LocalQuickFix>(2);
   if (ref_text.length() <= 0)   return;
   final String refname=(element instanceof PyQualifiedExpression) ? ((PyQualifiedExpression)element).getReferencedName() : ref_text;
+  final PyQualifiedName canonicalQName=getCanonicalName(reference,myTypeEvalContext);
+  final String canonicalName=canonicalQName != null ? canonicalQName.toString() : null;
+  if (canonicalName != null) {
+    for (    String ignored : myIgnoredIdentifiers) {
+      if (ignored.endsWith(END_WILDCARD)) {
+        final String prefix=ignored.substring(0,ignored.length() - END_WILDCARD.length());
+        if (canonicalName.startsWith(prefix)) {
+          return;
+        }
+      }
+ else       if (canonicalName.equals(ignored)) {
+        return;
+      }
+    }
+  }
+  if (myIgnoredIdentifiers.contains(refname)) {
+    return;
+  }
   if (element instanceof PyReferenceExpression) {
     PyReferenceExpression refex=(PyReferenceExpression)element;
-    if (myIgnoredIdentifiers.contains(refname) || PyNames.COMPARISON_OPERATORS.contains(refname)) {
+    if (PyNames.COMPARISON_OPERATORS.contains(refname)) {
       return;
     }
     if (CythonLanguageDialect.isInsideCythonFile(element) && CythonNames.BUILTINS.contains(text)) {
@@ -43,11 +61,6 @@
       description=PyBundle.message("INSP.module.$0.not.found",ref_text);
     }
   }
-  if (reference instanceof DocStringParameterReference) {
-    if (myIgnoredIdentifiers.contains(reference.getCanonicalText())) {
-      return;
-    }
-  }
   if (reference instanceof PsiReferenceEx && description == null) {
     description=((PsiReferenceEx)reference).getUnresolvedDescription();
   }
@@ -55,7 +68,7 @@
     boolean marked_qualified=false;
     if (element instanceof PyQualifiedExpression) {
       final PyQualifiedExpression qexpr=(PyQualifiedExpression)element;
-      if (myIgnoredIdentifiers.contains(ref_text) || PyNames.COMPARISON_OPERATORS.contains(qexpr.getReferencedName()) || refname == null) {
+      if (PyNames.COMPARISON_OPERATORS.contains(qexpr.getReferencedName()) || refname == null) {
         return;
       }
       final PyExpression qualifier=qexpr.getQualifier();
@@ -94,13 +107,21 @@
   if (severity == HighlightSeverity.WARNING) {
     hl_type=ProblemHighlightType.GENERIC_ERROR_OR_WARNING;
   }
+ else   if (severity == HighlightSeverity.ERROR) {
+    hl_type=ProblemHighlightType.GENERIC_ERROR;
+  }
  else {
     hl_type=ProblemHighlightType.LIKE_UNKNOWN_SYMBOL;
   }
   if (GenerateBinaryStubsFix.isApplicable(reference)) {
     actions.add(new GenerateBinaryStubsFix(reference));
   }
-  actions.add(new AddIgnoredIdentifierFix(ref_text));
+  if (canonicalQName != null) {
+    actions.add(new AddIgnoredIdentifierQuickFix(canonicalQName,false));
+    if (canonicalQName.getComponentCount() > 1) {
+      actions.add(new AddIgnoredIdentifierQuickFix(canonicalQName.removeLastComponent(),true));
+    }
+  }
   addPluginQuickFixes(reference,actions);
   PsiElement point=node.getLastChild();
   if (point == null)   point=node;
