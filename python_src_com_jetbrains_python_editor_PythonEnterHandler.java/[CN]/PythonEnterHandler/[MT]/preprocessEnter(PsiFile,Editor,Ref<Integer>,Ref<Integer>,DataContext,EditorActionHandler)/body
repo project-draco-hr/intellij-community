@@ -12,7 +12,7 @@
   if (isSplitLine != null) {
     return Result.Continue;
   }
-  Document doc=editor.getDocument();
+  final Document doc=editor.getDocument();
   PsiDocumentManager.getInstance(file.getProject()).commitDocument(doc);
   final PsiElement element=file.findElementAt(offset);
   CodeInsightSettings codeInsightSettings=CodeInsightSettings.getInstance();
@@ -54,11 +54,10 @@
     final boolean isEscapedQuote=quote.equals(doc.getText(TextRange.create(offset,offset + 1))) && nextIsBackslash;
     final boolean isEscapedBackslash="\\".equals(doc.getText(TextRange.create(offset - 2,offset - 1))) && nextIsBackslash;
     if (nextIsBackslash && !isEscapedQuote && !isEscapedBackslash)     return Result.Continue;
-    final PsiElement parent=string.getParent();
     final StringBuilder replacementString=new StringBuilder();
     needPostProcess=true;
-    if (parent instanceof PySequenceExpression || parent instanceof PyParenthesizedExpression || parent instanceof PyBinaryExpression|| parent instanceof PyKeyValueExpression|| parent instanceof PyNamedParameter|| parent instanceof PyArgumentList) {
-      replacementString.append(quote + pref + quote);
+    if (PsiTreeUtil.getParentOfType(string,IMPLICIT_WRAP_CLASSES) != null) {
+      replacementString.append(quote).append(pref).append(quote);
       doc.insertString(offset,replacementString);
       caretOffset.set(caretOffset.get() + 1);
       return Result.Continue;
@@ -68,7 +67,7 @@
         replacementString.append(quote);
         caretOffset.set(caretOffset.get() + 1);
       }
-      replacementString.append(quote + " \\" + pref);
+      replacementString.append(quote).append(" \\").append(pref);
       if (!isEscapedQuote)       replacementString.append(quote);
       doc.insertString(offset,replacementString.toString());
       caretOffset.set(caretOffset.get() + 3);
@@ -78,55 +77,5 @@
   if (!PyCodeInsightSettings.getInstance().INSERT_BACKSLASH_ON_WRAP) {
     return Result.Continue;
   }
-  if (offset > 0) {
-    final PsiElement beforeCaret=file.findElementAt(offset - 1);
-    if (beforeCaret instanceof PsiWhiteSpace && beforeCaret.getText().indexOf('\\') >= 0) {
-      return Result.Continue;
-    }
-  }
-  PsiElement statementBefore=findStatementBeforeCaret(file,offset);
-  PsiElement statementAfter=findStatementAfterCaret(file,offset);
-  if (statementBefore != statementAfter) {
-    return Result.Continue;
-  }
-  if (statementBefore == null) {
-    return Result.Continue;
-  }
-  if (PsiTreeUtil.hasErrorElements(statementBefore)) {
-    final Boolean autoWrapping=DataManager.getInstance().loadFromDataContext(dataContext,AutoHardWrapHandler.AUTO_WRAP_LINE_IN_PROGRESS_KEY);
-    if (autoWrapping == null) {
-      return Result.Continue;
-    }
-  }
-  if (inFromImportParentheses(statementBefore,offset)) {
-    return Result.Continue;
-  }
-  PsiElement wrappableBefore=findWrappable(file,offset,true);
-  PsiElement wrappableAfter=findWrappable(file,offset,false);
-  if (!(wrappableBefore instanceof PsiComment)) {
-    while (wrappableBefore != null) {
-      PsiElement next=PsiTreeUtil.getParentOfType(wrappableBefore,IMPLICIT_WRAP_CLASSES);
-      if (next == null) {
-        break;
-      }
-      wrappableBefore=next;
-    }
-  }
-  if (!(wrappableAfter instanceof PsiComment)) {
-    while (wrappableAfter != null) {
-      PsiElement next=PsiTreeUtil.getParentOfType(wrappableAfter,IMPLICIT_WRAP_CLASSES);
-      if (next == null) {
-        break;
-      }
-      wrappableAfter=next;
-    }
-  }
-  if (wrappableBefore instanceof PsiComment || wrappableAfter instanceof PsiComment) {
-    return Result.Continue;
-  }
-  if (wrappableAfter == null || wrappableBefore != wrappableAfter) {
-    doc.insertString(offset,"\\");
-    caretOffset.set(caretOffset.get() + 1);
-  }
-  return Result.Continue;
+  return checkInsertBackslash(file,caretOffset,dataContext,offset,doc);
 }
