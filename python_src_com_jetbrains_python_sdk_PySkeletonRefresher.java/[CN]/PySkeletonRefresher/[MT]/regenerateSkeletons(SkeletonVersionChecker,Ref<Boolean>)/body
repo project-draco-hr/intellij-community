@@ -63,9 +63,15 @@
     }
   }
   final SkeletonHeader newHeader=readSkeletonHeader(builtinsFile);
-  if (myPregeneratedSkeletons == null && (newHeader == null || newHeader.getVersion() < myVersionChecker.getBuiltinVersion())) {
+  final boolean mustUpdateBuiltins=myPregeneratedSkeletons == null && (newHeader == null || newHeader.getVersion() < myVersionChecker.getBuiltinVersion());
+  if (mustUpdateBuiltins) {
     indicate(PyBundle.message("sdk.gen.updating.builtins.$0",readablePath));
-    mySkeletonsGenerator.generateBuiltinSkeletons(mySdk);
+    if (mySdk != null) {
+      mySkeletonsGenerator.generateBuiltinSkeletons(mySdk);
+      if (myProject != null) {
+        PythonSdkPathCache.getInstance(myProject,mySdk).clearBuiltins();
+      }
+    }
   }
   if (!binaries.modules.isEmpty()) {
     indicate(PyBundle.message("sdk.gen.updating.$0",readablePath));
@@ -87,6 +93,14 @@
   if (!oldOrNonExisting) {
     indicate(PyBundle.message("sdk.gen.cleaning.$0",readablePath));
     cleanUpSkeletons(skeletonsDir);
+  }
+  if (mustUpdateBuiltins) {
+    ApplicationManager.getApplication().invokeLater(new Runnable(){
+      @Override public void run(){
+        DaemonCodeAnalyzer.getInstance(myProject).restart();
+      }
+    }
+);
   }
   return errorList;
 }
