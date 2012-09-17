@@ -1,7 +1,30 @@
 {
   if (!LanguageLevel.forElement(file).isPy3K())   return false;
-  PyExpression problemElement=PsiTreeUtil.getParentOfType(file.findElementAt(editor.getCaretModel().getOffset() - 1),PyNamedParameter.class);
-  if (problemElement == null)   problemElement=PsiTreeUtil.getTopmostParentOfType(file.findElementAt(editor.getCaretModel().getOffset() - 1),PyQualifiedExpression.class);
+  int offset=editor.getCaretModel().getOffset();
+  PsiElement elementAt=PyUtil.findNonWhitespaceAtOffset(file,offset);
+  if (elementAt != null && !(elementAt.getNode().getElementType() == PyTokenTypes.IDENTIFIER))   elementAt=file.findElementAt(offset);
+  PyCallExpression callExpression=PsiTreeUtil.getParentOfType(elementAt,PyCallExpression.class);
+  if (callExpression != null && callExpression.resolveCalleeFunction(PyResolveContext.defaultContext()) != null) {
+    PyAssignmentStatement assignmentStatement=PsiTreeUtil.getParentOfType(elementAt,PyAssignmentStatement.class);
+    if (assignmentStatement != null) {
+      PyType type=assignmentStatement.getAssignedValue().getType(TypeEvalContext.slow());
+      if (type == null || type instanceof PyReturnTypeReference) {
+        myText=PyBundle.message("INTN.specify.returt.type.in.annotation");
+        return true;
+      }
+    }
+  }
+ else {
+    PyFunction parentFunction=PsiTreeUtil.getParentOfType(elementAt,PyFunction.class);
+    if (parentFunction != null) {
+      final ASTNode nameNode=parentFunction.getNameNode();
+      if (nameNode != null && nameNode.getPsi() == elementAt) {
+        myText=PyBundle.message("INTN.specify.returt.type.in.annotation");
+        return true;
+      }
+    }
+  }
+  PyExpression problemElement=PyUtil.findProblemElement(editor,file,PyNamedParameter.class,PyQualifiedExpression.class);
   if (problemElement == null)   return false;
   if (problemElement instanceof PyQualifiedExpression) {
     final PyExpression qualifier=((PyQualifiedExpression)problemElement).getQualifier();
@@ -23,7 +46,7 @@
     final PsiElement resolvedReference=reference != null ? reference.resolve() : null;
     if (problemElement instanceof PyParameter)     parameter=(PyParameter)problemElement;
  else     if (resolvedReference instanceof PyParameter)     parameter=(PyParameter)resolvedReference;
-    if (parameter instanceof PyNamedParameter && (((PyNamedParameter)parameter).getAnnotation() != null || parameter.getDefaultValue() != null))     return false;
+    if (parameter instanceof PyNamedParameter && (((PyNamedParameter)parameter).getAnnotation() != null))     return false;
     if (parameter != null)     return true;
  else {
       if (resolvedReference instanceof PyTargetExpression) {
