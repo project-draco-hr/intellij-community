@@ -1,0 +1,46 @@
+{
+  myDocStringExpression=myFunction.getDocStringExpression();
+  final Pair<String,Integer> replacementToOffset=addParamToDocstring();
+  PyElementGenerator elementGenerator=PyElementGenerator.getInstance(myProject);
+  if (myDocStringExpression != null) {
+    if (myParams.size() > 1) {
+      throw new IllegalArgumentException("If docstring exists only one param could be added at a time");
+    }
+    String kind=myParams.get(0).getKind();
+    String name=myParams.get(0).getName();
+    final String typePattern=kind + " " + name+ ":";
+    final int index=myDocStringExpression.getText().indexOf(typePattern);
+    if (index == -1) {
+      PyExpression str=elementGenerator.createDocstring(replacementToOffset.getFirst()).getExpression();
+      myDocStringExpression.replace(str);
+      myStartOffset=replacementToOffset.getSecond();
+      myEndOffset=myStartOffset;
+    }
+ else {
+      myStartOffset=index + typePattern.length() + 1;
+      myEndOffset=myDocStringExpression.getText().indexOf("\n",myStartOffset);
+      if (myEndOffset == -1)       myEndOffset=myStartOffset;
+    }
+    myFunction=CodeInsightUtilBase.forcePsiPostprocessAndRestoreElement(myFunction);
+    myDocStringExpression=myFunction.getDocStringExpression();
+  }
+ else {
+    final PyStatementList list=myFunction.getStatementList();
+    final Document document=PsiDocumentManager.getInstance(myProject).getDocument(getFile());
+    myStartOffset=replacementToOffset.getSecond();
+    if (list != null && list.getStatements().length != 0) {
+      if (document.getLineNumber(list.getTextOffset()) == document.getLineNumber(myFunction.getTextOffset())) {
+        PyFunction func=elementGenerator.createFromText(LanguageLevel.forElement(myFunction),PyFunction.class,"def " + myFunction.getName() + myFunction.getParameterList().getText()+ ":\n\t"+ replacementToOffset.getFirst()+ "\n\t"+ list.getText());
+        myFunction=(PyFunction)myFunction.replace(func);
+        myStartOffset=replacementToOffset.getSecond() + 2;
+      }
+ else {
+        PyExpressionStatement str=elementGenerator.createDocstring(replacementToOffset.getFirst());
+        list.addBefore(str,list.getStatements()[0]);
+      }
+    }
+    myFunction=CodeInsightUtilBase.forcePsiPostprocessAndRestoreElement(myFunction);
+    myDocStringExpression=myFunction.getDocStringExpression();
+    myEndOffset=myStartOffset;
+  }
+}
