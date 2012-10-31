@@ -5,27 +5,27 @@
   }
   String kind="type";
   PyCallExpression callExpression=PyUtil.findProblemElement(editor,file,PyCallExpression.class);
-  PyFunction pyFunction=PsiTreeUtil.getParentOfType(elementAt,PyFunction.class);
+  PyFunction function=PsiTreeUtil.getParentOfType(elementAt,PyFunction.class);
   PyExpression problemElement=PyUtil.findProblemElement(editor,file,PyNamedParameter.class,PyQualifiedExpression.class);
   if (callExpression != null) {
     PyAssignmentStatement assignmentStatement=PsiTreeUtil.getParentOfType(elementAt,PyAssignmentStatement.class);
     if (assignmentStatement != null) {
       PyType pyType=assignmentStatement.getAssignedValue().getType(TypeEvalContext.slow());
       if (pyType == null || pyType instanceof PyReturnTypeReference) {
-        pyFunction=(PyFunction)callExpression.resolveCalleeFunction(PyResolveContext.defaultContext());
+        function=(PyFunction)callExpression.resolveCalleeFunction(PyResolveContext.defaultContext());
         problemElement=null;
         kind="rtype";
       }
     }
   }
-  if (pyFunction != null) {
-    final ASTNode nameNode=pyFunction.getNameNode();
+  if (function != null) {
+    final ASTNode nameNode=function.getNameNode();
     if (nameNode != null && nameNode.getPsi() == elementAt) {
       kind="rtype";
     }
   }
   PsiReference reference=null;
-  PyDocstringGenerator docstringGenerator=new PyDocstringGenerator(pyFunction);
+  PyDocstringGenerator docstringGenerator=new PyDocstringGenerator(function);
   String name="";
   if (problemElement != null) {
     name=problemElement.getName();
@@ -37,11 +37,17 @@
         name=qualifier.getText();
       }
     }
-    pyFunction=PsiTreeUtil.getParentOfType(problemElement,PyFunction.class);
+    function=PsiTreeUtil.getParentOfType(problemElement,PyFunction.class);
   }
-  docstringGenerator.withParam(kind,name);
-  final ASTNode nameNode=pyFunction.getNameNode();
-  if ((pyFunction != null && (problemElement instanceof PyParameter || reference != null && reference.resolve() instanceof PyParameter)) || elementAt == nameNode.getPsi() || callExpression != null) {
+  PySignature signature=PySignatureCacheManager.getInstance(project).findSignature(function);
+  if (signature != null) {
+    docstringGenerator.withParamTypedByQualifiedName(kind,name,signature.getArgTypeQualifiedName(name),function);
+  }
+ else {
+    docstringGenerator.withParam(kind,name);
+  }
+  final ASTNode nameNode=function.getNameNode();
+  if ((function != null && (problemElement instanceof PyParameter || reference != null && reference.resolve() instanceof PyParameter)) || elementAt == nameNode.getPsi() || callExpression != null) {
     docstringGenerator.build();
   }
   docstringGenerator.startTemplate();
