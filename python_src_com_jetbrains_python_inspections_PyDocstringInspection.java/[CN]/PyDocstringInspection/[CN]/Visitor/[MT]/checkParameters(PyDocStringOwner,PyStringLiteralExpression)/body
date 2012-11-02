@@ -1,17 +1,22 @@
 {
-  PyDocumentationSettings documentationSettings=PyDocumentationSettings.getInstance(node.getProject());
-  List<String> docstringParams;
   final String text=node.getText();
   if (text == null) {
     return false;
   }
-  if (documentationSettings.isEpydocFormat(node.getContainingFile()))   docstringParams=new EpydocString(text).getParameters();
- else   if (documentationSettings.isReSTFormat(node.getContainingFile()))   docstringParams=new SphinxDocString(text).getParameters();
- else   return false;
+  StructuredDocString docString=StructuredDocString.parse(text);
+  if (docString == null) {
+    return false;
+  }
+  List<Substring> docstringParams=docString.getParameterSubstrings();
+  if (docstringParams == null) {
+    return false;
+  }
   if (pyDocStringOwner instanceof PyFunction) {
     PyDecoratorList decoratorList=((PyFunction)pyDocStringOwner).getDecoratorList();
     boolean isClassMethod=false;
-    if (decoratorList != null)     isClassMethod=decoratorList.findDecorator(PyNames.CLASSMETHOD) != null;
+    if (decoratorList != null) {
+      isClassMethod=decoratorList.findDecorator(PyNames.CLASSMETHOD) != null;
+    }
     PyParameter[] realParams=((PyFunction)pyDocStringOwner).getParameterList().getParameters();
     List<PyParameter> missingParams=getMissingParams(realParams,docstringParams,isClassMethod);
     boolean registered=false;
@@ -21,12 +26,13 @@
       }
       registered=true;
     }
-    List<String> unexpectedParams=getUnexpectedParams(docstringParams,realParams,node);
+    List<Substring> unexpectedParams=getUnexpectedParams(docstringParams,realParams,node);
     if (!unexpectedParams.isEmpty()) {
-      for (      String param : unexpectedParams) {
+      for (      Substring param : unexpectedParams) {
         ProblemsHolder holder=getHolder();
-        int index=text.indexOf("param " + param + ":") + 6;
-        if (holder != null)         holder.registerProblem(node,TextRange.create(index,index + param.length()),"Unexpected parameter " + param + " in docstring",new DocstringQuickFix(null,param));
+        if (holder != null) {
+          holder.registerProblem(node,param.getTextRange(),"Unexpected parameter " + param + " in docstring",new DocstringQuickFix(null,param.getValue()));
+        }
       }
       registered=true;
     }
