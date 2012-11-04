@@ -1,0 +1,42 @@
+{
+  final Type evaluated=myVisited.get(type);
+  if (evaluated != null) {
+    return evaluated;
+  }
+  if (myVisited.containsKey(type)) {
+    return type != null ? _(type.getName()) : _(UNKNOWN);
+  }
+  myVisited.put(type,null);
+  Type result=null;
+  if (type instanceof PyTypeReference) {
+    final PyType resolved=((PyTypeReference)type).resolve(null,myContext);
+    if (resolved != null) {
+      result=build(resolved,true);
+    }
+  }
+ else   if (type instanceof PyCollectionType) {
+    final String name=type.getName();
+    final PyType elementType=((PyCollectionType)type).getElementType(myContext);
+    if (elementType != null) {
+      result=new CollectionOf(name,build(elementType,true));
+    }
+  }
+ else   if (type instanceof PyUnionType && allowUnions) {
+    if (type instanceof PyDynamicallyEvaluatedType) {
+      result=build(((PyDynamicallyEvaluatedType)type).exclude(null,myContext),true);
+    }
+ else {
+      result=new OneOf(Collections2.transform(((PyUnionType)type).getMembers(),new com.google.common.base.Function<PyType,Type>(){
+        @Override public Type apply(        PyType t){
+          return build(t,false);
+        }
+      }
+));
+    }
+  }
+  if (result == null) {
+    result=type != null ? _(type.getName()) : _(UNKNOWN);
+  }
+  myVisited.put(type,result);
+  return result;
+}
