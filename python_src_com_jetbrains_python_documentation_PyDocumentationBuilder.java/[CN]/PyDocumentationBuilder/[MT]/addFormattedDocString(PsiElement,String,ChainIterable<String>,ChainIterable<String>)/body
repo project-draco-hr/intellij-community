@@ -1,0 +1,50 @@
+{
+  Project project=element.getProject();
+  PyDocumentationSettings documentationSettings=PyDocumentationSettings.getInstance(project);
+  List<String> result=new ArrayList<String>();
+  String[] lines=removeCommonIndentation(docstring);
+  String preparedDocstring=StringUtil.join(lines,"\n");
+  if (documentationSettings.isEpydocFormat(element.getContainingFile())) {
+    Module module=ModuleUtil.findModuleForPsiElement(element);
+    final EpydocString epydocString=new EpydocString(preparedDocstring);
+    String formatted=epydocString.getDescription();
+    result.add(formatted);
+    result.add(formatStructuredDocString(epydocString));
+    unformattedOutput.add(result);
+    return;
+  }
+ else   if (documentationSettings.isReSTFormat(element.getContainingFile())) {
+    Module module=ModuleUtil.findModuleForPsiElement(element);
+    String formatted=null;
+    if (module != null) {
+      formatted=ReSTRunner.formatDocstring(module,preparedDocstring);
+    }
+    if (formatted == null) {
+      formatted=new SphinxDocString(preparedDocstring).getDescription();
+    }
+    result.add(formatted);
+    unformattedOutput.add(result);
+    return;
+  }
+  boolean is_first;
+  is_first=true;
+  int tabSize=CodeStyleSettingsManager.getSettings(project).getTabSize(PythonFileType.INSTANCE);
+  for (  String line : lines) {
+    if (is_first && ourSpacesPattern.matcher(line).matches())     continue;
+    if (is_first) {
+      is_first=false;
+    }
+ else {
+      result.add(BR);
+    }
+    int leadingTabs=0;
+    while (leadingTabs < line.length() && line.charAt(leadingTabs) == '\t') {
+      leadingTabs++;
+    }
+    if (leadingTabs > 0) {
+      line=StringUtil.repeatSymbol(' ',tabSize * leadingTabs) + line.substring(leadingTabs);
+    }
+    result.add(combUp(line));
+  }
+  formattedOutput.add(result);
+}
