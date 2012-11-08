@@ -1,32 +1,10 @@
 {
+  myText=PyBundle.message("INTN.specify.type.in.annotation");
   if (!LanguageLevel.forElement(file).isPy3K())   return false;
   int offset=editor.getCaretModel().getOffset();
   PsiElement elementAt=PyUtil.findNonWhitespaceAtOffset(file,offset);
-  if (elementAt != null && !(elementAt.getNode().getElementType() == PyTokenTypes.IDENTIFIER))   elementAt=file.findElementAt(offset);
-  PyCallExpression callExpression=PsiTreeUtil.getParentOfType(elementAt,PyCallExpression.class);
-  if (callExpression != null && callExpression.resolveCalleeFunction(PyResolveContext.defaultContext()) != null) {
-    PyAssignmentStatement assignmentStatement=PsiTreeUtil.getParentOfType(elementAt,PyAssignmentStatement.class);
-    if (assignmentStatement != null) {
-      final PyExpression assignedValue=assignmentStatement.getAssignedValue();
-      if (assignedValue != null) {
-        PyType type=assignedValue.getType(TypeEvalContext.slow());
-        if (type == null || type instanceof PyReturnTypeReference) {
-          myText=PyBundle.message("INTN.specify.returt.type.in.annotation");
-          return true;
-        }
-      }
-    }
-  }
- else {
-    PyFunction parentFunction=PsiTreeUtil.getParentOfType(elementAt,PyFunction.class);
-    if (parentFunction != null) {
-      final ASTNode nameNode=parentFunction.getNameNode();
-      if (nameNode != null && nameNode.getPsi() == elementAt) {
-        myText=PyBundle.message("INTN.specify.returt.type.in.annotation");
-        return true;
-      }
-    }
-  }
+  if (elementAt == null)   return false;
+  if (checkAvailableForReturn(elementAt))   return true;
   PyExpression problemElement=PyUtil.findProblemElement(editor,file,PyNamedParameter.class,PyQualifiedExpression.class);
   if (problemElement == null)   return false;
   if (problemElement instanceof PyQualifiedExpression) {
@@ -38,33 +16,5 @@
   if (problemElement.getParent() instanceof PyCallExpression || PsiTreeUtil.getParentOfType(problemElement,PyLambdaExpression.class) != null) {
     return false;
   }
-  final PyType type=problemElement.getType(TypeEvalContext.slow());
-  if (type == null || type instanceof PyReturnTypeReference) {
-    PsiReference reference=problemElement.getReference();
-    if (problemElement instanceof PyQualifiedExpression) {
-      final PyExpression qualifier=((PyQualifiedExpression)problemElement).getQualifier();
-      if (qualifier != null && !qualifier.getText().equals(PyNames.CANONICAL_SELF))       reference=qualifier.getReference();
-    }
-    PyParameter parameter=null;
-    final PsiElement resolvedReference=reference != null ? reference.resolve() : null;
-    if (problemElement instanceof PyParameter)     parameter=(PyParameter)problemElement;
- else     if (resolvedReference instanceof PyParameter)     parameter=(PyParameter)resolvedReference;
-    if (parameter instanceof PyNamedParameter && (((PyNamedParameter)parameter).getAnnotation() != null))     return false;
-    if (parameter != null)     return true;
- else {
-      if (resolvedReference instanceof PyTargetExpression) {
-        final PyExpression assignedValue=((PyTargetExpression)resolvedReference).findAssignedValue();
-        if (assignedValue instanceof PyCallExpression) {
-          final PyExpression callee=((PyCallExpression)assignedValue).getCallee();
-          if (callee != null) {
-            final PsiReference psiReference=callee.getReference();
-            if (psiReference != null && psiReference.resolve() == null)             return false;
-          }
-          final Callable callable=((PyCallExpression)assignedValue).resolveCalleeFunction(PyResolveContext.defaultContext());
-          if (callable instanceof PyFunction && ((PyFunction)callable).getAnnotation() == null)           return true;
-        }
-      }
-    }
-  }
-  return false;
+  return checkType(problemElement);
 }
