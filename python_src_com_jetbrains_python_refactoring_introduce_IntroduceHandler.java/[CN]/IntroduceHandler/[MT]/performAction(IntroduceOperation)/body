@@ -51,10 +51,21 @@
     showCannotPerformError(project,editor);
     return;
   }
-  TextRange r=element1.getTextRange();
-  if (singleElementSelection && element1 instanceof PyStringLiteralExpression && (r.getStartOffset() < selectionModel.getSelectionStart() || r.getEndOffset() > selectionModel.getSelectionEnd())) {
-    showCannotPerformError(project,editor);
-    return;
+  if (singleElementSelection && element1 instanceof PyStringLiteralExpression) {
+    final PyStringLiteralExpression literal=(PyStringLiteralExpression)element1;
+    if (literal.getStringNodes().size() > 1) {
+      showCannotPerformError(project,editor);
+      return;
+    }
+    final int offset=element1.getTextOffset();
+    final TextRange selectionRange=TextRange.create(selectionModel.getSelectionStart(),selectionModel.getSelectionEnd());
+    final TextRange elementRange=element1.getTextRange();
+    if (!elementRange.equals(selectionRange) && elementRange.contains(selectionRange)) {
+      final TextRange innerRange=literal.getStringValueTextRange();
+      final TextRange intersection=selectionRange.shiftRight(-offset).intersection(innerRange);
+      final TextRange finalRange=intersection != null ? intersection : selectionRange;
+      element1.putUserData(PyPsiUtils.SELECTION_BREAKS_AST_NODE,Pair.create(element1,finalRange));
+    }
   }
   if (!checkIntroduceContext(file,editor,element1)) {
     return;
