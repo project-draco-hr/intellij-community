@@ -58,6 +58,38 @@
       final PsiElement newElement=valueExpression.replace(newDictLiteral);
       return newElement.findElementAt(pos);
     }
+ else {
+      final TypeEvalContext context=TypeEvalContext.slow();
+      final PyType valueType=valueExpression.getType(context);
+      final PyBuiltinCache builtinCache=PyBuiltinCache.getInstance(oldExpression);
+      final PyType tupleType=builtinCache.getTupleType();
+      final PyType mappingType=PyTypeParser.getTypeByName(null,"collections.Mapping");
+      if (!PyTypeChecker.match(tupleType,valueType,context) || (mappingType != null && !PyTypeChecker.match(mappingType,valueType,context))) {
+        final String newLiteralText=prefix + "%s" + suffix;
+        final PyStringLiteralExpression newLiteralExpression=generator.createStringLiteralAlreadyEscaped(newLiteralText);
+        oldExpression.replace(newLiteralExpression);
+        final StringBuilder builder=new StringBuilder();
+        builder.append("(");
+        final List<PyStringFormatParser.SubstitutionChunk> positional=PyStringFormatParser.getPositionalSubstitutions(substitutions);
+        final int i=getPositionInRanges(PyStringFormatParser.substitutionsToRanges(positional),textRange);
+        final int pos;
+        if (i == 0) {
+          pos=builder.toString().length();
+          builder.append(newText);
+          builder.append(",");
+          builder.append(valueExpression.getText());
+        }
+ else {
+          builder.append(valueExpression.getText());
+          builder.append(",");
+          pos=builder.toString().length();
+          builder.append(newText);
+        }
+        builder.append(")");
+        final PsiElement newElement=valueExpression.replace(generator.createExpressionFromText(languageLevel,builder.toString()));
+        return newElement.findElementAt(pos);
+      }
+    }
   }
   if (isConcatFormatting(oldExpression) || substitutions.size() > 0) {
     final String leftQuote=quotes.getFirst();
