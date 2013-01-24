@@ -1,0 +1,42 @@
+{
+  final PyExpression callee=call.getCallee();
+  if (callee instanceof PyReferenceExpression) {
+    PsiElement must_be_super_init=((PyReferenceExpression)callee).getReference().resolve();
+    if (must_be_super_init instanceof PyFunction) {
+      PyClass must_be_super=((PyFunction)must_be_super_init).getContainingClass();
+      if (must_be_super == PyBuiltinCache.getInstance(call).getClass(PyNames.SUPER)) {
+        PyArgumentList arglist=call.getArgumentList();
+        if (arglist != null) {
+          final PyClass containingClass=PsiTreeUtil.getParentOfType(call,PyClass.class);
+          PyExpression[] args=arglist.getArguments();
+          if (args.length > 1) {
+            PyExpression first_arg=args[0];
+            if (first_arg instanceof PyReferenceExpression) {
+              final PyReferenceExpression firstArgRef=(PyReferenceExpression)first_arg;
+              final PyExpression qualifier=firstArgRef.getQualifier();
+              if (qualifier != null && PyNames.CLASS.equals(firstArgRef.getReferencedName())) {
+                final PsiReference qRef=qualifier.getReference();
+                final PsiElement element=qRef == null ? null : qRef.resolve();
+                if (element instanceof PyParameter) {
+                  final PyParameterList parameterList=PsiTreeUtil.getParentOfType(element,PyParameterList.class);
+                  if (parameterList != null && element == parameterList.getParameters()[0]) {
+                    return new Maybe<PyType>(getSuperCallTypeForArguments(context,containingClass,args[1]));
+                  }
+                }
+              }
+              PsiElement possible_class=firstArgRef.getReference().resolve();
+              if (possible_class instanceof PyClass && ((PyClass)possible_class).isNewStyleClass()) {
+                final PyClass first_class=(PyClass)possible_class;
+                return new Maybe<PyType>(getSuperCallTypeForArguments(context,first_class,args[1]));
+              }
+            }
+          }
+ else           if (((PyFile)call.getContainingFile()).getLanguageLevel().isPy3K() && containingClass != null) {
+            return new Maybe<PyType>(getSuperClassUnionType(containingClass));
+          }
+        }
+      }
+    }
+  }
+  return new Maybe<PyType>();
+}
