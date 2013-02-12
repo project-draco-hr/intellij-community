@@ -11,15 +11,16 @@
           uexpr=null;
         }
  else         if (owner == originalOwner && !scope.isGlobal(referencedName)) {
-          final ResolveResultList latest=resolveToLatestDefs(owner,myElement,referencedName);
+          final List<ReadWriteInstruction> instructions=PyDefUseUtil.getLatestDefs(owner,referencedName,myElement,false);
+          final ResolveResultList latest=resolveToLatestDefs(instructions,myElement,referencedName);
           if (!latest.isEmpty()) {
             return latest;
           }
-          if (owner instanceof PyClass) {
-            final ScopeOwner classOwner=ScopeUtil.getScopeOwner(owner);
-            if (classOwner != null) {
+          if (owner instanceof PyClass || (instructions.isEmpty() && isInOwnScopeComprehension(uexpr))) {
+            final ScopeOwner parentOwner=ScopeUtil.getScopeOwner(owner);
+            if (parentOwner != null) {
               processor=new ResolveProcessor(referencedName);
-              PyResolveUtil.scopeCrawlUp(processor,classOwner,referencedName,roof);
+              PyResolveUtil.scopeCrawlUp(processor,parentOwner,referencedName,roof);
               uexpr=processor.getResult();
             }
           }
@@ -49,8 +50,9 @@
   PyBuiltinCache builtins_cache=PyBuiltinCache.getInstance(realContext);
   if (uexpr == null) {
     PyType otype=builtins_cache.getObjectType();
-    if (otype != null) {
-      ret.addAll(otype.resolveMember(myElement.getName(),null,AccessDirection.READ,myContext));
+    String name=myElement.getName();
+    if (otype != null && name != null) {
+      ret.addAll(otype.resolveMember(name,null,AccessDirection.READ,myContext));
     }
   }
   if (uexpr == null) {
