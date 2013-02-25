@@ -1,39 +1,30 @@
 {
-  PyCallExpression callExpression=getCallExpression(elementAt);
-  if (callExpression != null) {
-    final PyExpression callee=callExpression.getCallee();
-    if (callee instanceof PyQualifiedExpression) {
-      final TypeEvalContext context=TypeEvalContext.fastStubOnly(callee.getContainingFile());
-      final Callable pyFunction=callExpression.resolveCalleeFunction(PyResolveContext.defaultContext().withTypeEvalContext(context));
-      if (pyFunction instanceof PyFunction) {
-        PyType type=pyFunction.getReturnType(context,(PyQualifiedExpression)callee);
-        if (type == null || type instanceof PyReturnTypeReference) {
-          final PsiReference reference=callee.getReference();
-          if (reference instanceof PsiPolyVariantReference) {
-            final ResolveResult[] results=((PsiPolyVariantReference)reference).multiResolve(false);
-            if (results.length == 1) {
-              final PsiElement result=results[0].getElement();
-              if (result == null)               return false;
-              final PsiFile psiFile=result.getContainingFile();
-              if (psiFile == null)               return false;
-              final VirtualFile virtualFile=psiFile.getVirtualFile();
-              if (virtualFile != null) {
-                if (ProjectRootManager.getInstance(psiFile.getProject()).getFileIndex().isInLibraryClasses(virtualFile)) {
-                  return false;
-                }
-              }
-              return true;
-            }
-          }
-        }
-      }
-    }
-  }
-  PyFunction parentFunction=PsiTreeUtil.getParentOfType(elementAt,PyFunction.class);
+  final PyFunction parentFunction=PsiTreeUtil.getParentOfType(elementAt,PyFunction.class);
   if (parentFunction != null) {
     final ASTNode nameNode=parentFunction.getNameNode();
     if (nameNode != null && nameNode.getPsi() == elementAt) {
-      return true;
+      return !isReturnTypeDefined(parentFunction);
+    }
+  }
+  final PyCallExpression callExpression=getCallExpression(elementAt);
+  if (callExpression == null)   return false;
+  final PyExpression callee=callExpression.getCallee();
+  if (callee == null)   return false;
+  final PsiReference reference=callee.getReference();
+  if (reference instanceof PsiPolyVariantReference) {
+    final ResolveResult[] results=((PsiPolyVariantReference)reference).multiResolve(false);
+    if (results.length == 1) {
+      final PsiElement result=results[0].getElement();
+      if (!(result instanceof PyFunction))       return false;
+      final PsiFile psiFile=result.getContainingFile();
+      if (psiFile == null)       return false;
+      final VirtualFile virtualFile=psiFile.getVirtualFile();
+      if (virtualFile != null) {
+        if (ProjectRootManager.getInstance(psiFile.getProject()).getFileIndex().isInLibraryClasses(virtualFile)) {
+          return false;
+        }
+      }
+      return !isReturnTypeDefined((PyFunction)result);
     }
   }
   return false;
