@@ -10,70 +10,28 @@
   }
 ;
   final CaretModel caretModel=editor.getCaretModel();
+  final SelectionModel selectionModel=editor.getSelectionModel();
   final Document document=editor.getDocument();
-  String newText=text;
-  if (file instanceof PyFile) {
-    final int caretOffset=caretModel.getOffset();
-    final int lineNumber=document.getLineNumber(caretOffset);
-    final int lineStartOffset=getLineStartSafeOffset(document,lineNumber);
-    final List<String> strings=StringUtil.split(text,"\n");
-    if (StringUtil.countChars(text,'\n') > 0 || StringUtil.startsWithWhitespace(text)) {
-      final PsiElement element=PsiUtilCore.getElementAtOffset(file,caretOffset - 1);
-      if (PsiTreeUtil.getParentOfType(element,PyStringLiteralExpression.class) != null)       return text;
-      final SelectionModel selectionModel=editor.getSelectionModel();
-      if (selectionModel.getSelectionStart() != selectionModel.getSelectionEnd()) {
-        final int line=document.getLineNumber(selectionModel.getSelectionStart());
-        final int lineOffset=getLineStartSafeOffset(document,line);
-        final PsiElement ws=file.findElementAt(lineOffset);
-        int offset=ws instanceof PsiWhiteSpace ? ws.getTextRange().getEndOffset() : selectionModel.getSelectionStart();
-        if (text.equals(selectionModel.getSelectedText()))         return text;
-        caretModel.moveToOffset(offset);
-        selectionModel.setSelection(offset,selectionModel.getSelectionEnd());
-      }
- else {
-        if (isNotApplicable(document,caretOffset,lineStartOffset)) {
-          return text;
-        }
-        caretModel.moveToOffset(lineStartOffset);
-      }
-      String spaceString;
-      int indent=0;
-      if (strings.size() > 0) {
-        spaceString=strings.get(0);
-        indent=StringUtil.findFirst(spaceString,NOT_INDENT_FILTER);
-        if (indent < 0)         indent=StringUtil.isEmptyOrSpaces(spaceString) ? spaceString.length() : 0;
-        if (!StringUtil.startsWithWhitespace(spaceString) && strings.size() > 1) {
-          spaceString=strings.get(1);
-          indent=StringUtil.findFirst(spaceString,NOT_INDENT_FILTER);
-          if (indent < 0)           indent=StringUtil.isEmptyOrSpaces(spaceString) ? spaceString.length() : 0;
-          if (indent == CodeStyleSettingsManager.getSettings(project).getIndentSize(PythonFileType.INSTANCE)) {
-            indent=0;
-          }
- else {
-            final String trimmed=StringUtil.trimLeading(strings.get(0));
-            if (trimmed.startsWith("def ") || trimmed.startsWith("if ") || trimmed.startsWith("try:")|| trimmed.startsWith("class ")|| trimmed.startsWith("for ")|| trimmed.startsWith("elif ")|| trimmed.startsWith("else:")|| trimmed.startsWith("except")|| trimmed.startsWith("while ")) {
-              indent=StringUtil.findFirst(spaceString,NOT_INDENT_FILTER) / 2;
-              if (indent < 0)               indent=0;
-            }
-          }
-        }
-      }
-      if (!StringUtil.isEmptyOrSpaces(text))       text=StringUtil.trimTrailing(text);
-      if (!StringUtil.startsWithWhitespace(text)) {
-        if (indent > 0) {
-          final String indentSymbol=useTabs ? "\t" : " ";
-          newText=StringUtil.repeat(indentSymbol,indent) + text;
-        }
- else         newText=new String(text);
-      }
- else {
-        newText=new String(text);
-      }
-      if ((element instanceof PsiWhiteSpace || element.getTextOffset() == 0) && (StringUtil.countChars(element.getText(),'\n') <= 2 && !StringUtil.isEmptyOrSpaces(text))) {
-        newText+="\n";
-      }
- else       newText=new String(newText);
+  final int caretOffset=selectionModel.getSelectionStart() != selectionModel.getSelectionEnd() ? selectionModel.getSelectionStart() : caretModel.getOffset();
+  final int lineNumber=document.getLineNumber(caretOffset);
+  final int lineStartOffset=getLineStartSafeOffset(document,lineNumber);
+  final String indentText=getIndentText(file,document,caretOffset,lineNumber);
+  int toRemove=calculateIndentToRemove(text,NOT_INDENT_FILTER);
+  if (StringUtil.isEmptyOrSpaces(indentText) && isApplicable(file,text,caretOffset)) {
+    caretModel.moveToOffset(lineStartOffset);
+    editor.getSelectionModel().setSelection(lineStartOffset,selectionModel.getSelectionEnd());
+  }
+  final List<String> strings=StringUtil.split(text,"\n",false);
+  String newText="";
+  if (StringUtil.isEmptyOrSpaces(indentText)) {
+    for (    String s : strings) {
+      newText+=indentText + StringUtil.trimStart(s,StringUtil.repeat(useTabs ? "\t" : " ",toRemove));
     }
   }
+ else {
+    newText=text;
+  }
+  String toString=document.getText(TextRange.create(lineStartOffset,document.getLineEndOffset(lineNumber)));
+  if (addLinebreak(text,toString,useTabs) && selectionModel.getSelectionStart() == selectionModel.getSelectionEnd())   newText+="\n";
   return newText;
 }
