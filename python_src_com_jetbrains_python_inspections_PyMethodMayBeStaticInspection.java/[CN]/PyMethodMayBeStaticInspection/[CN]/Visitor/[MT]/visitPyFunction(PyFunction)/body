@@ -1,0 +1,23 @@
+{
+  if (PyNames.getBuiltinMethods(LanguageLevel.forElement(node)).containsKey(node.getName()))   return;
+  final PyClass containingClass=node.getContainingClass();
+  if (containingClass == null)   return;
+  final PyStatementList statementList=node.getStatementList();
+  if (statementList == null)   return;
+  final PyStatement[] statements=statementList.getStatements();
+  if (statements.length == 1 && statements[0] instanceof PyPassStatement)   return;
+  final boolean[] mayBeStatic={true};
+  PyRecursiveElementVisitor visitor=new PyRecursiveElementVisitor(){
+    @Override public void visitPyReferenceExpression(    PyReferenceExpression node){
+      if (PyNames.CANONICAL_SELF.equals(node.getName())) {
+        mayBeStatic[0]=false;
+      }
+    }
+  }
+;
+  node.accept(visitor);
+  final PsiElement identifier=node.getNameIdentifier();
+  if (mayBeStatic[0] && identifier != null) {
+    registerProblem(identifier,PyBundle.message("INSP.method.may.be.static"),ProblemHighlightType.WEAK_WARNING,null,new PyMakeMethodStaticQuickFix(),new PyMakeFunctionFromMethodQuickFix());
+  }
+}
