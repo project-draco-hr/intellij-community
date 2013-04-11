@@ -1,8 +1,8 @@
 {
-  for (  Map.Entry<PyExpression,EnumSet<CallArgumentsMapping.ArgFlag>> arg_entry : result.getArgumentFlags().entrySet()) {
-    EnumSet<CallArgumentsMapping.ArgFlag> flags=arg_entry.getValue();
+  for (  Map.Entry<PyExpression,EnumSet<CallArgumentsMapping.ArgFlag>> argEntry : result.getArgumentFlags().entrySet()) {
+    EnumSet<CallArgumentsMapping.ArgFlag> flags=argEntry.getValue();
     if (!flags.isEmpty()) {
-      PyExpression arg=arg_entry.getKey();
+      PyExpression arg=argEntry.getKey();
       if (flags.contains(CallArgumentsMapping.ArgFlag.IS_DUP)) {
         holder.registerProblem(arg,PyBundle.message("INSP.duplicate.argument"));
       }
@@ -19,7 +19,22 @@
         holder.registerProblem(arg,PyBundle.message("INSP.unexpected.arg"));
       }
       if (flags.contains(CallArgumentsMapping.ArgFlag.IS_TOO_LONG)) {
-        holder.registerProblem(arg,PyBundle.message("INSP.more.args.that.pos.params"));
+        final PyCallExpression.PyMarkedCallee markedCallee=result.getMarkedCallee();
+        String parameterName=null;
+        if (markedCallee != null) {
+          final PyParameter[] parameters=markedCallee.getCallable().getParameterList().getParameters();
+          for (int i=parameters.length - 1; i >= 0; --i) {
+            final PyParameter param=parameters[i];
+            if (param instanceof PyNamedParameter) {
+              final List<PyNamedParameter> unmappedParams=result.getUnmappedParams();
+              if (!((PyNamedParameter)param).isPositionalContainer() && !((PyNamedParameter)param).isKeywordContainer() && param.getDefaultValue() == null && !unmappedParams.contains(param)) {
+                parameterName=param.getName();
+                break;
+              }
+            }
+          }
+          holder.registerProblem(arg,parameterName != null ? PyBundle.message("INSP.multiple.values.resolve.to.positional.$0",parameterName) : PyBundle.message("INSP.more.args.that.pos.params"));
+        }
       }
     }
   }
