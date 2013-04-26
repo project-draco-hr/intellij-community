@@ -8,44 +8,44 @@
   myDescriptionTextArea.setText("");
   setDownloadStatus(true);
   final Object pyPackage=myPackages.getSelectedValue();
-  if (pyPackage instanceof ComparablePair) {
-    final String packageName=((ComparablePair)pyPackage).getFirst();
+  if (pyPackage instanceof RepoPackage) {
+    final String packageName=((RepoPackage)pyPackage).getName();
     myVersionComboBox.removeAllItems();
     if (myVersionCheckBox.isEnabled()) {
-      PyPIPackageUtil.INSTANCE.usePackageReleases(packageName,new AsyncCallback(){
-        @Override public void handleResult(        Object result,        URL url,        String method){
-          final List<String> releases=(List<String>)result;
-          PyPIPackageUtil.INSTANCE.addPackageReleases(packageName,releases);
+      myController.fetchPackageVersions(packageName,new CatchingConsumer<List<String>,Exception>(){
+        @Override public void consume(        final List<String> releases){
           ApplicationManager.getApplication().invokeLater(new Runnable(){
             @Override public void run(){
-              myVersionComboBox.removeAllItems();
-              for (              String release : releases) {
-                myVersionComboBox.addItem(release);
+              if (myPackages.getSelectedValue() == pyPackage) {
+                myVersionComboBox.removeAllItems();
+                for (                String release : releases) {
+                  myVersionComboBox.addItem(release);
+                }
               }
             }
           }
 ,ModalityState.any());
         }
-        @Override public void handleError(        Exception exception,        URL url,        String method){
-          LOG.info("Error retrieving releases from PyPI",exception);
+        @Override public void consume(        Exception e){
+          LOG.info("Error retrieving releases",e);
         }
       }
 );
     }
     myInstallButton.setEnabled(!currentlyInstalling.contains(packageName));
-    PyPIPackageUtil.INSTANCE.fillPackageDetails(packageName,new AsyncCallback(){
-      @Override public void handleResult(      Object result,      URL url,      String method){
-        final Hashtable details=(Hashtable)result;
-        PyPIPackageUtil.INSTANCE.addPackageDetails(packageName,details);
+    myController.fetchPackageDetails(packageName,new CatchingConsumer<String,Exception>(){
+      @Override public void consume(      final String details){
         ApplicationManager.getApplication().invokeLater(new Runnable(){
           @Override public void run(){
-            addDetails(details);
+            if (myPackages.getSelectedValue() == pyPackage) {
+              myDescriptionTextArea.setText(details);
+            }
           }
         }
 ,ModalityState.any());
       }
-      @Override public void handleError(      Exception exception,      URL url,      String method){
-        LOG.info("Error retrieving package details from PyPI",exception);
+      @Override public void consume(      Exception exception){
+        LOG.info("Error retrieving package details",exception);
       }
     }
 );
