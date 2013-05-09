@@ -1,0 +1,65 @@
+{
+  final Application application=ApplicationManager.getApplication();
+  application.executeOnPooledThread(new Runnable(){
+    @Override public void run(){
+      PyExternalProcessException exc=null;
+      try {
+        PyPackageManagerImpl packageManager=(PyPackageManagerImpl)PyPackageManager.getInstance(selectedSdk);
+        myHasDistribute=packageManager.findPackage(PyPackageManagerImpl.PACKAGE_DISTRIBUTE) != null;
+        if (!myHasDistribute) {
+          myHasDistribute=packageManager.findPackage(PyPackageManagerImpl.PACKAGE_SETUPTOOLS) != null;
+        }
+        myHasPip=packageManager.findPackage(PyPackageManagerImpl.PACKAGE_PIP) != null;
+      }
+ catch (      PyExternalProcessException e) {
+        exc=e;
+      }
+      final PyExternalProcessException externalProcessException=exc;
+      application.invokeLater(new Runnable(){
+        @Override public void run(){
+          if (selectedSdk == getSelectedSdk()) {
+            final PythonSdkFlavor flavor=PythonSdkFlavor.getFlavor(selectedSdk);
+            final boolean invalid=PythonSdkType.isInvalid(selectedSdk);
+            boolean allowCreateVirtualEnv=!(PythonSdkType.isRemote(selectedSdk) || flavor instanceof IronPythonSdkFlavor) && !PythonSdkType.isVirtualEnv(selectedSdk) && myNotificationArea.hasLinkHandler(CREATE_VENV);
+            final String createVirtualEnvLink="<a href=\"" + CREATE_VENV + "\">create new VirtualEnv</a>";
+            myNotificationArea.hide();
+            if (!invalid) {
+              String text=null;
+              if (externalProcessException != null) {
+                final int retCode=externalProcessException.getRetcode();
+                if (retCode == PyPackageManagerImpl.ERROR_NO_PIP) {
+                  myHasPip=false;
+                }
+ else                 if (retCode == PyPackageManagerImpl.ERROR_NO_DISTRIBUTE) {
+                  myHasDistribute=false;
+                }
+ else {
+                  text=externalProcessException.getMessage();
+                }
+                final boolean hasPackagingTools=myHasPip && myHasDistribute;
+                allowCreateVirtualEnv&=!hasPackagingTools;
+              }
+              if (text == null) {
+                if (!myHasDistribute) {
+                  text="Python package management tools not found. <a href=\"" + INSTALL_DISTRIBUTE + "\">Install 'distribute'</a>";
+                }
+ else                 if (!myHasPip) {
+                  text="Python packaging tool 'pip' not found. <a href=\"" + INSTALL_PIP + "\">Install 'pip'</a>";
+                }
+              }
+              if (text != null) {
+                if (allowCreateVirtualEnv) {
+                  text+=" or " + createVirtualEnvLink;
+                }
+                myNotificationArea.showWarning(text);
+              }
+            }
+            myInstallButton.setEnabled(!invalid && externalProcessException == null && myHasPip);
+          }
+        }
+      }
+,ModalityState.any());
+    }
+  }
+);
+}
