@@ -14,15 +14,19 @@
   index.setInputIdToDataKeysIndex(new Factory<PersistentHashMap<Integer,Collection<K>>>(){
     @Override public PersistentHashMap<Integer,Collection<K>> create(){
       try {
+        ThrowableComputable<PersistentHashMap<Integer,Collection<K>>,IOException> process=new ThrowableComputable<PersistentHashMap<Integer,Collection<K>>,IOException>(){
+          @Override public PersistentHashMap<Integer,Collection<K>> compute() throws IOException {
+            return createIdToDataKeysIndex(indexId,keyDescriptor,storage);
+          }
+        }
+;
+        if (!index.doesNeedCompaction()) {
+          return process.compute();
+        }
         final ProgressManager progressManager=ProgressManager.getInstance();
         final ProgressIndicator currentProgress=progressManager.getProgressIndicator();
         if (currentProgress == null && ApplicationManager.getApplication().isDispatchThread()) {
-          return progressManager.runProcessWithProgressSynchronously(new ThrowableComputable<PersistentHashMap<Integer,Collection<K>>,IOException>(){
-            @Override public PersistentHashMap<Integer,Collection<K>> compute() throws IOException {
-              return createIdToDataKeysIndex(indexId,keyDescriptor,storage);
-            }
-          }
-,LangBundle.message("compacting.indices.title"),false,null);
+          return progressManager.runProcessWithProgressSynchronously(process,LangBundle.message("compacting.indices.title"),false,null);
         }
         if (currentProgress != null) {
           currentProgress.pushState();
