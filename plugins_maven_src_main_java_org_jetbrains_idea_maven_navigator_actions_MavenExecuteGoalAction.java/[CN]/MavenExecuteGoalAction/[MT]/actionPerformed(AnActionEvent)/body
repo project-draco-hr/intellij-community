@@ -1,0 +1,29 @@
+{
+  Project project=e.getRequiredData(PlatformDataKeys.PROJECT);
+  ExecuteMavenGoalHistoryService historyService=ExecuteMavenGoalHistoryService.getInstance(project);
+  MavenExecuteGoalDialog dialog=new MavenExecuteGoalDialog(project,historyService.getHistory());
+  dialog.setWorkDirectory(historyService.getWorkDirectory());
+  dialog.show();
+  if (!dialog.isOK()) {
+    return;
+  }
+  String goals=dialog.getGoals();
+  goals=goals.trim();
+  if (goals.startsWith("mvn ")) {
+    goals=goals.substring("mvn ".length()).trim();
+  }
+  String workDirectory=dialog.getWorkDirectory();
+  historyService.addCommand(goals,workDirectory);
+  MavenProjectsManager projectsManager=MavenProjectsManager.getInstance(project);
+  File mavenHome=MavenUtil.resolveMavenHomeDirectory(projectsManager.getGeneralSettings().getMavenHome());
+  if (mavenHome == null) {
+    throw new RuntimeException();
+  }
+  MavenRunnerParameters parameters=new MavenRunnerParameters(true,workDirectory,Arrays.asList(ParametersList.parse(goals)),null);
+  MavenGeneralSettings generalSettings=new MavenGeneralSettings();
+  generalSettings.setMavenHome(mavenHome.getPath());
+  MavenRunnerSettings runnerSettings=MavenRunner.getInstance(project).getSettings().clone();
+  runnerSettings.setMavenProperties(new LinkedHashMap<String,String>());
+  runnerSettings.setSkipTests(false);
+  MavenRunConfigurationType.runConfiguration(project,parameters,generalSettings,runnerSettings,null);
+}
