@@ -1,0 +1,87 @@
+{
+  super(project,repository,changeListener);
+  myUrlLabel.setVisible(false);
+  myURLText.setVisible(false);
+  myUsernameLabel.setVisible(false);
+  myUserNameText.setVisible(false);
+  myPasswordLabel.setText("Token");
+  myPasswordText.getDocument().addDocumentListener(new DocumentAdapter(){
+    @Override protected void textChanged(    DocumentEvent e){
+      String password=String.valueOf(myPasswordText.getPassword());
+      if (password.isEmpty() && password.equals(myRepository.getPassword())) {
+        return;
+      }
+      myRepository.setPassword(password);
+      new BoardsDownloader(){
+        @Override protected List<TrelloBoard> doInBackground() throws Exception {
+          myRepository.setCurrentUser(myRepository.fetchUserByToken());
+          return super.doInBackground();
+        }
+        @Override protected void done(){
+          super.done();
+          myBoardComboBox.setSelectedItem(UNSPECIFIED_BOARD);
+        }
+      }
+.execute();
+      doApply();
+    }
+  }
+);
+  myBoardComboBox.addItemListener(new ItemListener(){
+    @Override public void itemStateChanged(    ItemEvent e){
+      TrelloBoard board=(TrelloBoard)e.getItem();
+      if (e.getStateChange() == ItemEvent.DESELECTED || board.equals(myRepository.getCurrentBoard())) {
+        return;
+      }
+      if (board != UNSPECIFIED_BOARD) {
+        myRepository.setCurrentBoard(board);
+        new ListsDownloader(){
+          @Override protected void done(){
+            super.done();
+            myListComboBox.setSelectedItem(UNSPECIFIED_LIST);
+          }
+        }
+.execute();
+      }
+ else {
+        myRepository.setCurrentBoard(null);
+        myListComboBox.removeAllItems();
+        myRepository.setCurrentList(null);
+      }
+      doApply();
+    }
+  }
+);
+  myBoardComboBox.setRenderer(new TrelloModelRenderer("Set token first"));
+  myListComboBox.setRenderer(new TrelloModelRenderer("Select board first"));
+  myListComboBox.addItemListener(new ItemListener(){
+    @Override public void itemStateChanged(    ItemEvent e){
+      if (e.getStateChange() == ItemEvent.SELECTED) {
+        TrelloList list=(TrelloList)e.getItem();
+        myRepository.setCurrentList(list != UNSPECIFIED_LIST ? list : null);
+        doApply();
+      }
+    }
+  }
+);
+  if (myRepository.getCurrentUser() != null) {
+    new BoardsDownloader(){
+      @Override protected void done(){
+        TrelloBoard selectedBoard=myRepository.getCurrentBoard();
+        super.done();
+        myBoardComboBox.setSelectedItem(selectedBoard != null ? selectedBoard : UNSPECIFIED_BOARD);
+      }
+    }
+.execute();
+  }
+  if (myRepository.getCurrentBoard() != null) {
+    new ListsDownloader(){
+      @Override protected void done(){
+        TrelloList selectedList=myRepository.getCurrentList();
+        super.done();
+        myListComboBox.setSelectedItem(selectedList != null ? selectedList : UNSPECIFIED_LIST);
+      }
+    }
+.execute();
+  }
+}
