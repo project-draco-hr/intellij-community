@@ -1,2 +1,30 @@
 {
+  if (!isXmlRpcRequest(urlDecoder.getPath())) {
+    return false;
+  }
+  if (request.getMethod() == HttpMethod.POST) {
+    ChannelBuffer result;
+    ChannelBufferInputStream in=new ChannelBufferInputStream(request.getContent());
+    try {
+      result=ChannelBuffers.copiedBuffer(new XmlRpcWorker(handlerMapping).execute(in,xmlRpcContext));
+    }
+ catch (    Throwable ex) {
+      context.getChannel().close();
+      LOG.error(ex);
+      return true;
+    }
+ finally {
+      in.close();
+    }
+    HttpResponse response=Responses.create("text/xml");
+    response.setContent(result);
+    Responses.send(response,request,context);
+    return true;
+  }
+ else   if (HttpMethod.POST.getName().equals(request.getHeader("Access-Control-Request-Method"))) {
+    LOG.assertTrue(request.getMethod() == HttpMethod.OPTIONS);
+    Responses.sendOptionsResponse("POST, OPTIONS",request,context);
+    return true;
+  }
+  return false;
 }
