@@ -1,0 +1,36 @@
+{
+  final PsiExpression[] args=instruction.getArgs();
+  Map<PsiExpression,Nullness> map=myParametersNullability.get(instruction);
+  final DfaNotNullValue.Factory factory=runner.getFactory().getNotNullFactory();
+  for (int i=0; i < args.length; i++) {
+    final DfaValue arg=memState.pop();
+    PsiExpression expr=args[(args.length - i - 1)];
+    if (map.get(expr) == Nullness.NOT_NULL) {
+      if (!memState.applyNotNull(arg)) {
+        onPassingNullParameter(expr);
+        if (arg instanceof DfaVariableValue) {
+          memState.setVarValue((DfaVariableValue)arg,factory.create(((DfaVariableValue)arg).getVariableType()));
+        }
+      }
+    }
+ else     if (map.get(expr) == Nullness.UNKNOWN && !memState.checkNotNullable(arg)) {
+      onPassingNullParameterToNonAnnotated(runner,expr);
+    }
+  }
+  @NotNull final DfaValue qualifier=memState.pop();
+  try {
+    if (!memState.applyNotNull(qualifier)) {
+      onInstructionProducesNPE(instruction);
+      if (qualifier instanceof DfaVariableValue) {
+        memState.setVarValue((DfaVariableValue)qualifier,factory.create(((DfaVariableValue)qualifier).getVariableType()));
+      }
+    }
+    return nextInstruction(instruction,runner,memState);
+  }
+  finally {
+    memState.push(getMethodResultValue(instruction,qualifier,runner.getFactory()));
+    if (instruction.shouldFlushFields()) {
+      memState.flushFields(runner.getFields());
+    }
+  }
+}
