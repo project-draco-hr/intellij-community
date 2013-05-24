@@ -1,2 +1,29 @@
 {
+  assertLocalBranch(targetRef);
+  new Task.Backgroundable(myProject,"Cherry-picking",false){
+    @Override public void run(    @NotNull ProgressIndicator indicator){
+      callback.disableModifications();
+      GitLocalBranch currentBranch=myRepository.getCurrentBranch();
+      if (currentBranch == null || !currentBranch.getName().equals(targetRef.getName())) {
+        indicator.setText("Checking out " + targetRef.getName());
+        checkout(targetRef,indicator);
+      }
+      GitCherryPicker cherryPicker=new GitCherryPicker(GitActionHandlerImpl.this.myProject,myGit,myPlatformFacade,true);
+      final CommitDataGetter commitDataGetter=myLogComponent.getUiController().getDataPack().getCommitDataGetter();
+      List<GitCommit> commits=ContainerUtil.map(nodesToPick,new Function<Node,GitCommit>(){
+        @Override public GitCommit fun(        Node node){
+          return commitDataGetter.getCommitData(node).getFullCommit();
+        }
+      }
+);
+      cherryPicker.cherryPick(Collections.singletonMap(myRepository,commits));
+    }
+    @Override public void onSuccess(){
+      callback.enableModifications();
+    }
+    @Override public void onCancel(){
+      onSuccess();
+    }
+  }
+.queue();
 }
