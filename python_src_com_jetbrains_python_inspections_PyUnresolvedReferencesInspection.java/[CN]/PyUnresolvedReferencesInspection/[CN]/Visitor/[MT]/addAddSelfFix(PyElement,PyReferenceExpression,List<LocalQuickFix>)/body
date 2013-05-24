@@ -1,9 +1,20 @@
 {
-  PyClass containedClass=PsiTreeUtil.getParentOfType(node,PyClass.class);
-  if (containedClass != null) {
+  final PyClass containedClass=PsiTreeUtil.getParentOfType(node,PyClass.class);
+  final PyFunction function=PsiTreeUtil.getParentOfType(node,PyFunction.class);
+  if (containedClass != null && function != null) {
+    final PyParameter[] parameters=function.getParameterList().getParameters();
+    if (parameters.length == 0)     return;
+    final String qualifier=parameters[0].getText();
+    final PyDecoratorList decoratorList=function.getDecoratorList();
+    boolean isClassmethod=false;
+    if (decoratorList != null) {
+      for (      PyDecorator decorator : decoratorList.getDecorators()) {
+        if (PyNames.CLASSMETHOD.equals(decorator.getCallee().getText()))         isClassmethod=true;
+      }
+    }
     for (    PyTargetExpression target : containedClass.getInstanceAttributes()) {
-      if (Comparing.strEqual(node.getName(),target.getName())) {
-        actions.add(new UnresolvedReferenceAddSelfQuickFix(refex));
+      if (!isClassmethod && Comparing.strEqual(node.getName(),target.getName())) {
+        actions.add(new UnresolvedReferenceAddSelfQuickFix(refex,qualifier));
       }
     }
     for (    PyStatement statement : containedClass.getStatementList().getStatements()) {
@@ -15,7 +26,7 @@
             PyType type=myTypeEvalContext.getType(callexpr);
             if (type != null && type instanceof PyClassTypeImpl) {
               if (((PyCallExpression)callexpr).isCalleeText(PyNames.PROPERTY)) {
-                actions.add(new UnresolvedReferenceAddSelfQuickFix(refex));
+                actions.add(new UnresolvedReferenceAddSelfQuickFix(refex,qualifier));
               }
             }
           }
@@ -24,7 +35,7 @@
     }
     for (    PyFunction method : containedClass.getMethods()) {
       if (refex.getText().equals(method.getName())) {
-        actions.add(new UnresolvedReferenceAddSelfQuickFix(refex));
+        actions.add(new UnresolvedReferenceAddSelfQuickFix(refex,qualifier));
       }
     }
   }
