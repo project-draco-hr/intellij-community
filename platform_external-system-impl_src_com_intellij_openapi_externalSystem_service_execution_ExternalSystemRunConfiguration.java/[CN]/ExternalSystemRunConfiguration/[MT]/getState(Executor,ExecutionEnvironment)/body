@@ -4,15 +4,22 @@
       ConsoleView console=new TextConsoleBuilderImpl(getProject()).getConsole();
       final MyProcessHandler processHandler=new MyProcessHandler();
       console.attachToProcess(processHandler);
-      List<ExternalTaskPojo> tasks=ContainerUtilRt.newArrayList();
+      final List<ExternalTaskPojo> tasks=ContainerUtilRt.newArrayList();
       for (      String taskName : mySettings.getTaskNames()) {
         tasks.add(new ExternalTaskPojo(taskName,mySettings.getExternalProjectPath(),null));
       }
       final ExternalSystemExecuteTaskTask task=new ExternalSystemExecuteTaskTask(mySettings.getExternalSystemId(),getProject(),tasks,mySettings.getVmOptions());
       ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
         @Override public void run(){
+          String greeting=ExternalSystemBundle.message("run.text.starting",StringUtil.join(mySettings.getTaskNames()," "));
+          processHandler.notifyTextAvailable(greeting,ProcessOutputTypes.SYSTEM);
           task.execute(new ExternalSystemTaskNotificationListenerAdapter(){
+            private boolean myResetGreeting=true;
             @Override public void onTaskOutput(            @NotNull ExternalSystemTaskId id,            @NotNull String text,            boolean stdOut){
+              if (myResetGreeting) {
+                processHandler.notifyTextAvailable("\r",ProcessOutputTypes.SYSTEM);
+                myResetGreeting=false;
+              }
               processHandler.notifyTextAvailable(text,stdOut ? ProcessOutputTypes.STDOUT : ProcessOutputTypes.STDERR);
             }
             @Override public void onEnd(            @NotNull ExternalSystemTaskId id){
