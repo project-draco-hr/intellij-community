@@ -1,0 +1,49 @@
+{
+  return new RunnableState(){
+    @Nullable @Override public ExecutionResult execute(    Executor executor,    @NotNull ProgramRunner runner) throws ExecutionException {
+      ConsoleView console=new TextConsoleBuilderImpl(getProject()).getConsole();
+      final ProcessHandler processHandler=new ProcessHandler(){
+        @Override protected void destroyProcessImpl(){
+        }
+        @Override protected void detachProcessImpl(){
+          notifyProcessDetached();
+        }
+        @Override public boolean detachIsDefault(){
+          return true;
+        }
+        @Nullable @Override public OutputStream getProcessInput(){
+          return null;
+        }
+      }
+;
+      console.attachToProcess(processHandler);
+      List<ExternalTaskPojo> tasks=ContainerUtilRt.newArrayList();
+      for (      String taskName : mySettings.getTaskNames()) {
+        tasks.add(new ExternalTaskPojo(taskName,mySettings.getExternalProjectPath(),null));
+      }
+      final ExternalSystemExecuteTaskTask task=new ExternalSystemExecuteTaskTask(mySettings.getExternalSystemId(),getProject(),tasks,mySettings.getVmOptions());
+      ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+        @Override public void run(){
+          task.execute(new ExternalSystemTaskNotificationListenerAdapter(){
+            @Override public void onTaskOutput(            @NotNull ExternalSystemTaskId id,            @NotNull String text,            boolean stdOut){
+              processHandler.notifyTextAvailable(text,stdOut ? ProcessOutputTypes.STDOUT : ProcessOutputTypes.STDERR);
+            }
+            @Override public void onEnd(            @NotNull ExternalSystemTaskId id){
+              processHandler.destroyProcess();
+            }
+          }
+);
+        }
+      }
+);
+      return new DefaultExecutionResult(console,processHandler);
+    }
+    @Override public RunnerSettings getRunnerSettings(){
+      return null;
+    }
+    @Override public ConfigurationPerRunnerSettings getConfigurationSettings(){
+      return null;
+    }
+  }
+;
+}
