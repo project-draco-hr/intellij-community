@@ -1,0 +1,46 @@
+{
+  final GitLineHandler h=new GitLineHandler(myProject,myRepository.getRoot(),GitCommand.REBASE);
+  h.addParameters("-i","-v");
+  h.addLineListener(new GitLineHandlerAdapter(){
+    @Override public void onLineAvailable(    String line,    Key outputType){
+      if (line.toLowerCase().startsWith("rebasing")) {
+        line=line.trim();
+        String progress=line.substring(line.indexOf('(') + 1,line.lastIndexOf('/'));
+        Integer index=null;
+        try {
+          index=Integer.parseInt(progress) - 1;
+          if (index >= 0 && index < commands.size()) {
+            final Integer finalIndex=index;
+            ApplicationManager.getApplication().invokeLater(new Runnable(){
+              @Override public void run(){
+                callback.interactiveCommandApplied(commands.get(finalIndex));
+              }
+            }
+);
+          }
+        }
+ catch (        NumberFormatException e) {
+          e.printStackTrace();
+        }
+      }
+    }
+  }
+);
+  GitRebaseEditorService rebaseEditorService=GitRebaseEditorService.getInstance();
+  RebaseEditor editor=new RebaseEditor(rebaseEditorService,myRepository.getRoot(),commands,h);
+  Integer rebaseEditorNo=editor.getHandlerNo();
+  rebaseEditorService.configureHandler(h,rebaseEditorNo);
+  GitRebaser rebaser=new GitRebaser(myProject,myGit,null){
+    @Override protected GitLineHandler createHandler(    VirtualFile root){
+      return h;
+    }
+    @Override protected void makeContinueRebaseInteractiveEditor(    VirtualFile root,    GitLineHandler rh){
+      GitRebaseEditorService rebaseEditorService=GitRebaseEditorService.getInstance();
+      RebaseEditor editor=new RebaseEditor(rebaseEditorService,root,commands,rh);
+      Integer rebaseEditorNo=editor.getHandlerNo();
+      rebaseEditorService.configureHandler(rh,rebaseEditorNo);
+    }
+  }
+;
+  doRebase(onto,subjectRef,callback,rebaser);
+}
