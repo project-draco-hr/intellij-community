@@ -2,25 +2,16 @@
   Alarm findUsagesStartedBalloon=new Alarm();
   findUsagesStartedBalloon.addRequest(new Runnable(){
     @Override public void run(){
-      notifyByFindBalloon(null,MessageType.WARNING,myProcessPresentation,"Find Usages in progress...");
+      notifyByFindBalloon(null,MessageType.WARNING,myProcessPresentation,UsageViewManagerImpl.this.myProject,"Find Usages in progress...");
       findStartedBalloonShown.set(true);
     }
   }
 ,300,ModalityState.NON_MODAL);
   UsageSearcher usageSearcher=mySearcherFactory.create();
-  final AtomicInteger tooManyUsages=new AtomicInteger();
-  final CountDownLatch waitWhileUserClick=new CountDownLatch(1);
   usageSearcher.generate(new Processor<Usage>(){
     @Override public boolean process(    final Usage usage){
-      final ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
+      ProgressIndicator indicator=ProgressWrapper.unwrap(ProgressManager.getInstance().getProgressIndicator());
       if (searchHasBeenCancelled() || indicator != null && indicator.isCanceled())       return false;
-      if (tooManyUsages.get() == 1) {
-        try {
-          waitWhileUserClick.await(1,TimeUnit.SECONDS);
-        }
- catch (        InterruptedException ignored) {
-        }
-      }
       boolean incrementCounter=!isSelfUsage(usage,mySearchFor);
       if (incrementCounter) {
         final int usageCount=myUsageCountWithoutDefinition.incrementAndGet();
@@ -28,11 +19,18 @@
           myFirstUsage.compareAndSet(null,usage);
         }
         final UsageViewImpl usageView=getUsageView();
-        if (usageCount > UsageLimitUtil.USAGES_LIMIT && tooManyUsages.get() == 0 && tooManyUsages.compareAndSet(0,1)) {
-          showTooManyUsagesWarning(indicator,waitWhileUserClick,myUsageCountWithoutDefinition.get(),usageView);
+        if (usageCount > UsageLimitUtil.USAGES_LIMIT) {
+          if (indicator instanceof FindUsagesIndicator && ((FindUsagesIndicator)indicator).switchTooManyUsagesStatus()) {
+            showTooManyUsagesWarning(myProject,(FindUsagesIndicator)indicator,myUsageCountWithoutDefinition.get(),usageView);
+          }
         }
         if (usageView != null) {
-          usageView.appendUsage(usage);
+          ApplicationManager.getApplication().runReadAction(new Runnable(){
+            public void run(){
+              usageView.appendUsage(usage);
+            }
+          }
+);
         }
       }
       return indicator == null || !indicator.isCanceled();
