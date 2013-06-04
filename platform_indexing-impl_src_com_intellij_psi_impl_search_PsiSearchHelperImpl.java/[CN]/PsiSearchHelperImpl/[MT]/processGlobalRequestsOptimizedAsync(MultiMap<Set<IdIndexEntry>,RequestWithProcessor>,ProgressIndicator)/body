@@ -27,12 +27,25 @@
     progress.setText(PsiBundle.message("psi.search.for.word.progress",getPresentableWordsDescription(allWords)));
   }
   final AsyncFuture<Boolean> result=processPsiFileRootsAsync(new ArrayList<VirtualFile>(candidateFiles.keySet()),new Processor<PsiElement>(){
-    @Override public boolean process(    PsiElement psiRoot){
-      final VirtualFile vfile=psiRoot.getContainingFile().getVirtualFile();
+    @Override public boolean process(    final PsiElement psiRoot){
+      if (progress instanceof FindUsagesIndicator) {
+        ((FindUsagesIndicator)progress).pauseProcessingIfTooManyUsages();
+      }
+      final VirtualFile vfile=ApplicationManager.getApplication().runReadAction(new Computable<VirtualFile>(){
+        public VirtualFile compute(){
+          return psiRoot.getContainingFile().getVirtualFile();
+        }
+      }
+);
       for (      final RequestWithProcessor singleRequest : candidateFiles.get(vfile)) {
-        StringSearcher searcher=searchers.get(singleRequest);
-        TextOccurenceProcessor adapted=adaptProcessor(singleRequest.request,singleRequest.refProcessor);
-        if (!LowLevelSearchUtil.processElementsContainingWordInElement(adapted,psiRoot,searcher,true,progress)) {
+        final StringSearcher searcher=searchers.get(singleRequest);
+        final TextOccurenceProcessor adapted=adaptProcessor(singleRequest.request,singleRequest.refProcessor);
+        if (!ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
+          public Boolean compute(){
+            return LowLevelSearchUtil.processElementsContainingWordInElement(adapted,psiRoot,searcher,true,progress);
+          }
+        }
+)) {
           return false;
         }
       }
