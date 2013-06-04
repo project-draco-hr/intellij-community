@@ -4,52 +4,21 @@
   if (cached != null && cached.getSecond() == fileModificationStamp) {
     return cached.getFirst();
   }
-  MostlySingularMultiMap<String,AnnotationData> data=new MostlySingularMultiMap<String,AnnotationData>();
+  DataParsingSaxHandler handler=new DataParsingSaxHandler(file);
   try {
-    Document document=JDOMUtil.loadDocument(escapeAttributes(file.getText()));
-    Element rootElement=document.getRootElement();
-    List<Element> itemElements=rootElement == null ? Collections.<Element>emptyList() : (List<Element>)rootElement.getChildren("item");
-    for (    Element element : itemElements) {
-      String externalName=element.getAttributeValue("name");
-      for (      Element annotationElement : (List<Element>)element.getChildren("annotation")) {
-        String annotationFQN=annotationElement.getAttributeValue("name");
-        if (StringUtil.isEmpty(annotationFQN))         continue;
-        annotationFQN=intern(annotationFQN);
-        List<Element> children=(List<Element>)annotationElement.getChildren();
-        StringBuilder buf=new StringBuilder(children.size() * "name=value,".length());
-        for (        Element annotationParameter : children) {
-          if (buf.length() != 0) {
-            buf.append(",");
-          }
-          String nameValue=annotationParameter.getAttributeValue("name");
-          if (nameValue != null) {
-            buf.append(nameValue);
-            buf.append("=");
-          }
-          buf.append(annotationParameter.getAttributeValue("val"));
-        }
-        String annotationParameters=buf.length() == 0 ? "" : intern(buf.toString());
-        for (        AnnotationData existingData : data.get(externalName)) {
-          if (existingData.annotationClassFqName.equals(annotationFQN)) {
-            duplicateError(file,externalName,"Duplicate annotation '" + annotationFQN + "' ");
-          }
-        }
-        AnnotationData annData=internAnnotationData(new AnnotationData(annotationFQN,annotationParameters,file.getVirtualFile()));
-        data.add(externalName,annData);
-      }
-    }
+    SAXParser saxParser=SAXParserFactory.newInstance().newSAXParser();
+    saxParser.parse(new InputSource(new StringReader(escapeAttributes(file.getText()))),handler);
   }
  catch (  IOException e) {
     LOG.error(e);
   }
-catch (  JDOMException e) {
+catch (  ParserConfigurationException e) {
     LOG.error(e);
   }
-  if (data.isEmpty()) {
-    data=MostlySingularMultiMap.emptyMap();
+catch (  SAXException e) {
+    LOG.error(e);
   }
-  data.compact();
-  Pair<MostlySingularMultiMap<String,AnnotationData>,Long> pair=Pair.create(data,file.getModificationStamp());
+  Pair<MostlySingularMultiMap<String,AnnotationData>,Long> pair=Pair.create(handler.getResult(),file.getModificationStamp());
   annotationFileToDataAndModStamp.put(file,pair);
-  return data;
+  return pair.first;
 }
