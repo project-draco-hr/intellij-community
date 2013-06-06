@@ -1,0 +1,46 @@
+{
+  ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+    public void run(){
+      if (delay > 0) {
+        try {
+          Thread.sleep(delay);
+        }
+ catch (        InterruptedException ignore) {
+        }
+      }
+      ApplicationManager.getApplication().invokeLater(new Runnable(){
+        @Override public void run(){
+          if (!TestRunnerService.getInstance(module).getProjectConfiguration().isEmpty())           return;
+          String testRunner=detectTestRunnerFromSetupPy(module);
+          final Collection<VirtualFile> filenames=FilenameIndex.getAllFilesByExt(module.getProject(),PythonFileType.INSTANCE.getDefaultExtension(),GlobalSearchScope.moduleScope(module));
+          for (          VirtualFile file : filenames) {
+            if (file.getName().startsWith("test")) {
+              if (testRunner.isEmpty())               testRunner=checkImports(file,module);
+            }
+ else {
+              if (PyDocumentationSettings.getInstance(module).getFormat().isEmpty()) {
+                checkDocstring(file,module);
+              }
+            }
+            if (!testRunner.isEmpty() && !PyDocumentationSettings.getInstance(module).getFormat().isEmpty()) {
+              break;
+            }
+          }
+          if (testRunner.isEmpty()) {
+            final Sdk sdk=PythonSdkType.findPythonSdk(module);
+            if (sdk != null && sdk.getSdkType() instanceof PythonSdkType && testRunner.isEmpty()) {
+              if (VFSTestFrameworkListener.isTestFrameworkInstalled(sdk,PyNames.NOSE_TEST))               testRunner=PythonTestConfigurationsModel.PYTHONS_NOSETEST_NAME;
+ else               if (VFSTestFrameworkListener.isTestFrameworkInstalled(sdk,PyNames.PY_TEST))               testRunner=PythonTestConfigurationsModel.PY_TEST_NAME;
+ else               if (VFSTestFrameworkListener.isTestFrameworkInstalled(sdk,PyNames.AT_TEST))               testRunner=PythonTestConfigurationsModel.PYTHONS_ATTEST_NAME;
+            }
+          }
+          if (testRunner.isEmpty())           testRunner=PythonTestConfigurationsModel.PYTHONS_UNITTEST_NAME;
+          TestRunnerService.getInstance(module).setProjectConfiguration(testRunner);
+          if (PyDocumentationSettings.getInstance(module).getFormat().isEmpty())           PyDocumentationSettings.getInstance(module).setFormat(DocStringFormat.PLAIN);
+        }
+      }
+,ModalityState.any(),module.getDisposed());
+    }
+  }
+);
+}
