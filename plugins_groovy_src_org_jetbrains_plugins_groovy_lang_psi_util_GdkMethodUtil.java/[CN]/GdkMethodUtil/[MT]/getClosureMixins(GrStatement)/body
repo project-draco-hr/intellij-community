@@ -1,0 +1,27 @@
+{
+  if (!(statement instanceof GrAssignmentExpression))   return null;
+  final GrAssignmentExpression assignment=(GrAssignmentExpression)statement;
+  final CachedValuesManager manager=CachedValuesManager.getManager(statement.getProject());
+  return manager.getCachedValue(statement,new CachedValueProvider<Trinity<PsiClassType,GrReferenceExpression,List<GrMethod>>>(){
+    @Nullable @Override public Result<Trinity<PsiClassType,GrReferenceExpression,List<GrMethod>>> compute(){
+      Pair<PsiClassType,GrReferenceExpression> original=getTypeToMixIn(assignment);
+      if (original == null)       return Result.create(null,PsiModificationTracker.MODIFICATION_COUNT);
+      final Pair<GrSignature,String> signatures=getTypeToMix(assignment);
+      if (signatures == null)       return Result.create(null,PsiModificationTracker.MODIFICATION_COUNT);
+      final String name=signatures.second;
+      final List<GrMethod> methods=ContainerUtil.newArrayList();
+      final PsiClass closure=GroovyPsiManager.getInstance(statement.getProject()).findClassWithCache(GroovyCommonClassNames.GROOVY_LANG_CLOSURE,statement.getResolveScope());
+      if (closure == null)       return Result.create(null,PsiModificationTracker.MODIFICATION_COUNT);
+      signatures.first.accept(new GrSignatureVisitor(){
+        @Override public void visitClosureSignature(        GrClosureSignature signature){
+          super.visitClosureSignature(signature);
+          GrMethod method=createMethod(signature,name,assignment,closure);
+          methods.add(method);
+        }
+      }
+);
+      return Result.create(Trinity.create(original.first,original.second,methods),PsiModificationTracker.MODIFICATION_COUNT);
+    }
+  }
+);
+}
