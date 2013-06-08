@@ -14,21 +14,17 @@
       LOG.error(e);
     }
   }
-  PsiMethod[] getterPrototypes=myDescriptor.getGetterPrototypes();
-  PsiMethod[] setterPrototypes=myDescriptor.getSetterPrototypes();
-  ArrayList<UsageInfo> array=new ArrayList<UsageInfo>();
-  PsiField[] fields=myFields;
-  for (int i=0; i < fields.length; i++) {
-    PsiField field=fields[i];
-    for (    final PsiReference reference : ReferencesSearch.search(field)) {
+  ArrayList<EncapsulateFieldUsageInfo> array=ContainerUtil.newArrayList();
+  for (  FieldDescriptor fieldDescriptor : myFieldDescriptors) {
+    for (    final PsiReference reference : ReferencesSearch.search(fieldDescriptor.getField())) {
       if (!(reference instanceof PsiReferenceExpression))       continue;
       PsiReferenceExpression ref=(PsiReferenceExpression)reference;
-      if (findGet && isUsedInExistingAccessor(getterPrototypes[i],ref))       continue;
-      if (findSet && isUsedInExistingAccessor(setterPrototypes[i],ref))       continue;
+      if (findGet && isUsedInExistingAccessor(fieldDescriptor.getGetterPrototype(),ref))       continue;
+      if (findSet && isUsedInExistingAccessor(fieldDescriptor.getSetterPrototype(),ref))       continue;
       if (!findGet) {
         if (!PsiUtil.isAccessedForWriting(ref))         continue;
       }
-      if (!findSet || field.hasModifierProperty(PsiModifier.FINAL)) {
+      if (!findSet || fieldDescriptor.getField().hasModifierProperty(PsiModifier.FINAL)) {
         if (!PsiUtil.isAccessedForReading(ref))         continue;
       }
       if (!myDescriptor.isToUseAccessorsWhenAccessible()) {
@@ -37,14 +33,15 @@
         if (qualifier != null) {
           accessObjectClass=(PsiClass)PsiUtil.getAccessObjectClass(qualifier).getElement();
         }
-        if (facade.getResolveHelper().isAccessible(field,newModifierList,ref,accessObjectClass,null)) {
+        final PsiResolveHelper helper=JavaPsiFacade.getInstance(((PsiReferenceExpression)reference).getProject()).getResolveHelper();
+        if (helper.isAccessible(fieldDescriptor.getField(),newModifierList,ref,accessObjectClass,null)) {
           continue;
         }
       }
-      UsageInfo usageInfo=new MyUsageInfo(ref,i);
+      EncapsulateFieldUsageInfo usageInfo=new EncapsulateFieldUsageInfo(ref,fieldDescriptor);
       array.add(usageInfo);
     }
   }
-  MyUsageInfo[] usageInfos=array.toArray(new MyUsageInfo[array.size()]);
+  EncapsulateFieldUsageInfo[] usageInfos=array.toArray(new EncapsulateFieldUsageInfo[array.size()]);
   return UsageViewUtil.removeDuplicatedUsages(usageInfos);
 }
