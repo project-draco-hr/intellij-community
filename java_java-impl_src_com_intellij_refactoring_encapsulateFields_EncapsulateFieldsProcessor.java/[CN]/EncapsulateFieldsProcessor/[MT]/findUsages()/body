@@ -1,45 +1,14 @@
 {
-  boolean findGet=myDescriptor.isToEncapsulateGet();
-  boolean findSet=myDescriptor.isToEncapsulateSet();
-  PsiModifierList newModifierList=null;
-  final JavaPsiFacade facade=JavaPsiFacade.getInstance(myProject);
-  if (!myDescriptor.isToUseAccessorsWhenAccessible()) {
-    PsiElementFactory factory=facade.getElementFactory();
-    try {
-      PsiField field=factory.createField("a",PsiType.INT);
-      setNewFieldVisibility(field);
-      newModifierList=field.getModifierList();
-    }
- catch (    IncorrectOperationException e) {
-      LOG.error(e);
-    }
-  }
   ArrayList<EncapsulateFieldUsageInfo> array=ContainerUtil.newArrayList();
   for (  FieldDescriptor fieldDescriptor : myFieldDescriptors) {
     for (    final PsiReference reference : ReferencesSearch.search(fieldDescriptor.getField())) {
-      if (!(reference instanceof PsiReferenceExpression))       continue;
-      PsiReferenceExpression ref=(PsiReferenceExpression)reference;
-      if (findGet && isUsedInExistingAccessor(fieldDescriptor.getGetterPrototype(),ref))       continue;
-      if (findSet && isUsedInExistingAccessor(fieldDescriptor.getSetterPrototype(),ref))       continue;
-      if (!findGet) {
-        if (!PsiUtil.isAccessedForWriting(ref))         continue;
+      final PsiElement element=reference.getElement();
+      if (element == null)       continue;
+      final EncapsulateFieldHelper helper=EncapsulateFieldHelper.getHelper(element.getLanguage());
+      EncapsulateFieldUsageInfo usageInfo=helper.createUsage(myDescriptor,fieldDescriptor,reference);
+      if (usageInfo != null) {
+        array.add(usageInfo);
       }
-      if (!findSet || fieldDescriptor.getField().hasModifierProperty(PsiModifier.FINAL)) {
-        if (!PsiUtil.isAccessedForReading(ref))         continue;
-      }
-      if (!myDescriptor.isToUseAccessorsWhenAccessible()) {
-        PsiClass accessObjectClass=null;
-        PsiExpression qualifier=ref.getQualifierExpression();
-        if (qualifier != null) {
-          accessObjectClass=(PsiClass)PsiUtil.getAccessObjectClass(qualifier).getElement();
-        }
-        final PsiResolveHelper helper=JavaPsiFacade.getInstance(((PsiReferenceExpression)reference).getProject()).getResolveHelper();
-        if (helper.isAccessible(fieldDescriptor.getField(),newModifierList,ref,accessObjectClass,null)) {
-          continue;
-        }
-      }
-      EncapsulateFieldUsageInfo usageInfo=new EncapsulateFieldUsageInfo(ref,fieldDescriptor);
-      array.add(usageInfo);
     }
   }
   EncapsulateFieldUsageInfo[] usageInfos=array.toArray(new EncapsulateFieldUsageInfo[array.size()]);

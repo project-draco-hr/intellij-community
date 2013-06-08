@@ -1,0 +1,37 @@
+{
+  if (!(reference instanceof PsiReferenceExpression))   return null;
+  boolean findSet=descriptor.isToEncapsulateSet();
+  boolean findGet=descriptor.isToEncapsulateGet();
+  PsiReferenceExpression ref=(PsiReferenceExpression)reference;
+  if (findGet && isUsedInExistingAccessor(descriptor.getTargetClass(),fieldDescriptor.getGetterPrototype(),ref))   return null;
+  if (findSet && isUsedInExistingAccessor(descriptor.getTargetClass(),fieldDescriptor.getSetterPrototype(),ref))   return null;
+  if (!findGet) {
+    if (!PsiUtil.isAccessedForWriting(ref))     return null;
+  }
+  if (!findSet || fieldDescriptor.getField().hasModifierProperty(PsiModifier.FINAL)) {
+    if (!PsiUtil.isAccessedForReading(ref))     return null;
+  }
+  if (!descriptor.isToUseAccessorsWhenAccessible()) {
+    PsiModifierList newModifierList=null;
+    PsiElementFactory factory=JavaPsiFacade.getInstance(descriptor.getTargetClass().getProject()).getElementFactory();
+    try {
+      PsiField field=factory.createField("a",PsiType.INT);
+      setNewFieldVisibility(field,descriptor);
+      newModifierList=field.getModifierList();
+    }
+ catch (    IncorrectOperationException e) {
+      LOG.error(e);
+    }
+    PsiClass accessObjectClass=null;
+    PsiExpression qualifier=ref.getQualifierExpression();
+    if (qualifier != null) {
+      accessObjectClass=(PsiClass)PsiUtil.getAccessObjectClass(qualifier).getElement();
+    }
+    final PsiResolveHelper helper=JavaPsiFacade.getInstance(((PsiReferenceExpression)reference).getProject()).getResolveHelper();
+    if (helper.isAccessible(fieldDescriptor.getField(),newModifierList,ref,accessObjectClass,null)) {
+      return null;
+    }
+  }
+  EncapsulateFieldUsageInfo usageInfo=new EncapsulateFieldUsageInfo(ref,fieldDescriptor);
+  return usageInfo;
+}
