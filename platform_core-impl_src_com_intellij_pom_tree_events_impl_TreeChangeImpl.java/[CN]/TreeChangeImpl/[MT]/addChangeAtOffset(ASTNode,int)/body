@@ -1,12 +1,33 @@
 {
-  int index=0;
-  for (  Pair<ASTNode,Integer> pair : myOffsets) {
-    if (child == pair.getFirst())     return;
-    if (nodeOffset < pair.getSecond().intValue() || nodeOffset == pair.getSecond().intValue() && isAfter(pair.getFirst(),child)) {
-      myOffsets.add(index,new Pair<ASTNode,Integer>(child,Integer.valueOf(nodeOffset)));
-      return;
+  int optimizedIndex=haveNotCalculated;
+  if (mySortedChanges.size() > 0) {
+    Pair<ASTNode,Integer> pair=mySortedChanges.get(mySortedChanges.size() - 1);
+    if (pair.getFirst() == child.getTreePrev() && pair.getSecond() <= nodeOffset) {
+      optimizedIndex=mySortedChanges.size();
+      if (!ourDoAddChangeAtOffsetChecks) {
+        mySortedChanges.add(new Pair<ASTNode,Integer>(child,Integer.valueOf(nodeOffset)));
+        return;
+      }
     }
-    index++;
   }
-  myOffsets.add(new Pair<ASTNode,Integer>(child,Integer.valueOf(nodeOffset)));
+  int index=0;
+  try {
+    for (    Pair<ASTNode,Integer> pair : mySortedChanges) {
+      if (child == pair.getFirst())       return;
+      if (nodeOffset < pair.getSecond().intValue() || nodeOffset == pair.getSecond().intValue() && isAfter(pair.getFirst(),child)) {
+        mySortedChanges.add(index,new Pair<ASTNode,Integer>(child,Integer.valueOf(nodeOffset)));
+        return;
+      }
+      index++;
+    }
+    mySortedChanges.add(new Pair<ASTNode,Integer>(child,Integer.valueOf(nodeOffset)));
+  }
+  finally {
+    if (optimizedIndex != haveNotCalculated && index != optimizedIndex) {
+      ChangeInfo changeInfo=myChanges.get(child);
+      ASTNode prev=child.getTreePrev();
+      LOG.error("Failed to calculate optimized index for add change at offset:" + changeInfo + ","+ prev+ ","+ myChanges.get(prev));
+      ourDoAddChangeAtOffsetChecks=false;
+    }
+  }
 }
