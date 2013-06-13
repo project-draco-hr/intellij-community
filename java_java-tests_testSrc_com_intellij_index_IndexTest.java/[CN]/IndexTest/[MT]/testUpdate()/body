@@ -1,0 +1,53 @@
+{
+  final File storageFile=FileUtil.createTempFile("indextest","storage");
+  final File metaIndexFile=FileUtil.createTempFile("indextest_inputs","storage");
+  final MapIndexStorage indexStorage=new MapIndexStorage(storageFile,new EnumeratorStringDescriptor(),new EnumeratorStringDescriptor(),16 * 1024);
+  final StringIndex index=new StringIndex(indexStorage,new Factory<PersistentHashMap<Integer,Collection<String>>>(){
+    @Override public PersistentHashMap<Integer,Collection<String>> create(){
+      try {
+        return createMetaIndex(metaIndexFile);
+      }
+ catch (      IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+);
+  try {
+    index.update("com/ppp/a.java","a b c d",null);
+    index.update("com/ppp/b.java","a b g h",null);
+    index.update("com/ppp/c.java","a z f",null);
+    index.update("com/ppp/d.java","a a u y z",null);
+    index.update("com/ppp/e.java","a n chj e c d",null);
+    assertDataEquals(index.getFilesByWord("a"),"com/ppp/a.java","com/ppp/b.java","com/ppp/c.java","com/ppp/d.java","com/ppp/e.java");
+    assertDataEquals(index.getFilesByWord("b"),"com/ppp/a.java","com/ppp/b.java");
+    assertDataEquals(index.getFilesByWord("c"),"com/ppp/a.java","com/ppp/e.java");
+    assertDataEquals(index.getFilesByWord("d"),"com/ppp/a.java","com/ppp/e.java");
+    assertDataEquals(index.getFilesByWord("g"),"com/ppp/b.java");
+    assertDataEquals(index.getFilesByWord("h"),"com/ppp/b.java");
+    assertDataEquals(index.getFilesByWord("z"),"com/ppp/c.java","com/ppp/d.java");
+    assertDataEquals(index.getFilesByWord("f"),"com/ppp/c.java");
+    assertDataEquals(index.getFilesByWord("u"),"com/ppp/d.java");
+    assertDataEquals(index.getFilesByWord("y"),"com/ppp/d.java");
+    assertDataEquals(index.getFilesByWord("n"),"com/ppp/e.java");
+    assertDataEquals(index.getFilesByWord("chj"),"com/ppp/e.java");
+    assertDataEquals(index.getFilesByWord("e"),"com/ppp/e.java");
+    index.update("com/ppp/d.java","a u y z","a a u y z");
+    assertDataEquals(index.getFilesByWord("a"),"com/ppp/a.java","com/ppp/b.java","com/ppp/c.java","com/ppp/d.java","com/ppp/e.java");
+    index.update("com/ppp/d.java","u y z","a u y z");
+    assertDataEquals(index.getFilesByWord("a"),"com/ppp/a.java","com/ppp/b.java","com/ppp/c.java","com/ppp/e.java");
+    index.update("com/ppp/d.java","a a a u y z","u y z");
+    assertDataEquals(index.getFilesByWord("a"),"com/ppp/a.java","com/ppp/b.java","com/ppp/c.java","com/ppp/d.java","com/ppp/e.java");
+    index.update("com/ppp/e.java","a n chj e c d z","a n chj e c d");
+    assertDataEquals(index.getFilesByWord("z"),"com/ppp/c.java","com/ppp/d.java","com/ppp/e.java");
+    index.update("com/ppp/b.java",null,"a b g h");
+    assertDataEquals(index.getFilesByWord("a"),"com/ppp/a.java","com/ppp/c.java","com/ppp/d.java","com/ppp/e.java");
+    assertDataEquals(index.getFilesByWord("b"),"com/ppp/a.java");
+    assertDataEquals(index.getFilesByWord("g"));
+    assertDataEquals(index.getFilesByWord("h"));
+  }
+  finally {
+    indexStorage.close();
+    FileUtil.delete(storageFile);
+  }
+}
