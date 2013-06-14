@@ -1,0 +1,34 @@
+{
+  final Set<Module> modules=new THashSet<Module>();
+  scope.accept(new PsiElementVisitor(){
+    @Override public void visitElement(    PsiElement element){
+      final Module module=ModuleUtil.findModuleForPsiElement(element);
+      if (module != null) {
+        modules.add(module);
+      }
+    }
+  }
+);
+  LanguageLevel projectLanguageLevel=LanguageLevelProjectExtension.getInstance(manager.getProject()).getLanguageLevel();
+  for (  Module module : modules) {
+    LanguageLevel languageLevel=LanguageLevelModuleExtension.getInstance(module).getLanguageLevel();
+    if (languageLevel == null) {
+      languageLevel=projectLanguageLevel;
+    }
+    RefManager refManager=globalContext.getRefManager();
+    final RefModule refModule=refManager.getRefModule(module);
+    for (    OrderEntry entry : ModuleRootManager.getInstance(module).getOrderEntries()) {
+      if (!(entry instanceof ModuleOrderEntry))       continue;
+      final Module dependantModule=((ModuleOrderEntry)entry).getModule();
+      if (dependantModule == null)       continue;
+      LanguageLevel dependantLanguageLevel=LanguageLevelModuleExtension.getInstance(dependantModule).getLanguageLevel();
+      if (dependantLanguageLevel == null) {
+        dependantLanguageLevel=projectLanguageLevel;
+      }
+      if (languageLevel.compareTo(dependantLanguageLevel) < 0) {
+        final CommonProblemDescriptor problemDescriptor=manager.createProblemDescriptor("Inconsistent language level settings: module " + module.getName() + " with language level "+ languageLevel+ " depends on module "+ dependantModule.getName()+ " with language level "+ dependantLanguageLevel,new UnnecessaryModuleDependencyInspection.RemoveModuleDependencyFix(module,dependantModule),new OpenModuleSettingsFix(module));
+        problemProcessor.addProblemElement(refModule,problemDescriptor);
+      }
+    }
+  }
+}
