@@ -1,8 +1,9 @@
 {
   ResolveResultList ret=new ResolveResultList();
   PsiElement uexpr=processor.getResult();
+  final List<PsiElement> definers=processor.getDefiners();
   if (uexpr != null) {
-    if (processor.getDefiners().isEmpty()) {
+    if (definers.isEmpty()) {
       final ScopeOwner originalOwner=ScopeUtil.getScopeOwner(realContext);
       final ScopeOwner owner=ScopeUtil.getScopeOwner(uexpr);
       if (owner != null) {
@@ -36,7 +37,7 @@
         }
       }
     }
-    for (    PsiElement hit : processor.getDefiners()) {
+    for (    PsiElement hit : definers) {
       ret.poke(hit,getRate(hit));
     }
     final PsiElement packageInit=PyUtil.turnDirIntoInit(uexpr);
@@ -44,43 +45,29 @@
       uexpr=packageInit;
     }
   }
- else   if (!processor.getDefiners().isEmpty()) {
-    ret.add(new ImportedResolveResult(null,RatedResolveResult.RATE_LOW,processor.getDefiners()));
+ else   if (!definers.isEmpty()) {
+    ret.add(new ImportedResolveResult(null,RatedResolveResult.RATE_LOW,definers));
   }
-  PyBuiltinCache builtins_cache=PyBuiltinCache.getInstance(realContext);
+  PyBuiltinCache builtinCache=PyBuiltinCache.getInstance(realContext);
   if (uexpr == null) {
     String name=myElement.getName();
     if (PyModuleType.MODULE_MEMBERS.contains(name)) {
-      PyType otype=builtins_cache.getObjectType();
-      if (otype != null && name != null) {
-        ret.addAll(otype.resolveMember(name,null,AccessDirection.READ,myContext));
-      }
-    }
-  }
-  if (uexpr == null) {
-    PyFile bfile=builtins_cache.getBuiltinsFile();
-    if (bfile != null && !PyUtil.isClassPrivateName(referencedName)) {
-      uexpr=bfile.getElementNamed(referencedName);
-      if (uexpr == null && "__builtins__".equals(referencedName)) {
-        uexpr=bfile;
-      }
-    }
-  }
-  if (uexpr == null && CythonLanguageDialect.isInsideCythonFile(realContext)) {
-    final CythonFile implicit=CythonResolveUtil.findImplicitDefinitionFile(realContext);
-    if (implicit != null) {
-      uexpr=implicit.getElementNamed(referencedName);
-    }
-    final ScopeOwner owner=PsiTreeUtil.getParentOfType(myElement,ScopeOwner.class);
-    if (owner instanceof CythonFile) {
-      final PsiElement resolved=((CythonFile)owner).getElementNamed(referencedName);
-      if ((resolved instanceof CythonFunction && ((CythonFunction)resolved).isCythonLevel()) || resolved instanceof CythonFile) {
-        ret.poke(resolved,getRate(resolved));
+      PyType objectType=builtinCache.getObjectType();
+      if (objectType != null && name != null) {
+        ret.addAll(objectType.resolveMember(name,null,AccessDirection.READ,myContext));
       }
     }
   }
   if (uexpr != null) {
-    ret.add(new ImportedResolveResult(uexpr,getRate(uexpr),processor.getDefiners()));
+    ret.add(new ImportedResolveResult(uexpr,getRate(uexpr),definers));
+  }
+ else {
+    for (    PyReferenceResolveProvider provider : Extensions.getExtensions(PyReferenceResolveProvider.EP_NAME)) {
+      final List<RatedResolveResult> results=provider.resolveName(myElement,definers);
+      for (      RatedResolveResult res : results) {
+        ret.add(res);
+      }
+    }
   }
   return ret;
 }
