@@ -1,6 +1,6 @@
 {
   MyInfo info=getProcessingInfo(e.getDataContext());
-  if (info.settings == null || info.localSettings == null || info.externalProject == null) {
+  if (info.settings == null || info.localSettings == null || info.externalProject == null || info.ideProject == null || info.externalSystemId == null) {
     return;
   }
   ExternalSystemTasksTreeModel allTasksModel=ExternalSystemDataKeys.ALL_TASKS_MODEL.getData(e.getDataContext());
@@ -13,4 +13,20 @@
   }
   info.localSettings.forgetExternalProject(Collections.singleton(info.externalProject.getPath()));
   info.settings.unlinkExternalProject(info.externalProject.getPath());
+  PlatformFacade platformFacade=ServiceManager.getService(PlatformFacade.class);
+  String externalSystemIdAsString=info.externalSystemId.toString();
+  List<Module> orphanModules=ContainerUtilRt.newArrayList();
+  for (  Module module : platformFacade.getModules(info.ideProject)) {
+    String systemId=module.getOptionValue(ExternalSystemConstants.EXTERNAL_SYSTEM_ID_KEY);
+    if (!externalSystemIdAsString.equals(systemId)) {
+      continue;
+    }
+    String path=module.getOptionValue(ExternalSystemConstants.LINKED_PROJECT_PATH_KEY);
+    if (info.externalProject.getPath().equals(path)) {
+      orphanModules.add(module);
+    }
+  }
+  if (!orphanModules.isEmpty()) {
+    ExternalSystemUtil.ruleOrphanModules(orphanModules,info.ideProject,info.externalSystemId);
+  }
 }
