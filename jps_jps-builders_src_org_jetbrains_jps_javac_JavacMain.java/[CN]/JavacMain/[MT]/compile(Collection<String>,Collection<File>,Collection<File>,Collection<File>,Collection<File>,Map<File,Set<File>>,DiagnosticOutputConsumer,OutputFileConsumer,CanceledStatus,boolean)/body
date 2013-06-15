@@ -6,7 +6,7 @@
       break;
     }
     if (compiler == null) {
-      outConsumer.report(new PlainMessageDiagnostic(Diagnostic.Kind.ERROR,"Eclipse Batch Compiler was not found in classpath"));
+      diagnosticConsumer.report(new PlainMessageDiagnostic(Diagnostic.Kind.ERROR,"Eclipse Batch Compiler was not found in classpath"));
       return false;
     }
   }
@@ -14,7 +14,7 @@
   if (compiler == null) {
     compiler=ToolProvider.getSystemJavaCompiler();
     if (compiler == null) {
-      outConsumer.report(new PlainMessageDiagnostic(Diagnostic.Kind.ERROR,"System Java Compiler was not found in classpath"));
+      diagnosticConsumer.report(new PlainMessageDiagnostic(Diagnostic.Kind.ERROR,"System Java Compiler was not found in classpath"));
       return false;
     }
     nowUsingJavac=true;
@@ -26,7 +26,14 @@
     outputDir.mkdirs();
   }
   final List<JavaSourceTransformer> transformers=getSourceTransformers();
-  final JavacFileManager fileManager=new JavacFileManager(new ContextImpl(compiler,outConsumer,outputSink,canceledStatus,nowUsingJavac),transformers);
+  transformers.add(new JavaSourceTransformer(){
+    @Override public CharSequence transform(    File sourceFile,    CharSequence content) throws TransformError {
+      diagnosticConsumer.javaFileLoaded(sourceFile);
+      return content;
+    }
+  }
+);
+  final JavacFileManager fileManager=new JavacFileManager(new ContextImpl(compiler,diagnosticConsumer,outputSink,canceledStatus,nowUsingJavac),transformers);
   fileManager.handleOption("-bootclasspath",Collections.singleton("").iterator());
   fileManager.handleOption("-extdirs",Collections.singleton("").iterator());
   fileManager.handleOption("-endorseddirs",Collections.singleton("").iterator());
@@ -69,7 +76,7 @@
   final LineOutputWriter out=new LineOutputWriter(){
     protected void lineAvailable(    String line){
       if (nowUsingJavac) {
-        outConsumer.outputLineAvailable(line);
+        diagnosticConsumer.outputLineAvailable(line);
       }
  else {
       }
@@ -80,14 +87,14 @@
     for (Iterator<String> iterator=_options.iterator(); iterator.hasNext(); ) {
       fileManager.handleOption(iterator.next(),iterator);
     }
-    final JavaCompiler.CompilationTask task=compiler.getTask(out,fileManager,outConsumer,_options,null,fileManager.getJavaFileObjectsFromFiles(sources));
+    final JavaCompiler.CompilationTask task=compiler.getTask(out,fileManager,diagnosticConsumer,_options,null,fileManager.getJavaFileObjectsFromFiles(sources));
     return task.call();
   }
  catch (  IllegalArgumentException e) {
-    outConsumer.report(new PlainMessageDiagnostic(Diagnostic.Kind.ERROR,e.getMessage()));
+    diagnosticConsumer.report(new PlainMessageDiagnostic(Diagnostic.Kind.ERROR,e.getMessage()));
   }
 catch (  CompilationCanceledException ignored) {
-    outConsumer.report(new PlainMessageDiagnostic(Diagnostic.Kind.OTHER,"Compilation was canceled"));
+    diagnosticConsumer.report(new PlainMessageDiagnostic(Diagnostic.Kind.OTHER,"Compilation was canceled"));
   }
  finally {
     fileManager.close();
