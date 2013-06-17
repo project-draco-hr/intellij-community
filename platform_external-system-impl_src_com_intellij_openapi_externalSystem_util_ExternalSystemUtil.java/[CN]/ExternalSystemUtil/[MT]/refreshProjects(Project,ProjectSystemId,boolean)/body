@@ -9,9 +9,9 @@
     return;
   }
   final ProjectDataManager projectDataManager=ServiceManager.getService(ProjectDataManager.class);
+  final int[] counter=new int[1];
   ExternalProjectRefreshCallback callback=new ExternalProjectRefreshCallback(){
     @NotNull private final Set<String> myExternalModuleNames=ContainerUtilRt.newHashSet();
-    private int myCounter=projectsSettings.size();
     @Override public void onSuccess(    @Nullable DataNode<ProjectData> externalProject){
       if (externalProject == null) {
         return;
@@ -21,12 +21,12 @@
         myExternalModuleNames.add(node.getData().getName());
       }
       projectDataManager.importData(externalProject.getKey(),Collections.singleton(externalProject),project,false);
-      if (--myCounter <= 0) {
+      if (--counter[0] <= 0) {
         processOrphanModules();
       }
     }
     @Override public void onFailure(    @NotNull String errorMessage,    @Nullable String errorDetails){
-      myCounter=Integer.MAX_VALUE;
+      counter[0]=Integer.MAX_VALUE;
     }
     private void processOrphanModules(){
       PlatformFacade platformFacade=ServiceManager.getService(PlatformFacade.class);
@@ -44,7 +44,19 @@
     }
   }
 ;
+  Map<String,Long> modificationStamps=manager.getLocalSettingsProvider().fun(project).getExternalConfigModificationStamps();
+  Set<String> toRefresh=ContainerUtilRt.newHashSet();
   for (  ExternalProjectSettings setting : projectsSettings) {
-    refreshProject(project,externalSystemId,setting.getExternalProjectPath(),callback,true,false);
+    Long oldModificationStamp=modificationStamps.get(setting.getExternalProjectPath());
+    long currentModificationStamp=getTimeStamp(setting.getExternalProjectPath());
+    if (force || currentModificationStamp < 0 || oldModificationStamp == null || oldModificationStamp < currentModificationStamp) {
+      toRefresh.add(setting.getExternalProjectPath());
+    }
+  }
+  if (!toRefresh.isEmpty()) {
+    counter[0]=toRefresh.size();
+    for (    String path : toRefresh) {
+      refreshProject(project,externalSystemId,path,callback,true,false);
+    }
   }
 }
