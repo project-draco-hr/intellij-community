@@ -13,20 +13,7 @@
     file.putUserData(BlockSupport.DO_NOT_REPARSE_INCREMENTALLY,data);
   }
   final String oldPsiText=ApplicationManager.getApplication().isInternal() && ApplicationManager.getApplication().isUnitTestMode() ? myTreeElementBeingReparsedSoItWontBeCollected.getText() : null;
-  int startOffset;
-  int endOffset;
-  int lengthShift;
-  if (file.getViewProvider().supportsIncrementalReparse(file.getLanguage())) {
-    startOffset=textBlock.getStartOffset();
-    int psiEndOffset=textBlock.getPsiEndOffset();
-    endOffset=psiEndOffset;
-    lengthShift=textBlock.getTextEndOffset() - psiEndOffset;
-  }
- else {
-    startOffset=0;
-    endOffset=document.getTextLength();
-    lengthShift=document.getTextLength() - myTreeElementBeingReparsedSoItWontBeCollected.getTextLength();
-  }
+  final TextRange changedPsiRange=getChangedPsiRange(file,textBlock.getStartOffset(),textBlock.getPsiEndOffset(),document.getTextLength());
   if (!assertBeforeCommit(document,file,textBlock,chars,oldPsiText,myTreeElementBeingReparsedSoItWontBeCollected)) {
     return new Processor<Document>(){
       @Override public boolean process(      Document document){
@@ -41,7 +28,7 @@
 ;
   }
   BlockSupport blockSupport=BlockSupport.getInstance(file.getProject());
-  final DiffLog diffLog=blockSupport.reparseRange(file,startOffset,endOffset,lengthShift,chars,task.indicator);
+  final DiffLog diffLog=blockSupport.reparseRange(file,changedPsiRange,chars,task.indicator);
   return new Processor<Document>(){
     @Override public boolean process(    Document document){
       ApplicationManager.getApplication().assertWriteAccessAllowed();
@@ -50,16 +37,11 @@
         return false;
       }
       try {
-        textBlock.performAtomically(new Runnable(){
+        CodeStyleManager.getInstance(file.getProject()).performActionWithFormatterDisabled(new Runnable(){
           @Override public void run(){
-            CodeStyleManager.getInstance(file.getProject()).performActionWithFormatterDisabled(new Runnable(){
-              @Override public void run(){
 synchronized (PsiLock.LOCK) {
-                  doActualPsiChange(file,diffLog);
-                }
-              }
+              doActualPsiChange(file,diffLog);
             }
-);
           }
         }
 );
