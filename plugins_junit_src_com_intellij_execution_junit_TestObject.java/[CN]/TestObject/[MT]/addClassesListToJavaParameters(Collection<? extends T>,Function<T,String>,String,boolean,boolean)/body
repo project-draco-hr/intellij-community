@@ -5,6 +5,7 @@
       myTempFile.deleteOnExit();
       myJavaParameters.getProgramParametersList().add("@" + myTempFile.getAbsolutePath());
     }
+    final Map<String,List<String>> perModule=forkPerModule() ? new HashMap<String,List<String>>() : null;
     final PrintWriter writer=new PrintWriter(myTempFile,"UTF-8");
     try {
       writer.println(packageName);
@@ -16,6 +17,18 @@
           return;
         }
         testNames.add(name);
+        if (perModule != null && element instanceof PsiElement) {
+          final Module module=ModuleUtilCore.findModuleForPsiElement((PsiElement)element);
+          if (module != null) {
+            final String moduleDir=PathMacroUtil.getModuleDir(module.getModuleFilePath());
+            List<String> list=perModule.get(moduleDir);
+            if (list == null) {
+              list=new ArrayList<String>();
+              perModule.put(moduleDir,list);
+            }
+            list.add(name);
+          }
+        }
       }
       Collections.sort(testNames);
       for (      String testName : testNames) {
@@ -24,6 +37,24 @@
     }
   finally {
       writer.close();
+    }
+    if (perModule != null && perModule.size() > 1) {
+      final PrintWriter wWriter=new PrintWriter(myWorkingDirsFile,"UTF-8");
+      try {
+        wWriter.println(packageName);
+        for (        String workingDir : perModule.keySet()) {
+          wWriter.println(workingDir);
+          final List<String> classNames=perModule.get(workingDir);
+          wWriter.println(classNames.size());
+          Collections.sort(classNames);
+          for (          String className : classNames) {
+            wWriter.println(className);
+          }
+        }
+      }
+  finally {
+        wWriter.close();
+      }
     }
   }
  catch (  IOException e) {
