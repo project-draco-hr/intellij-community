@@ -1,0 +1,62 @@
+{
+  ExternalSystemManager<?,?,?,?,?> manager=ExternalSystemApiUtil.getManager(externalSystemId);
+  if (manager == null) {
+    return;
+  }
+  AbstractExternalSystemSettings<?,?> settings=manager.getSettingsProvider().fun(project);
+  final Collection<? extends ExternalProjectSettings> projectsSettings=settings.getLinkedProjectsSettings();
+  if (projectsSettings.isEmpty()) {
+    return;
+  }
+  final ProjectDataManager projectDataManager=ServiceManager.getService(ProjectDataManager.class);
+  final int[] counter=new int[1];
+  ExternalProjectRefreshCallback callback=new ExternalProjectRefreshCallback(){
+    @NotNull private final Set<String> myExternalModuleNames=ContainerUtilRt.newHashSet();
+    @Override public void onSuccess(    @Nullable DataNode<ProjectData> externalProject){
+      if (externalProject == null) {
+        return;
+      }
+      Collection<DataNode<ModuleData>> moduleNodes=ExternalSystemApiUtil.findAll(externalProject,ProjectKeys.MODULE);
+      for (      DataNode<ModuleData> node : moduleNodes) {
+        myExternalModuleNames.add(node.getData().getName());
+      }
+      projectDataManager.importData(externalProject.getKey(),Collections.singleton(externalProject),project,false);
+      if (--counter[0] <= 0) {
+        processOrphanModules();
+      }
+    }
+    @Override public void onFailure(    @NotNull String errorMessage,    @Nullable String errorDetails){
+      counter[0]=Integer.MAX_VALUE;
+    }
+    private void processOrphanModules(){
+      PlatformFacade platformFacade=ServiceManager.getService(PlatformFacade.class);
+      List<Module> orphanIdeModules=ContainerUtilRt.newArrayList();
+      String externalSystemIdAsString=externalSystemId.toString();
+      for (      Module module : platformFacade.getModules(project)) {
+        String s=module.getOptionValue(ExternalSystemConstants.EXTERNAL_SYSTEM_ID_KEY);
+        if (externalSystemIdAsString.equals(s) && !myExternalModuleNames.contains(module.getName())) {
+          orphanIdeModules.add(module);
+        }
+      }
+      if (!orphanIdeModules.isEmpty()) {
+        ruleOrphanModules(orphanIdeModules,project,externalSystemId);
+      }
+    }
+  }
+;
+  Map<String,Long> modificationStamps=manager.getLocalSettingsProvider().fun(project).getExternalConfigModificationStamps();
+  Set<String> toRefresh=ContainerUtilRt.newHashSet();
+  for (  ExternalProjectSettings setting : projectsSettings) {
+    Long oldModificationStamp=modificationStamps.get(setting.getExternalProjectPath());
+    long currentModificationStamp=getTimeStamp(setting.getExternalProjectPath());
+    if (force || currentModificationStamp < 0 || oldModificationStamp == null || oldModificationStamp < currentModificationStamp) {
+      toRefresh.add(setting.getExternalProjectPath());
+    }
+  }
+  if (!toRefresh.isEmpty()) {
+    counter[0]=toRefresh.size();
+    for (    String path : toRefresh) {
+      refreshProject(project,externalSystemId,path,callback,true,false);
+    }
+  }
+}

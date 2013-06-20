@@ -1,18 +1,30 @@
 {
+  THashSet<String> dependencyTypesFromSettings=new THashSet<String>();
+  AccessToken accessToken=ReadAction.start();
+  try {
+    if (myModule.getProject().isDisposed())     return;
+    dependencyTypesFromSettings.addAll(MavenProjectsManager.getInstance(myModule.getProject()).getImportingSettings().getDependencyTypesAsSet());
+  }
+  finally {
+    accessToken.finish();
+  }
   for (  MavenArtifact artifact : myMavenProject.getDependencies()) {
-    if (!myMavenProject.isSupportedDependency(artifact,SupportedRequestType.FOR_IMPORT))     continue;
+    String dependencyType=artifact.getType();
+    if (!dependencyTypesFromSettings.contains(dependencyType) && !myMavenProject.getDependencyTypesFromImporters(SupportedRequestType.FOR_IMPORT).contains(dependencyType)) {
+      continue;
+    }
     DependencyScope scope=selectScope(artifact.getScope());
     MavenProject depProject=myMavenTree.findProject(artifact.getMavenId());
     if (depProject != null && !myMavenTree.isIgnored(depProject)) {
       if (depProject == myMavenProject)       continue;
-      boolean isTestJar=MavenConstants.TYPE_TEST_JAR.equals(artifact.getType()) || "tests".equals(artifact.getClassifier());
+      boolean isTestJar=MavenConstants.TYPE_TEST_JAR.equals(dependencyType) || "tests".equals(artifact.getClassifier());
       myRootModelAdapter.addModuleDependency(myMavenProjectToModuleName.get(depProject),scope,isTestJar);
       Element buildHelperCfg=depProject.getPluginGoalConfiguration("org.codehaus.mojo","build-helper-maven-plugin","attach-artifact");
       if (buildHelperCfg != null) {
         addAttachArtifactDependency(buildHelperCfg,scope,depProject,artifact);
       }
       if (artifact.getClassifier() != null && !"system".equals(artifact.getScope()) && !"false".equals(System.getProperty("idea.maven.classifier.dep"))) {
-        MavenArtifact a=new MavenArtifact(artifact.getGroupId(),artifact.getArtifactId(),artifact.getVersion(),artifact.getBaseVersion(),artifact.getType(),artifact.getClassifier(),artifact.getScope(),artifact.isOptional(),artifact.getExtension(),null,myMavenProject.getLocalRepository(),false,false);
+        MavenArtifact a=new MavenArtifact(artifact.getGroupId(),artifact.getArtifactId(),artifact.getVersion(),artifact.getBaseVersion(),dependencyType,artifact.getClassifier(),artifact.getScope(),artifact.isOptional(),artifact.getExtension(),null,myMavenProject.getLocalRepository(),false,false);
         myRootModelAdapter.addLibraryDependency(a,scope,myModifiableModelsProvider,myMavenProject);
       }
     }
