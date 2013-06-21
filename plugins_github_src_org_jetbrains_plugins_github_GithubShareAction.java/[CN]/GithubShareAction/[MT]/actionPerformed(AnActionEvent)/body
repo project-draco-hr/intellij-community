@@ -4,18 +4,18 @@
     return;
   }
   final VirtualFile root=project.getBaseDir();
-  final boolean gitDetected=GitUtil.isUnderGit(root);
+  GitRepositoryManager manager=GitUtil.getRepositoryManager(project);
+  final GitRepository gitRepository=manager.getRepositoryForFile(root);
+  final boolean gitDetected=gitRepository != null;
+  boolean externalRemoteDetected=false;
   if (gitDetected) {
-    try {
-      final List<GitDeprecatedRemote> gitRemotes=GitDeprecatedRemote.list(project,root);
-      if (!gitRemotes.isEmpty()) {
-        Messages.showErrorDialog(project,"Project is already under git with configured remote","Cannot create new GitHub repository");
-        return;
-      }
-    }
- catch (    VcsException e2) {
-      Messages.showErrorDialog(project,"Error happened during git operation: " + e2.getMessage(),"Cannot create new GitHub repository");
+    if (isRepositoryOnGitHub(gitRepository)) {
+      Notification notification=new Notification(GithubUtil.GITHUB_NOTIFICATION_GROUP,"","Project is already on GitHub",NotificationType.INFORMATION);
+      Notificator.getInstance(project).notify(notification);
       return;
+    }
+ else {
+      externalRemoteDetected=!gitRepository.getRemotes().isEmpty();
     }
   }
   BasicAction.saveAll();
@@ -57,7 +57,7 @@
       Messages.showErrorDialog(project,"Failed to create new GitHub repository","Create GitHub Repository");
       return;
     }
-    bindToGithub(project,root,gitDetected,settings.getLogin(),name);
+    bindToGithub(project,root,gitDetected,externalRemoteDetected,settings.getLogin(),name);
   }
  catch (  final Exception e1) {
     Messages.showErrorDialog(e1.getMessage(),"Failed to create new GitHub repository");
