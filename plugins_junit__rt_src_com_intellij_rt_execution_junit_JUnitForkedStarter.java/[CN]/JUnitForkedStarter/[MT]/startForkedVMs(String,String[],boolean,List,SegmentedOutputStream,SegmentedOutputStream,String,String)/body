@@ -14,7 +14,7 @@
   testRunner.setStreams(out,err,0);
   final Object description=testRunner.getTestToStart(args);
   if (description == null)   return -1;
-  TreeSender.sendTree(testRunner,description);
+  TreeSender.sendTree(testRunner,description,true);
   long time=System.currentTimeMillis();
   int result=0;
   if (workingDirsPath == null || new File(workingDirsPath).length() == 0) {
@@ -32,7 +32,7 @@
           File tempFile=File.createTempFile("idea_junit",".tmp");
           tempFile.deleteOnExit();
           final FileOutputStream writer=new FileOutputStream(tempFile);
-          String firstName=null;
+          List classNames=new ArrayList();
           try {
             final int classNamesSize=Integer.parseInt(perDirReader.readLine());
             writer.write((packageName + ", working directory: \'" + workingDir+ "\'\n").getBytes("UTF-8"));
@@ -42,23 +42,26 @@
                 System.err.println("Class name is expected. Working dir: " + workingDir);
                 return -1;
               }
-              if (firstName == null) {
-                firstName=className;
-              }
+              classNames.add(className);
               writer.write((className + "\n").getBytes("UTF-8"));
             }
           }
   finally {
             writer.close();
           }
-          final Object rootDescriptor=findByClassName(testRunner,firstName,description);
+          final Object rootDescriptor=findByClassName(testRunner,(String)classNames.get(0),description);
           final int childResult;
           final File dir=new File(workingDir);
           if (forkMode.equals("none")) {
-            childResult=runChild(rootDescriptor,isJUnit4,listeners,out,err,parameters,testRunner,false,"@" + tempFile.getAbsolutePath(),dir);
+            childResult=runChild(isJUnit4,listeners,out,err,parameters,"@" + tempFile.getAbsolutePath(),dir,String.valueOf(testRunner.getRegistry().getKnownObject(rootDescriptor) - 1));
           }
  else {
-            final List children=testRunner.getChildTests(rootDescriptor);
+            final List children=new ArrayList(testRunner.getChildTests(description));
+            for (Iterator iterator=children.iterator(); iterator.hasNext(); ) {
+              if (!classNames.contains(testRunner.getTestClassName(iterator.next()))) {
+                iterator.remove();
+              }
+            }
             final boolean forkTillMethod=forkMode.equalsIgnoreCase("method");
             childResult=processChildren(isJUnit4,listeners,out,err,parameters,testRunner,children,result,forkTillMethod,dir);
           }
