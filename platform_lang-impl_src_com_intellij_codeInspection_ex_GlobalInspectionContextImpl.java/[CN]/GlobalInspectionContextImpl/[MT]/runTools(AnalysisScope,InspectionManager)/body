@@ -8,7 +8,7 @@
   ((RefManagerImpl)getRefManager()).initializeAnnotators();
   for (  Tools tools : specialTools) {
     for (    ScopeToolState state : tools.getTools()) {
-      InspectionToolWrapper toolWrapper=(InspectionToolWrapper)state.getTool();
+      InspectionToolWrapper toolWrapper=state.getTool();
       InspectionTool tool=(InspectionTool)toolWrapper.getTool();
       try {
         if (tool.isGraphNeeded()) {
@@ -32,14 +32,15 @@ catch (      Exception e) {
   }
   for (  Tools tools : globalTools) {
     for (    ScopeToolState state : tools.getTools()) {
-      InspectionToolWrapper toolWrapper=(InspectionToolWrapper)state.getTool();
+      InspectionToolWrapper toolWrapper=state.getTool();
       GlobalInspectionTool tool=(GlobalInspectionTool)toolWrapper.getTool();
+      InspectionToolPresentation toolPresentation=getPresentation(toolWrapper);
       try {
         if (tool.isGraphNeeded()) {
           ((RefManagerImpl)getRefManager()).findAllDeclarations();
         }
-        tool.runInspection(scope,manager,this,toolWrapper);
-        if (tool.queryExternalUsagesRequests(manager,this,toolWrapper)) {
+        tool.runInspection(scope,manager,this,toolPresentation);
+        if (tool.queryExternalUsagesRequests(manager,this,toolPresentation)) {
           needRepeatSearchRequest.add(toolWrapper);
         }
       }
@@ -74,14 +75,14 @@ catch (    Exception e) {
   for (  Tools tools : globalSimpleTools) {
     GlobalInspectionToolWrapper toolWrapper=(GlobalInspectionToolWrapper)tools.getTool();
     GlobalSimpleInspectionTool tool=(GlobalSimpleInspectionTool)toolWrapper.getTool();
-    tool.inspectionStarted(manager,this,toolWrapper);
+    tool.inspectionStarted(manager,this,getPresentation(toolWrapper));
   }
-  final Map<String,DescriptorProviderInspection> map=getInspectionWrappersMap(localTools);
+  final Map<String,InspectionToolWrapper> map=getInspectionWrappersMap(localTools);
   scope.accept(new PsiElementVisitor(){
     @Override public void visitFile(    final PsiFile file){
       final VirtualFile virtualFile=file.getVirtualFile();
       if (virtualFile != null) {
-        incrementJobDoneAmount(getStdJobDescriptors().LOCAL_ANALYSIS,ProjectUtil.calcRelativeToProjectPath(virtualFile,myProject));
+        incrementJobDoneAmount(getStdJobDescriptors().LOCAL_ANALYSIS,ProjectUtilCore.displayUrlRelativeToProject(virtualFile,virtualFile.getPresentableUrl(),myProject,true,false));
         if (SingleRootFileViewProvider.isTooLargeForIntelligence(virtualFile))         return;
         if (localScopeFiles != null && !localScopeFiles.add(virtualFile))         return;
       }
@@ -105,7 +106,8 @@ catch (    Exception e) {
             ProblemsHolder problemsHolder=new ProblemsHolder(manager,file,false);
             ProblemDescriptionsProcessor problemDescriptionProcessor=getProblemDescriptionProcessor(toolWrapper,map);
             tool.checkFile(file,manager,problemsHolder,GlobalInspectionContextImpl.this,problemDescriptionProcessor);
-            LocalInspectionToolWrapper.addProblemDescriptors(problemsHolder.getResults(),false,GlobalInspectionContextImpl.this,null,CONVERT,toolWrapper);
+            InspectionToolPresentation toolPresentation=getPresentation(toolWrapper);
+            LocalDescriptorsUtil.addProblemDescriptors(problemsHolder.getResults(),false,GlobalInspectionContextImpl.this,null,CONVERT,toolPresentation);
             return true;
           }
         }
