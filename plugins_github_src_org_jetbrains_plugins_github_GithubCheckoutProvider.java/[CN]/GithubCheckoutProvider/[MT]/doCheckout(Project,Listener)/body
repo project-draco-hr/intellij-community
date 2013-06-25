@@ -3,14 +3,27 @@
     return;
   }
   BasicAction.saveAll();
-  List<RepositoryInfo> availableRepos=null;
-  try {
-    availableRepos=GithubUtil.getAvailableRepos(project);
+  final GithubAuthData auth=GithubUtil.getAuthData();
+  final AtomicReference<List<RepositoryInfo>> repositoryInfoRef=new AtomicReference<List<RepositoryInfo>>();
+  ProgressManager.getInstance().run(new Task.Modal(project,"Access to GitHub",true){
+    public void run(    @NotNull ProgressIndicator indicator){
+      try {
+        final List<RepositoryInfo> repositoryInfo=GithubUtil.runAndValidateAuth(project,auth,indicator,new ThrowableComputable<List<RepositoryInfo>,IOException>(){
+          @Override public List<RepositoryInfo> compute() throws IOException {
+            return GithubUtil.getAvailableRepos(auth);
+          }
+        }
+);
+        repositoryInfoRef.set(repositoryInfo);
+      }
+ catch (      IOException e) {
+        LOG.info(e);
+        GithubUtil.notifyError(project,"Couldn't get the list of GitHub repositories",GithubUtil.getErrorTextFromException(e));
+      }
+    }
   }
- catch (  IOException e) {
-    LOG.info(e);
-    GithubUtil.notifyError(project,"Couldn't get the list of GitHub repositories",GithubUtil.getErrorTextFromException(e));
-  }
+);
+  final List<RepositoryInfo> availableRepos=repositoryInfoRef.get();
   if (availableRepos == null) {
     return;
   }

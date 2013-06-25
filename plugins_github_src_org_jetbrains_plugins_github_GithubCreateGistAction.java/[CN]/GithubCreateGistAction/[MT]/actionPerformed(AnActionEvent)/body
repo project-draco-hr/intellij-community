@@ -15,18 +15,23 @@
     return;
   }
   final boolean anonymous=dialog.isAnonymous();
+  GithubAuthData auth=null;
   if (!anonymous) {
-    if (!GithubUtil.checkCredentials(project)) {
-      final GithubLoginDialog loginDialog=new GithubLoginDialog(project);
-      loginDialog.show();
-      if (!loginDialog.isOK()) {
-        showError(project,FAILED_TO_CREATE_GIST,"You have to login to GitHub to create non-anonymous Gists.",null,null);
-        return;
+    final AtomicReference<Boolean> success=new AtomicReference<Boolean>();
+    final GithubAuthData validAuth=GithubUtil.getAuthData();
+    ProgressManager.getInstance().run(new Task.Modal(project,"Access to GitHub",true){
+      public void run(      @NotNull ProgressIndicator indicator){
+        success.set(GithubUtil.makeValidAuthData(project,validAuth,indicator));
       }
     }
+);
+    if (!success.get()) {
+      showError(project,FAILED_TO_CREATE_GIST,"You have to login to GitHub to create non-anonymous Gists.",null,null);
+      return;
+    }
+    auth=validAuth;
   }
-  GithubSettings settings=GithubSettings.getInstance();
-  createGistWithProgress(project,editor,file,files,settings.getLogin(),settings.getPassword(),dialog.getDescription(),dialog.isPrivate(),anonymous,new Consumer<String>(){
+  createGistWithProgress(project,editor,file,files,auth,dialog.getDescription(),dialog.isPrivate(),anonymous,new Consumer<String>(){
     @Override public void consume(    String url){
       if (url == null) {
         return;
