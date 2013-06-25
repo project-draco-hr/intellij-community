@@ -3,23 +3,23 @@
   DomElement domElement;
   Map m=getMap().get(paramTag.getName());
   while (true) {
-    if (m == null)     return;
+    if (m == null)     return ParamInfoList.EMPTY;
     configurationTag=configurationTag.getParentTag();
-    if (configurationTag == null)     return;
+    if (configurationTag == null)     return ParamInfoList.EMPTY;
     String tagName=configurationTag.getName();
     if ("configuration".equals(tagName)) {
       domElement=DomManager.getDomManager(configurationTag.getProject()).getDomElement(configurationTag);
       if (domElement instanceof MavenDomConfiguration) {
         break;
       }
-      if (domElement != null)       return;
+      if (domElement != null)       return ParamInfoList.EMPTY;
     }
     m=(Map)m.get(tagName);
   }
   Map<Pair<String,String>,Map<String,ParamInfo>> pluginsMap=m;
   MavenDomConfiguration domCfg=(MavenDomConfiguration)domElement;
   MavenDomPlugin domPlugin=domCfg.getParentOfType(MavenDomPlugin.class,true);
-  if (domPlugin == null)   return;
+  if (domPlugin == null)   return ParamInfoList.EMPTY;
   String pluginGroupId=domPlugin.getGroupId().getStringValue();
   String pluginArtifactId=domPlugin.getArtifactId().getStringValue();
   Map<String,ParamInfo> goalsMap;
@@ -32,19 +32,31 @@
  else {
     goalsMap=pluginsMap.get(Pair.create(pluginGroupId,pluginArtifactId));
   }
-  if (goalsMap == null)   return;
+  if (goalsMap == null)   return ParamInfoList.EMPTY;
   DomElement parent=domCfg.getParent();
   if (parent instanceof MavenDomPluginExecution) {
+    SmartList<ParamInfo> infos=null;
     MavenDomGoals goals=((MavenDomPluginExecution)parent).getGoals();
     for (    MavenDomGoal goal : goals.getGoals()) {
       ParamInfo info=goalsMap.get(goal.getStringValue());
       if (info != null) {
-        if (!processor.process(info,domCfg))         return;
+        if (infos == null) {
+          infos=new SmartList<ParamInfo>();
+        }
+        infos.add(info);
       }
+    }
+    if (infos != null) {
+      ParamInfo defaultInfo=goalsMap.get(null);
+      if (defaultInfo != null) {
+        infos.add(defaultInfo);
+      }
+      return new ParamInfoList(domCfg,infos);
     }
   }
   ParamInfo defaultInfo=goalsMap.get(null);
   if (defaultInfo != null) {
-    if (!processor.process(defaultInfo,domCfg))     return;
+    return new ParamInfoList(domCfg,Collections.singletonList(defaultInfo));
   }
+  return ParamInfoList.EMPTY;
 }
