@@ -134,10 +134,11 @@
   final Runnable runnable=new Runnable(){
     public void run(){
       try {
-        PsiExpression[] exprs=new PsiExpression[refsToInline.length];
+        SmartPsiElementPointer<PsiExpression>[] exprs=new SmartPsiElementPointer[refsToInline.length];
+        final SmartPointerManager pointerManager=SmartPointerManager.getInstance(project);
         for (int idx=0; idx < refsToInline.length; idx++) {
           PsiJavaCodeReferenceElement refElement=(PsiJavaCodeReferenceElement)refsToInline[idx];
-          exprs[idx]=InlineUtil.inlineVariable(local,defToInline,refElement);
+          exprs[idx]=pointerManager.createSmartPsiElementPointer(InlineUtil.inlineVariable(local,defToInline,refElement));
         }
         if (!isInliningVariableInitializer(defToInline)) {
           defToInline.getParent().delete();
@@ -149,11 +150,16 @@
           QuickFixFactory.getInstance().createRemoveUnusedVariableFix(local).invoke(project,editor,local.getContainingFile());
         }
         if (editor != null && !ApplicationManager.getApplication().isUnitTestMode()) {
-          highlightManager.addOccurrenceHighlights(editor,exprs,attributes,true,null);
+          highlightManager.addOccurrenceHighlights(editor,ContainerUtil.convert(exprs,new PsiExpression[refsToInline.length],new Function<SmartPsiElementPointer<PsiExpression>,PsiExpression>(){
+            @Override public PsiExpression fun(            SmartPsiElementPointer<PsiExpression> pointer){
+              return pointer.getElement();
+            }
+          }
+),attributes,true,null);
           WindowManager.getInstance().getStatusBar(project).setInfo(RefactoringBundle.message("press.escape.to.remove.the.highlighting"));
         }
-        for (        final PsiExpression expr : exprs) {
-          InlineUtil.tryToInlineArrayCreationForVarargs(expr);
+        for (        final SmartPsiElementPointer<PsiExpression> expr : exprs) {
+          InlineUtil.tryToInlineArrayCreationForVarargs(expr.getElement());
         }
       }
  catch (      IncorrectOperationException e) {
