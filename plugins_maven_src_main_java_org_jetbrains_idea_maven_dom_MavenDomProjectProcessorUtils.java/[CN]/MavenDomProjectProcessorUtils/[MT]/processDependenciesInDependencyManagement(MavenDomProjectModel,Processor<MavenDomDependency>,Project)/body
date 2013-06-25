@@ -1,0 +1,44 @@
+{
+  Processor<MavenDomDependencies> managedDependenciesListProcessor=new Processor<MavenDomDependencies>(){
+    @Override public boolean process(    MavenDomDependencies dependencies){
+      SmartList<MavenDomDependency> importDependencies=null;
+      for (      MavenDomDependency domDependency : dependencies.getDependencies()) {
+        if ("import".equals(domDependency.getScope().getRawText())) {
+          if (importDependencies == null) {
+            importDependencies=new SmartList<MavenDomDependency>();
+          }
+          importDependencies.add(domDependency);
+        }
+ else {
+          if (processor.process(domDependency))           return true;
+        }
+      }
+      if (importDependencies != null) {
+        for (        MavenDomDependency domDependency : importDependencies) {
+          GenericDomValue<String> version=domDependency.getVersion();
+          if (version.getXmlElement() != null) {
+            GenericDomValueReference reference=new GenericDomValueReference(version);
+            PsiElement resolve=reference.resolve();
+            if (resolve instanceof XmlFile) {
+              MavenDomProjectModel dependModel=MavenDomUtil.getMavenDomModel((PsiFile)resolve,MavenDomProjectModel.class);
+              if (dependModel != null) {
+                for (                MavenDomDependency dep : dependModel.getDependencyManagement().getDependencies().getDependencies()) {
+                  if (processor.process(dep))                   return true;
+                }
+              }
+            }
+          }
+        }
+      }
+      return false;
+    }
+  }
+;
+  Function<MavenDomProjectModelBase,MavenDomDependencies> domFunction=new Function<MavenDomProjectModelBase,MavenDomDependencies>(){
+    public MavenDomDependencies fun(    MavenDomProjectModelBase mavenDomProfile){
+      return mavenDomProfile.getDependencyManagement().getDependencies();
+    }
+  }
+;
+  return process(projectDom,managedDependenciesListProcessor,project,domFunction,domFunction);
+}
