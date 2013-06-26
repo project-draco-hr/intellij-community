@@ -3,27 +3,31 @@
     return EMPTY_RESULT;
   }
   final ForwardDeclaration<ParseResult,PyElementType> typeExpr=ForwardDeclaration.create();
-  final FunctionalParser<ParseResult,PyElementType> simpleType=token(IDENTIFIER).then(many(op(".").skipThen(token(IDENTIFIER)))).map(new MakeSimpleType(anchor));
+  final FunctionalParser<ParseResult,PyElementType> simpleType=token(IDENTIFIER).then(many(op(".").skipThen(token(IDENTIFIER)))).map(new MakeSimpleType(anchor)).named("simple-type");
   final FunctionalParser<ParseResult,PyElementType> tupleType=op("(").skipThen(typeExpr).then(many(op(",").skipThen(typeExpr))).thenSkip(op(")")).map(new Function<Pair<ParseResult,List<ParseResult>>,ParseResult>(){
     @Override public ParseResult fun(    Pair<ParseResult,List<ParseResult>> value){
-      final List<PyType> types=new ArrayList<PyType>();
       ParseResult result=value.getFirst();
+      final List<ParseResult> rest=value.getSecond();
+      if (rest.isEmpty()) {
+        return result;
+      }
+      final List<PyType> types=new ArrayList<PyType>();
       types.add(result.getType());
-      for (      ParseResult r : value.getSecond()) {
+      for (      ParseResult r : rest) {
         result=result.merge(r);
         types.add(r.getType());
       }
       return result.withType(PyTupleType.create(anchor,types.toArray(new PyType[types.size()])));
     }
   }
-);
+).named("tuple-type");
   final FunctionalParser<ParseResult,PyElementType> typeParameter=token(PARAMETER).map(new Function<Token<PyElementType>,ParseResult>(){
     @Override public ParseResult fun(    Token<PyElementType> token){
       return new ParseResult(new PyGenericType(token.getText().toString()),token.getRange());
     }
   }
-);
-  final FunctionalParser<ParseResult,PyElementType> simpleExpr=simpleType.or(tupleType).or(typeParameter).cached();
+).named("type-parameter");
+  final FunctionalParser<ParseResult,PyElementType> simpleExpr=simpleType.or(tupleType).or(typeParameter).cached().named("simple-expr");
   final FunctionalParser<ParseResult,PyElementType> paramExpr=simpleExpr.thenSkip(op("of")).then(simpleExpr).map(new Function<Pair<ParseResult,ParseResult>,ParseResult>(){
     @Override public ParseResult fun(    Pair<ParseResult,ParseResult> value){
       final ParseResult firstResult=value.getFirst();
@@ -55,7 +59,7 @@
       return EMPTY_RESULT;
     }
   }
-)).or(simpleExpr);
+)).or(simpleExpr).named("param-expr");
   final FunctionalParser<ParseResult,PyElementType> unionExpr=paramExpr.then(many(op("or").skipThen(paramExpr))).map(new Function<Pair<ParseResult,List<ParseResult>>,ParseResult>(){
     @Override public ParseResult fun(    Pair<ParseResult,List<ParseResult>> value){
       final ParseResult first=value.getFirst();
@@ -73,9 +77,9 @@
       return result.withType(PyUnionType.union(types));
     }
   }
-);
-  typeExpr.define(unionExpr);
-  final FunctionalParser<ParseResult,PyElementType> typeFile=typeExpr.endOfInput();
+).named("union-expr");
+  typeExpr.define(unionExpr).named("type-expr");
+  final FunctionalParser<ParseResult,PyElementType> typeFile=typeExpr.endOfInput().named("type-file");
   try {
     return typeFile.parse(tokenize(type));
   }
