@@ -68,7 +68,7 @@
   }
   final AnalysisScope scope=new AnalysisScope(psiElement.getContainingFile());
   final InspectionManagerEx inspectionManagerEx=(InspectionManagerEx)InspectionManager.getInstance(project);
-  GlobalInspectionContextImpl globalContext=inspectionManagerEx.createNewGlobalContext(false);
+  final GlobalInspectionContextImpl globalContext=inspectionManagerEx.createNewGlobalContext(false);
   globalContext.setCurrentScope(scope);
   final RefManagerImpl refManager=(RefManagerImpl)globalContext.getRefManager();
   refManager.inspectionReadActionStarted();
@@ -79,19 +79,32 @@
       String toolId=toolWrapper instanceof LocalInspectionToolWrapper ? ((LocalInspectionToolWrapper)toolWrapper).getTool().getID() : toolWrapper.getShortName();
       toolWrapper.initialize(globalContext);
       Collection<CommonProblemDescriptor> descriptors;
+      final InspectionToolPresentation presentation=globalContext.getPresentation(toolWrapper);
       if (toolWrapper instanceof LocalInspectionToolWrapper) {
         LocalInspectionToolWrapper local=(LocalInspectionToolWrapper)toolWrapper;
         if (local.isUnfair())         continue;
-        local.processFile(psiElement.getContainingFile(),false,manager);
-        descriptors=local.getProblemDescriptors();
+        List<ProblemDescriptor> results=local.getTool().processFile(psiElement.getContainingFile(),manager);
+        InspectionToolPresentation toolPresentation=globalContext.getPresentation(local);
+        LocalDescriptorsUtil.addProblemDescriptors(results,toolPresentation,false,globalContext,local.getTool());
+        descriptors=presentation.getProblemDescriptors();
       }
  else       if (toolWrapper instanceof GlobalInspectionToolWrapper) {
-        GlobalInspectionToolWrapper global=(GlobalInspectionToolWrapper)toolWrapper;
-        if (global.getTool().isGraphNeeded()) {
+        final GlobalInspectionToolWrapper global=(GlobalInspectionToolWrapper)toolWrapper;
+        GlobalInspectionTool globalTool=global.getTool();
+        if (globalTool.isGraphNeeded()) {
           refManager.findAllDeclarations();
         }
-        global.processFile(scope,manager,globalContext,false);
-        descriptors=global.getProblemDescriptors();
+        final InspectionToolPresentation toolPresentation=globalContext.getPresentation(global);
+        globalContext.getRefManager().iterate(new RefVisitor(){
+          @Override public void visitElement(          @NotNull RefEntity refEntity){
+            CommonProblemDescriptor[] descriptors1=global.getTool().checkElement(refEntity,scope,manager,globalContext,toolPresentation);
+            if (descriptors1 != null) {
+              toolPresentation.addProblemElement(refEntity,false,descriptors1);
+            }
+          }
+        }
+);
+        descriptors=presentation.getProblemDescriptors();
       }
  else {
         continue;

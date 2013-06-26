@@ -3,34 +3,17 @@
   if (depId == null)   return null;
   final MavenDomProjectModel model=dependency.getParentOfType(MavenDomProjectModel.class,false);
   if (model == null)   return null;
-  SearchProcessor<MavenDomDependency,MavenDomDependencies> processor=new SearchProcessor<MavenDomDependency,MavenDomDependencies>(){
-    @Override protected MavenDomDependency find(    MavenDomDependencies mavenDomDependencies){
-      for (      MavenDomDependency domDependency : mavenDomDependencies.getDependencies()) {
-        if (depId.equals(DependencyConflictId.create(domDependency))) {
-          return domDependency;
-        }
-        if ("import".equals(domDependency.getScope().getRawText())) {
-          GenericDomValue<String> version=domDependency.getVersion();
-          if (version.getXmlElement() != null) {
-            GenericDomValueReference reference=new GenericDomValueReference(version);
-            PsiElement resolve=reference.resolve();
-            if (resolve instanceof XmlFile) {
-              MavenDomProjectModel dependModel=MavenDomUtil.getMavenDomModel((PsiFile)resolve,MavenDomProjectModel.class);
-              if (dependModel != null) {
-                for (                MavenDomDependency dep : dependModel.getDependencyManagement().getDependencies().getDependencies()) {
-                  if (depId.equals(DependencyConflictId.create(dep))) {
-                    return domDependency;
-                  }
-                }
-              }
-            }
-          }
-        }
+  final Ref<MavenDomDependency> res=new Ref<MavenDomDependency>();
+  Processor<MavenDomDependency> processor=new Processor<MavenDomDependency>(){
+    @Override public boolean process(    MavenDomDependency dependency){
+      if (depId.equals(DependencyConflictId.create(dependency))) {
+        res.set(dependency);
+        return true;
       }
-      return null;
+      return false;
     }
   }
 ;
   processDependenciesInDependencyManagement(model,processor,project);
-  return processor.myResult;
+  return res.get();
 }

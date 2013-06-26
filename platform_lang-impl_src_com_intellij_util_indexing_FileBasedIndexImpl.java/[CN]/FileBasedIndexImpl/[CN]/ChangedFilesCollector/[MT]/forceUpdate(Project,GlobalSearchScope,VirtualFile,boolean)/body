@@ -1,23 +1,36 @@
 {
   myChangedFilesCollector.ensureAllInvalidateTasksCompleted();
   ProjectIndexableFilesFilter indexableFilesFilter=projectIndexableFiles(project);
-  for (  VirtualFile file : getAllFilesToUpdate()) {
-    if (indexableFilesFilter != null && file instanceof VirtualFileWithId && !indexableFilesFilter.contains(((VirtualFileWithId)file).getId())) {
-      continue;
+  final UpdateSemaphore updateSemaphore=obtainForceUpdateSemaphore();
+  try {
+    for (    VirtualFile file : getAllFilesToUpdate()) {
+      if (indexableFilesFilter != null && file instanceof VirtualFileWithId && !indexableFilesFilter.contains(((VirtualFileWithId)file).getId())) {
+        continue;
+      }
+      if (filter == null || filter.accept(file) || Comparing.equal(file,restrictedTo)) {
+        try {
+          updateSemaphore.down();
+          processFileImpl(project,new com.intellij.ide.caches.FileContent(file),onlyRemoveOutdatedData);
+        }
+ catch (        ProcessCanceledException e) {
+          updateSemaphore.reportUpdateCanceled();
+          throw e;
+        }
+ finally {
+          updateSemaphore.up();
+        }
+      }
     }
-    if (filter == null || filter.accept(file) || Comparing.equal(file,restrictedTo)) {
-      try {
-        myForceUpdateSemaphore.down();
-        processFileImpl(project,new com.intellij.ide.caches.FileContent(file),onlyRemoveOutdatedData);
+    while (!updateSemaphore.waitFor(500)) {
+      if (Thread.holdsLock(PsiLock.LOCK)) {
+        break;
       }
-  finally {
-        myForceUpdateSemaphore.up();
-      }
+    }
+    if (updateSemaphore.isUpdateCanceled()) {
+      throw new ProcessCanceledException();
     }
   }
-  while (!myForceUpdateSemaphore.waitFor(500)) {
-    if (Thread.holdsLock(PsiLock.LOCK)) {
-      break;
-    }
+  finally {
+    releaseForceUpdateSemaphore(updateSemaphore);
   }
 }
