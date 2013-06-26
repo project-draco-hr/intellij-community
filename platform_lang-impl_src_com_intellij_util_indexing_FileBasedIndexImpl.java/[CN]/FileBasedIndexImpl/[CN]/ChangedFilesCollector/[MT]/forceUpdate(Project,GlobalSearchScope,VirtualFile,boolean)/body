@@ -1,36 +1,37 @@
 {
   myChangedFilesCollector.ensureAllInvalidateTasksCompleted();
   ProjectIndexableFilesFilter indexableFilesFilter=projectIndexableFiles(project);
-  final UpdateSemaphore updateSemaphore=obtainForceUpdateSemaphore();
-  try {
-    for (    VirtualFile file : getAllFilesToUpdate()) {
-      if (indexableFilesFilter != null && file instanceof VirtualFileWithId && !indexableFilesFilter.contains(((VirtualFileWithId)file).getId())) {
-        continue;
-      }
-      if (filter == null || filter.accept(file) || Comparing.equal(file,restrictedTo)) {
-        try {
-          updateSemaphore.down();
-          processFileImpl(project,new com.intellij.ide.caches.FileContent(file),onlyRemoveOutdatedData);
+  UpdateSemaphore updateSemaphore;
+  do {
+    updateSemaphore=obtainForceUpdateSemaphore();
+    try {
+      for (      VirtualFile file : getAllFilesToUpdate()) {
+        if (indexableFilesFilter != null && file instanceof VirtualFileWithId && !indexableFilesFilter.contains(((VirtualFileWithId)file).getId())) {
+          continue;
         }
- catch (        ProcessCanceledException e) {
-          updateSemaphore.reportUpdateCanceled();
-          throw e;
-        }
+        if (filter == null || filter.accept(file) || Comparing.equal(file,restrictedTo)) {
+          try {
+            updateSemaphore.down();
+            processFileImpl(project,new com.intellij.ide.caches.FileContent(file),onlyRemoveOutdatedData);
+          }
+ catch (          ProcessCanceledException e) {
+            updateSemaphore.reportUpdateCanceled();
+            throw e;
+          }
  finally {
-          updateSemaphore.up();
+            updateSemaphore.up();
+          }
+        }
+      }
+      while (!updateSemaphore.waitFor(500)) {
+        if (Thread.holdsLock(PsiLock.LOCK)) {
+          break;
         }
       }
     }
-    while (!updateSemaphore.waitFor(500)) {
-      if (Thread.holdsLock(PsiLock.LOCK)) {
-        break;
-      }
-    }
-    if (updateSemaphore.isUpdateCanceled()) {
-      throw new ProcessCanceledException();
-    }
-  }
   finally {
-    releaseForceUpdateSemaphore(updateSemaphore);
+      releaseForceUpdateSemaphore(updateSemaphore);
+    }
   }
+ while (updateSemaphore.isUpdateCanceled());
 }
