@@ -1,6 +1,5 @@
 {
   final Project project=e.getData(PlatformDataKeys.PROJECT);
-  final GithubAuthData auth=GithubUtil.getAuthData();
   final VirtualFile root=project.getBaseDir();
   GitRepositoryManager manager=GitUtil.getRepositoryManager(project);
   if (manager == null) {
@@ -10,7 +9,7 @@
   final GitRepository gitRepository=manager.getRepositoryForFile(project.getBaseDir());
   final GitRemote remote=GithubUtil.findGitHubRemoteBranch(gitRepository);
   final String pushUrl=GithubUtil.getGithubUrl(remote);
-  final String login=auth.getLogin();
+  final String login=GithubSettings.getInstance().getLogin();
   final int index=pushUrl.lastIndexOf(login);
   if (index == -1) {
     Messages.showErrorDialog(project,"Github remote repository doesn't seem to be your own repository: " + pushUrl,CANNOT_PERFORM_GITHUB_REBASE);
@@ -20,27 +19,28 @@
   if (repoName.endsWith(".git")) {
     repoName=repoName.substring(0,repoName.length() - 4);
   }
-  final AtomicReference<String> remoteForForkParentRepo=new AtomicReference<String>();
-  final AtomicReference<String> parentRepoUrlRef=new AtomicReference<String>();
+  final Ref<String> remoteForForkParentRepo=new Ref<String>();
+  final Ref<String> parentRepoUrlRef=new Ref<String>();
   final String finalRepoName=repoName;
   ProgressManager.getInstance().run(new Task.Modal(project,"Access to GitHub",true){
     public void run(    @NotNull ProgressIndicator indicator){
       try {
-        final RepositoryInfo repositoryInfo=GithubUtil.runAndValidateAuth(project,auth,indicator,new ThrowableComputable<RepositoryInfo,IOException>(){
-          @Override public RepositoryInfo compute() throws IOException {
-            return GithubUtil.getDetailedRepoInfo(auth,login,finalRepoName);
+        final Ref<RepositoryInfo> repositoryInfoRef=new Ref<RepositoryInfo>();
+        GithubUtil.runAndGetValidAuth(project,indicator,new ThrowableConsumer<GithubAuthData,IOException>(){
+          @Override public void consume(          GithubAuthData authData) throws IOException {
+            repositoryInfoRef.set(GithubUtil.getDetailedRepoInfo(authData,login,finalRepoName));
           }
         }
 );
-        if (repositoryInfo == null) {
+        if (repositoryInfoRef.isNull()) {
           Messages.showErrorDialog(project,"Github repository doesn't seem to be your own repository: " + pushUrl,CANNOT_PERFORM_GITHUB_REBASE);
           return;
         }
-        if (!repositoryInfo.isFork()) {
+        if (!repositoryInfoRef.get().isFork()) {
           Messages.showErrorDialog(project,"Github repository '" + finalRepoName + "' is not a forked one",CANNOT_PERFORM_GITHUB_REBASE);
           return;
         }
-        final String parent=repositoryInfo.getParentName();
+        final String parent=repositoryInfoRef.get().getParentName();
         LOG.assertTrue(parent != null,"Parent repository not found!");
         final String parentDotGit=parent + ".git";
         final String parentRepoUrl=GithubApiUtil.getGitHost() + "/" + parentDotGit;
@@ -62,7 +62,7 @@
   }
 );
   final String parentRepoUrl=parentRepoUrlRef.get();
-  if (remoteForForkParentRepo.get() == null) {
+  if (remoteForForkParentRepo.isNull()) {
     final int result=Messages.showYesNoDialog(project,"It is necessary to have '" + parentRepoUrl + "' as a configured remote. Add remote?","Github Rebase",Messages.getQuestionIcon());
     if (result != Messages.OK) {
       return;
@@ -71,7 +71,7 @@
   BasicAction.saveAll();
   new Task.Backgroundable(project,"Adding GitHub parent as a remote host"){
     @Override public void run(    @NotNull ProgressIndicator indicator){
-      if (remoteForForkParentRepo.get() == null) {
+      if (remoteForForkParentRepo.isNull()) {
         try {
           LOG.info("Adding GitHub parent as a remote host");
           indicator.setText("Adding GitHub parent as a remote host");
