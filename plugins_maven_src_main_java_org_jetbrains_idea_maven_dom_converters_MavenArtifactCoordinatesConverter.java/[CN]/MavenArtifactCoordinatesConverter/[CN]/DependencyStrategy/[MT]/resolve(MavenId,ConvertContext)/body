@@ -1,0 +1,30 @@
+{
+  PsiFile res=super.resolve(id,context);
+  if (res != null)   return res;
+  DomElement parent=context.getInvocationElement().getParent();
+  if (!(parent instanceof MavenDomDependency))   return null;
+  DependencyConflictId dependencyId=DependencyConflictId.create((MavenDomDependency)parent);
+  if (dependencyId == null)   return null;
+  MavenProject mavenProject=findMavenProject(context);
+  if (mavenProject != null) {
+    for (    MavenArtifact artifact : mavenProject.getDependencies()) {
+      if (dependencyId.equals(DependencyConflictId.create(artifact))) {
+        return super.resolve(new MavenId(id.getGroupId(),id.getArtifactId(),artifact.getVersion()),context);
+      }
+    }
+  }
+  if (id.getVersion() == null) {
+    MavenDomDependency managedDependency=MavenDomProjectProcessorUtils.searchManagingDependency((MavenDomDependency)parent);
+    if (managedDependency != null) {
+      final GenericDomValue<String> managedDependencyArtifactId=managedDependency.getArtifactId();
+      return RecursionManager.doPreventingRecursion(managedDependencyArtifactId,false,new Computable<PsiFile>(){
+        @Override public PsiFile compute(){
+          PsiElement res=new GenericDomValueReference(managedDependencyArtifactId).resolve();
+          return res instanceof PsiFile ? (PsiFile)res : null;
+        }
+      }
+);
+    }
+  }
+  return null;
+}

@@ -39,6 +39,8 @@
       context.processMessage(new ProgressMessage("Parsing java... [" + chunkName + "]"));
       final int filesCount=files.size();
       boolean compiledOk=true;
+      int tempRootsErrorCount=0;
+      int tempRootsWarningCount=0;
       if (filesCount > 0) {
         LOG.info("Compiling " + filesCount + " java files; module: "+ chunkName+ (chunk.containsTests() ? " (tests)" : ""));
         if (LOG.isDebugEnabled()) {
@@ -54,23 +56,36 @@
             LOG.debug("  " + file.getAbsolutePath());
           }
         }
-        compiledOk=compileJava(context,chunk,files,classpath,platformCp,srcPath,diagnosticSink,outputSink);
-        if (compiledOk) {
-          final Collection<File> loadedTempFiles=diagnosticSink.getLoadedTempSources();
-          if (!loadedTempFiles.isEmpty()) {
-            compiledOk=compileJava(context,chunk,loadedTempFiles,classpath,platformCp,tempRoots,new DiagnosticSink(context,Collections.<File>emptySet()),outputSink);
+        try {
+          compiledOk=compileJava(context,chunk,files,classpath,platformCp,srcPath,diagnosticSink,outputSink);
+          if (compiledOk) {
+            final Collection<File> loadedTempFiles=diagnosticSink.getLoadedTempSources();
+            if (!loadedTempFiles.isEmpty()) {
+              final DiagnosticSink tempRootsSink=new DiagnosticSink(context,Collections.<File>emptySet());
+              compiledOk=compileJava(context,chunk,loadedTempFiles,classpath,platformCp,tempRoots,tempRootsSink,outputSink);
+              tempRootsErrorCount=tempRootsSink.getErrorCount();
+              tempRootsWarningCount=tempRootsSink.getWarningCount();
+            }
+          }
+        }
+  finally {
+          for (          File file : diagnosticSink.getFilesWithErrors()) {
+            if (!file.exists()) {
+              FSOperations.markDeleted(context,file);
+            }
           }
         }
       }
       context.checkCanceled();
-      if (!compiledOk && diagnosticSink.getErrorCount() == 0) {
+      if (!compiledOk && (diagnosticSink.getErrorCount() + tempRootsErrorCount) == 0) {
         diagnosticSink.report(new PlainMessageDiagnostic(Diagnostic.Kind.ERROR,"Compilation failed: internal java compiler error"));
       }
-      if (!Utils.PROCEED_ON_ERROR_KEY.get(context,Boolean.FALSE) && diagnosticSink.getErrorCount() > 0) {
+      final int totalErrorCount=diagnosticSink.getErrorCount() + tempRootsErrorCount;
+      if (!Utils.PROCEED_ON_ERROR_KEY.get(context,Boolean.FALSE) && totalErrorCount > 0) {
         if (!compiledOk) {
           diagnosticSink.report(new PlainMessageDiagnostic(Diagnostic.Kind.OTHER,"Errors occurred while compiling module '" + chunkName + "'"));
         }
-        throw new StopBuildException("Compilation failed: errors: " + diagnosticSink.getErrorCount() + "; warnings: "+ diagnosticSink.getWarningCount());
+        throw new StopBuildException("Compilation failed: errors: " + totalErrorCount + "; warnings: "+ (diagnosticSink.getWarningCount() + tempRootsWarningCount));
       }
     }
   }
