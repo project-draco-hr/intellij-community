@@ -17,71 +17,25 @@
   if (!repository.isFresh()) {
     return true;
   }
-  final Ref<Exception> exceptionRef=new Ref<Exception>();
-  final Ref<VirtualFile> readmeFileRef=new Ref<VirtualFile>();
-  LOG.info("Touching file 'README' for initial commit");
-  indicator.setText("Touching file 'README' for initial commit");
-  ApplicationManager.getApplication().invokeAndWait(new Runnable(){
-    @Override public void run(){
-      ApplicationManager.getApplication().runWriteAction(new Runnable(){
-        @Override public void run(){
-          VirtualFile file=null;
-          try {
-            file=root.findChild("README");
-            if (file == null) {
-              file=root.createChildData(this,"README");
-              VfsUtil.saveText(file,"This file was created by " + ApplicationInfoEx.getInstanceEx().getFullApplicationName() + " for binding GitHub repository");
-            }
- else {
-              VfsUtil.saveText(file,VfsUtil.loadText(file) + "\nThis file was modified by " + ApplicationInfoEx.getInstanceEx().getFullApplicationName()+ " for binding GitHub repository");
-            }
-          }
- catch (          IOException e) {
-            exceptionRef.set(e);
-            LOG.info("Failed to touch file 'README' for initial commit: " + e.getMessage());
-          }
-          readmeFileRef.set(file);
-        }
-      }
-);
-    }
-  }
-,indicator.getModalityState());
-  final VirtualFile readmeFile=readmeFileRef.get();
-  if (!exceptionRef.isNull()) {
-    showErrorDialog(project,exceptionRef.get().getMessage(),"Failed to modify file during post activities",indicator);
-  }
   LOG.info("Trying to commit");
   indicator.setText("Trying to commit");
   try {
     LOG.info("Adding files for commit");
     indicator.setText("Adding files to git");
-    final ArrayList<VirtualFile> files2Add=new ArrayList<VirtualFile>();
-    if (readmeFile != null) {
-      files2Add.add(readmeFile);
-    }
-    final ChangeListManagerImpl changeListManager=(ChangeListManagerImpl)ChangeListManager.getInstance(project);
-    final Semaphore semaphore=new Semaphore();
-    semaphore.up();
-    changeListManager.invokeAfterUpdate(new Runnable(){
+    List<VirtualFile> untrackedFiles=new ArrayList<VirtualFile>(repository.getUntrackedFilesHolder().retrieveUntrackedFiles());
+    final GithubUntrackedFilesDialog dialog=new GithubUntrackedFilesDialog(project,untrackedFiles);
+    ApplicationManager.getApplication().invokeAndWait(new Runnable(){
       @Override public void run(){
-        semaphore.down();
+        dialog.show();
       }
     }
-,InvokeAfterUpdateMode.SILENT,null,null);
-    if (!semaphore.waitFor(30000)) {
-      throw new VcsException("Too long VCS update");
+,indicator.getModalityState());
+    final Collection<VirtualFile> files2add=dialog.getSelectedFiles();
+    if (!dialog.isOK() || files2add.isEmpty()) {
+      showErrorDialog(project,"No files to commit","Failed to commit file during post activities",indicator);
+      return false;
     }
-    for (    VirtualFile file : changeListManager.getUnversionedFiles()) {
-      if (file.getPath().contains(Project.DIRECTORY_STORE_FOLDER)) {
-        continue;
-      }
-      if (readmeFile != null && readmeFile.equals(file)) {
-        continue;
-      }
-      files2Add.add(file);
-    }
-    GitFileUtils.addFiles(project,root,files2Add);
+    GitFileUtils.addFiles(project,root,files2add);
     LOG.info("Performing commit");
     indicator.setText("Performing commit");
     GitSimpleHandler handler=new GitSimpleHandler(project,root,GitCommand.COMMIT);
