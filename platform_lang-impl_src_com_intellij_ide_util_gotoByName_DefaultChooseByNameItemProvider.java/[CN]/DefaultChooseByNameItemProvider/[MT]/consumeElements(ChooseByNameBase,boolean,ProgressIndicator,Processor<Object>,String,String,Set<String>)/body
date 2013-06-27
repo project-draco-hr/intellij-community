@@ -1,15 +1,19 @@
 {
   ChooseByNameModel model=base.getModel();
-  List<String> namesList=new ArrayList<String>();
-  getNamesByPattern(base,new ArrayList<String>(allNames),indicator,namesList,namePattern,matchingMode);
+  String matchingPattern=convertToMatchingPattern(base,namePattern);
+  List<String> namesList=getNamesByPattern(base,new ArrayList<String>(allNames),indicator,matchingPattern);
   allNames.removeAll(namesList);
-  sortNamesList(namePattern,namesList);
+  sortNamesList(matchingPattern,namesList);
   indicator.checkCanceled();
   List<Object> sameNameElements=new SmartList<Object>();
   List<Pair<String,MinusculeMatcher>> patternsAndMatchers=getPatternsAndMatchers(qualifierPattern,base);
-  int elementsConsumed=0;
+  MinusculeMatcher matcher=buildPatternMatcher(matchingPattern,NameUtil.MatchingCaseSensitivity.NONE);
+  boolean sortedByMatchingDegree=!(base.getModel() instanceof CustomMatcherModel);
+  boolean afterStartMatch=false;
   for (  String name : namesList) {
     indicator.checkCanceled();
+    boolean isStartMatch=matcher.isStartMatch(name);
+    boolean needSeparator=sortedByMatchingDegree && !isStartMatch && afterStartMatch;
     Object[] elements=model instanceof ContributorsBasedGotoByModel ? ((ContributorsBasedGotoByModel)model).getElementsByName(name,everywhere,namePattern,indicator) : model.getElementsByName(name,everywhere,namePattern);
     if (elements.length > 1) {
       sameNameElements.clear();
@@ -21,18 +25,17 @@
       }
       sortByProximity(base,sameNameElements);
       for (      Object element : sameNameElements) {
-        if (needSeparator && !consumer.process(ChooseByNameBase.NON_PREFIX_SEPARATOR))         return null;
-        if (!consumer.process(element))         return null;
+        if (needSeparator && !consumer.process(ChooseByNameBase.NON_PREFIX_SEPARATOR))         return false;
+        if (!consumer.process(element))         return false;
         needSeparator=false;
-        elementsConsumed++;
+        afterStartMatch=isStartMatch;
       }
     }
  else     if (elements.length == 1 && matchesQualifier(elements[0],base,patternsAndMatchers)) {
-      if (needSeparator && !consumer.process(ChooseByNameBase.NON_PREFIX_SEPARATOR))       return null;
-      if (!consumer.process(elements[0]))       return null;
-      needSeparator=false;
-      elementsConsumed++;
+      if (needSeparator && !consumer.process(ChooseByNameBase.NON_PREFIX_SEPARATOR))       return false;
+      if (!consumer.process(elements[0]))       return false;
+      afterStartMatch=isStartMatch;
     }
   }
-  return elementsConsumed;
+  return true;
 }
