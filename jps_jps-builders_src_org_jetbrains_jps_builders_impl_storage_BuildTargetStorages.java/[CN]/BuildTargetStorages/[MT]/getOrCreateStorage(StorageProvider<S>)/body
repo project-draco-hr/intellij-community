@@ -1,8 +1,30 @@
 {
-  S storage=(S)myStorages.get(provider);
-  if (storage == null) {
-    storage=provider.createStorage(myPaths.getTargetDataRoot(myTarget));
-    myStorages.put(provider,storage);
+  NotNullLazyValue<? extends StorageOwner> lazyValue=myStorages.get(provider);
+  if (lazyValue == null) {
+    NotNullLazyValue<S> newValue=new NotNullLazyValue<S>(){
+      @NotNull @Override protected S compute(){
+        try {
+          return provider.createStorage(myPaths.getTargetDataRoot(myTarget));
+        }
+ catch (        IOException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+;
+    lazyValue=myStorages.putIfAbsent(provider,newValue);
+    if (lazyValue == null) {
+      lazyValue=newValue;
+    }
   }
-  return (S)storage;
+  try {
+    return (S)lazyValue.getValue();
+  }
+ catch (  RuntimeException e) {
+    final Throwable cause=e.getCause();
+    if (cause instanceof IOException) {
+      throw (IOException)cause;
+    }
+    throw e;
+  }
 }
