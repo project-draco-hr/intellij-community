@@ -8,6 +8,13 @@
   sortNamesList(matchingPattern,namesList);
   indicator.checkCanceled();
   List<Object> sameNameElements=new SmartList<Object>();
+  final TObjectIntHashMap<Object> sameNameWeights=new TObjectIntHashMap<Object>();
+  Comparator<Object> weightComparator=new Comparator<Object>(){
+    @Override public int compare(    Object o1,    Object o2){
+      return sameNameWeights.get(o2) - sameNameWeights.get(o1);
+    }
+  }
+;
   List<Pair<String,MinusculeMatcher>> patternsAndMatchers=getPatternsAndMatchers(qualifierPattern,base);
   MinusculeMatcher matcher=buildPatternMatcher(matchingPattern,NameUtil.MatchingCaseSensitivity.NONE);
   boolean sortedByMatchingDegree=!(base.getModel() instanceof CustomMatcherModel);
@@ -19,13 +26,17 @@
     Object[] elements=model instanceof ContributorsBasedGotoByModel ? ((ContributorsBasedGotoByModel)model).getElementsByName(name,everywhere,namePattern,indicator) : model.getElementsByName(name,everywhere,namePattern);
     if (elements.length > 1) {
       sameNameElements.clear();
+      sameNameWeights.clear();
       for (      final Object element : elements) {
         indicator.checkCanceled();
-        if (matchesQualifier(element,base,patternsAndMatchers)) {
+        Integer degree=matchQualifier(element,base,patternsAndMatchers);
+        if (degree != null) {
           sameNameElements.add(element);
+          sameNameWeights.put(element,degree);
         }
       }
       sortByProximity(base,sameNameElements);
+      Collections.sort(sameNameElements,weightComparator);
       for (      Object element : sameNameElements) {
         if (needSeparator && !consumer.process(ChooseByNameBase.NON_PREFIX_SEPARATOR))         return false;
         if (!consumer.process(element))         return false;
@@ -33,7 +44,7 @@
         afterStartMatch=isStartMatch;
       }
     }
- else     if (elements.length == 1 && matchesQualifier(elements[0],base,patternsAndMatchers)) {
+ else     if (elements.length == 1 && matchQualifier(elements[0],base,patternsAndMatchers) != null) {
       if (needSeparator && !consumer.process(ChooseByNameBase.NON_PREFIX_SEPARATOR))       return false;
       if (!consumer.process(elements[0]))       return false;
       afterStartMatch=isStartMatch;
