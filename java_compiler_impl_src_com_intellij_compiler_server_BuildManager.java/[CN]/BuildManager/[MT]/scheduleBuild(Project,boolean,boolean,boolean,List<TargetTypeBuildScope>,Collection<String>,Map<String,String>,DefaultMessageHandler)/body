@@ -1,6 +1,32 @@
 {
   final String projectPath=getProjectPath(project);
   final UUID sessionId=UUID.randomUUID();
+  final boolean isAutomake=messageHandler instanceof AutoMakeMessageHandler;
+  final BuilderMessageHandler handler=new MessageHandlerWrapper(messageHandler){
+    @Override public void buildStarted(    UUID sessionId){
+      super.buildStarted(sessionId);
+      try {
+        ApplicationManager.getApplication().getMessageBus().syncPublisher(BuildManagerListener.TOPIC).buildStarted(project,sessionId,isAutomake);
+      }
+ catch (      Throwable e) {
+        LOG.error(e);
+      }
+    }
+    @Override public void sessionTerminated(    UUID sessionId){
+      try {
+        super.sessionTerminated(sessionId);
+      }
+  finally {
+        try {
+          ApplicationManager.getApplication().getMessageBus().syncPublisher(BuildManagerListener.TOPIC).buildFinished(project,sessionId,isAutomake);
+        }
+ catch (        Throwable e) {
+          LOG.error(e);
+        }
+      }
+    }
+  }
+;
   if (myListenPort < 0) {
     try {
 synchronized (this) {
@@ -57,7 +83,7 @@ synchronized (myProjectDataMap) {
  else {
           params=CmdlineProtoUtil.createBuildRequest(projectPath,scopes,isMake ? Collections.<String>emptyList() : paths,userData,globals,currentFSChanges);
         }
-        myMessageDispatcher.registerBuildMessageHandler(sessionId,new BuilderMessageHandlerWrapper(handler){
+        myMessageDispatcher.registerBuildMessageHandler(sessionId,new MessageHandlerWrapper(handler){
           @Override public void sessionTerminated(          UUID sessionId){
             try {
               super.sessionTerminated(sessionId);
