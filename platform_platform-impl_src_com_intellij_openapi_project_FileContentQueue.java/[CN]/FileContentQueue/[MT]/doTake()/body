@@ -1,38 +1,54 @@
 {
-  FileContent result;
-synchronized (this) {
-    result=myPushbackBuffer.poll();
-    if (result != null) {
-      return result;
-    }
-  }
-  try {
-    while (result == null) {
-      result=myQueue.poll(300L,TimeUnit.MILLISECONDS);
-      if (result == null && myContentLoadingThreadTerminated) {
-        return null;
+  FileContent result=null;
+  while (result == null) {
+    if (ourAllowParallelFileReading) {
+      result=myLoadedContentsQueue.poll();
+      if (result == null) {
+        VirtualFile virtualFileToLoad=myFilesToLoadQueue.poll();
+        while (virtualFileToLoad != null) {
+          if (isValidFile(virtualFileToLoad)) {
+            FileContent content=new FileContent(virtualFileToLoad);
+            try {
+              content.getBytes();
+              return content;
+            }
+ catch (            Throwable t) {
+              if (t instanceof IOException || t instanceof InvalidVirtualFileAccessException) {
+                LOG.info(t);
+              }
+ else {
+                LOG.error(t);
+              }
+            }
+          }
+          virtualFileToLoad=myFilesToLoadQueue.poll();
+        }
       }
     }
-  }
- catch (  InterruptedException e) {
-    throw new RuntimeException(e);
+ else {
+      try {
+        result=myLoadedContentsQueue.poll(300,TimeUnit.MILLISECONDS);
+      }
+ catch (      InterruptedException ex) {
+        throw new RuntimeException(ex);
+      }
+    }
+    if (result == null && myContentLoadingThreadTerminated) {
+      return null;
+    }
   }
   final VirtualFile file=result.getVirtualFile();
   if (file == null) {
     try {
-      myQueue.put(result);
+      myLoadedContentsQueue.put(result);
     }
  catch (    InterruptedException ignore) {
     }
     return null;
   }
-synchronized (this) {
-    try {
-      myTotalSize-=result.getLength();
-    }
-  finally {
-      notifyAll();
-    }
+synchronized (myProceedWithLoadingLock) {
+    myLoadedBytesInQueue-=result.getLength();
+    myProceedWithLoadingLock.notify();
   }
   return result;
 }
