@@ -1,0 +1,36 @@
+{
+  final String remoteUrl=GithubUtil.findGithubRemoteUrl(gitRepository);
+  if (remoteUrl == null) {
+    GithubNotifications.showError(project,CANNOT_PERFORM_GITHUB_REBASE,"Can't find github remote");
+    return null;
+  }
+  final String userAndRepo=GithubUtil.getUserAndRepositoryFromRemoteUrl(remoteUrl);
+  if (userAndRepo == null) {
+    GithubNotifications.showError(project,CANNOT_PERFORM_GITHUB_REBASE,"Can't process remote: " + remoteUrl);
+    return null;
+  }
+  int index=userAndRepo.indexOf('/');
+  if (index == -1) {
+    GithubNotifications.showError(project,CANNOT_PERFORM_GITHUB_REBASE,"Can't process remote: " + remoteUrl);
+    return null;
+  }
+  final String user=userAndRepo.substring(0,index);
+  final String repositoryName=userAndRepo.substring(index + 1);
+  final Ref<RepositoryInfo> repositoryInfoRef=new Ref<RepositoryInfo>();
+  try {
+    GithubUtil.runAndGetValidAuth(project,indicator,new ThrowableConsumer<GithubAuthData,IOException>(){
+      @Override public void consume(      GithubAuthData authData) throws IOException {
+        repositoryInfoRef.set(GithubUtil.getDetailedRepoInfo(authData,user,repositoryName));
+      }
+    }
+);
+  }
+ catch (  IOException e) {
+    GithubNotifications.showError(project,CANNOT_PERFORM_GITHUB_REBASE,"Can't load repository info: " + e.getMessage());
+  }
+  if (repositoryInfoRef.isNull()) {
+    GithubNotifications.showError(project,CANNOT_PERFORM_GITHUB_REBASE,"Can't load repository info");
+    return null;
+  }
+  return repositoryInfoRef.get();
+}
