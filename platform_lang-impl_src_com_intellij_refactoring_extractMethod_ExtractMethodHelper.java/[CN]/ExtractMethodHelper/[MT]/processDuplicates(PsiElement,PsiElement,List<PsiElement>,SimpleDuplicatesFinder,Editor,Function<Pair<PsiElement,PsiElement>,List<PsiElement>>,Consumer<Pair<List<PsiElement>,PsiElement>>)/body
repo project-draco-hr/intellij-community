@@ -1,0 +1,36 @@
+{
+  final List<Pair<PsiElement,PsiElement>> duplicates=finder.findDuplicates(scope,generatedMethod);
+  if (duplicates.size() > 0) {
+    final String message=RefactoringBundle.message("0.has.detected.1.code.fragments.in.this.file.that.can.be.replaced.with.a.call.to.extracted.method",ApplicationNamesInfo.getInstance().getProductName(),duplicates.size());
+    final boolean isUnittest=ApplicationManager.getApplication().isUnitTestMode();
+    final int exitCode=!isUnittest ? Messages.showYesNoDialog(callElement.getProject(),message,RefactoringBundle.message("refactoring.extract.method.dialog.title"),Messages.getInformationIcon()) : DialogWrapper.OK_EXIT_CODE;
+    if (exitCode == DialogWrapper.OK_EXIT_CODE) {
+      boolean replaceAll=false;
+      for (      Pair<PsiElement,PsiElement> match : duplicates) {
+        final List<PsiElement> elementsRange=collector.fun(match);
+        final Pair<List<PsiElement>,PsiElement> replacement=Pair.create(elementsRange,callElement);
+        if (!replaceAll) {
+          highlightInEditor(callElement.getProject(),match,editor);
+          int promptResult=FindManager.PromptResult.ALL;
+          if (!isUnittest) {
+            ReplacePromptDialog promptDialog=new ReplacePromptDialog(false,RefactoringBundle.message("replace.fragment"),callElement.getProject());
+            promptDialog.show();
+            promptResult=promptDialog.getExitCode();
+          }
+          if (promptResult == FindManager.PromptResult.SKIP)           continue;
+          if (promptResult == FindManager.PromptResult.CANCEL)           break;
+          if (promptResult == FindManager.PromptResult.OK) {
+            replacer.consume(replacement);
+          }
+ else           if (promptResult == FindManager.PromptResult.ALL) {
+            replacer.consume(replacement);
+            replaceAll=true;
+          }
+        }
+ else {
+          replacer.consume(replacement);
+        }
+      }
+    }
+  }
+}
