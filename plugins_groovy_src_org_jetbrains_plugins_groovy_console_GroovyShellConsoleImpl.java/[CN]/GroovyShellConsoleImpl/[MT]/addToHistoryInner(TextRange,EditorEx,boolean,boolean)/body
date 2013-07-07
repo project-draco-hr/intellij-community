@@ -1,10 +1,25 @@
 {
   final String result=super.addToHistoryInner(textRange,editor,erase,preserveMarkup);
-  if (result.startsWith("import")) {
-    String prepared=prepareImport(result);
-    if (prepared != null) {
-      ((GroovyCodeFragment)myFile).addImportsFromString(prepared);
+  GroovyShellCodeFragment codeFragment=(GroovyShellCodeFragment)myFile;
+  GrTopStatement[] definitions=codeFragment.getTopStatements();
+  for (  GrTopStatement statement : definitions) {
+    if (statement instanceof GrImportStatement) {
+      codeFragment.addImportsFromString(importToString((GrImportStatement)statement));
     }
+ else     if (statement instanceof GrMethod) {
+      codeFragment.addVariable(((GrMethod)statement).getName(),generateClosure((GrMethod)statement));
+    }
+ else     if (statement instanceof GrAssignmentExpression) {
+      GrAssignmentExpression assignment=(GrAssignmentExpression)statement;
+      GrExpression left=assignment.getLValue();
+      if (left instanceof GrReferenceExpression && !((GrReferenceExpression)left).isQualified()) {
+        codeFragment.addVariable(((GrReferenceExpression)left).getReferenceName(),assignment.getRValue());
+      }
+    }
+  }
+  PsiType scriptType=((GroovyShellCodeFragment)myFile).getInferredScriptReturnType();
+  if (scriptType != null) {
+    codeFragment.addVariable("_",scriptType);
   }
   return result;
 }
