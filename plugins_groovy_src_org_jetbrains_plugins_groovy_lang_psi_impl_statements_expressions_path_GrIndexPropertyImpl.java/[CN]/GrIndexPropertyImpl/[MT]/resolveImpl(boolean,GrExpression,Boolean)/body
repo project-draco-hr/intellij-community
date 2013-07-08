@@ -1,2 +1,68 @@
 {
+  if (isSetter == null)   isSetter=PsiUtil.isLValue(this);
+  GrExpression invoked=getInvokedExpression();
+  PsiType thisType=invoked.getType();
+  if (thisType == null) {
+    thisType=TypesUtil.getJavaLangObject(this);
+  }
+  GrArgumentList argList=getArgumentList();
+  PsiType[] argTypes=PsiUtil.getArgumentTypes(argList.getNamedArguments(),argList.getExpressionArguments(),GrClosableBlock.EMPTY_ARRAY,true,upToArgument,false);
+  if (argTypes == null)   return GroovyResolveResult.EMPTY_ARRAY;
+  final GlobalSearchScope resolveScope=getResolveScope();
+  if (argTypes.length == 0) {
+    PsiType arrType=null;
+    if (invoked instanceof GrBuiltinTypeClassExpression) {
+      arrType=((GrBuiltinTypeClassExpression)invoked).getPrimitiveType();
+    }
+    if (invoked instanceof GrReferenceExpression) {
+      final PsiElement resolved=((GrReferenceExpression)invoked).resolve();
+      if (resolved instanceof PsiClass) {
+        String qname=((PsiClass)resolved).getQualifiedName();
+        if (qname != null) {
+          arrType=TypesUtil.createTypeByFQClassName(qname,this);
+        }
+      }
+    }
+    if (arrType != null) {
+      return GroovyResolveResult.EMPTY_ARRAY;
+    }
+  }
+  GroovyResolveResult[] candidates;
+  final String name=isSetter ? "putAt" : "getAt";
+  if (isSetter && !incompleteCode) {
+    argTypes=ArrayUtil.append(argTypes,TypeInferenceHelper.getInitializerFor(this),PsiType.class);
+  }
+  if (PsiImplUtil.isSimpleArrayAccess(thisType,argTypes,this,isSetter)) {
+    return GroovyResolveResult.EMPTY_ARRAY;
+  }
+  candidates=ResolveUtil.getMethodCandidates(thisType,name,invoked,true,incompleteCode,false,argTypes);
+  if (candidates.length == 2) {
+    for (int i=0; i < candidates.length; i++) {
+      GroovyResolveResult candidate=candidates[i];
+      final PsiElement element=candidate.getElement();
+      if (element instanceof GrGdkMethod) {
+        final PsiMethod staticMethod=((GrGdkMethod)element).getStaticMethod();
+        final PsiParameter param=staticMethod.getParameterList().getParameters()[0];
+        if (param.getType().equalsToText(CommonClassNames.JAVA_LANG_OBJECT)) {
+          return new GroovyResolveResult[]{candidates[1 - i]};
+        }
+      }
+    }
+  }
+  if (candidates.length != 1) {
+    final GrTupleType tupleType=new GrTupleType(argTypes,JavaPsiFacade.getInstance(getProject()),resolveScope);
+    final GroovyResolveResult[] tupleCandidates=ResolveUtil.getMethodCandidates(thisType,name,invoked,tupleType);
+    if (incompleteCode) {
+      candidates=ArrayUtil.mergeArrays(candidates,tupleCandidates,new ArrayFactory<GroovyResolveResult>(){
+        @NotNull @Override public GroovyResolveResult[] create(        int count){
+          return new GroovyResolveResult[count];
+        }
+      }
+);
+    }
+ else {
+      candidates=tupleCandidates;
+    }
+  }
+  return candidates;
 }
