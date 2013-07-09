@@ -1,0 +1,45 @@
+{
+  final GitRepository gitRepository=GithubUtil.getGitRepository(project,file);
+  if (gitRepository == null) {
+    GithubNotifications.showError(project,CANNOT_PERFORM_GITHUB_REBASE,"Can't find git repository");
+    return;
+  }
+  final VirtualFile root=gitRepository.getRoot();
+  BasicAction.saveAll();
+  new Task.Backgroundable(project,"Rebasing GitHub fork..."){
+    @Override public void run(    @NotNull ProgressIndicator indicator){
+      String upstreamRemoteUrl=GithubUtil.findGithubUpstreamRemote(gitRepository);
+      if (upstreamRemoteUrl == null) {
+        LOG.info("Configuring upstream remote");
+        indicator.setText("Configuring upstream remote...");
+        upstreamRemoteUrl=configureUpstreamRemote(project,root,gitRepository,indicator);
+        if (upstreamRemoteUrl == null) {
+          return;
+        }
+      }
+      if (!GithubUrlUtil.isGithubUrl(upstreamRemoteUrl)) {
+        GithubNotifications.showError(project,CANNOT_PERFORM_GITHUB_REBASE,"Configured upstream is not a GitHub repository: " + upstreamRemoteUrl);
+        return;
+      }
+ else {
+        final GithubUserAndRepository userAndRepo=GithubUrlUtil.getUserAndRepositoryFromRemoteUrl(upstreamRemoteUrl);
+        final String login=GithubSettings.getInstance().getLogin();
+        if (userAndRepo != null) {
+          if (userAndRepo.getUserName().equals(login)) {
+            GithubNotifications.showError(project,CANNOT_PERFORM_GITHUB_REBASE,"Configured upstream seems to be your own repository: " + upstreamRemoteUrl);
+            return;
+          }
+        }
+      }
+      LOG.info("Fetching upstream");
+      indicator.setText("Fetching upstream...");
+      if (!fetchParent(project,gitRepository,indicator)) {
+        return;
+      }
+      LOG.info("Rebasing current branch");
+      indicator.setText("Rebasing current branch...");
+      rebaseCurrentBranch(project,root,gitRepository,indicator);
+    }
+  }
+.queue();
+}

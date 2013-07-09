@@ -1,0 +1,40 @@
+{
+  if (!repository.isFresh()) {
+    return true;
+  }
+  LOG.info("Trying to commit");
+  try {
+    LOG.info("Adding files for commit");
+    indicator.setText("Adding files to git...");
+    final List<VirtualFile> untrackedFiles=new ArrayList<VirtualFile>(repository.getUntrackedFilesHolder().retrieveUntrackedFiles());
+    final Ref<GithubUntrackedFilesDialog> dialogRef=new Ref<GithubUntrackedFilesDialog>();
+    ApplicationManager.getApplication().invokeAndWait(new Runnable(){
+      @Override public void run(){
+        GithubUntrackedFilesDialog dialog=new GithubUntrackedFilesDialog(project,untrackedFiles);
+        DialogManager.show(dialog);
+        dialogRef.set(dialog);
+      }
+    }
+,indicator.getModalityState());
+    final GithubUntrackedFilesDialog dialog=dialogRef.get();
+    final Collection<VirtualFile> files2add=dialog.getSelectedFiles();
+    if (!dialog.isOK() || files2add.isEmpty()) {
+      GithubNotifications.showWarningURL(project,"Can't finish GitHub sharing process","No files to commit. ","'" + name + "'"," on GitHub",url);
+      return false;
+    }
+    GitFileUtils.addFiles(project,root,files2add);
+    LOG.info("Performing commit");
+    indicator.setText("Performing commit...");
+    GitSimpleHandler handler=new GitSimpleHandler(project,root,GitCommand.COMMIT);
+    handler.addParameters("-m",dialog.getCommitMessage());
+    handler.endOptions();
+    handler.run();
+    VcsFileUtil.refreshFiles(project,dialog.getSelectedFiles());
+  }
+ catch (  VcsException e) {
+    GithubNotifications.showErrorURL(project,"Can't finish GitHub sharing process","Successfully created project ","'" + name + "'"," on GitHub, but initial commit failed:<br/>" + e.getMessage(),url);
+    return false;
+  }
+  LOG.info("Successfully created initial commit");
+  return true;
+}

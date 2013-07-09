@@ -1,0 +1,47 @@
+{
+  AnalysisScope scope=myForwardScope;
+  final DependenciesBuilder builder=new ForwardDependenciesBuilder(getProject(),scope,getScopeOfInterest());
+  builder.setTotalFileCount(myTotalFileCount);
+  builder.analyze();
+  subtractScope(builder,getScope());
+  final PsiManager psiManager=PsiManager.getInstance(getProject());
+  psiManager.startBatchFilesProcessingMode();
+  try {
+    final int fileCount=getScope().getFileCount();
+    getScope().accept(new PsiRecursiveElementVisitor(){
+      @Override public void visitFile(      final PsiFile file){
+        ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
+        if (indicator != null) {
+          if (indicator.isCanceled()) {
+            throw new ProcessCanceledException();
+          }
+          indicator.setText(AnalysisScopeBundle.message("package.dependencies.progress.text"));
+          final VirtualFile virtualFile=file.getVirtualFile();
+          if (virtualFile != null) {
+            indicator.setText2(getRelativeToProjectPath(virtualFile));
+          }
+          if (fileCount > 0) {
+            indicator.setFraction(((double)++myFileCount) / myTotalFileCount);
+          }
+        }
+        final Map<PsiFile,Set<PsiFile>> dependencies=builder.getDependencies();
+        for (        final PsiFile psiFile : dependencies.keySet()) {
+          if (dependencies.get(psiFile).contains(file)) {
+            Set<PsiFile> fileDeps=getDependencies().get(file);
+            if (fileDeps == null) {
+              fileDeps=new HashSet<PsiFile>();
+              getDependencies().put(file,fileDeps);
+            }
+            fileDeps.add(psiFile);
+          }
+        }
+        psiManager.dropResolveCaches();
+        InjectedLanguageManager.getInstance(file.getProject()).dropFileCaches(file);
+      }
+    }
+);
+  }
+  finally {
+    psiManager.finishBatchFilesProcessingMode();
+  }
+}
