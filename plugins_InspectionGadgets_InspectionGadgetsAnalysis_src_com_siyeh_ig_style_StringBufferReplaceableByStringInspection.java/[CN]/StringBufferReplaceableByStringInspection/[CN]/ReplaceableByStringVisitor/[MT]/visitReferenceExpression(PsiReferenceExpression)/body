@@ -1,0 +1,43 @@
+{
+  if (!myReplaceable || expression.getTextOffset() < myVariable.getTextOffset()) {
+    return;
+  }
+  super.visitReferenceExpression(expression);
+  final PsiExpression qualifier=expression.getQualifierExpression();
+  if (qualifier != null) {
+    return;
+  }
+  final PsiElement target=expression.resolve();
+  if (!myVariable.equals(target)) {
+    return;
+  }
+  if (myToStringFound) {
+    myReplaceable=false;
+    return;
+  }
+  final PsiElement element=PsiTreeUtil.getParentOfType(expression,PsiCodeBlock.class,PsiIfStatement.class,PsiLoopStatement.class);
+  if (!myParent.equals(element)) {
+    myReplaceable=false;
+    return;
+  }
+  PsiElement parent=expression.getParent();
+  while (true) {
+    if (!(parent instanceof PsiReferenceExpression)) {
+      myReplaceable=false;
+      return;
+    }
+    final PsiElement grandParent=parent.getParent();
+    if (!isAppendCall(grandParent)) {
+      if (!isToStringCall(grandParent)) {
+        myReplaceable=false;
+        return;
+      }
+      myToStringFound=true;
+      return;
+    }
+    parent=grandParent.getParent();
+    if (parent instanceof PsiExpressionStatement) {
+      return;
+    }
+  }
+}

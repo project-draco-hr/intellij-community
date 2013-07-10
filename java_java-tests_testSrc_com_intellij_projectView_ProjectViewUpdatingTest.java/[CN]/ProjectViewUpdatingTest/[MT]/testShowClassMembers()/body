@@ -1,0 +1,52 @@
+{
+  getProjectTreeStructure().setProviders(new ClassesTreeStructureProvider(myProject),new FormMergerTreeStructureProvider(myProject));
+  final AbstractProjectViewPSIPane pane=myStructure.createPane();
+  final JTree tree=pane.getTree();
+  PlatformTestUtil.assertTreeEqual(tree,"-Project\n" + " +PsiDirectory: showClassMembers\n" + getRootFiles() + " +External Libraries\n");
+  myStructure.setShowMembers(true);
+  PsiJavaFile classFile=(PsiJavaFile)getContentDirectory().findSubdirectory("src").findSubdirectory("com").findSubdirectory("package1").findFile("Class1.java");
+  PsiClass aClass=classFile.getClasses()[0];
+  PsiFile containingFile=aClass.getContainingFile();
+  pane.select(aClass,containingFile.getVirtualFile(),true);
+  PlatformTestUtil.assertTreeEqual(pane.getTree(),"-Project\n" + " -PsiDirectory: showClassMembers\n" + "  -PsiDirectory: src\n"+ "   -PsiDirectory: com\n"+ "    -PsiDirectory: package1\n"+ "     -[Class1]\n"+ "      +InnerClass\n"+ "      getValue():int\n"+ "      myField1:boolean\n"+ "      myField2:boolean\n"+ "     +Class2\n" + getRootFiles() + " +External Libraries\n",true);
+  final Document document=FileDocumentManager.getInstance().getDocument(containingFile.getVirtualFile());
+  final int caretPosition=document.getText().indexOf("public class InnerClass") - 1;
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    public void run(){
+      CommandProcessor.getInstance().executeCommand(myProject,new Runnable(){
+        @Override public void run(){
+          document.insertString(caretPosition,"\n");
+        }
+      }
+,"typing",null);
+    }
+  }
+);
+  PsiDocumentManager.getInstance(myProject).commitDocument(document);
+  PlatformTestUtil.waitForAlarm(600);
+  PlatformTestUtil.assertTreeEqual(pane.getTree(),"-Project\n" + " -PsiDirectory: showClassMembers\n" + "  -PsiDirectory: src\n"+ "   -PsiDirectory: com\n"+ "    -PsiDirectory: package1\n"+ "     -[Class1]\n"+ "      +InnerClass\n"+ "      getValue():int\n"+ "      myField1:boolean\n"+ "      myField2:boolean\n"+ "     +Class2\n" + getRootFiles() + " +External Libraries\n",true);
+  classFile=(PsiJavaFile)getContentDirectory().findSubdirectory("src").findSubdirectory("com").findSubdirectory("package1").findFile("Class1.java");
+  aClass=classFile.getClasses()[0];
+  final PsiField lastField=aClass.getFields()[1];
+  pane.select(lastField,containingFile.getVirtualFile(),true);
+  PlatformTestUtil.assertTreeEqual(pane.getTree(),"-Project\n" + " -PsiDirectory: showClassMembers\n" + "  -PsiDirectory: src\n"+ "   -PsiDirectory: com\n"+ "    -PsiDirectory: package1\n"+ "     -Class1\n"+ "      +InnerClass\n"+ "      getValue():int\n"+ "      myField1:boolean\n"+ "      [myField2:boolean]\n"+ "     +Class2\n" + getRootFiles() + " +External Libraries\n",true);
+  CommandProcessor.getInstance().executeCommand(myProject,new Runnable(){
+    @Override public void run(){
+      ApplicationManager.getApplication().runWriteAction(new Runnable(){
+        @Override public void run(){
+          try {
+            assertEquals("myField2",lastField.getName());
+            lastField.setName("_firstField");
+          }
+ catch (          IncorrectOperationException e) {
+            fail(e.getMessage());
+          }
+        }
+      }
+);
+    }
+  }
+,null,null);
+  PlatformTestUtil.waitForAlarm(600);
+  PlatformTestUtil.assertTreeEqual(pane.getTree(),"-Project\n" + " -PsiDirectory: showClassMembers\n" + "  -PsiDirectory: src\n"+ "   -PsiDirectory: com\n"+ "    -PsiDirectory: package1\n"+ "     -Class1\n"+ "      +InnerClass\n"+ "      getValue():int\n"+ "      [_firstField:boolean]\n"+ "      myField1:boolean\n"+ "     +Class2\n" + getRootFiles() + " +External Libraries\n",true);
+}

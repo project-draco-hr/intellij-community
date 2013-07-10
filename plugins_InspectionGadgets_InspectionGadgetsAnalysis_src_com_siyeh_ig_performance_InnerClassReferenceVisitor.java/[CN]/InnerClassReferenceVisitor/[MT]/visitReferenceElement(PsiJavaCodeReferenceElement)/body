@@ -7,14 +7,46 @@
     return;
   }
   super.visitReferenceElement(reference);
+  final PsiElement qualifier=reference.getQualifier();
+  if (qualifier instanceof PsiSuperExpression) {
+    return;
+  }
+  if (qualifier instanceof PsiReferenceExpression) {
+    final PsiReferenceExpression referenceExpression=(PsiReferenceExpression)qualifier;
+    final PsiElement resolvedExpression=referenceExpression.resolve();
+    if (!(resolvedExpression instanceof PsiField) && !(resolvedExpression instanceof PsiMethod)) {
+      return;
+    }
+  }
   final PsiElement element=reference.resolve();
-  if (!(element instanceof PsiClass)) {
-    return;
+  if (element instanceof PsiMethod || element instanceof PsiField) {
+    final PsiMember member=(PsiMember)element;
+    if (member.hasModifierProperty(PsiModifier.STATIC)) {
+      return;
+    }
+    final PsiClass containingClass=member.getContainingClass();
+    if (innerClass.equals(containingClass)) {
+      return;
+    }
+    if (member.hasModifierProperty(PsiModifier.PRIVATE)) {
+      referencesStaticallyAccessible=false;
+      return;
+    }
+    referencesStaticallyAccessible&=isClassStaticallyAccessible(containingClass);
   }
-  final PsiClass aClass=(PsiClass)element;
-  final PsiElement scope=aClass.getScope();
-  if (!(scope instanceof PsiClass)) {
-    return;
+ else   if (element instanceof PsiLocalVariable || element instanceof PsiParameter) {
+    final PsiElement containingMethod=PsiTreeUtil.getParentOfType(reference,PsiMethod.class);
+    final PsiElement referencedMethod=PsiTreeUtil.getParentOfType(element,PsiMethod.class);
+    if (containingMethod != null && referencedMethod != null && !containingMethod.equals(referencedMethod)) {
+      referencesStaticallyAccessible=false;
+    }
   }
-  referencesStaticallyAccessible&=aClass.hasModifierProperty(PsiModifier.STATIC);
+ else   if ((element instanceof PsiClass)) {
+    final PsiClass aClass=(PsiClass)element;
+    final PsiElement scope=aClass.getScope();
+    if (!(scope instanceof PsiClass)) {
+      return;
+    }
+    referencesStaticallyAccessible&=aClass.hasModifierProperty(PsiModifier.STATIC);
+  }
 }

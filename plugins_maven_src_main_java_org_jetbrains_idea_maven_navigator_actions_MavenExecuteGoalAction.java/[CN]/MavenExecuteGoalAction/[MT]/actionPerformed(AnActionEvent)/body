@@ -1,5 +1,5 @@
 {
-  Project project=e.getRequiredData(PlatformDataKeys.PROJECT);
+  final Project project=e.getRequiredData(PlatformDataKeys.PROJECT);
   ExecuteMavenGoalHistoryService historyService=ExecuteMavenGoalHistoryService.getInstance(project);
   MavenExecuteGoalDialog dialog=new MavenExecuteGoalDialog(project,historyService.getHistory());
   String lastWorkingDirectory=historyService.getWorkDirectory();
@@ -7,10 +7,15 @@
     lastWorkingDirectory=obtainAppropriateWorkingDirectory(project);
   }
   dialog.setWorkDirectory(lastWorkingDirectory);
+  if (historyService.getCanceledCommand() != null) {
+    dialog.setGoals(historyService.getCanceledCommand());
+  }
   dialog.show();
   if (!dialog.isOK()) {
+    historyService.setCanceledCommand(dialog.getGoals());
     return;
   }
+  historyService.setCanceledCommand(null);
   String goals=dialog.getGoals();
   goals=goals.trim();
   if (goals.startsWith("mvn ")) {
@@ -21,7 +26,16 @@
   MavenProjectsManager projectsManager=MavenProjectsManager.getInstance(project);
   File mavenHome=MavenUtil.resolveMavenHomeDirectory(projectsManager.getGeneralSettings().getMavenHome());
   if (mavenHome == null) {
-    throw new RuntimeException();
+    Notification notification=new Notification(MavenUtil.MAVEN_NOTIFICATION_GROUP,"Failed to execute goal",RunnerBundle.message("external.maven.home.no.default.with.fix"),NotificationType.ERROR,new NotificationListener(){
+      @Override public void hyperlinkUpdate(      @NotNull Notification notification,      @NotNull HyperlinkEvent event){
+        if (event.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
+          ShowSettingsUtil.getInstance().showSettingsDialog(project,MavenSettings.DISPLAY_NAME);
+        }
+      }
+    }
+);
+    Notifications.Bus.notify(notification,project);
+    return;
   }
   MavenRunnerParameters parameters=new MavenRunnerParameters(true,workDirectory,Arrays.asList(ParametersList.parse(goals)),null);
   MavenGeneralSettings generalSettings=new MavenGeneralSettings();

@@ -62,7 +62,9 @@
         mv.visitVarInsn(ALOAD,var);
         Label end=new Label();
         mv.visitJumpInsn(IFNONNULL,end);
-        generateThrow(IAE_CLASS_NAME,myMessage == null ? String.format(NULL_ARG_MESSAGE,param - mySyntheticCount,myClassName,name) : myMessage,end);
+        String descrPattern=myMessage != null ? myMessage : NULL_ARG_MESSAGE;
+        String[] args=myMessage != null ? EMPTY_STRING_ARRAY : new String[]{String.valueOf(param - mySyntheticCount),myClassName,name};
+        generateThrow(IAE_CLASS_NAME,end,descrPattern,args);
       }
     }
     @Override public void visitLocalVariable(    String name,    String desc,    String signature,    Label start,    Label end,    int index){
@@ -77,15 +79,26 @@
           mv.visitInsn(DUP);
           final Label skipLabel=new Label();
           mv.visitJumpInsn(IFNONNULL,skipLabel);
-          generateThrow(ISE_CLASS_NAME,myMessage == null ? String.format(NULL_RESULT_MESSAGE,myClassName,name) : myMessage,skipLabel);
+          String descrPattern=myMessage != null ? myMessage : NULL_RESULT_MESSAGE;
+          String[] args=myMessage != null ? EMPTY_STRING_ARRAY : new String[]{myClassName,name};
+          generateThrow(ISE_CLASS_NAME,skipLabel,descrPattern,args);
         }
       }
       mv.visitInsn(opcode);
     }
-    private void generateThrow(    final String exceptionClass,    final String descr,    final Label end){
+    private void generateThrow(    final String exceptionClass,    final Label end,    final String descrPattern,    final String[] args){
       mv.visitTypeInsn(NEW,exceptionClass);
       mv.visitInsn(DUP);
-      mv.visitLdcInsn(descr);
+      mv.visitLdcInsn(descrPattern);
+      mv.visitLdcInsn(args.length);
+      mv.visitTypeInsn(ANEWARRAY,OBJECT_CLASS_NAME);
+      for (int i=0; i < args.length; i++) {
+        mv.visitInsn(DUP);
+        mv.visitLdcInsn(i);
+        mv.visitLdcInsn(args[i]);
+        mv.visitInsn(AASTORE);
+      }
+      mv.visitMethodInsn(INVOKESTATIC,STRING_CLASS_NAME,"format","(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;");
       mv.visitMethodInsn(INVOKESPECIAL,exceptionClass,CONSTRUCTOR_NAME,EXCEPTION_INIT_SIGNATURE);
       mv.visitInsn(ATHROW);
       mv.visitLabel(end);

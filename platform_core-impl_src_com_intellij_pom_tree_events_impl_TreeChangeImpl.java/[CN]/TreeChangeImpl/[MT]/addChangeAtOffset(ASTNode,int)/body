@@ -1,12 +1,35 @@
 {
-  int index=0;
-  for (  Pair<ASTNode,Integer> pair : myOffsets) {
-    if (child == pair.getFirst())     return;
-    if (nodeOffset < pair.getSecond().intValue() || nodeOffset == pair.getSecond().intValue() && isAfter(pair.getFirst(),child)) {
-      myOffsets.add(index,new Pair<ASTNode,Integer>(child,Integer.valueOf(nodeOffset)));
-      return;
+  int optimizedIndex=haveNotCalculated;
+  if (ourEnableAddChangeAtOffsetOptimization && mySortedChanges.size() > 0) {
+    Pair<ASTNode,Integer> pair=mySortedChanges.get(mySortedChanges.size() - 1);
+    if (pair.getFirst() == child.getTreePrev() && pair.getSecond() <= nodeOffset) {
+      optimizedIndex=mySortedChanges.size();
+      if (!ourDoChecks) {
+        mySortedChanges.add(new Pair<ASTNode,Integer>(child,Integer.valueOf(nodeOffset)));
+        return;
+      }
     }
-    index++;
   }
-  myOffsets.add(new Pair<ASTNode,Integer>(child,Integer.valueOf(nodeOffset)));
+  int index=0;
+  try {
+    for (    Pair<ASTNode,Integer> pair : mySortedChanges) {
+      if (child == pair.getFirst())       return;
+      if (nodeOffset < pair.getSecond().intValue() || nodeOffset == pair.getSecond().intValue() && isAfter(pair.getFirst(),child)) {
+        mySortedChanges.add(index,new Pair<ASTNode,Integer>(child,Integer.valueOf(nodeOffset)));
+        return;
+      }
+      index++;
+    }
+    mySortedChanges.add(new Pair<ASTNode,Integer>(child,Integer.valueOf(nodeOffset)));
+  }
+  finally {
+    if (optimizedIndex != haveNotCalculated && index != optimizedIndex) {
+      ASTNode prev=child.getTreePrev();
+      Pair<ASTNode,Integer> pair=mySortedChanges.get(index);
+      ChangeInfo prevChange=myChanges.get(prev);
+      ChangeInfo prevChange2=myChanges.get(pair.getFirst());
+      LOG.error("Failed to calculate optimized index for add change at offset: prev node:" + prev + ", prev change:"+ prevChange+ ",prev change length:"+ (prevChange != null ? prevChange.getOldLength() : null)+ ", prev text length:"+ prev.getTextLength()+ ",prev offset:"+ mySortedChanges.get(mySortedChanges.size() - 1).getSecond()+ ", node:"+ child+ ", nodeOffset:"+ nodeOffset+ ", optimizedIndex:"+ optimizedIndex+ ", real index:"+ index+ ", same node:"+ (pair.getFirst() == child)+ ", at place:"+ pair.getSecond()+ ", node:"+ pair.getFirst()+ ", change:"+ prevChange2+ ", prevChange oldLength:"+ (prevChange2 != null ? prevChange2.getOldLength() : null)+ ", prevchange length2:"+ pair.getFirst().getTextLength()+ ","+ toString());
+      ourEnableAddChangeAtOffsetOptimization=false;
+    }
+  }
 }

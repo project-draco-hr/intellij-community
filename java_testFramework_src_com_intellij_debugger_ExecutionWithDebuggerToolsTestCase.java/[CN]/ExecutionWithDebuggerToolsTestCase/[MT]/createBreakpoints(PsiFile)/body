@@ -1,0 +1,71 @@
+{
+  Runnable runnable=new Runnable(){
+    @Override public void run(){
+      BreakpointManager breakpointManager=DebuggerManagerImpl.getInstanceEx(myProject).getBreakpointManager();
+      Document document=PsiDocumentManager.getInstance(myProject).getDocument(file);
+      int offset=-1;
+      for (; ; ) {
+        offset=document.getText().indexOf("Breakpoint!",offset + 1);
+        if (offset == -1)         break;
+        int commentLine=document.getLineNumber(offset);
+        String comment=document.getText().substring(document.getLineStartOffset(commentLine),document.getLineEndOffset(commentLine));
+        Breakpoint breakpoint;
+        if (comment.indexOf("Method") != -1) {
+          breakpoint=breakpointManager.addMethodBreakpoint(document,commentLine + 1);
+          println("MethodBreakpoint created at " + file.getVirtualFile().getName() + ":"+ (commentLine + 2),ProcessOutputTypes.SYSTEM);
+        }
+ else         if (comment.indexOf("Field") != -1) {
+          breakpoint=breakpointManager.addFieldBreakpoint(document,commentLine + 1,readValue(comment,"Field"));
+          println("FieldBreakpoint created at " + file.getVirtualFile().getName() + ":"+ (commentLine + 2),ProcessOutputTypes.SYSTEM);
+        }
+ else         if (comment.indexOf("Exception") != -1) {
+          breakpoint=breakpointManager.addExceptionBreakpoint(readValue(comment,"Exception"),"");
+          println("ExceptionBreakpoint created at " + file.getVirtualFile().getName() + ":"+ (commentLine + 2),ProcessOutputTypes.SYSTEM);
+        }
+ else {
+          breakpoint=breakpointManager.addLineBreakpoint(document,commentLine + 1);
+          println("LineBreakpoint created at " + file.getVirtualFile().getName() + ":"+ (commentLine + 2),ProcessOutputTypes.SYSTEM);
+        }
+        String suspendPolicy=readValue(comment,"suspendPolicy");
+        if (suspendPolicy != null) {
+          breakpoint.SUSPEND=!DebuggerSettings.SUSPEND_NONE.equals(suspendPolicy);
+          breakpoint.SUSPEND_POLICY=suspendPolicy;
+          println("SUSPEND_POLICY = " + suspendPolicy,ProcessOutputTypes.SYSTEM);
+        }
+        String condition=readValue(comment,"Condition");
+        if (condition != null) {
+          breakpoint.CONDITION_ENABLED=true;
+          breakpoint.setCondition(new TextWithImportsImpl(CodeFragmentKind.EXPRESSION,condition));
+          println("Condition = " + condition,ProcessOutputTypes.SYSTEM);
+        }
+        String passCount=readValue(comment,"Pass count");
+        if (passCount != null) {
+          breakpoint.COUNT_FILTER_ENABLED=true;
+          breakpoint.COUNT_FILTER=Integer.parseInt(passCount);
+          println("Pass count = " + passCount,ProcessOutputTypes.SYSTEM);
+        }
+        String classFilters=readValue(comment,"Class filters");
+        if (classFilters != null) {
+          breakpoint.CLASS_FILTERS_ENABLED=true;
+          StringTokenizer tokenizer=new StringTokenizer(classFilters," ,");
+          ArrayList<ClassFilter> lst=new ArrayList<ClassFilter>();
+          while (tokenizer.hasMoreTokens()) {
+            ClassFilter filter=new ClassFilter();
+            filter.setEnabled(true);
+            filter.setPattern(tokenizer.nextToken());
+            lst.add(filter);
+          }
+          breakpoint.setClassFilters(lst.toArray(new ClassFilter[lst.size()]));
+          println("Class filters = " + classFilters,ProcessOutputTypes.SYSTEM);
+        }
+      }
+    }
+  }
+;
+  if (!SwingUtilities.isEventDispatchThread()) {
+    DebuggerInvocationUtil.invokeAndWait(myProject,runnable,ModalityState.defaultModalityState());
+  }
+ else {
+    runnable.run();
+  }
+}

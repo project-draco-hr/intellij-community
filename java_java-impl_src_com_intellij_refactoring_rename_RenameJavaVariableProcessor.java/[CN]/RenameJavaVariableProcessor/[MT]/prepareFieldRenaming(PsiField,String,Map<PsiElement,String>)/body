@@ -5,7 +5,7 @@
   final String propertyName=manager.variableNameToPropertyName(field.getName(),VariableKind.FIELD);
   String newPropertyName=manager.variableNameToPropertyName(newName,VariableKind.FIELD);
   boolean isStatic=field.hasModifierProperty(PsiModifier.STATIC);
-  PsiMethod getter=PropertyUtil.findPropertyGetter(aClass,propertyName,isStatic,false);
+  PsiMethod[] getters=GetterSetterPrototypeProvider.findGetters(aClass,propertyName,isStatic);
   PsiMethod setter=PropertyUtil.findPropertySetter(aClass,propertyName,isStatic,false);
   boolean shouldRenameSetterParameter=false;
   if (setter != null) {
@@ -13,22 +13,31 @@
     PsiParameter setterParameter=setter.getParameterList().getParameters()[0];
     shouldRenameSetterParameter=parameterName.equals(setterParameter.getName());
   }
-  String newGetterName="";
-  if (getter != null) {
-    String getterId=getter.getName();
-    newGetterName=PropertyUtil.suggestGetterName(newPropertyName,field.getType(),getterId);
-    if (newGetterName.equals(getterId)) {
-      getter=null;
-      newGetterName=null;
-    }
- else {
-      for (      PsiMethod method : getter.findDeepestSuperMethods()) {
-        if (method instanceof PsiCompiledElement) {
-          getter=null;
-          break;
-        }
+  if (getters != null) {
+    List<PsiMethod> validGetters=new ArrayList<PsiMethod>();
+    for (    PsiMethod getter : getters) {
+      String newGetterName=GetterSetterPrototypeProvider.suggestNewGetterName(propertyName,newPropertyName,getter);
+      String getterId=null;
+      if (newGetterName == null) {
+        getterId=getter.getName();
+        newGetterName=PropertyUtil.suggestGetterName(newPropertyName,field.getType(),getterId);
       }
+      if (newGetterName.equals(getterId)) {
+        continue;
+      }
+ else {
+        boolean valid=true;
+        for (        PsiMethod method : getter.findDeepestSuperMethods()) {
+          if (method instanceof PsiCompiledElement) {
+            valid=false;
+            break;
+          }
+        }
+        if (!valid)         continue;
+      }
+      validGetters.add(getter);
     }
+    getters=validGetters.isEmpty() ? null : validGetters.toArray(new PsiMethod[validGetters.size()]);
   }
   String newSetterName="";
   if (setter != null) {
@@ -52,13 +61,19 @@
       }
     }
   }
-  if ((getter != null || setter != null) && askToRenameAccesors(getter,setter,newName,project)) {
-    getter=null;
+  if ((getters != null || setter != null) && askToRenameAccesors(getters != null ? getters[0] : null,setter,newName,project)) {
+    getters=null;
     setter=null;
     shouldRenameSetterParameter=false;
   }
-  if (getter != null) {
-    addOverriddenAndImplemented(getter,newGetterName,allRenames);
+  if (getters != null) {
+    for (    PsiMethod getter : getters) {
+      String newGetterName=GetterSetterPrototypeProvider.suggestNewGetterName(propertyName,newPropertyName,getter);
+      if (newGetterName == null) {
+        newGetterName=PropertyUtil.suggestGetterName(newPropertyName,field.getType(),getter.getName());
+      }
+      addOverriddenAndImplemented(getter,newGetterName,allRenames);
+    }
   }
   if (setter != null) {
     addOverriddenAndImplemented(setter,newSetterName,allRenames);

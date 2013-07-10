@@ -1,17 +1,17 @@
 {
   final Project project=PlatformDataKeys.PROJECT.getData(dataContext);
-  final PrinterJob printerJob=PrinterJob.getPrinterJob();
-  final PsiDirectory[] psiDirectory=new PsiDirectory[1];
+  if (project == null)   return;
+  PsiDirectory[] psiDirectory=new PsiDirectory[1];
   PsiElement psiElement=LangDataKeys.PSI_ELEMENT.getData(dataContext);
   if (psiElement instanceof PsiDirectory) {
     psiDirectory[0]=(PsiDirectory)psiElement;
   }
-  final PsiFile psiFile=LangDataKeys.PSI_FILE.getData(dataContext);
-  final String[] shortFileName=new String[1];
-  final String[] directoryName=new String[1];
+  PsiFile psiFile=LangDataKeys.PSI_FILE.getData(dataContext);
+  String[] shortFileName=new String[1];
+  String[] directoryName=new String[1];
   if (psiFile != null || psiDirectory[0] != null) {
     if (psiFile != null) {
-      shortFileName[0]=psiFile.getVirtualFile().getName();
+      shortFileName[0]=psiFile.getName();
       if (psiDirectory[0] == null) {
         psiDirectory[0]=psiFile.getContainingDirectory();
       }
@@ -38,8 +38,8 @@
   }
   printDialog.apply();
   final PageFormat pageFormat=createPageFormat();
+  final BasePainter painter;
   PrintSettings printSettings=PrintSettings.getInstance();
-  Printable painter;
   if (printSettings.getPrintScope() != PrintSettings.PRINT_DIRECTORY) {
     if (psiFile == null && editor == null)     return;
     TextPainter textPainter=psiFile != null ? initTextPainter(psiFile,editor) : initTextPainter((DocumentEx)editor.getDocument(),project);
@@ -56,7 +56,6 @@
     addToPsiFileList(psiDirectory[0],filesList,isRecursive);
     painter=new MultiFilePainter(filesList);
   }
-  final Printable painter0=painter;
   Pageable document=new Pageable(){
     @Override public int getNumberOfPages(){
       return Pageable.UNKNOWN_NUMBER_OF_PAGES;
@@ -65,10 +64,11 @@
       return pageFormat;
     }
     @Override public Printable getPrintable(    int pageIndex) throws IndexOutOfBoundsException {
-      return painter0;
+      return painter;
     }
   }
 ;
+  final PrinterJob printerJob=PrinterJob.getPrinterJob();
   try {
     printerJob.setPageable(document);
     printerJob.setPrintable(painter,pageFormat);
@@ -77,31 +77,22 @@
     }
   }
  catch (  Exception e) {
+    LOG.warn(e);
   }
   PsiDocumentManager.getInstance(project).commitAllDocuments();
   ProgressManager.getInstance().run(new Task.Backgroundable(project,CodeEditorBundle.message("print.progress"),true,PerformInBackgroundOption.ALWAYS_BACKGROUND){
     @Override public void run(    @NotNull ProgressIndicator indicator){
       try {
-        ProgressIndicator progress=ProgressManager.getInstance().getProgressIndicator();
-        if (painter0 instanceof MultiFilePainter) {
-          ((MultiFilePainter)painter0).setProgress(progress);
-        }
- else {
-          ((TextPainter)painter0).setProgress(progress);
-        }
+        painter.setProgress(indicator);
         printerJob.print();
       }
- catch (      final PrinterException e) {
-        SwingUtilities.invokeLater(new Runnable(){
-          @Override public void run(){
-            Messages.showErrorDialog(project,e.getMessage(),CommonBundle.getErrorTitle());
-          }
-        }
-);
-        LOG.info(e);
-      }
-catch (      ProcessCanceledException e) {
+ catch (      ProcessCanceledException e) {
+        LOG.info("Cancelled");
         printerJob.cancel();
+      }
+catch (      Exception e) {
+        Notifications.Bus.notify(new Notification("Print",CommonBundle.getErrorTitle(),e.getMessage(),NotificationType.ERROR));
+        LOG.warn(e);
       }
     }
   }

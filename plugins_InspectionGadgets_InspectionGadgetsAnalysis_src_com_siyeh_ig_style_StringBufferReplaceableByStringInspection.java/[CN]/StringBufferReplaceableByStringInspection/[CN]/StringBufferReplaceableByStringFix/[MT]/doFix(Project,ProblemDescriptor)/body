@@ -3,8 +3,7 @@
   final PsiElement parent=element.getParent();
   if (!(parent instanceof PsiVariable)) {
     if (parent instanceof PsiNewExpression) {
-      final PsiNewExpression newExpression=(PsiNewExpression)parent;
-      final PsiExpression stringBuilderExpression=getCompleteExpression(newExpression);
+      final PsiExpression stringBuilderExpression=getCompleteExpression(parent);
       final StringBuilder stringExpression=buildStringExpression(stringBuilderExpression,new StringBuilder());
       if (stringExpression != null && stringBuilderExpression != null) {
         replaceExpression(stringBuilderExpression,stringExpression.toString());
@@ -21,12 +20,45 @@
   if (initializer == null) {
     return;
   }
-  final StringBuilder stringExpression=buildStringExpression(initializer,new StringBuilder());
-  if (stringExpression == null) {
+  final StringBuilder stringExpression;
+  if (isAppendCall(initializer)) {
+    stringExpression=buildStringExpression(initializer,new StringBuilder());
+    if (stringExpression == null) {
+      return;
+    }
+  }
+ else   if (initializer instanceof PsiNewExpression) {
+    final PsiNewExpression newExpression=(PsiNewExpression)initializer;
+    final PsiExpressionList argumentList=newExpression.getArgumentList();
+    if (argumentList == null) {
+      return;
+    }
+    final PsiExpression[] arguments=argumentList.getExpressions();
+    if (arguments.length == 0 || PsiType.INT.equals(arguments[0].getType())) {
+      stringExpression=new StringBuilder();
+    }
+ else {
+      stringExpression=new StringBuilder(arguments[0].getText());
+    }
+  }
+ else {
     return;
   }
-  final PsiClassType javaLangString=TypeUtils.getStringType(variable);
-  final PsiTypeElement typeElement=JavaPsiFacade.getElementFactory(project).createTypeElement(javaLangString);
-  replaceExpression(initializer,stringExpression.toString());
-  originalTypeElement.replace(typeElement);
+  final PsiCodeBlock codeBlock=PsiTreeUtil.getParentOfType(variable,PsiCodeBlock.class);
+  if (codeBlock == null) {
+    return;
+  }
+  final StringBuildingVisitor visitor=new StringBuildingVisitor(variable,stringExpression);
+  codeBlock.accept(visitor);
+  if (visitor.hadProblem()) {
+    return;
+  }
+  final List<PsiMethodCallExpression> expressions=visitor.getExpressions();
+  variable.delete();
+  for (int i=0, size=expressions.size() - 1; i < size; i++) {
+    final PsiMethodCallExpression expression=expressions.get(i);
+    expression.getParent().delete();
+  }
+  final PsiMethodCallExpression lastExpression=expressions.get(expressions.size() - 1);
+  replaceExpression(lastExpression,stringExpression.toString());
 }
