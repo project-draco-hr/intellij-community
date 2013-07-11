@@ -1,0 +1,60 @@
+{
+  if (tokens.isEmpty()) {
+    return null;
+  }
+  final Token<PyElementType> firstToken=tokens.get(0);
+  final String firstText=firstToken.getText().toString();
+  final TextRange firstRange=firstToken.getRange();
+  PyType type=null;
+  PsiElement resolved=file.getElementNamed(firstText);
+  if (resolved != null) {
+    if (resolved instanceof PyTypedElement) {
+      type=context.getType((PyTypedElement)resolved);
+      if (type != null) {
+        tokens.remove(0);
+        if (type instanceof PyClassLikeType) {
+          type=((PyClassLikeType)type).toInstance();
+        }
+        types.put(firstRange,type);
+        fullRanges.put(type,firstRange);
+        for (        PyFromImportStatement fromImportStatement : file.getFromImports()) {
+          for (          PyImportElement importElement : fromImportStatement.getImportElements()) {
+            if (firstText.equals(importElement.getVisibleName())) {
+              imports.put(type,importElement);
+            }
+          }
+        }
+        for (        PyImportElement importElement : file.getImportTargets()) {
+          if (firstText.equals(importElement.getVisibleName())) {
+            imports.put(type,importElement);
+          }
+        }
+      }
+    }
+  }
+ else {
+    PyQualifiedName qName=null;
+    while (!tokens.isEmpty()) {
+      final Token<PyElementType> token=tokens.get(0);
+      final String name=token.getText().toString();
+      qName=qName != null ? qName.append(name) : PyQualifiedName.fromComponents(name);
+      PsiElement module=new QualifiedNameResolverImpl(qName).fromElement(myAnchor).firstResult();
+      if (module == null) {
+        break;
+      }
+      if (module instanceof PsiDirectory) {
+        module=PyUtil.getPackageElement((PsiDirectory)module);
+      }
+      if (module instanceof PyTypedElement) {
+        final PyType moduleType=context.getType((PyTypedElement)module);
+        if (moduleType != null) {
+          type=moduleType;
+          types.put(token.getRange(),type);
+          fullRanges.put(type,TextRange.create(firstRange.getStartOffset(),token.getRange().getEndOffset()));
+        }
+      }
+      tokens.remove(0);
+    }
+  }
+  return type;
+}
