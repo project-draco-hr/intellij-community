@@ -1,0 +1,84 @@
+{
+  final Map<String,String> libs=new HashMap<String,String>();
+  final Runnable runnable=new Runnable(){
+    public void run(){
+      try {
+        final DOMParser parser=new DOMParser();
+        parser.parse(CLASS_ROOT_URL + fqn.replace('.','/') + CLASS_PAGE_EXT);
+        final Document doc=parser.getDocument();
+        if (doc != null) {
+          final NodeList links=doc.getElementsByTagName(LINK_TAG_NAME);
+          for (int i=0; i < links.getLength(); i++) {
+            final Node link=links.item(i);
+            final String libName=link.getTextContent();
+            final NamedNodeMap attributes=link.getAttributes();
+            if (attributes != null) {
+              final Node href=attributes.getNamedItem(LINK_ATTR_NAME);
+              if (href != null) {
+                final String pathToJar=href.getTextContent();
+                if (pathToJar != null && (pathToJar.startsWith("/jar/") || pathToJar.startsWith("/class/../"))) {
+                  libs.put(libName,SERVICE_URL + pathToJar);
+                }
+              }
+            }
+          }
+        }
+      }
+ catch (      IOException ignore) {
+      }
+catch (      SAXException e) {
+      }
+    }
+  }
+;
+  final Task.Modal task=new Task.Modal(editor.getProject(),"Looking for libraries",true){
+    @Override public void run(    @NotNull ProgressIndicator indicator){
+      indicator.setIndeterminate(true);
+      runnable.run();
+    }
+    @Override public void onSuccess(){
+      super.onSuccess();
+      if (libs.isEmpty()) {
+        HintManager.getInstance().showInformationHint(editor,"No libraries found for '" + fqn + "'");
+      }
+ else {
+        final ArrayList<String> variants=new ArrayList<String>(libs.keySet());
+        Collections.sort(variants,new Comparator<String>(){
+          @Override public int compare(          String o1,          String o2){
+            return o1.compareTo(o2);
+          }
+        }
+);
+        final JBList libNames=new JBList(variants);
+        libNames.installCellRenderer(new NotNullFunction<Object,JComponent>(){
+          @NotNull @Override public JComponent fun(          Object o){
+            return new JLabel(o.toString(),PlatformIcons.JAR_ICON,SwingConstants.LEFT);
+          }
+        }
+);
+        if (libs.size() == 1) {
+          final String jarName=libs.keySet().iterator().next();
+          final String url=libs.get(jarName);
+          initiateDownload(url,jarName);
+        }
+ else {
+          JBPopupFactory.getInstance().createListPopupBuilder(libNames).setTitle("Select a jar file").setItemChoosenCallback(new Runnable(){
+            @Override public void run(){
+              final Object value=libNames.getSelectedValue();
+              if (value instanceof String) {
+                final String jarName=(String)value;
+                final String url=libs.get(jarName);
+                if (url != null) {
+                  initiateDownload(url,jarName);
+                }
+              }
+            }
+          }
+).createPopup().showInBestPositionFor(editor);
+        }
+      }
+    }
+  }
+;
+  ProgressManager.getInstance().run(task);
+}
