@@ -1,0 +1,87 @@
+{
+  int unreachableParametersCount=0;
+  int notMatchedStringVars=0;
+  boolean hasCallingVariableInContext=false;
+  final PsiParameterList parameterList=method.getParameterList();
+  final TIntObjectHashMap<SubLookupElement> parametersMap=new TIntObjectHashMap<SubLookupElement>(parameterList.getParametersCount());
+  final PsiParameter[] parameters=parameterList.getParameters();
+  for (int i=0; i < parameters.length; i++) {
+    final PsiParameter parameter=parameters[i];
+    final String typeQName=parameter.getType().getCanonicalText();
+    if (typeQName != null) {
+      if (JAVA_LANG_STRING.equals(typeQName)) {
+        final PsiVariable relevantStringVar=context.findRelevantStringInContext(parameter.getName());
+        if (relevantStringVar == null) {
+          notMatchedStringVars++;
+        }
+ else {
+          parametersMap.put(i,new VariableSubLookupElement(relevantStringVar));
+        }
+      }
+ else       if (!ChainCompletionStringUtil.isPrimitiveOrArrayOfPrimitives(typeQName)) {
+        final Collection<PsiVariable> contextVariables=context.getVariables(typeQName);
+        final PsiVariable contextVariable=ContainerUtil.getFirstItem(contextVariables,null);
+        if (contextVariable != null) {
+          if (contextVariables.size() == 1)           parametersMap.put(i,new VariableSubLookupElement(contextVariable));
+          continue;
+        }
+        final Collection<ContextRelevantVariableGetter> relevantVariablesGetters=context.getRelevantVariablesGetters(typeQName);
+        final ContextRelevantVariableGetter contextVariableGetter=ContainerUtil.getFirstItem(relevantVariablesGetters,null);
+        if (contextVariableGetter != null) {
+          if (relevantVariablesGetters.size() == 1)           parametersMap.put(i,contextVariableGetter.createSubLookupElement());
+          continue;
+        }
+        final Collection<PsiMethod> containingClassMethods=context.getContainingClassMethods(typeQName);
+        final PsiMethod contextRelevantGetter=ContainerUtil.getFirstItem(containingClassMethods,null);
+        if (contextRelevantGetter != null) {
+          if (containingClassMethods.size() == 1)           parametersMap.put(i,new GetterLookupSubLookupElement(method.getName()));
+          continue;
+        }
+        final ContextRelevantStaticMethod contextRelevantStaticMethod=ContainerUtil.getFirstItem(context.getRelevantStaticMethods(typeQName,weight),null);
+        if (contextRelevantStaticMethod != null) {
+          continue;
+        }
+        if (!nullableNotNullManager.isNullable(parameter,true)) {
+          unreachableParametersCount++;
+        }
+      }
+    }
+  }
+  final LookupElement lookupElement;
+  if (isHeadMethod) {
+    if (method.hasModifierProperty(PsiModifier.STATIC)) {
+      lookupElement=createLookupElement(method,parametersMap);
+    }
+ else     if (method.isConstructor()) {
+      return null;
+    }
+ else {
+      final PsiClass containingClass=method.getContainingClass();
+      final String classQName=containingClass.getQualifiedName();
+      if (classQName == null)       return null;
+      final Object e=ContainerUtil.getFirstItem(context.getContextRefElements(classQName),null);
+      if (e != null) {
+        final LookupElement firstChainElement;
+        if (e instanceof PsiVariable) {
+          hasCallingVariableInContext=true;
+          firstChainElement=new VariableLookupItem((PsiVariable)e);
+        }
+ else         if (e instanceof PsiMethod) {
+          firstChainElement=createLookupElement((PsiMethod)e,null);
+        }
+ else         if (e instanceof LookupElement) {
+          firstChainElement=(LookupElement)e;
+        }
+ else {
+          throw new AssertionError();
+        }
+        lookupElement=new JavaChainLookupElement(firstChainElement,createLookupElement(method,parametersMap));
+      }
+ else       lookupElement=context.getContainingClassQNames().contains(classQName) ? createLookupElement(method,parametersMap) : new JavaChainLookupElement(ChainCompletionNewVariableLookupElement.create(containingClass),createLookupElement(method,parametersMap));
+    }
+  }
+ else {
+    lookupElement=createLookupElement(method,parametersMap);
+  }
+  return new MethodProcResult(lookupElement,unreachableParametersCount,notMatchedStringVars,hasCallingVariableInContext);
+}

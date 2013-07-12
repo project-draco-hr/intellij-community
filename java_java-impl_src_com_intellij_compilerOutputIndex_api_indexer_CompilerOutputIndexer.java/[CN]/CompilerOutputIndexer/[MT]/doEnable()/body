@@ -1,0 +1,56 @@
+{
+  if (!myInitialized) {
+    myIndexes=Extensions.getExtensions(CompilerOutputBaseIndex.EXTENSION_POINT_NAME,myProject);
+    myIndexTypeQNameToIndex=new HashMap<String,CompilerOutputBaseIndex>();
+    boolean needReindex=false;
+    for (    final CompilerOutputBaseIndex index : myIndexes) {
+      if (index.init(myProject)) {
+        needReindex=true;
+      }
+      myIndexTypeQNameToIndex.put(index.getClass().getCanonicalName(),index);
+    }
+    initTimestampIndex(needReindex);
+    try {
+      myFileEnumerator=new PersistentEnumeratorDelegate<String>(IndexInfrastructure.getStorageFile(CompilerOutputIndexUtil.generateIndexId("compilerOutputIndexFileId.enum",myProject)),new EnumeratorStringDescriptor(),2048);
+    }
+ catch (    IOException e) {
+      throw new RuntimeException(e);
+    }
+    CompilerManager.getInstance(myProject).addAfterTask(new CompileTask(){
+      @Override public boolean execute(      final CompileContext context){
+        if (myEnabled.get() && myInProgress.compareAndSet(false,true)) {
+          myLock.lock();
+          try {
+            context.getProgressIndicator().setText("Compiler output indexing in progress");
+            for (            final Module module : context.getCompileScope().getAffectedModules()) {
+              CompilerOutputFilesUtil.iterateModuleClassFiles(module,new Consumer<File>(){
+                @Override public void consume(                final File file){
+                  try {
+                    doIndexing(file,context.getProgressIndicator());
+                  }
+ catch (                  ProcessCanceledException e0) {
+                    throw e0;
+                  }
+catch (                  RuntimeException e) {
+                    LOG.error(e);
+                  }
+                }
+              }
+);
+            }
+          }
+  finally {
+            myLock.unlock();
+            myInProgress.set(false);
+          }
+        }
+        return true;
+      }
+    }
+);
+    if (needReindex) {
+      reindexAllProjectInBackground();
+    }
+    myInitialized=true;
+  }
+}

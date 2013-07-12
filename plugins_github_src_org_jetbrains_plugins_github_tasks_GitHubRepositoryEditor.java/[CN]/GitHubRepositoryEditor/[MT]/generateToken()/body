@@ -1,0 +1,32 @@
+{
+  final Ref<String> tokenRef=new Ref<String>();
+  final Ref<IOException> exceptionRef=new Ref<IOException>();
+  final Collection<String> scopes=myPrivateRepo.isSelected() ? Collections.<String>singleton("repo") : Collections.<String>emptyList();
+  ProgressManager.getInstance().run(new Task.Modal(myProject,"Access to GitHub",true){
+    public void run(    @NotNull ProgressIndicator indicator){
+      try {
+        tokenRef.set(GithubUtil.runWithValidAuth(myProject,indicator,new ThrowableConvertor<GithubAuthData,String,IOException>(){
+          @Nullable @Override public String convert(          GithubAuthData auth) throws IOException {
+            return GithubUtil.getScopedToken(auth,scopes,"Intellij tasks plugin");
+          }
+        }
+));
+      }
+ catch (      IOException e) {
+        exceptionRef.set(e);
+      }
+    }
+  }
+);
+  if (!exceptionRef.isNull()) {
+    if (exceptionRef.get() instanceof AuthenticationException) {
+      GithubNotifications.showWarningDialog(myProject,"Can't get access token","You need to provide basic authentication");
+      return;
+    }
+    GithubNotifications.showErrorDialog(myProject,"Can't get access token",exceptionRef.get().getMessage());
+    return;
+  }
+  if (!tokenRef.isNull()) {
+    myToken.setText(tokenRef.get());
+  }
+}
