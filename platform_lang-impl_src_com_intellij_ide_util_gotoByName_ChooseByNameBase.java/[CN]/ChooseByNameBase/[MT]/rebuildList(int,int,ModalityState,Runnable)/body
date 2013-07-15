@@ -4,60 +4,53 @@
   myAlarm.cancelAllRequests();
   myListUpdater.cancelAll();
   cancelCalcElementsThread();
-  ApplicationManager.getApplication().invokeLater(new Runnable(){
+  final String text=myTextField.getText();
+  if (!canShowListForEmptyPattern() && (text == null || text.trim().isEmpty())) {
+    myListModel.clear();
+    hideList();
+    myTextFieldPanel.hideHint();
+    myCard.show(myCardContainer,CHECK_BOX_CARD);
+    return;
+  }
+  ListCellRenderer cellRenderer=myList.getCellRenderer();
+  if (cellRenderer instanceof ExpandedItemListCellRendererWrapper) {
+    cellRenderer=((ExpandedItemListCellRendererWrapper)cellRenderer).getWrappee();
+  }
+  if (cellRenderer instanceof MatcherHolder) {
+    final String pattern=transformPattern(text);
+    final Matcher matcher=buildPatternMatcher(isSearchInAnyPlace() ? "*" + pattern : pattern);
+    ((MatcherHolder)cellRenderer).setPatternMatcher(matcher);
+  }
+  final Runnable request=new Runnable(){
     @Override public void run(){
-      final String text=myTextField.getText();
-      if (!canShowListForEmptyPattern() && (text == null || text.trim().isEmpty())) {
-        myListModel.clear();
-        hideList();
-        if (myTextFieldPanel != null)         myTextFieldPanel.hideHint();
-        myCard.show(myCardContainer,CHECK_BOX_CARD);
-        return;
-      }
-      final Runnable request=new Runnable(){
-        @Override public void run(){
-          final Consumer<Set<?>> callback=new Consumer<Set<?>>(){
-            @Override public void consume(            Set<?> elements){
+      scheduleCalcElements(text,myCheckBox.isSelected(),postRunnable == null,modalityState,new Consumer<Set<?>>(){
+        @Override public void consume(        Set<?> elements){
 synchronized (myRebuildMutex) {
-                ApplicationManager.getApplication().assertIsDispatchThread();
-                if (checkDisposed()) {
-                  return;
-                }
-                myListIsUpToDate=true;
-                setElementsToList(pos,elements);
-                myList.repaint();
-                chosenElementMightChange();
-                if (elements.isEmpty() && myTextFieldPanel != null) {
-                  myTextFieldPanel.hideHint();
-                }
-                if (postRunnable != null) {
-                  postRunnable.run();
-                }
-              }
+            ApplicationManager.getApplication().assertIsDispatchThread();
+            if (checkDisposed()) {
+              return;
+            }
+            myListIsUpToDate=true;
+            setElementsToList(pos,elements);
+            myList.repaint();
+            chosenElementMightChange();
+            if (elements.isEmpty()) {
+              myTextFieldPanel.hideHint();
+            }
+            if (postRunnable != null) {
+              postRunnable.run();
             }
           }
-;
-          cancelCalcElementsThread();
-          ListCellRenderer cellRenderer=myList.getCellRenderer();
-          if (cellRenderer instanceof ExpandedItemListCellRendererWrapper) {
-            cellRenderer=((ExpandedItemListCellRendererWrapper)cellRenderer).getWrappee();
-          }
-          if (cellRenderer instanceof MatcherHolder) {
-            final String pattern=transformPattern(text);
-            final Matcher matcher=buildPatternMatcher(isSearchInAnyPlace() ? "*" + pattern + "*" : pattern);
-            ((MatcherHolder)cellRenderer).setPatternMatcher(matcher);
-          }
-          scheduleCalcElements(text,myCheckBox.isSelected(),postRunnable == null,modalityState,callback);
         }
       }
-;
-      if (delay > 0) {
-        myAlarm.addRequest(request,delay,ModalityState.stateForComponent(myTextField));
-      }
- else {
-        request.run();
-      }
+);
     }
   }
-,modalityState);
+;
+  if (delay > 0) {
+    myAlarm.addRequest(request,delay,ModalityState.stateForComponent(myTextField));
+  }
+ else {
+    request.run();
+  }
 }
