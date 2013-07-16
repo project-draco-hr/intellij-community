@@ -1,34 +1,29 @@
 {
   showCard(SEARCHING_CARD,200);
   final Set<Object> elements=new LinkedHashSet<Object>();
-  final Runnable action=new Runnable(){
-    @Override public void run(){
-      try {
-        boolean everywhere=myCheckboxState;
-        ensureNamesLoaded(everywhere);
-        addElementsByPattern(myPattern,elements,myCancelled,everywhere);
-        for (        Object elem : elements) {
-          if (myCancelled.isCanceled()) {
-            break;
+  Runnable calculation=new Runnable(){
+    public void run(){
+      ProgressManager.getInstance().runProcess(new Runnable(){
+        @Override public void run(){
+          ApplicationManager.getApplication().runReadAction(new Runnable(){
+            @Override public void run(){
+              try {
+                boolean everywhere=myCheckboxState;
+                ensureNamesLoaded(everywhere);
+                addElementsByPattern(myPattern,elements,myCancelled,everywhere);
+              }
+ catch (              ProcessCanceledException e) {
+              }
+            }
           }
-          if (elem instanceof PsiElement) {
-            final PsiElement psiElement=(PsiElement)elem;
-            psiElement.isWritable();
-          }
+);
         }
       }
- catch (      ProcessCanceledException e) {
-      }
+,myCancelled);
     }
   }
 ;
-  Runnable readAction=new Runnable(){
-    @Override public void run(){
-      ApplicationManager.getApplication().runReadAction(action);
-    }
-  }
-;
-  ProgressManager.getInstance().runProcess(readAction,myCancelled);
+  calculation.run();
   if (myCancelled.isCanceled()) {
     myShowCardAlarm.cancelAllRequests();
     return;
@@ -36,17 +31,19 @@
   final String cardToShow;
   if (elements.isEmpty() && !myCheckboxState) {
     myCheckboxState=true;
-    ProgressManager.getInstance().runProcess(readAction,myCancelled);
+    calculation.run();
     cardToShow=elements.isEmpty() ? NOT_FOUND_CARD : NOT_FOUND_IN_PROJECT_CARD;
   }
  else {
     cardToShow=elements.isEmpty() ? NOT_FOUND_CARD : CHECK_BOX_CARD;
   }
   showCard(cardToShow,0);
-  myElements=filter(elements);
+  final Set<Object> filtered=filter(elements);
   ApplicationManager.getApplication().invokeLater(new Runnable(){
     @Override public void run(){
-      myCallback.consume(myElements);
+      if (!myCancelled.isCanceled()) {
+        myCallback.consume(filtered);
+      }
     }
   }
 ,myModalityState);
