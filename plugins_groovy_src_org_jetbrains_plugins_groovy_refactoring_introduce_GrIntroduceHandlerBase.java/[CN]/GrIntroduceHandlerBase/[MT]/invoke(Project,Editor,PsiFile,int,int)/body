@@ -27,20 +27,56 @@
       return false;
     }
     checkOccurrences(context.getOccurrences());
-    final Settings settings=showDialog(context);
-    if (settings == null)     return false;
-    CommandProcessor.getInstance().executeCommand(context.getProject(),new Runnable(){
-      public void run(){
-        AccessToken accessToken=WriteAction.start();
-        try {
-          runRefactoring(context,settings);
+    final boolean isInplace=isInplace(context);
+    Pass<OccurrencesChooser.ReplaceChoice> callback=new Pass<OccurrencesChooser.ReplaceChoice>(){
+      @Override public void pass(      OccurrencesChooser.ReplaceChoice choice){
+        final Settings settings=isInplace ? getSettingsForInplace(context,choice) : showDialog(context);
+        if (settings == null)         return;
+        CommandProcessor.getInstance().executeCommand(context.getProject(),new Runnable(){
+          public void run(){
+            List<RangeMarker> occurrences=ContainerUtil.newArrayList();
+            Document document=editor.getDocument();
+            for (            PsiElement element : context.getOccurrences()) {
+              occurrences.add(document.createRangeMarker(element.getTextRange()));
+            }
+            GrVariable var=ApplicationManager.getApplication().runWriteAction(new Computable<GrVariable>(){
+              @Override public GrVariable compute(){
+                return runRefactoring(context,settings);
+              }
+            }
+);
+            if (isInplace && var != null) {
+              editor.getCaretModel().moveToOffset(var.getTextOffset());
+              InplaceVariableIntroducer<PsiElement> introducer=getIntroducer(var,context,occurrences);
+              PsiDocumentManager.getInstance(project).doPostponedOperationsAndUnblockDocument(context.getEditor().getDocument());
+              introducer.performInplaceRefactoring(getDialog(context).suggestNames());
+            }
+          }
         }
-  finally {
-          accessToken.finish();
-        }
+,getRefactoringName(),null);
       }
     }
-,getRefactoringName(),null);
+;
+    if (isInplace(context)) {
+      Map<OccurrencesChooser.ReplaceChoice,List<Object>> occurrencesMap=fillChoice(context);
+      new OccurrencesChooser<Object>(editor){
+        @Override protected TextRange getOccurrenceRange(        Object occurrence){
+          if (occurrence instanceof PsiElement) {
+            return ((PsiElement)occurrence).getTextRange();
+          }
+ else           if (occurrence instanceof StringPartInfo) {
+            return ((StringPartInfo)occurrence).getRange();
+          }
+ else {
+            return null;
+          }
+        }
+      }
+.showChooser(callback,occurrencesMap);
+    }
+ else {
+      callback.pass(null);
+    }
     return true;
   }
  catch (  GrRefactoringError e) {
