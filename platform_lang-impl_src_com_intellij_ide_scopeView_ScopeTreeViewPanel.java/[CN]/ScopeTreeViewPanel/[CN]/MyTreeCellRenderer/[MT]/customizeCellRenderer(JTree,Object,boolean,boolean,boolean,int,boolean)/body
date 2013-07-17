@@ -13,6 +13,30 @@
     }
     final PsiElement psiElement=node.getPsiElement();
     textAttributes.setForegroundColor(CopyPasteManager.getInstance().isCutElement(psiElement) ? CopyPasteManager.CUT_COLOR : node.getColor());
+    if (getCurrentScope() != DefaultScopesProvider.getInstance(myProject).getProblemsScope()) {
+      final PsiFile containingFile=psiElement != null ? psiElement.getContainingFile() : null;
+      final VirtualFile virtualFile=PsiUtilCore.getVirtualFile(psiElement);
+      boolean isProblem;
+      if (containingFile != null) {
+        isProblem=myWolfTheProblemSolver.isProblemFile(virtualFile);
+      }
+ else       if (virtualFile != null) {
+        isProblem=myWolfTheProblemSolver.hasProblemFilesBeneath(new Condition<VirtualFile>(){
+          @Override public boolean value(          VirtualFile file){
+            return VfsUtilCore.isAncestor(virtualFile,file,false);
+          }
+        }
+);
+      }
+ else {
+        final Module module=node instanceof ModuleNode ? ((ModuleNode)node).getModule() : null;
+        isProblem=module != null && myWolfTheProblemSolver.hasProblemFilesBeneath(module);
+      }
+      if (isProblem) {
+        textAttributes.setEffectColor(JBColor.RED);
+        textAttributes.setEffectType(EffectType.WAVE_UNDERSCORE);
+      }
+    }
     append(node.toString(),SimpleTextAttributes.fromTextAttributes(textAttributes));
     String oldToString=toString();
     if (!myProject.isDisposed()) {
