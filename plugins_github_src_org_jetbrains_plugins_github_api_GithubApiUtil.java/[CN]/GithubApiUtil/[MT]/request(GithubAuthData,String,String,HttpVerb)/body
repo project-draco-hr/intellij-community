@@ -2,12 +2,11 @@
   HttpMethod method=null;
   try {
     method=doREST(auth,path,requestBody,verb);
+    checkStatusCode(method);
     String resp=method.getResponseBodyAsString();
     if (resp == null) {
-      LOG.info("Unexpectedly empty response");
       return null;
     }
-    checkStatusCode(method);
     JsonElement ret=parseResponse(resp);
     Header header=method.getResponseHeader("Link");
     if (header != null) {
@@ -18,11 +17,12 @@
         String newPath=GithubUrlUtil.removeProtocolPrefix(value.substring(begin + 1,end));
         int index=newPath.indexOf('/');
         JsonElement next=request(auth,newPath.substring(index),requestBody,verb);
-        if (next != null) {
-          JsonArray merged=ret.getAsJsonArray();
-          merged.addAll(next.getAsJsonArray());
-          return merged;
+        if (next == null) {
+          throw new NoHttpResponseException("Unexpected empty response");
         }
+        JsonArray merged=ret.getAsJsonArray();
+        merged.addAll(next.getAsJsonArray());
+        return merged;
       }
     }
     return ret;
