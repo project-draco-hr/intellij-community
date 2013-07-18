@@ -29,7 +29,7 @@
     checkOccurrences(context.getOccurrences());
     final boolean isInplace=isInplace(context);
     Pass<OccurrencesChooser.ReplaceChoice> callback=new Pass<OccurrencesChooser.ReplaceChoice>(){
-      @Override public void pass(      OccurrencesChooser.ReplaceChoice choice){
+      @Override public void pass(      final OccurrencesChooser.ReplaceChoice choice){
         final Settings settings=isInplace ? getSettingsForInplace(context,choice) : showDialog(context);
         if (settings == null)         return;
         CommandProcessor.getInstance().executeCommand(context.getProject(),new Runnable(){
@@ -37,8 +37,11 @@
             List<RangeMarker> occurrences=ContainerUtil.newArrayList();
             Document document=editor.getDocument();
             for (            PsiElement element : context.getOccurrences()) {
-              occurrences.add(document.createRangeMarker(element.getTextRange()));
+              occurrences.add(createRange(document,element));
             }
+            RangeMarker expressionRangeMarker=createRange(document,context.getExpression());
+            RangeMarker stringPartRangeMarker=createRange(document,context.getStringPart());
+            RangeMarker varRangeMarker=createRange(document,context.getVar());
             GrVariable var=ApplicationManager.getApplication().runWriteAction(new Computable<GrVariable>(){
               @Override public GrVariable compute(){
                 return runRefactoring(context,settings);
@@ -46,14 +49,13 @@
             }
 );
             if (isInplace && var != null) {
-              editor.getCaretModel().moveToOffset(var.getTextOffset());
-              InplaceVariableIntroducer<PsiElement> introducer=getIntroducer(var,context,occurrences);
+              InplaceVariableIntroducer<PsiElement> introducer=getIntroducer(var,context,settings,occurrences,varRangeMarker,expressionRangeMarker,stringPartRangeMarker);
               PsiDocumentManager.getInstance(project).doPostponedOperationsAndUnblockDocument(context.getEditor().getDocument());
               introducer.performInplaceRefactoring(getDialog(context).suggestNames());
             }
           }
         }
-,getRefactoringName(),null);
+,getRefactoringName(),getRefactoringName());
       }
     }
 ;
