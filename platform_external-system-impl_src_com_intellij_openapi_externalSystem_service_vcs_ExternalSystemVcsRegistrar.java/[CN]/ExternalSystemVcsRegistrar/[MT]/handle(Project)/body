@@ -1,45 +1,36 @@
 {
-  final Ref<GitPlatformFacade> gitFacade=new Ref<GitPlatformFacade>();
-  try {
-    gitFacade.set(ServiceManager.getService(GitPlatformFacade.class));
-  }
- catch (  Throwable e) {
-  }
-  if (gitFacade.get() == null) {
-    return;
-  }
   for (  final ExternalSystemManager<?,?,?,?,?> manager : ExternalSystemApiUtil.getAllManagers()) {
     final AbstractExternalSystemSettings settings=manager.getSettingsProvider().fun(project);
     settings.subscribe(new ExternalSystemSettingsListenerAdapter(){
       @Override public void onProjectsLinked(      @NotNull final Collection linked){
+        List<VcsDirectoryMapping> newMappings=ContainerUtilRt.newArrayList();
         final LocalFileSystem fileSystem=LocalFileSystem.getInstance();
         ProjectLevelVcsManager vcsManager=ProjectLevelVcsManager.getInstance(project);
         for (        Object o : linked) {
           final ExternalProjectSettings settings=(ExternalProjectSettings)o;
-          Project projectProxy=(Project)Proxy.newProxyInstance(getClass().getClassLoader(),new Class[]{Project.class},new InvocationHandler(){
-            @SuppressWarnings("ConstantConditions") @Override public Object invoke(            Object proxy,            Method method,            Object[] args) throws Throwable {
-              if ("getBaseDir".equals(method.getName())) {
-                return fileSystem.refreshAndFindFileByPath(settings.getExternalProjectPath());
-              }
-              return method.invoke(project,args);
-            }
+          VirtualFile dir=fileSystem.refreshAndFindFileByPath(settings.getExternalProjectPath());
+          if (dir == null) {
+            continue;
           }
-);
-          Collection<VirtualFile> roots=new GitRootDetector(projectProxy,gitFacade.get()).detect().getRoots();
-          if (!roots.isEmpty()) {
-            List<VcsDirectoryMapping> mappings=ContainerUtilRt.newArrayList(vcsManager.getDirectoryMappings());
-            if (roots.size() == 1 && mappings.size() == 1 && StringUtil.isEmpty(mappings.get(0).getVcs()) && roots.iterator().next().equals(project.getBaseDir())) {
-              mappings.clear();
-              mappings.add(new VcsDirectoryMapping("",GitVcs.getKey().getName()));
-            }
- else {
-              for (              VirtualFile root : roots) {
-                mappings.add(new VcsDirectoryMapping(root.getPath(),GitVcs.getKey().getName()));
-              }
-            }
-            vcsManager.setDirectoryMappings(mappings);
+          if (!dir.isDirectory()) {
+            dir=dir.getParent();
+          }
+          newMappings.addAll(VcsUtil.findRoots(dir,project));
+        }
+        List<VcsDirectoryMapping> oldMappings=vcsManager.getDirectoryMappings();
+        if (oldMappings.size() == 1 && newMappings.size() == 1 && StringUtil.isEmpty(oldMappings.get(0).getVcs())) {
+          VcsDirectoryMapping newMapping=newMappings.iterator().next();
+          String detectedDirPath=newMapping.getDirectory();
+          VirtualFile detectedDir=fileSystem.findFileByPath(detectedDirPath);
+          if (detectedDir != null && detectedDir.equals(project.getBaseDir())) {
+            newMappings.clear();
+            newMappings.add(new VcsDirectoryMapping("",newMapping.getVcs()));
+            vcsManager.setDirectoryMappings(newMappings);
+            return;
           }
         }
+        newMappings.addAll(oldMappings);
+        vcsManager.setDirectoryMappings(newMappings);
       }
     }
 );
