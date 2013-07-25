@@ -1,21 +1,22 @@
 {
-  TextRange result=range;
-  if (shouldProcess(element)) {
-    final TextRange elementRange=element.getTextRange();
-    if (range.contains(elementRange)) {
-      new CommentFormatter(project).process(element);
-      final TextRange newRange=element.getTextRange();
-      result=new TextRange(range.getStartOffset(),range.getEndOffset() + newRange.getLength() - elementRange.getLength());
-    }
-    if (element.getPsi() instanceof PsiField || element.getPsi() instanceof PsiMethod || element instanceof PsiDocComment|| range.getEndOffset() < elementRange.getStartOffset()) {
-      return result;
-    }
+  TextRange resultTextRange=markedRange;
+  boolean shouldFormat=markedRange.contains(element.getTextRange());
+  if (shouldFormat) {
+    TextRange before=element.getTextRange();
+    new CommentFormatter(project).processComment(element);
+    int deltaRange=element.getTextRange().getLength() - before.getLength();
+    resultTextRange=new TextRange(markedRange.getStartOffset(),markedRange.getEndOffset() + deltaRange);
+  }
+  final PsiElement elementPsi=element.getPsi();
+  if ((shouldFormat && (elementPsi instanceof PsiMethod || elementPsi instanceof PsiField || elementPsi instanceof PsiDocComment)) || markedRange.getEndOffset() < element.getStartOffset()) {
+    return resultTextRange;
   }
   ASTNode current=element.getFirstChildNode();
   while (current != null) {
-    current.getFirstChildNode();
-    result=formatCommentsInner(project,current,result);
+    if (!(shouldFormat && current.getPsi() instanceof PsiDocComment && elementPsi instanceof PsiClass)) {
+      resultTextRange=formatCommentsInner(project,current,resultTextRange);
+    }
     current=current.getTreeNext();
   }
-  return result;
+  return resultTextRange;
 }
