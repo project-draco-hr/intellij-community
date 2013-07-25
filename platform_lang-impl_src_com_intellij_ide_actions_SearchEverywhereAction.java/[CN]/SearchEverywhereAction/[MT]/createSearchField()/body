@@ -1,11 +1,7 @@
 {
   field=new MySearchTextField();
-  int columns=20;
-  if (UIUtil.isUnderDarcula() || UIUtil.isUnderAquaLookAndFeel()) {
-    columns=7;
-  }
   final JTextField editor=field.getTextEditor();
-  editor.setColumns(columns);
+  onFocusLost(editor);
   editor.getDocument().addDocumentListener(new DocumentAdapter(){
     @Override protected void textChanged(    DocumentEvent e){
       final String pattern=editor.getText();
@@ -15,7 +11,9 @@
           if (StringUtil.isEmpty(pattern)) {
             SwingUtilities.invokeLater(new Runnable(){
               @Override public void run(){
-                myPopup.cancel();
+                if (myPopup != null && myPopup.isVisible()) {
+                  myPopup.cancel();
+                }
               }
             }
 );
@@ -31,6 +29,8 @@
   editor.addFocusListener(new FocusAdapter(){
     @Override public void focusGained(    FocusEvent e){
       final Project project=PlatformDataKeys.PROJECT.getData(DataManager.getInstance().getDataContext(editor));
+      field.setText("");
+      field.getTextEditor().setForeground(UIUtil.getLabelForeground());
       editor.setColumns(25);
       myFocusComponent=e.getOppositeComponent();
       SwingUtilities.invokeLater(new Runnable(){
@@ -43,17 +43,20 @@
 );
     }
     @Override public void focusLost(    FocusEvent e){
-      editor.setColumns(7);
-      myAlarm.cancelAllRequests();
-      myList.setModel(new DefaultListModel());
-      SwingUtilities.invokeLater(new Runnable(){
-        @Override public void run(){
-          final JComponent parent=(JComponent)editor.getParent();
-          parent.revalidate();
-          parent.repaint();
-        }
-      }
+      onFocusLost(editor);
+    }
+  }
 );
+  editor.addKeyListener(new KeyAdapter(){
+    @Override public void keyPressed(    KeyEvent e){
+      int keyCode=e.getKeyCode();
+      if (keyCode == KeyEvent.VK_ESCAPE && StringUtil.isEmpty(editor.getText())) {
+        IdeFocusManager focusManager=IdeFocusManager.findInstanceByComponent(editor);
+        focusManager.requestDefaultFocus(true);
+      }
+ else       if (keyCode == KeyEvent.VK_ENTER) {
+        doNavigate();
+      }
     }
   }
 );
