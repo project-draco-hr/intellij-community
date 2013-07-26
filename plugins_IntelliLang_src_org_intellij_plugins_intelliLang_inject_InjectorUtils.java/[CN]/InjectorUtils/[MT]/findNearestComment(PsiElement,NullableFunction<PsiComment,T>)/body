@@ -1,24 +1,46 @@
 {
   if (element instanceof PsiComment)   return null;
-  PsiComment comment;
-  PsiElement start=element;
-  for (int i=0; i < 3 && start != null; i++) {
-    if (start instanceof PsiFile)     return null;
-    for (PsiElement e=start.getPrevSibling(); e != null; e=e.getPrevSibling()) {
+  PsiFile containingFile=element.getContainingFile();
+  Document document=PsiDocumentManager.getInstance(containingFile.getProject()).getDocument(containingFile);
+  if (document == null)   return null;
+  TextRange elementRange=element.getTextRange();
+  int lineNumber=document.getLineNumber(elementRange.getStartOffset());
+  int minLineOffset=document.getLineStartOffset(Math.max(0,lineNumber - 3));
+  TextRange r=TextRange.create(minLineOffset,elementRange.getStartOffset());
+  List<PsiElement> elements=CollectHighlightsUtil.getElementsInRange(containingFile,r.getStartOffset(),r.getEndOffset());
+  List<PsiLanguageInjectionHost> otherHosts=new SmartList<PsiLanguageInjectionHost>();
+  boolean commentOrSpaces=false;
+  for (  PsiElement e : ContainerUtil.reverse(elements)) {
+    if (e.getTextLength() > r.getLength())     continue;
+    if (e instanceof PsiComment) {
+      commentOrSpaces=true;
+      PsiComment comment=(PsiComment)e;
+      if (!checkDepth(otherHosts,element,comment))       continue;
+      T value=processor.fun(comment);
+      if (value != null)       return value;
+    }
+ else     if (StringUtil.isEmptyOrSpaces(e.getText())) {
+      commentOrSpaces=true;
+    }
+ else {
+      commentOrSpaces=false;
+      if (e instanceof PsiLanguageInjectionHost) {
+        otherHosts.add((PsiLanguageInjectionHost)e);
+      }
+    }
+  }
+  if (commentOrSpaces) {
+    for (PsiElement e=elements.get(0).getPrevSibling(); e != null; e=e.getPrevSibling()) {
       if (e instanceof PsiComment) {
-        comment=(PsiComment)e;
+        PsiComment comment=(PsiComment)e;
+        if (!checkDepth(otherHosts,element,comment))         continue;
         T value=processor.fun(comment);
         if (value != null)         return value;
- else         continue;
       }
- else       if (e instanceof PsiWhiteSpace || e.getText().trim().isEmpty())       continue;
- else       if (e instanceof PsiLanguageInjectionHost) {
-        if (StringUtil.isEmptyOrSpaces(e.getText()))         continue;
- else         return null;
+ else       if (!StringUtil.isEmptyOrSpaces(e.getText())) {
+        break;
       }
-      break;
     }
-    start=start.getParent();
   }
   return null;
 }
