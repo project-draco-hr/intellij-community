@@ -1,0 +1,32 @@
+{
+  if (!(path.isEmpty() || (path.length() == 1 && path.charAt(0) == '/') || path.equalsIgnoreCase("/RPC2"))) {
+    return false;
+  }
+  if (request.getMethod() == HttpMethod.POST) {
+    ChannelBuffer result;
+    ChannelBufferInputStream in=new ChannelBufferInputStream(request.getContent());
+    try {
+      XmlRpcServerRequest xmlRpcServerRequest=new XmlRpcRequestProcessor().decodeRequest(in);
+      Object response=invokeHandler(getHandler(xmlRpcServerRequest.getMethodName(),handlers == null ? handlerMapping : handlers),xmlRpcServerRequest);
+      result=ChannelBuffers.copiedBuffer(new XmlRpcResponseProcessor().encodeResponse(response,CharsetToolkit.UTF8));
+    }
+ catch (    Throwable e) {
+      context.getChannel().close();
+      LOG.error(e);
+      return true;
+    }
+ finally {
+      in.close();
+    }
+    HttpResponse response=Responses.create("text/xml");
+    response.setContent(result);
+    Responses.send(response,request,context);
+    return true;
+  }
+ else   if (HttpMethod.POST.getName().equals(request.getHeader("Access-Control-Request-Method"))) {
+    LOG.assertTrue(request.getMethod() == HttpMethod.OPTIONS);
+    Responses.sendOptionsResponse("POST, OPTIONS",request,context);
+    return true;
+  }
+  return false;
+}

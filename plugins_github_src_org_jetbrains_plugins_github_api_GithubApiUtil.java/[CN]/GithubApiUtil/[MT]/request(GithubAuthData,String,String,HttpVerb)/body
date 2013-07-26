@@ -3,29 +3,26 @@
   try {
     method=doREST(auth,path,requestBody,verb);
     checkStatusCode(method);
-    String resp=method.getResponseBodyAsString();
+    InputStream resp=method.getResponseBodyAsStream();
     if (resp == null) {
-      return null;
+      return new ResponsePage();
     }
     JsonElement ret=parseResponse(resp);
+    if (ret.isJsonNull()) {
+      return new ResponsePage();
+    }
     Header header=method.getResponseHeader("Link");
     if (header != null) {
       String value=header.getValue();
-      int end=value.indexOf(">; rel=\"next\"");
+      int end=value.indexOf(">; rel=\"nextPage\"");
       int begin=value.lastIndexOf('<',end);
       if (begin >= 0 && end >= 0) {
         String newPath=GithubUrlUtil.removeProtocolPrefix(value.substring(begin + 1,end));
         int index=newPath.indexOf('/');
-        JsonElement next=request(auth,newPath.substring(index),requestBody,verb);
-        if (next == null) {
-          throw new NoHttpResponseException("Unexpected empty response");
-        }
-        JsonArray merged=ret.getAsJsonArray();
-        merged.addAll(next.getAsJsonArray());
-        return merged;
+        return new ResponsePage(ret,newPath.substring(index));
       }
     }
-    return ret;
+    return new ResponsePage(ret);
   }
   finally {
     if (method != null) {
