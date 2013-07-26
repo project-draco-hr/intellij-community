@@ -5,34 +5,24 @@
     checkStatusCode(method);
     InputStream resp=method.getResponseBodyAsStream();
     if (resp == null) {
-      return null;
+      return new ResponsePage();
     }
     JsonElement ret=parseResponse(resp);
     if (ret.isJsonNull()) {
-      return null;
+      return new ResponsePage();
     }
     Header header=method.getResponseHeader("Link");
     if (header != null) {
       String value=header.getValue();
-      int end=value.indexOf(">; rel=\"next\"");
+      int end=value.indexOf(">; rel=\"nextPage\"");
       int begin=value.lastIndexOf('<',end);
       if (begin >= 0 && end >= 0) {
         String newPath=GithubUrlUtil.removeProtocolPrefix(value.substring(begin + 1,end));
         int index=newPath.indexOf('/');
-        JsonElement next=request(auth,newPath.substring(index),requestBody,verb);
-        if (next == null) {
-          LOG.info("Bad response page: " + index);
-          return null;
-        }
-        if (!next.isJsonArray() || !ret.isJsonArray()) {
-          throw new JsonException("Wrong json type: expected JsonArray");
-        }
-        JsonArray merged=ret.getAsJsonArray();
-        merged.addAll(next.getAsJsonArray());
-        return merged;
+        return new ResponsePage(ret,newPath.substring(index));
       }
     }
-    return ret;
+    return new ResponsePage(ret);
   }
   finally {
     if (method != null) {
