@@ -1,0 +1,94 @@
+{
+  if (myClassModel == null) {
+    myClassModel=new GotoClassModel2(project);
+    myFileModel=new GotoFileModel(project);
+    myActionModel=new GotoActionModel(project,myFocusComponent);
+    myClasses=myClassModel.getNames(false);
+    myFiles=myFileModel.getNames(false);
+    myActions=myActionModel.getNames(true);
+  }
+  final AccessToken token=ApplicationManager.getApplication().acquireReadActionLock();
+  try {
+    List<MatchResult> classes=collectResults(pattern,myClasses,myClassModel);
+    List<MatchResult> files=collectResults(pattern,myFiles,myFileModel);
+    List<MatchResult> actions=collectResults(pattern,myActions,myActionModel);
+    final DefaultListModel listModel=new DefaultListModel();
+    Set<VirtualFile> alreadyAddedFiles=new HashSet<VirtualFile>();
+    for (    MatchResult o : classes) {
+      myProgressIndicator.checkCanceled();
+      Object[] objects=myClassModel.getElementsByName(o.elementName,false,pattern);
+      for (      Object object : objects) {
+        myProgressIndicator.checkCanceled();
+        if (!listModel.contains(object)) {
+          listModel.addElement(object);
+          if (object instanceof PsiElement) {
+            VirtualFile file=PsiUtilCore.getVirtualFile((PsiElement)object);
+            if (file != null) {
+              alreadyAddedFiles.add(file);
+            }
+          }
+        }
+      }
+    }
+    for (    MatchResult o : files) {
+      myProgressIndicator.checkCanceled();
+      Object[] objects=myFileModel.getElementsByName(o.elementName,false,pattern);
+      for (      Object object : objects) {
+        myProgressIndicator.checkCanceled();
+        if (!listModel.contains(object)) {
+          if (object instanceof PsiFile) {
+            object=((PsiFile)object).getVirtualFile();
+          }
+          if (!alreadyAddedFiles.contains(object)) {
+            myProgressIndicator.checkCanceled();
+            listModel.addElement(object);
+          }
+        }
+      }
+    }
+    for (    MatchResult o : actions) {
+      myProgressIndicator.checkCanceled();
+      Object[] objects=myActionModel.getElementsByName(o.elementName,true,pattern);
+      for (      Object object : objects) {
+        myProgressIndicator.checkCanceled();
+        listModel.addElement(object);
+      }
+    }
+    SwingUtilities.invokeLater(new Runnable(){
+      @Override public void run(){
+        myProgressIndicator.checkCanceled();
+        myList.setModel(listModel);
+        if (myPopup == null || !myPopup.isVisible()) {
+          final ActionCallback callback=ListDelegationUtil.installKeyboardDelegation(field.getTextEditor(),myList);
+          myPopup=JBPopupFactory.getInstance().createListPopupBuilder(myList).setRequestFocus(false).createPopup();
+          Disposer.register(myPopup,new Disposable(){
+            @Override public void dispose(){
+              callback.setDone();
+            }
+          }
+);
+          myPopup.showUnderneathOf(field);
+        }
+ else {
+          myList.revalidate();
+          myList.repaint();
+        }
+        ListScrollingUtil.ensureSelectionExists(myList);
+        if (myList.getModel().getSize() == 0) {
+          myPopup.cancel();
+        }
+ else {
+          final Dimension size=myList.getPreferredSize();
+          myPopup.setSize(new Dimension(Math.min(600,Math.max(field.getWidth(),size.width + 2)),Math.min(600,size.height + 2)));
+          final Point screen=field.getLocationOnScreen();
+          final int x=screen.x + field.getWidth() - myPopup.getSize().width;
+          myPopup.setLocation(new Point(x,myPopup.getLocationOnScreen().y));
+        }
+      }
+    }
+);
+  }
+  finally {
+    token.finish();
+  }
+}
