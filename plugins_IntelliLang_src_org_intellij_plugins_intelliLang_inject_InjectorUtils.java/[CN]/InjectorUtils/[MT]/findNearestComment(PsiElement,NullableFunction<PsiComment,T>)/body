@@ -1,17 +1,10 @@
 {
   if (element instanceof PsiComment)   return null;
   PsiFile containingFile=element.getContainingFile();
-  Document document=PsiDocumentManager.getInstance(containingFile.getProject()).getDocument(containingFile);
-  if (document == null)   return null;
-  TextRange elementRange=element.getTextRange();
-  int lineNumber=document.getLineNumber(elementRange.getStartOffset());
-  int minLineOffset=document.getLineStartOffset(Math.max(0,lineNumber - 3));
-  TextRange r=TextRange.create(minLineOffset,elementRange.getStartOffset());
-  List<PsiElement> elements=CollectHighlightsUtil.getElementsInRange(containingFile,r.getStartOffset(),r.getEndOffset());
   List<PsiLanguageInjectionHost> otherHosts=new SmartList<PsiLanguageInjectionHost>();
   boolean commentOrSpaces=false;
-  for (  PsiElement e : ContainerUtil.reverse(elements)) {
-    if (e.getTextLength() > r.getLength())     continue;
+  PsiElement prev=element, e=prevOrParent(element,containingFile);
+  for (int counter=0; e != null && counter < 100; prev=e, e=prevOrParent(e,containingFile), counter++) {
     if (e instanceof PsiComment) {
       commentOrSpaces=true;
       PsiComment comment=(PsiComment)e;
@@ -30,7 +23,7 @@
     }
   }
   if (commentOrSpaces) {
-    for (PsiElement e=elements.get(0).getPrevSibling(); e != null; e=e.getPrevSibling()) {
+    for (e=prevOrParent(prev,containingFile); e != null; e=e.getPrevSibling()) {
       if (e instanceof PsiComment) {
         PsiComment comment=(PsiComment)e;
         if (!checkDepth(otherHosts,element,comment))         continue;
