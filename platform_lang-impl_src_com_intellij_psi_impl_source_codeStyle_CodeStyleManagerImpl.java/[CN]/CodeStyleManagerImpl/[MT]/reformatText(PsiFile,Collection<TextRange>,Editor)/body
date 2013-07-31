@@ -16,6 +16,8 @@
     editor=PsiUtilBase.findEditor(file);
   }
   int visualColumnToRestore=-1;
+  String caretIndentToRestore=null;
+  RangeMarker caretRangeMarker=null;
   if (editor != null) {
     Document document=editor.getDocument();
     int caretOffset=editor.getCaretModel().getOffset();
@@ -34,6 +36,8 @@
     }
     if (fixCaretPosition) {
       visualColumnToRestore=editor.getCaretModel().getVisualPosition().column;
+      caretIndentToRestore=document.getText(TextRange.create(lineStartOffset,caretOffset));
+      caretRangeMarker=document.createRangeMarker(lineStartOffset,caretOffset);
     }
   }
   final SmartPointerManager smartPointerManager=SmartPointerManager.getInstance(getProject());
@@ -68,13 +72,28 @@
   if (editor == null) {
     return;
   }
-  if (visualColumnToRestore < 0) {
-    editor.getScrollingModel().scrollToCaret(ScrollType.RELATIVE);
-    return;
+  boolean virtualSpaceEnabled=editor.getSettings().isVirtualSpace();
+  if (virtualSpaceEnabled) {
+    if (visualColumnToRestore < 0) {
+      editor.getScrollingModel().scrollToCaret(ScrollType.RELATIVE);
+      return;
+    }
+    CaretModel caretModel=editor.getCaretModel();
+    VisualPosition position=caretModel.getVisualPosition();
+    if (visualColumnToRestore != position.column) {
+      caretModel.moveToVisualPosition(new VisualPosition(position.line,visualColumnToRestore));
+    }
   }
-  CaretModel caretModel=editor.getCaretModel();
-  VisualPosition position=caretModel.getVisualPosition();
-  if (visualColumnToRestore != position.column) {
-    caretModel.moveToVisualPosition(new VisualPosition(position.line,visualColumnToRestore));
+ else {
+    if (caretRangeMarker == null || !caretRangeMarker.isValid() || caretIndentToRestore == null) {
+      return;
+    }
+    int offset=caretRangeMarker.getStartOffset();
+    caretRangeMarker.dispose();
+    if (editor.getCaretModel().getVisualPosition().column == visualColumnToRestore) {
+      return;
+    }
+    Document document=editor.getDocument();
+    document.replaceString(document.getLineStartOffset(document.getLineNumber(offset)),offset,caretIndentToRestore);
   }
 }
