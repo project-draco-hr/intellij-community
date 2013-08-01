@@ -2,23 +2,40 @@
   super(new MavenGenerateProvider<MavenDomDependency>(MavenDomBundle.message("generate.dependency"),MavenDomDependency.class){
     @Nullable @Override protected MavenDomDependency doGenerate(    @NotNull final MavenDomProjectModel mavenModel,    final Editor editor){
       Project project=mavenModel.getManager().getProject();
-      final List<MavenId> ids=MavenArtifactSearchDialog.searchForArtifact(project);
+      final Map<DependencyConflictId,MavenDomDependency> managedDependencies=GenerateManagedDependencyAction.collectManagingDependencies(mavenModel);
+      final List<MavenId> ids=MavenArtifactSearchDialog.searchForArtifact(project,managedDependencies.values());
       if (ids.isEmpty())       return null;
       PsiDocumentManager.getInstance(project).commitAllDocuments();
       XmlFile psiFile=DomUtil.getFile(mavenModel);
       return new WriteCommandAction<MavenDomDependency>(psiFile.getProject(),"Generate Dependency",psiFile){
         @Override protected void run(        Result<MavenDomDependency> result) throws Throwable {
-          MavenDomDependencies deps;
+          boolean isInsideManagedDependencies;
           MavenDomDependencyManagement dependencyManagement=mavenModel.getDependencyManagement();
-          XmlElement managetDependencyXml=dependencyManagement.getXmlElement();
-          if (managetDependencyXml != null && managetDependencyXml.getTextRange().contains(editor.getCaretModel().getOffset())) {
-            deps=dependencyManagement.getDependencies();
+          XmlElement managedDependencyXml=dependencyManagement.getXmlElement();
+          if (managedDependencyXml != null && managedDependencyXml.getTextRange().contains(editor.getCaretModel().getOffset())) {
+            isInsideManagedDependencies=true;
           }
  else {
-            deps=mavenModel.getDependencies();
+            isInsideManagedDependencies=false;
           }
           for (          MavenId each : ids) {
-            result.setResult(MavenDomUtil.createDomDependency(deps,editor,each));
+            MavenDomDependency res;
+            if (isInsideManagedDependencies) {
+              res=MavenDomUtil.createDomDependency(dependencyManagement.getDependencies(),editor,each);
+            }
+ else {
+              DependencyConflictId conflictId=new DependencyConflictId(each.getGroupId(),each.getArtifactId(),null,null);
+              MavenDomDependency managedDependenciesDom=managedDependencies.get(conflictId);
+              if (managedDependenciesDom != null && Comparing.equal(each.getVersion(),managedDependenciesDom.getVersion().getStringValue())) {
+                res=MavenDomUtil.createDomDependency(mavenModel.getDependencies(),editor);
+                res.getGroupId().setStringValue(conflictId.getGroupId());
+                res.getArtifactId().setStringValue(conflictId.getArtifactId());
+              }
+ else {
+                res=MavenDomUtil.createDomDependency(mavenModel.getDependencies(),editor,each);
+              }
+            }
+            result.setResult(res);
           }
         }
       }
