@@ -1,6 +1,7 @@
 {
-  HttpClient client=getHttpClient();
-  GetMethod method=new GetMethod(getUrl() + REST_API_PATH_SUFFIX + "/search");
+  if (myRestApiVersion == null) {
+    myRestApiVersion=discoverRestApiVersion();
+  }
   String jqlQuery=mySearchQuery;
   if (!StringUtil.isEmpty(searchQuery)) {
     if (JiraUtil.ANY_ISSUE_KEY_REGEX.matcher(searchQuery).matches()) {
@@ -10,18 +11,7 @@
       jqlQuery+=String.format(" and summary ~ \"%s\"",searchQuery);
     }
   }
-  method.setQueryString(new NameValuePair[]{new NameValuePair("jql",jqlQuery),new NameValuePair("fields",JiraIssue.REQUIRED_RESPONSE_FIELDS),new NameValuePair("maxResults",String.valueOf(max))});
-  LOG.debug("URI is " + method.getURI());
-  int statusCode=client.executeMethod(method);
-  LOG.debug("Status code is " + statusCode);
-  String entityContent=StreamUtil.readText(method.getResponseBodyAsStream(),"utf-8");
-  LOG.debug(entityContent);
-  if (statusCode != HttpStatus.SC_OK) {
-    return Task.EMPTY_ARRAY;
-  }
-  JiraResponseWrapper.Issues wrapper=JiraUtil.GSON.fromJson(entityContent,JiraResponseWrapper.Issues.class);
-  List<JiraIssue> issues=wrapper.getIssues();
-  LOG.debug("Total " + issues.size() + " issues downloaded");
+  List<JiraIssue> issues=myRestApiVersion.findIssues(jqlQuery,max);
   return ContainerUtil.map2Array(issues,Task.class,new Function<JiraIssue,Task>(){
     @Override public JiraTask fun(    JiraIssue issue){
       return new JiraTask(issue,JiraRepository.this);

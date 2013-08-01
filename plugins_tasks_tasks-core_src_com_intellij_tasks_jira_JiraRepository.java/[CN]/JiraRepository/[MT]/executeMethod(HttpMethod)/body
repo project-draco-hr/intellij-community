@@ -1,0 +1,30 @@
+{
+  LOG.debug("URI is " + method.getURI());
+  int statusCode;
+  String entityContent;
+  try {
+    statusCode=getHttpClient().executeMethod(method);
+    LOG.debug("Status code is " + statusCode);
+    entityContent=StreamUtil.readText(method.getResponseBodyAsStream(),"utf-8");
+    LOG.debug(entityContent);
+  }
+  finally {
+    method.releaseConnection();
+  }
+  if (statusCode == HttpStatus.SC_UNAUTHORIZED) {
+    throw new Exception(LOGIN_FAILED_CHECK_YOUR_PERMISSIONS);
+  }
+ else   if (statusCode != HttpStatus.SC_OK) {
+    String reason=method.getStatusText();
+    Header contentType=method.getResponseHeader("Content-Type");
+    if (contentType.getValue().startsWith("application/json")) {
+      JsonObject object=JiraUtil.GSON.fromJson(entityContent,JsonObject.class);
+      if (object.has("errorMessages")) {
+        reason=StringUtil.join(object.getAsJsonArray("errorMessages")," ");
+        LOG.warn(reason);
+      }
+    }
+    throw new Exception("Request failed with error: " + reason);
+  }
+  return entityContent;
+}
