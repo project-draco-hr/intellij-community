@@ -2,7 +2,51 @@
   SwingUtilities.invokeLater(new Runnable(){
     @Override public void run(){
       myProgressIndicator.checkCanceled();
-      myList.setModel(listModel);
+      final DataContext dataContext=DataManager.getInstance().getDataContext(myContextComponent);
+      int settings=0;
+      int actions=0;
+      final DefaultListModel model=new DefaultListModel();
+      final String pattern=field.getText();
+      final Consumer<Object> consumer=new Consumer<Object>(){
+        @Override public void consume(        Object o){
+          if (isSetting(o) || isVirtualFile(o) || isActionValue(o)|| o instanceof PsiElement) {
+            model.addElement(o);
+          }
+        }
+      }
+;
+      for (      SearchTopHitProvider provider : SearchTopHitProvider.EP_NAME.getExtensions()) {
+        provider.consumeTopHits(pattern,consumer);
+      }
+      myTopHitsCount=model.size();
+      for (      Object o : listModel.toArray()) {
+        if (model.contains(o)) {
+          continue;
+        }
+        if (isSetting(o)) {
+          if (settings < 15) {
+            settings++;
+            model.addElement(o);
+          }
+        }
+ else         if (isActionValue(o)) {
+          if (actions < 15) {
+            final AnAction action=(AnAction)((Map.Entry)o).getKey();
+            if (model.contains(action)) {
+              continue;
+            }
+            final AnActionEvent event=GotoActionModel.updateActionBeforeShow(action,dataContext);
+            if (event.getPresentation().isEnabledAndVisible()) {
+              actions++;
+              model.addElement(action);
+            }
+          }
+        }
+ else {
+          model.addElement(o);
+        }
+      }
+      myList.setModel(model);
       if (myPopup == null || !myPopup.isVisible()) {
         final ActionCallback callback=ListDelegationUtil.installKeyboardDelegation(field.getTextEditor(),myList);
         myPopup=JBPopupFactory.getInstance().createListPopupBuilder(myList).setRequestFocus(false).createPopup();

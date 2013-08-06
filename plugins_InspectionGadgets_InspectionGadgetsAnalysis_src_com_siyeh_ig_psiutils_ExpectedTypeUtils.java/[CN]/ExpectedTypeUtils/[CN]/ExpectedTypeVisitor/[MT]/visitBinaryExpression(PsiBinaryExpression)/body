@@ -1,6 +1,4 @@
 {
-  final IElementType tokenType=binaryExpression.getOperationTokenType();
-  final PsiType type=binaryExpression.getType();
   final PsiExpression rhs=binaryExpression.getROperand();
   if (rhs == null) {
     expectedType=null;
@@ -17,26 +15,49 @@
     expectedType=null;
     return;
   }
+  final IElementType tokenType=binaryExpression.getOperationTokenType();
+  final PsiType type=binaryExpression.getType();
   if (TypeUtils.isJavaLangString(type) || isArithmeticOperation(tokenType) || isBooleanOperation(tokenType)) {
     expectedType=type;
   }
  else   if (isShiftOperation(tokenType)) {
-    if (wrappedExpression.equals(lhs)) {
+    if (lhs == wrappedExpression) {
       expectedType=unaryNumericPromotion(lhsType);
     }
  else {
       expectedType=unaryNumericPromotion(rhsType);
     }
   }
+ else   if (ComparisonUtils.isEqualityComparison(binaryExpression)) {
+    final PsiType wrappedExpressionType=wrappedExpression.getType();
+    if (TypeConversionUtil.isPrimitiveAndNotNull(wrappedExpressionType)) {
+      expectedType=wrappedExpressionType;
+      return;
+    }
+    if (lhs == wrappedExpression) {
+      if (TypeConversionUtil.isPrimitiveAndNotNull(rhsType)) {
+        expectedType=PsiPrimitiveType.getUnboxedType(wrappedExpressionType);
+        return;
+      }
+      expectedType=TypeUtils.getObjectType(wrappedExpression);
+    }
+ else {
+      if (TypeConversionUtil.isPrimitiveAndNotNull(lhsType)) {
+        expectedType=PsiPrimitiveType.getUnboxedType(wrappedExpressionType);
+        return;
+      }
+      expectedType=TypeUtils.getObjectType(wrappedExpression);
+    }
+  }
  else   if (ComparisonUtils.isComparisonOperation(tokenType)) {
-    if (!ClassUtils.isPrimitive(lhsType)) {
+    if (lhs == wrappedExpression && !TypeConversionUtil.isPrimitiveAndNotNull(lhsType)) {
       lhsType=PsiPrimitiveType.getUnboxedType(lhsType);
       if (lhsType == null) {
         expectedType=null;
         return;
       }
     }
-    if (!ClassUtils.isPrimitive(rhsType)) {
+    if (rhs == wrappedExpression && !TypeConversionUtil.isPrimitiveAndNotNull(rhsType)) {
       rhsType=PsiPrimitiveType.getUnboxedType(rhsType);
       if (rhsType == null) {
         expectedType=null;

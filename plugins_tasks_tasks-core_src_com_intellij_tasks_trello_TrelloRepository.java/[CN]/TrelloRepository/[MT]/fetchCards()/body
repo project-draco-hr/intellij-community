@@ -1,18 +1,21 @@
 {
-  String url;
+  boolean fromList=false;
+  String baseUrl;
   if (myCurrentList != null) {
-    url=TrelloUtil.TRELLO_API_BASE_URL + "/lists/" + myCurrentList.getId()+ "/cards?actions=commentCard&filter=all";
+    baseUrl=TrelloUtil.TRELLO_API_BASE_URL + "/lists/" + myCurrentList.getId()+ "/cards";
+    fromList=true;
   }
  else   if (myCurrentBoard != null) {
-    url=TrelloUtil.TRELLO_API_BASE_URL + "/boards/" + myCurrentBoard.getId()+ "/cards?actions=commentCard&filter=all";
+    baseUrl=TrelloUtil.TRELLO_API_BASE_URL + "/boards/" + myCurrentBoard.getId()+ "/cards";
   }
  else   if (myCurrentUser != null) {
-    url=TrelloUtil.TRELLO_API_BASE_URL + "/members/me/cards/?actions=commentCard&filter=all";
+    baseUrl=TrelloUtil.TRELLO_API_BASE_URL + "/members/me/cards";
   }
  else {
     throw new IllegalStateException("Not configured");
   }
-  List<TrelloCard> cards=makeRequestAndDeserializeJsonResponse(url,TrelloUtil.LIST_OF_CARDS_TYPE);
+  String allCardsUrl=baseUrl + "?actions=commentCard&filter=all";
+  List<TrelloCard> cards=makeRequestAndDeserializeJsonResponse(allCardsUrl,TrelloUtil.LIST_OF_CARDS_TYPE);
   LOG.debug("Total " + cards.size() + " cards downloaded");
   List<TrelloCard> filtered=ContainerUtil.filter(cards,new Condition<TrelloCard>(){
     @Override public boolean value(    TrelloCard card){
@@ -21,5 +24,19 @@
   }
 );
   LOG.debug("Total " + filtered.size() + " cards after filtering");
+  if (!fromList) {
+    String visibleCardsUrl=baseUrl + "?filter=visible&fields=none";
+    List<TrelloCard> visibleCards=makeRequestAndDeserializeJsonResponse(visibleCardsUrl,TrelloUtil.LIST_OF_CARDS_TYPE);
+    LOG.debug("Total " + visibleCards.size() + " visible cards");
+    Set<String> visibleCardsIDs=ContainerUtil.map2Set(visibleCards,new Function<TrelloCard,String>(){
+      @Override public String fun(      TrelloCard card){
+        return card.getId();
+      }
+    }
+);
+    for (    TrelloCard card : filtered) {
+      card.setVisible(visibleCardsIDs.contains(card.getId()));
+    }
+  }
   return filtered;
 }
