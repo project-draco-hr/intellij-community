@@ -6,7 +6,23 @@
       int settings=0;
       int actions=0;
       final DefaultListModel model=new DefaultListModel();
+      final String pattern=field.getText();
+      final Consumer<Object> consumer=new Consumer<Object>(){
+        @Override public void consume(        Object o){
+          if (isSetting(o) || isVirtualFile(o) || isActionValue(o)|| o instanceof PsiElement) {
+            model.addElement(o);
+          }
+        }
+      }
+;
+      for (      SearchTopHitProvider provider : SearchTopHitProvider.EP_NAME.getExtensions()) {
+        provider.consumeTopHits(pattern,consumer);
+      }
+      myTopHitsCount=model.size();
       for (      Object o : listModel.toArray()) {
+        if (model.contains(o)) {
+          continue;
+        }
         if (isSetting(o)) {
           if (settings < 15) {
             settings++;
@@ -15,10 +31,14 @@
         }
  else         if (isActionValue(o)) {
           if (actions < 15) {
-            final AnActionEvent event=GotoActionModel.updateActionBeforeShow((AnAction)((Map.Entry)o).getKey(),dataContext);
+            final AnAction action=(AnAction)((Map.Entry)o).getKey();
+            if (model.contains(action)) {
+              continue;
+            }
+            final AnActionEvent event=GotoActionModel.updateActionBeforeShow(action,dataContext);
             if (event.getPresentation().isEnabledAndVisible()) {
               actions++;
-              model.addElement(o);
+              model.addElement(action);
             }
           }
         }
