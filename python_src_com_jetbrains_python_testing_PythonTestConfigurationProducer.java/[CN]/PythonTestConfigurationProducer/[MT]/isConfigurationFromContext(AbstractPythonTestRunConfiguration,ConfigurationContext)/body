@@ -1,0 +1,32 @@
+{
+  final Location location=context.getLocation();
+  if (location == null || !isAvailable(location))   return false;
+  final PsiElement element=location.getPsiElement();
+  final PsiFile file=element.getContainingFile();
+  final VirtualFile virtualFile=element instanceof PsiDirectory ? ((PsiDirectory)element).getVirtualFile() : file.getVirtualFile();
+  final PyFunction pyFunction=PsiTreeUtil.getParentOfType(element,PyFunction.class,false);
+  final PyClass pyClass=PsiTreeUtil.getParentOfType(element,PyClass.class);
+  final AbstractPythonTestRunConfiguration.TestType confType=configuration.getTestType();
+  final String workingDirectory=configuration.getWorkingDirectory();
+  if (element instanceof PsiDirectory) {
+    final String path=((PsiDirectory)element).getVirtualFile().getPath();
+    return confType == AbstractPythonTestRunConfiguration.TestType.TEST_FOLDER && path.equals(configuration.getFolderName()) || path.equals(new File(workingDirectory,configuration.getFolderName()).getAbsolutePath());
+  }
+  final String scriptName=configuration.getScriptName();
+  final boolean isTestFileEquals=virtualFile != null && scriptName.equals(virtualFile.getPath()) || scriptName.equals(new File(workingDirectory,scriptName).getAbsolutePath());
+  if (pyFunction != null) {
+    final String methodName=configuration.getMethodName();
+    if (pyFunction.getContainingClass() == null) {
+      return confType == AbstractPythonTestRunConfiguration.TestType.TEST_FUNCTION && methodName.equals(pyFunction.getName()) && isTestFileEquals;
+    }
+ else     if (pyFunction.getContainingClass() != null) {
+      final String className=configuration.getClassName();
+      return confType == AbstractPythonTestRunConfiguration.TestType.TEST_METHOD && methodName.equals(pyFunction.getName()) && pyClass != null && className.equals(pyClass.getName()) && isTestFileEquals;
+    }
+  }
+  if (pyClass != null) {
+    final String className=configuration.getClassName();
+    return confType == AbstractPythonTestRunConfiguration.TestType.TEST_CLASS && className.equals(pyClass.getName()) && isTestFileEquals;
+  }
+  return confType == AbstractPythonTestRunConfiguration.TestType.TEST_SCRIPT && isTestFileEquals;
+}
