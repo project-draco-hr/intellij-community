@@ -1,24 +1,38 @@
 {
   registrar.registerReferenceProvider(PlatformPatterns.psiElement(),new PsiReferenceProvider(){
     @NotNull @Override public PsiReference[] getReferencesByElement(    @NotNull PsiElement element,    @NotNull ProcessingContext context){
-      element.putUserData(INJECTED_REFERENCE,null);
       ReferenceInjector[] extensions=ReferenceInjector.EXTENSION_POINT_NAME.getExtensions();
       PsiReference[] references=new PsiReference[0];
       Configuration configuration=Configuration.getProjectInstance(element.getProject());
-      for (      ReferenceInjector extension : extensions) {
-        Collection<BaseInjection> injections=configuration.getInjectionsByLanguageId(extension.getId());
+      boolean injected=false;
+      for (      ReferenceInjector injector : extensions) {
+        Collection<BaseInjection> injections=configuration.getInjectionsByLanguageId(injector.getId());
         for (        BaseInjection injection : injections) {
           if (injection.acceptForReference(element)) {
-            element.putUserData(INJECTED_REFERENCE,extension);
+            injected=true;
             LanguageInjectionSupport support=InjectorUtils.findInjectionSupport(injection.getSupportId());
             element.putUserData(LanguageInjectionSupport.INJECTOR_SUPPORT,support);
             List<TextRange> area=injection.getInjectedArea(element);
             for (            TextRange range : area) {
-              references=ArrayUtil.mergeArrays(references,extension.getReferences(element,context,range));
+              references=ArrayUtil.mergeArrays(references,injector.getReferences(element,context,range));
             }
           }
         }
       }
+      if (element instanceof PsiLanguageInjectionHost) {
+        TemporaryPlacesRegistry registry=TemporaryPlacesRegistry.getInstance(element.getProject());
+        InjectedLanguage language=registry.getLanguageFor((PsiLanguageInjectionHost)element,element.getContainingFile());
+        if (language != null) {
+          ReferenceInjector injector=ReferenceInjector.findById(language.getID());
+          if (injector != null) {
+            injected=true;
+            element.putUserData(LanguageInjectionSupport.INJECTOR_SUPPORT,registry.getLanguageInjectionSupport());
+            TextRange range=ElementManipulators.getValueTextRange(element);
+            references=ArrayUtil.mergeArrays(references,injector.getReferences(element,context,range));
+          }
+        }
+      }
+      element.putUserData(INJECTED_REFERENCES,injected ? references : null);
       return references;
     }
   }
