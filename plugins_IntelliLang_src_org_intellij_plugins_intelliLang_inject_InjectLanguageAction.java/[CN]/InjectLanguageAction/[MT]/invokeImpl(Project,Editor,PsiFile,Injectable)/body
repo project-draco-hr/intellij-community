@@ -3,17 +3,23 @@
   if (host == null)   return;
   if (defaultFunctionalityWorked(host,injectable.getId()))   return;
   try {
+    Language language=injectable.toLanguage();
     for (    LanguageInjectionSupport support : InjectorUtils.getActiveInjectionSupports()) {
-      if (support.addInjectionInPlace(injectable,host)) {
-        ((PsiModificationTrackerImpl)PsiManager.getInstance(project).getModificationTracker()).incCounter();
+      if (support.isApplicableTo(host) && support.addInjectionInPlace(language,host)) {
         return;
       }
     }
-    TemporaryPlacesRegistry.getInstance(project).getLanguageInjectionSupport().addInjectionInPlace(injectable,host);
+    if (TemporaryPlacesRegistry.getInstance(project).getLanguageInjectionSupport().addInjectionInPlace(language,host)) {
+      HintManager.getInstance().showInformationHint(editor,StringUtil.escapeXml(language.getDisplayName()) + " was temporarily injected");
+    }
   }
   finally {
     if (injectable.getLanguage() != null) {
       FileContentUtil.reparseFiles(project,Collections.<VirtualFile>emptyList(),true);
+    }
+ else {
+      ((PsiModificationTrackerImpl)PsiManager.getInstance(project).getModificationTracker()).incCounter();
+      DaemonCodeAnalyzer.getInstance(project).restart();
     }
   }
 }
