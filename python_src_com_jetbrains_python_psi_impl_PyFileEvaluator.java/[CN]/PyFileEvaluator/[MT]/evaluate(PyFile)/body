@@ -12,15 +12,27 @@
         String name=expression.getName();
         PyExpression value=((PyTargetExpression)expression).findAssignedValue();
         myNamespace.put(name,createEvaluator().evaluate(value));
+        if (myDeclarationsToTrack.contains(name)) {
+          List<PyExpression> declarations=new ArrayList<PyExpression>();
+          PyPsiUtils.sequenceToList(declarations,value);
+          myDeclarations.put(name,declarations);
+        }
       }
     }
     @Override public void visitPyAugAssignmentStatement(    PyAugAssignmentStatement node){
       PyExpression target=node.getTarget();
-      if (target instanceof PyReferenceExpression && ((PyReferenceExpression)target).getQualifier() == null && target.getName() != null) {
-        Object currentValue=myNamespace.get(target.getName());
+      String name=target.getName();
+      if (target instanceof PyReferenceExpression && ((PyReferenceExpression)target).getQualifier() == null && name != null) {
+        Object currentValue=myNamespace.get(name);
         if (currentValue != null) {
           Object rhs=createEvaluator().evaluate(node.getValue());
-          myNamespace.put(target.getName(),PyEvaluator.concatenate(currentValue,rhs));
+          myNamespace.put(name,PyEvaluator.concatenate(currentValue,rhs));
+        }
+        if (myDeclarationsToTrack.contains(name)) {
+          List<PyExpression> declarations=myDeclarations.get(name);
+          if (declarations != null) {
+            PyPsiUtils.sequenceToList(declarations,node.getValue());
+          }
         }
       }
     }
@@ -36,12 +48,7 @@
           if (qualifier instanceof PyReferenceExpression) {
             PyReferenceExpression qualifierRef=(PyReferenceExpression)qualifier;
             if (qualifierRef.getQualifier() == null) {
-              String nameBeingExtended=qualifierRef.getReferencedName();
-              Object value=myNamespace.get(nameBeingExtended);
-              if (value instanceof List) {
-                Object arg=createEvaluator().evaluate(node.getArguments()[0]);
-                myNamespace.put(nameBeingExtended,PyEvaluator.concatenate(value,arg));
-              }
+              processExtendCall(node,qualifierRef.getReferencedName());
             }
           }
         }
