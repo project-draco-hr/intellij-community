@@ -1,0 +1,52 @@
+{
+  LightweightHint hint;
+  final JComponent editorComponent=editor.getComponent();
+  TextRange range=myDocumentFragment.getTextRange();
+  int startOffset=range.getStartOffset();
+  int endOffset=range.getEndOffset();
+  int verticalScrollOffset=editor.getScrollingModel().getVerticalScrollOffset();
+  if (verticalScrollOffset > endOffset) {
+    startOffset-=(verticalScrollOffset - endOffset);
+    endOffset-=(verticalScrollOffset - endOffset);
+    startOffset=Math.max(0,startOffset);
+    endOffset=Math.max(0,endOffset);
+  }
+  Document doc=myDocumentFragment.getDocument();
+  int endLine=doc.getLineNumber(endOffset);
+  int startLine=doc.getLineNumber(startOffset);
+  JLayeredPane layeredPane=editorComponent.getRootPane().getLayeredPane();
+  Rectangle rect=editor.getComponent().getVisibleRect();
+  Point point=intInfo.getOriginalPoint();
+  SwingUtilities.convertPointToScreen(point,intInfo.getOriginalComponent());
+  VisualPosition visual=editor.offsetToVisualPosition(startOffset);
+  p=editor.visualPositionToXY(visual);
+  p=SwingUtilities.convertPoint(((EditorEx)editor).getGutterComponentEx(),p,layeredPane);
+  p.x-=3;
+  p.y=point.y;
+  Point screenPoint=new Point(p);
+  SwingUtilities.convertPointToScreen(screenPoint,layeredPane);
+  int maxLineCount=(ScreenUtil.getScreenRectangle(screenPoint).height - screenPoint.y) / editor.getLineHeight();
+  if (endLine - startLine > maxLineCount) {
+    endOffset=doc.getLineEndOffset(Math.max(0,Math.min(startLine + maxLineCount,doc.getLineCount() - 1)));
+  }
+  FoldingModelEx foldingModel=(FoldingModelEx)editor.getFoldingModel();
+  foldingModel.setFoldingEnabled(false);
+  TextRange textRange=new TextRange(startOffset,endOffset);
+  List<Pair<RangeHighlighter,int[]>> highlightInfo=new ArrayList<Pair<RangeHighlighter,int[]>>();
+  for (  RangeHighlighter highlighter : myHighlighters) {
+    if (highlighter instanceof RangeHighlighterEx) {
+      RangeHighlighterEx rangeHighlighterEx=(RangeHighlighterEx)highlighter;
+      highlightInfo.add(Pair.create(highlighter,new int[]{rangeHighlighterEx.getAffectedAreaStartOffset(),rangeHighlighterEx.getAffectedAreaEndOffset()}));
+    }
+  }
+  hint=EditorFragmentComponent.showEditorFragmentHintAt(editor,textRange,p.x,p.y,true,false,true,highlightInfo.toArray(new Pair[]{}));
+  if (hint == null)   return null;
+  JComponent component=hint.getComponent();
+  Dimension size=new Dimension(editorComponent.getWidth(),component.getPreferredSize().height);
+  size.width-=((EditorEx)editor).getScrollPane().getVerticalScrollBar().getWidth();
+  component.setPreferredSize(size);
+  component.setMinimumSize(size);
+  component.setSize(size);
+  foldingModel.setFoldingEnabled(true);
+  return hint;
+}
