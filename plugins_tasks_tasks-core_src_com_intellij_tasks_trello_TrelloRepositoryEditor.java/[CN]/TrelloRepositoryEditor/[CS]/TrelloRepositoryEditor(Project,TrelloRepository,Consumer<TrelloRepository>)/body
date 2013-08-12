@@ -42,8 +42,8 @@
     }
   }
 );
-  myBoardComboBox.setRenderer(new TrelloModelRenderer("Set token first"));
-  myListComboBox.setRenderer(new TrelloModelRenderer("Select board first"));
+  myBoardComboBox.setRenderer(new TrelloBoardRenderer("Set token first"));
+  myListComboBox.setRenderer(new TrelloListRenderer("Select board first"));
   myListComboBox.addItemListener(new ItemListener(){
     @Override public void itemStateChanged(    ItemEvent e){
       if (e.getStateChange() == ItemEvent.SELECTED) {
@@ -56,11 +56,33 @@
 );
   if (myRepository.getCurrentUser() != null) {
     new BoardsDownloader(myRepository.getCurrentBoard()){
-      @Override protected void updateUI(      List<TrelloBoard> boards){
-        super.updateUI(boards);
-        if (myRepository.getCurrentBoard() != null) {
-          new ListsDownloader(myRepository.getCurrentList()).runOnPooledThread();
+      @Override protected List<TrelloBoard> download() throws Exception {
+        List<TrelloBoard> boards=super.download();
+        if (myBoard == null) {
+          return boards;
         }
+        int i=boards.indexOf(myBoard);
+        myBoard=i >= 0 ? boards.get(i) : myRepository.fetchBoardById(myBoard.getId());
+        myRepository.setCurrentBoard(myBoard);
+        return boards;
+      }
+    }
+.runOnPooledThread();
+  }
+  if (myRepository.getCurrentBoard() != null) {
+    new ListsDownloader(myRepository.getCurrentList()){
+      @Override protected List<TrelloList> download() throws Exception {
+        List<TrelloList> lists=super.download();
+        if (myList == null) {
+          return lists;
+        }
+        int i=lists.indexOf(myList);
+        myList=i >= 0 ? lists.get(i) : myRepository.fetchListById(myList.getId());
+        if (!myList.getIdBoard().equals(myRepository.getCurrentBoard().getId())) {
+          myList.setMoved(true);
+        }
+        myRepository.setCurrentList(myList);
+        return lists;
       }
     }
 .runOnPooledThread();
