@@ -3,20 +3,34 @@
     @Override public void run(){
       final ModuleRootManager moduleRootManager=ModuleRootManager.getInstance(module);
       final ModifiableRootModel model=moduleRootManager.getModifiableModel();
+      final ContentEntry[] contentEntries=model.getContentEntries();
+      final Map<String,ContentEntry> contentEntriesMap=new HashMap<String,ContentEntry>(contentEntries.length);
+      for (      ContentEntry contentEntry : contentEntries) {
+        contentEntriesMap.put(contentEntry.getUrl(),contentEntry);
+      }
       try {
         for (        DataNode<ContentRootData> data : datas) {
           ContentRootData contentRoot=data.getData();
           ContentEntry contentEntry=findOrCreateContentRoot(model,contentRoot.getRootPath());
           LOG.info(String.format("Importing content root '%s' for module '%s'",contentRoot.getRootPath(),module.getName()));
+          final Set<String> retainedPaths=new HashSet<String>();
           for (          String path : contentRoot.getPaths(ExternalSystemSourceType.SOURCE)) {
             createSourceRootIfAbsent(contentEntry,path,module.getName());
+            retainedPaths.add(ExternalSystemApiUtil.toCanonicalPath(path));
           }
           for (          String path : contentRoot.getPaths(ExternalSystemSourceType.TEST)) {
             createTestRootIfAbsent(contentEntry,path,module.getName());
+            retainedPaths.add(ExternalSystemApiUtil.toCanonicalPath(path));
           }
           for (          String path : contentRoot.getPaths(ExternalSystemSourceType.EXCLUDED)) {
             createExcludedRootIfAbsent(contentEntry,path,module.getName());
+            retainedPaths.add(ExternalSystemApiUtil.toCanonicalPath(path));
           }
+          contentEntriesMap.remove(contentEntry.getUrl());
+          removeOutdatedContentFolders(contentEntry,retainedPaths);
+        }
+        for (        ContentEntry contentEntry : contentEntriesMap.values()) {
+          model.removeContentEntry(contentEntry);
         }
       }
   finally {
