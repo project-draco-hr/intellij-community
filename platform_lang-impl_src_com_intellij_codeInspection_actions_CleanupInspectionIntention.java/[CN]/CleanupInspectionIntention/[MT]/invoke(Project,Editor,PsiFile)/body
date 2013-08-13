@@ -2,7 +2,7 @@
   if (!FileModificationService.getInstance().preparePsiElementForWrite(file))   return;
   final List<ProblemDescriptor> descriptions=ProgressManager.getInstance().runProcess(new Computable<List<ProblemDescriptor>>(){
     @Override public List<ProblemDescriptor> compute(){
-      InspectionManagerEx inspectionManager=(InspectionManagerEx)InspectionManager.getInstance(project);
+      InspectionManager inspectionManager=InspectionManager.getInstance(project);
       return InspectionEngine.runInspectionOnFile(file,myToolWrapper,inspectionManager.createNewGlobalContext(false));
     }
   }
@@ -15,34 +15,24 @@
     }
   }
 );
-  boolean fixesWereAvailable=false;
   for (  final ProblemDescriptor descriptor : descriptions) {
     final QuickFix[] fixes=descriptor.getFixes();
     if (fixes != null && fixes.length > 0) {
-      fixesWereAvailable=true;
       for (      final QuickFix<CommonProblemDescriptor> fix : fixes) {
         if (fix != null && fix.getClass().isAssignableFrom(myQuickfixClass)) {
           final PsiElement element=descriptor.getPsiElement();
           if (element != null && element.isValid()) {
-            if (fix instanceof IntentionAction && ((IntentionAction)fix).startInWriteAction()) {
-              ApplicationManager.getApplication().runWriteAction(new Runnable(){
-                @Override public void run(){
-                  fix.applyFix(project,descriptor);
-                }
+            ApplicationManager.getApplication().runWriteAction(new Runnable(){
+              @Override public void run(){
+                fix.applyFix(project,descriptor);
               }
+            }
 );
-            }
- else {
-              fix.applyFix(project,descriptor);
-            }
-            PsiDocumentManager.getInstance(project).commitDocument(editor.getDocument());
+            PsiDocumentManager.getInstance(project).commitAllDocuments();
           }
           break;
         }
       }
     }
-  }
-  if (!fixesWereAvailable) {
-    CommonRefactoringUtil.showErrorHint(project,editor,"No fixes are available in batch mode",CommonBundle.getWarningTitle(),null);
   }
 }
