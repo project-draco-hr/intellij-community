@@ -51,15 +51,21 @@
   if (boxingHappened[0] == 0 && boxingHappened[1] > 0)   return Specifics.FIRST;
   if (boxingHappened[0] > 0 && boxingHappened[1] == 0)   return Specifics.SECOND;
   if (sameBoxing) {
-    final PsiResolveHelper resolveHelper=PsiResolveHelper.SERVICE.getInstance(myArgumentsList.getProject());
-    int level1=getLevel(applicabilityLevel,languageLevel,method1,typeParameters1,types2,types1,resolveHelper);
-    int level2=getLevel(applicabilityLevel,languageLevel,method2,typeParameters2,types1,types2,resolveHelper);
+    final PsiSubstitutor siteSubstitutor1=((MethodCandidateInfo)info1).getSiteSubstitutor();
+    final PsiSubstitutor siteSubstitutor2=((MethodCandidateInfo)info2).getSiteSubstitutor();
+    final int level1=getLevel(applicabilityLevel,languageLevel,method1,typeParameters1,types2,types1,siteSubstitutor2,siteSubstitutor1);
+    final int level2=getLevel(applicabilityLevel,languageLevel,method2,typeParameters2,types1,types2,siteSubstitutor1,siteSubstitutor2);
     if (level1 > level2)     return Specifics.SECOND;
     if (level2 > level1)     return Specifics.FIRST;
-    final boolean raw1=PsiUtil.isRawSubstitutor(method1,classSubstitutor1);
-    final boolean raw2=PsiUtil.isRawSubstitutor(method2,classSubstitutor2);
-    if (raw1 ^ raw2) {
-      return raw1 ? Specifics.SECOND : Specifics.FIRST;
+    if (level1 > MethodCandidateInfo.ApplicabilityLevel.NOT_APPLICABLE) {
+      final boolean abstract1=method1.hasModifierProperty(PsiModifier.ABSTRACT);
+      final boolean abstract2=method2.hasModifierProperty(PsiModifier.ABSTRACT);
+      if (abstract1 && !abstract2) {
+        return Specifics.SECOND;
+      }
+      if (abstract2 && !abstract1) {
+        return Specifics.FIRST;
+      }
     }
   }
  else   if (applicabilityLevel == MethodCandidateInfo.ApplicabilityLevel.VARARGS) {
@@ -91,6 +97,11 @@
         return Specifics.FIRST;
       }
     }
+  }
+  final boolean raw1=PsiUtil.isRawSubstitutor(method1,classSubstitutor1);
+  final boolean raw2=PsiUtil.isRawSubstitutor(method2,classSubstitutor2);
+  if (raw1 ^ raw2) {
+    return raw1 ? Specifics.SECOND : Specifics.FIRST;
   }
   return Specifics.NEITHER;
 }
