@@ -24,29 +24,27 @@
     try {
       final File _file=file;
       final Set<String>[] resourceDependencies=new Set[1];
-      Runnable runnable=new Runnable(){
-        public void run(){
-          Runnable runnable=new Runnable(){
-            public void run(){
-              final VirtualFile vf=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(_file);
-              if (vf != null) {
-                final PsiFile psiFile=PsiManager.getInstance(myProject).findFile(vf);
-                if (psiFile != null && isAccepted(psiFile)) {
-                  resourceDependencies[0]=getResourceDependencies(psiFile);
-                  resourceManager.addResource(location,_file.getAbsolutePath());
-                }
+      new WriteAction(){
+        @Override protected void run(        Result result) throws Throwable {
+          final VirtualFile vf=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(_file);
+          if (vf != null) {
+            final PsiFile psiFile=PsiManager.getInstance(myProject).findFile(vf);
+            if (psiFile != null && isAccepted(psiFile)) {
+              resourceDependencies[0]=getResourceDependencies(psiFile);
+              resourceManager.addResource(location,_file.getAbsolutePath());
+            }
  else {
+              ApplicationManager.getApplication().invokeLater(new Runnable(){
+                @Override public void run(){
                   Messages.showErrorDialog(myProject,"Not a valid file: " + vf.getPresentableUrl(),"Download Problem");
                 }
               }
+,myProject.getDisposed());
             }
           }
-;
-          ApplicationManager.getApplication().runWriteAction(runnable);
         }
       }
-;
-      GuiUtils.invokeAndWait(runnable);
+.execute();
       if (resourceDependencies[0] != null) {
         for (        String s : resourceDependencies[0]) {
           myProgress.checkCanceled();
@@ -55,20 +53,26 @@
         }
       }
     }
- catch (    InterruptedException e) {
-    }
-catch (    InvocationTargetException e) {
-      final Throwable targetException=e.getTargetException();
-      if (targetException instanceof RuntimeException) {
-        throw (RuntimeException)targetException;
+ catch (    Error err) {
+      Throwable e=err.getCause();
+      if (e instanceof InterruptedException) {
       }
- else       if (targetException instanceof IOException) {
-        throw (IOException)targetException;
-      }
- else       if (targetException instanceof InterruptedException) {
+ else       if (e instanceof InvocationTargetException) {
+        final Throwable targetException=((InvocationTargetException)e).getTargetException();
+        if (targetException instanceof RuntimeException) {
+          throw (RuntimeException)targetException;
+        }
+ else         if (targetException instanceof IOException) {
+          throw (IOException)targetException;
+        }
+ else         if (targetException instanceof InterruptedException) {
+        }
+ else {
+          Logger.getInstance(getClass().getName()).error(e);
+        }
       }
  else {
-        Logger.getInstance(getClass().getName()).error(e);
+        throw err;
       }
     }
   }
