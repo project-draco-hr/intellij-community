@@ -29,9 +29,23 @@
   if (info == null) {
     return;
   }
+  final Set<RemoteBranch> branches=getAvailableBranchesFromGit(repository);
+  branches.addAll(info.getBranches());
   GithubRepo parent=info.getRepo().getParent();
   String suggestedBranch=parent == null ? null : parent.getUserName() + ":" + parent.getDefaultBranch();
-  final GithubCreatePullRequestDialog dialog=new GithubCreatePullRequestDialog(project,info.getBranches(),suggestedBranch);
+  Collection<String> suggestions=ContainerUtil.map(branches,new Function<RemoteBranch,String>(){
+    @Override public String fun(    RemoteBranch remoteBranch){
+      return remoteBranch.getReference();
+    }
+  }
+);
+  Consumer<String> showDiff=new Consumer<String>(){
+    @Override public void consume(    String s){
+      showDiffByRef(project,s,branches,repository,currentBranch.getName());
+    }
+  }
+;
+  final GithubCreatePullRequestDialog dialog=new GithubCreatePullRequestDialog(project,suggestions,suggestedBranch,showDiff);
   DialogManager.show(dialog);
   if (!dialog.isOK()) {
     return;
@@ -45,9 +59,17 @@
         GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,"Push failed:<br/>" + result.getErrorOutputAsHtmlString());
         return;
       }
+      String from=info.getRepo().getUserName() + ":" + currentBranch.getName();
+      String onto=dialog.getTargetBranch();
+      GithubAuthData auth=info.getAuthData();
+      GithubFullPath targetRepo=findTargetRepository(project,auth,onto,info.getRepo(),upstreamUserAndRepo,branches);
+      if (targetRepo == null) {
+        GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,"Can't find repository for specified branch: " + onto);
+        return;
+      }
       LOG.info("Creating pull request");
       indicator.setText("Creating pull request...");
-      GithubPullRequest request=createPullRequest(project,info,dialog,currentBranch.getName(),upstreamUserAndRepo);
+      GithubPullRequest request=createPullRequest(project,auth,targetRepo,dialog.getRequestTitle(),dialog.getDescription(),from,onto);
       if (request == null) {
         return;
       }
