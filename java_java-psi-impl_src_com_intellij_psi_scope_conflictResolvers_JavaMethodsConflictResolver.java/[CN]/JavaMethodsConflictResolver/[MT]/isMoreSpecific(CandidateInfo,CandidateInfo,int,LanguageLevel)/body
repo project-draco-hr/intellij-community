@@ -12,11 +12,12 @@
   final int max=Math.max(params1.length,params2.length);
   PsiType[] types1=new PsiType[max];
   PsiType[] types2=new PsiType[max];
+  final boolean varargsPosition=applicabilityLevel == MethodCandidateInfo.ApplicabilityLevel.VARARGS;
   for (int i=0; i < max; i++) {
     ProgressManager.checkCanceled();
     PsiType type1=params1.length > 0 ? params1[Math.min(i,params1.length - 1)].getType() : null;
     PsiType type2=params2.length > 0 ? params2[Math.min(i,params2.length - 1)].getType() : null;
-    if (applicabilityLevel == MethodCandidateInfo.ApplicabilityLevel.VARARGS) {
+    if (varargsPosition) {
       if (type1 instanceof PsiEllipsisType && type2 instanceof PsiEllipsisType && params1.length == params2.length && (!JavaVersionService.getInstance().isAtLeast(class1,JavaSdkVersion.JDK_1_7) || ((PsiArrayType)type1).getComponentType().equalsToText(CommonClassNames.JAVA_LANG_OBJECT) || ((PsiArrayType)type2).getComponentType().equalsToText(CommonClassNames.JAVA_LANG_OBJECT))) {
         type1=((PsiEllipsisType)type1).toArrayType();
         type2=((PsiEllipsisType)type2).toArrayType();
@@ -53,11 +54,15 @@
   if (sameBoxing) {
     final PsiSubstitutor siteSubstitutor1=((MethodCandidateInfo)info1).getSiteSubstitutor();
     final PsiSubstitutor siteSubstitutor2=((MethodCandidateInfo)info2).getSiteSubstitutor();
-    final int level1=getLevel(applicabilityLevel,languageLevel,method1,typeParameters1,types2,types1,siteSubstitutor2,siteSubstitutor1);
-    final int level2=getLevel(applicabilityLevel,languageLevel,method2,typeParameters2,types1,types2,siteSubstitutor1,siteSubstitutor2);
-    if (level1 > level2)     return Specifics.SECOND;
-    if (level2 > level1)     return Specifics.FIRST;
-    if (level1 > MethodCandidateInfo.ApplicabilityLevel.NOT_APPLICABLE) {
+    final PsiType[] types2AtSite=typesAtSite(types2,siteSubstitutor2);
+    final PsiType[] types1AtSite=typesAtSite(types1,siteSubstitutor1);
+    final PsiSubstitutor methodSubstitutor1=calculateMethodSubstitutor(typeParameters1,method1,siteSubstitutor1,types1,types2AtSite,languageLevel);
+    final PsiSubstitutor methodSubstitutor2=calculateMethodSubstitutor(typeParameters2,method2,siteSubstitutor2,types2,types1AtSite,languageLevel);
+    final boolean applicable12=isApplicableTo(types2AtSite,method1,typeParameters1,languageLevel,methodSubstitutor1,varargsPosition);
+    final boolean applicable21=isApplicableTo(types1AtSite,method2,typeParameters2,languageLevel,methodSubstitutor2,varargsPosition);
+    if (applicable12 || applicable21) {
+      if (applicable12 && !applicable21)       return Specifics.SECOND;
+      if (applicable21 && !applicable12)       return Specifics.FIRST;
       final boolean abstract1=method1.hasModifierProperty(PsiModifier.ABSTRACT);
       final boolean abstract2=method2.hasModifierProperty(PsiModifier.ABSTRACT);
       if (abstract1 && !abstract2) {
@@ -68,7 +73,7 @@
       }
     }
   }
- else   if (applicabilityLevel == MethodCandidateInfo.ApplicabilityLevel.VARARGS) {
+ else   if (varargsPosition) {
     final PsiType lastParamType1=classSubstitutor1.substitute(types1[types1.length - 1]);
     final PsiType lastParamType2=classSubstitutor2.substitute(types2[types1.length - 1]);
     final boolean assignable1=TypeConversionUtil.isAssignable(lastParamType2,lastParamType1);
