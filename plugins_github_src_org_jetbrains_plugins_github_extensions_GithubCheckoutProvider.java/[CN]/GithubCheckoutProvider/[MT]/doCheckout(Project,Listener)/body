@@ -3,27 +3,25 @@
     return;
   }
   BasicAction.saveAll();
-  final Ref<List<GithubRepo>> repositoryInfoRef=new Ref<List<GithubRepo>>();
-  ProgressManager.getInstance().run(new Task.Modal(project,"Access to GitHub",true){
-    public void run(    @NotNull ProgressIndicator indicator){
-      try {
-        GithubUtil.runAndGetValidAuth(project,indicator,new ThrowableConsumer<GithubAuthData,IOException>(){
-          @Override public void consume(          GithubAuthData authData) throws IOException {
-            repositoryInfoRef.set(GithubApiUtil.getAvailableRepos(authData));
+  List<GithubRepo> availableRepos;
+  try {
+    availableRepos=GithubUtil.computeValueInModal(project,"Access to GitHub",new ThrowableConvertor<ProgressIndicator,List<GithubRepo>,IOException>(){
+      @Override public List<GithubRepo> convert(      ProgressIndicator indicator) throws IOException {
+        return GithubUtil.runWithValidAuth(project,indicator,new ThrowableConvertor<GithubAuthData,List<GithubRepo>,IOException>(){
+          @Override public List<GithubRepo> convert(          GithubAuthData authData) throws IOException {
+            return GithubApiUtil.getAvailableRepos(authData);
           }
         }
 );
       }
- catch (      GithubAuthenticationCanceledException e) {
-      }
-catch (      IOException e) {
-        GithubNotifications.showError(project,"Couldn't get the list of GitHub repositories",e);
-      }
     }
-  }
 );
-  final List<GithubRepo> availableRepos=repositoryInfoRef.get();
-  if (availableRepos == null) {
+  }
+ catch (  GithubAuthenticationCanceledException e) {
+    return;
+  }
+catch (  IOException e) {
+    GithubNotifications.showError(project,"Couldn't get the list of GitHub repositories",e);
     return;
   }
   Collections.sort(availableRepos,new Comparator<GithubRepo>(){
