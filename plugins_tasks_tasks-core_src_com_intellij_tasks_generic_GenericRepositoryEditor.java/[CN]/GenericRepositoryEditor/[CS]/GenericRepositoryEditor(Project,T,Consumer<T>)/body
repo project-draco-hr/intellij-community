@@ -18,60 +18,69 @@
     }
   }
 );
-switch (myRepository.getResponseType()) {
-case XML:
-    myXmlRadioButton.setSelected(true);
-  myHtmlRadioButton.setSelected(false);
-myJsonRadioButton.setSelected(false);
-break;
-case HTML:
-myXmlRadioButton.setSelected(false);
-myHtmlRadioButton.setSelected(true);
-myJsonRadioButton.setSelected(false);
-break;
-case JSON:
-myXmlRadioButton.setSelected(false);
-myHtmlRadioButton.setSelected(false);
-myJsonRadioButton.setSelected(true);
-break;
-}
-ActionListener listener=new ActionListener(){
-@Override public void actionPerformed(final ActionEvent e){
-responseTypeChanged();
-}
-}
+  ActionListener radioButtonListener=new ActionListener(){
+    @Override public void actionPerformed(    final ActionEvent e){
+      singleTaskUrlEnablingChanged();
+      doApply();
+      selectCardByResponseType();
+    }
+  }
 ;
-myXmlRadioButton.addActionListener(listener);
-myHtmlRadioButton.addActionListener(listener);
-myJsonRadioButton.addActionListener(listener);
-myLoginMethodTypeComboBox.setSelectedItem(myRepository.getLoginMethodType());
-myTasksListMethodTypeComboBox.setSelectedItem(myRepository.getTasksListMethodType());
-installListener(myLoginMethodTypeComboBox);
-installListener(myTasksListMethodTypeComboBox);
-installListener(myTasksListURLText.getDocument());
-installListener(myLoginURLText.getDocument());
-installListener(myTaskPatternText.getDocument());
-String useCompletionText=". Use " + KeymapUtil.getFirstKeyboardShortcutText(ActionManager.getInstance().getAction(IdeActions.ACTION_CODE_COMPLETION)) + " for completion.";
-myLoginTooltip.setText("<html>Available placeholders: " + SERVER_URL_PLACEHOLDER + ", "+ USERNAME_PLACEHOLDER+ ", "+ PASSWORD_PLACEHOLDER+ useCompletionText+ "</html>");
-myTaskListTooltip.setText("<html>Available placeholders: " + SERVER_URL_PLACEHOLDER + ", "+ MAX_COUNT_PLACEHOLDER+ ", "+ QUERY_PLACEHOLDER+ " (use for faster tasks search)"+ useCompletionText+ "</html>");
-myTaskPatternTooltip.setText("<html>Task pattern should be a regexp with two matching groups: ({id}.+?) and ({summary}.+?)" + useCompletionText + "</html>");
-myTabbedPane.addTab("Additional",myPanel);
-myManageTemplateVariablesButton.addActionListener(new ActionListener(){
-@Override public void actionPerformed(final ActionEvent e){
-final ManageTemplateVariablesDialog dialog=new ManageTemplateVariablesDialog(myManageTemplateVariablesButton);
-dialog.setTemplateVariables(myRepository.getTemplateVariables());
-if (dialog.showAndGet()) {
-myRepository.setTemplateVariables(dialog.getTemplateVariables());
-}
-}
-}
+  myXmlRadioButton.addActionListener(radioButtonListener);
+  myTextRadioButton.addActionListener(radioButtonListener);
+  myJsonRadioButton.addActionListener(radioButtonListener);
+  myLoginMethodTypeComboBox.setSelectedItem(myRepository.getLoginMethodType().toString());
+  myTasksListMethodTypeComboBox.setSelectedItem(myRepository.getTasksListMethodType().toString());
+  mySingleTaskMethodComboBox.setSelectedItem(myRepository.getSingleTaskMethodType().toString());
+  installListener(myLoginMethodTypeComboBox);
+  installListener(myTasksListMethodTypeComboBox);
+  installListener(mySingleTaskMethodComboBox);
+  installListener(myLoginURLText);
+  installListener(myTasksListURLText);
+  installListener(mySingleTaskURLText);
+  myTabbedPane.addTab("Server configuration",myPanel);
+  ResponseHandler xmlHandler=myRepository.getResponseHandler(ResponseType.XML);
+  ResponseHandler jsonHandler=myRepository.getResponseHandler(ResponseType.JSON);
+  ResponseHandler textHandler=myRepository.getResponseHandler(ResponseType.TEXT);
+  myCardPanel.add(xmlHandler.getConfigurationComponent(myProject),ResponseType.XML.getMimeType());
+  myCardPanel.add(jsonHandler.getConfigurationComponent(myProject),ResponseType.JSON.getMimeType());
+  myCardPanel.add(textHandler.getConfigurationComponent(myProject),ResponseType.TEXT.getMimeType());
+  myRadio2ResponseType=new IdentityHashMap<JRadioButton,ResponseType>();
+  myRadio2ResponseType.put(myJsonRadioButton,ResponseType.JSON);
+  myRadio2ResponseType.put(myXmlRadioButton,ResponseType.XML);
+  myRadio2ResponseType.put(myTextRadioButton,ResponseType.TEXT);
+  myManageTemplateVariablesButton.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    final ActionEvent e){
+      final ManageTemplateVariablesDialog dialog=new ManageTemplateVariablesDialog(myManageTemplateVariablesButton);
+      dialog.setTemplateVariables(myRepository.getAllTemplateVariables());
+      if (dialog.showAndGet()) {
+        myRepository.setTemplateVariables(ContainerUtil.filter(dialog.getTemplateVariables(),new Condition<TemplateVariable>(){
+          @Override public boolean value(          TemplateVariable variable){
+            return !variable.getIsPredefined();
+          }
+        }
+));
+        myCustomPanel.removeAll();
+        myCustomPanel.add(createCustomPanel());
+        myTabbedPane.getComponentAt(0).repaint();
+        List<String> placeholders=createPlaceholdersList(myRepository);
+        ((TextFieldWithAutoCompletion)myLoginURLText).setVariants(placeholders);
+        ((TextFieldWithAutoCompletion)myTasksListURLText).setVariants(concat(placeholders,"{max}","{since}"));
+        ((TextFieldWithAutoCompletion)mySingleTaskURLText).setVariants(concat(placeholders,"{id}"));
+        myPanel.repaint();
+      }
+    }
+  }
 );
-myResetToDefaultsButton.addActionListener(new ActionListener(){
-@Override public void actionPerformed(final ActionEvent e){
-myRepository.resetToDefaults();
-reset(myRepository.clone());
-}
-}
+  myResetToDefaultsButton.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    final ActionEvent e){
+      myRepository.resetToDefaults();
+      reset(myRepository.clone());
+    }
+  }
 );
-loginUrlEnablingChanged();
+  selectRadioButtonByResponseType();
+  selectCardByResponseType();
+  loginUrlEnablingChanged();
+  singleTaskUrlEnablingChanged();
 }
