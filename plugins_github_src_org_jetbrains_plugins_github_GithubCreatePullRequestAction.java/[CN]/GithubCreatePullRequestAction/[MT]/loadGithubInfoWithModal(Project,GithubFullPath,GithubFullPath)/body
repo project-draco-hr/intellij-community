@@ -1,9 +1,7 @@
 {
-  final Ref<GithubInfo> githubInfoRef=new Ref<GithubInfo>();
-  final Ref<IOException> exceptionRef=new Ref<IOException>();
-  ProgressManager.getInstance().run(new Task.Modal(project,"Access to GitHub",true){
-    public void run(    @NotNull ProgressIndicator indicator){
-      try {
+  try {
+    return GithubUtil.computeValueInModal(project,"Access to GitHub",new ThrowableConvertor<ProgressIndicator,GithubInfo,IOException>(){
+      @Override public GithubInfo convert(      ProgressIndicator indicator) throws IOException {
         final Ref<GithubRepoDetailed> reposRef=new Ref<GithubRepoDetailed>();
         final GithubAuthData auth=GithubUtil.runAndGetValidAuth(project,indicator,new ThrowableConsumer<GithubAuthData,IOException>(){
           @Override public void consume(          GithubAuthData authData) throws IOException {
@@ -12,20 +10,16 @@
         }
 );
         List<RemoteBranch> branches=loadAvailableBranchesFromGithub(project,auth,reposRef.get(),upstreamUserAndRepo);
-        githubInfoRef.set(new GithubInfo(auth,reposRef.get(),branches));
-      }
- catch (      IOException e) {
-        exceptionRef.set(e);
+        return new GithubInfo(auth,reposRef.get(),branches);
       }
     }
-  }
 );
-  if (!exceptionRef.isNull()) {
-    if (exceptionRef.get() instanceof GithubAuthenticationCanceledException) {
-      return null;
-    }
-    GithubNotifications.showErrorDialog(project,CANNOT_CREATE_PULL_REQUEST,exceptionRef.get());
+  }
+ catch (  GithubAuthenticationCanceledException e) {
     return null;
   }
-  return githubInfoRef.get();
+catch (  IOException e) {
+    GithubNotifications.showErrorDialog(project,CANNOT_CREATE_PULL_REQUEST,e);
+    return null;
+  }
 }

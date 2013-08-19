@@ -1,13 +1,11 @@
 {
-  final Ref<GithubInfo> githubInfoRef=new Ref<GithubInfo>();
-  final Ref<IOException> exceptionRef=new Ref<IOException>();
-  ProgressManager.getInstance().run(new Task.Modal(project,"Access to GitHub",true){
-    public void run(    @NotNull ProgressIndicator indicator){
-      try {
+  try {
+    return GithubUtil.computeValueInModal(project,"Access to GitHub",new ThrowableConvertor<ProgressIndicator,GithubInfo,IOException>(){
+      @Override public GithubInfo convert(      ProgressIndicator indicator) throws IOException {
         final Ref<List<GithubRepo>> availableReposRef=new Ref<List<GithubRepo>>();
         final GithubAuthData auth=GithubUtil.runAndGetValidAuth(project,indicator,new ThrowableConsumer<GithubAuthData,IOException>(){
           @Override public void consume(          GithubAuthData authData) throws IOException {
-            availableReposRef.set(GithubApiUtil.getAvailableRepos(authData));
+            availableReposRef.set(GithubApiUtil.getUserRepos(authData));
           }
         }
 );
@@ -16,20 +14,16 @@
           names.add(info.getName());
         }
         final GithubUserDetailed userInfo=GithubApiUtil.getCurrentUserDetailed(auth);
-        githubInfoRef.set(new GithubInfo(auth,userInfo,names));
-      }
- catch (      IOException e) {
-        exceptionRef.set(e);
+        return new GithubInfo(auth,userInfo,names);
       }
     }
-  }
 );
-  if (!exceptionRef.isNull()) {
-    if (exceptionRef.get() instanceof GithubAuthenticationCanceledException) {
-      return null;
-    }
-    GithubNotifications.showErrorDialog(project,"Failed to connect to GitHub",exceptionRef.get());
+  }
+ catch (  GithubAuthenticationCanceledException e) {
     return null;
   }
-  return githubInfoRef.get();
+catch (  IOException e) {
+    GithubNotifications.showErrorDialog(project,"Failed to connect to GitHub",e);
+    return null;
+  }
 }

@@ -18,42 +18,26 @@
     }
     return true;
   }
-  if (rType == PsiType.NULL) {
-    return !(lType instanceof PsiPrimitiveType);
-  }
-  if (isNumericType(lType) && isNumericType(rType)) {
+  if (isAssignableWithoutConversions(lType,rType,context)) {
     return true;
   }
-  if (isClassType(lType,JAVA_LANG_STRING)) {
-    return true;
+  Boolean byConversionInMethodCall=isAssignableByConversion(lType,rType,context,true);
+  if (byConversionInMethodCall != null) {
+    return byConversionInMethodCall.booleanValue();
+  }
+  if (lType instanceof PsiPrimitiveType && rType == PsiType.NULL) {
+    return false;
   }
   final PsiManager manager=context.getManager();
   final GlobalSearchScope scope=context.getResolveScope();
-  if (lType instanceof PsiArrayType) {
-    PsiType lComponentType=((PsiArrayType)lType).getComponentType();
-    PsiType rComponentType=ClosureParameterEnhancer.findTypeForIteration(rType,context);
-    if (rComponentType != null && isAssignable(lComponentType,rComponentType,context)) {
-      return true;
-    }
-  }
-  if (unboxPrimitiveTypeWrapper(lType) == PsiType.CHAR && (isClassType(rType,JAVA_LANG_STRING) || isClassType(rType,GROOVY_LANG_GSTRING))) {
-    return true;
-  }
-  if (isAssignableByMethodCallConversion(lType,rType,context))   return true;
   lType=boxPrimitiveType(lType,manager,scope);
   rType=boxPrimitiveType(rType,manager,scope);
   if (lType.isAssignableFrom(rType)) {
     return true;
   }
-  if (context instanceof GroovyPsiElement) {
-    for (    GrTypeConverter converter : GrTypeConverter.EP_NAME.getExtensions()) {
-      if (!converter.isAllowedInMethodCall()) {
-        Boolean result=converter.isConvertible(lType,rType,(GroovyPsiElement)context);
-        if (result != null) {
-          return result;
-        }
-      }
-    }
+  Boolean byConversion=isAssignableByConversion(lType,rType,context,false);
+  if (byConversion != null) {
+    return byConversion.booleanValue();
   }
   return false;
 }

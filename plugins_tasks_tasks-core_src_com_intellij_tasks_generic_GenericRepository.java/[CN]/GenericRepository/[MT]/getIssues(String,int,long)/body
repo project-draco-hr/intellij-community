@@ -1,9 +1,15 @@
 {
-  final HttpClient httpClient=getHttpClient();
-  if (!isLoginAnonymously() && !isUseHttpAuthentication())   login(httpClient);
-  final HttpMethod method=getTaskListsMethod(query != null ? query : "",max);
-  httpClient.executeMethod(method);
-  if (method.getStatusCode() != 200)   throw new Exception("Cannot get tasks: HTTP status code " + method.getStatusCode());
-  final String response=method.getResponseBodyAsString();
-  return parseResponse(query,max,response);
+  if (!isLoginAnonymously() && !isUseHttpAuthentication()) {
+    executeMethod(getLoginMethod());
+  }
+  List<TemplateVariable> variables=concat(getAllTemplateVariables(),new TemplateVariable("max",max),new TemplateVariable("since",since));
+  String requestUrl=GenericRepositoryUtil.substituteTemplateVariables(getTasksListUrl(),variables);
+  String responseBody=executeMethod(getHttpMethod(requestUrl,myTasksListMethodType));
+  Task[] tasks=getActiveResponseHandler().parseIssues(responseBody);
+  if (!StringUtil.isEmpty(mySingleTaskUrl) && !(myResponseType == ResponseType.TEXT)) {
+    for (int i=0; i < tasks.length; i++) {
+      tasks[i]=findTask(tasks[i].getId());
+    }
+  }
+  return tasks;
 }
