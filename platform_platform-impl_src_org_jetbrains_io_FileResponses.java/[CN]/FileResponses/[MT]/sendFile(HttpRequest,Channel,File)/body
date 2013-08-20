@@ -6,24 +6,18 @@
   RandomAccessFile raf=new RandomAccessFile(file,"r");
   try {
     long fileLength=raf.length();
-    HttpResponse response=createResponse(file.getPath());
+    HttpResponse response=create(getContentType(file.getPath()));
+    addNoCache(response);
     addCommonHeaders(response);
-    response.setHeader(LAST_MODIFIED,Responses.DATE_FORMAT.get().format(new Date(file.lastModified())));
+    response.headers().set(HttpHeaders.Names.LAST_MODIFIED,Responses.DATE_FORMAT.get().format(new Date(file.lastModified())));
     boolean keepAlive=addKeepAliveIfNeed(response,request);
     if (request.getMethod() != HttpMethod.HEAD) {
-      setContentLength(response,fileLength);
+      HttpHeaders.setContentLength(response,fileLength);
     }
     ChannelFuture future=channel.write(response);
     if (request.getMethod() != HttpMethod.HEAD) {
-      if (channel.getPipeline().get(SslHandler.class) == null) {
-        final FileRegion region=new DefaultFileRegion(raf.getChannel(),0,fileLength);
-        future=channel.write(region);
-        future.addListener(new ChannelFutureListener(){
-          @Override public void operationComplete(          ChannelFuture future){
-            region.releaseExternalResources();
-          }
-        }
-);
+      if (channel.pipeline().get(SslHandler.class) == null) {
+        future=channel.write(new DefaultFileRegion(raf.getChannel(),0,fileLength));
       }
  else {
         future=channel.write(new ChunkedFile(raf,0,fileLength,8192));
@@ -32,6 +26,7 @@
     if (!keepAlive) {
       future.addListener(ChannelFutureListener.CLOSE);
     }
+    channel.flush();
     fileWillBeClosed=true;
   }
   finally {

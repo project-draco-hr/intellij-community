@@ -1,0 +1,34 @@
+{
+  Attribute<HttpRequestHandler> prevHandlerAttribute=context.attr(PREV_HANDLER);
+  HttpRequestHandler connectedHandler=prevHandlerAttribute.get();
+  if (connectedHandler != null) {
+    if (connectedHandler.isSupported(request) && connectedHandler.process(urlDecoder,request,context)) {
+      return true;
+    }
+    prevHandlerAttribute.set(null);
+  }
+  for (  HttpRequestHandler handler : BuiltInServerManager.EP_NAME.getExtensions()) {
+    try {
+      if (handler.isSupported(request) && handler.process(urlDecoder,request,context)) {
+        prevHandlerAttribute.set(handler);
+        return true;
+      }
+    }
+ catch (    Throwable e) {
+      BuiltInServer.LOG.error(e);
+    }
+  }
+  if (urlDecoder.path().equals("/favicon.ico")) {
+    Icon icon=IconLoader.findIcon(ApplicationInfoEx.getInstanceEx().getSmallIconUrl());
+    if (icon != null) {
+      BufferedImage image=UIUtil.createImage(icon.getIconWidth(),icon.getIconHeight(),BufferedImage.TYPE_INT_ARGB);
+      icon.paintIcon(null,image.getGraphics(),0,0);
+      byte[] icoBytes=Sanselan.writeImageToBytes(image,ImageFormat.IMAGE_FORMAT_ICO,null);
+      HttpResponse response=Responses.create(FileResponses.getContentType(urlDecoder.path()),Unpooled.wrappedBuffer(icoBytes));
+      Responses.addNoCache(response);
+      Responses.send(response,context.channel(),request);
+      return true;
+    }
+  }
+  return false;
+}
