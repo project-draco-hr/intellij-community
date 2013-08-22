@@ -7,25 +7,36 @@
   if (ignoreInTestCode && TestUtils.isInTestCode(statement)) {
     return;
   }
-  final Set<PsiClassType> exceptionsThrown=ExceptionUtils.calculateExceptionsThrown(tryBlock);
-  final int numExceptionsThrown=exceptionsThrown.size();
-  final Set<PsiType> exceptionsCaught=new HashSet<PsiType>(numExceptionsThrown);
+  final Set<PsiClassType> thrownTypes=ExceptionUtils.calculateExceptionsThrown(tryBlock);
+  final Set<PsiType> caughtTypes=new HashSet<PsiType>(thrownTypes.size());
   final PsiCatchSection[] catchSections=statement.getCatchSections();
   for (  final PsiCatchSection catchSection : catchSections) {
     final PsiParameter parameter=catchSection.getParameter();
     if (parameter == null) {
       continue;
     }
-    final PsiType typeCaught=parameter.getType();
-    if (typeCaught instanceof PsiDisjunctionType) {
-      final PsiDisjunctionType disjunctionType=(PsiDisjunctionType)typeCaught;
+    final PsiType caughtType=parameter.getType();
+    if (caughtType instanceof PsiDisjunctionType) {
+      final PsiDisjunctionType disjunctionType=(PsiDisjunctionType)caughtType;
       final List<PsiType> types=disjunctionType.getDisjunctions();
       for (      PsiType type : types) {
-        check(exceptionsThrown,exceptionsCaught,parameter,type);
+        check(thrownTypes,caughtTypes,parameter,type);
       }
     }
  else {
-      check(exceptionsThrown,exceptionsCaught,parameter,typeCaught);
+      if (thrownTypes.isEmpty()) {
+        if (CommonClassNames.JAVA_LANG_EXCEPTION.equals(caughtType.getCanonicalText())) {
+          final PsiTypeElement typeElement=parameter.getTypeElement();
+          if (typeElement == null) {
+            continue;
+          }
+          final PsiClass runtimeExceptionClass=ClassUtils.findClass(CommonClassNames.JAVA_LANG_RUNTIME_EXCEPTION,parameter);
+          registerError(typeElement,Collections.singletonList(runtimeExceptionClass));
+        }
+      }
+ else {
+        check(thrownTypes,caughtTypes,parameter,caughtType);
+      }
     }
   }
 }
