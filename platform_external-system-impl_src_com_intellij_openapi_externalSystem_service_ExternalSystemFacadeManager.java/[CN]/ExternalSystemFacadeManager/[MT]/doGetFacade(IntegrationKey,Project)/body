@@ -1,29 +1,25 @@
 {
-  boolean currentInProcess=ExternalSystemApiUtil.isInProcessMode();
-  if (myInProcessCommunication.getAndSet(currentInProcess) != currentInProcess) {
-    myCommunicationManager.get().clear();
-    myCommunicationManager.set(currentInProcess ? myInProcessCommunicationManager : myRemoteCommunicationManager);
-  }
+  final boolean currentInProcess=ExternalSystemApiUtil.isInProcessMode(key.getExternalSystemId());
+  final ExternalSystemCommunicationManager myCommunicationManager=currentInProcess ? myInProcessCommunicationManager : myRemoteCommunicationManager;
   ExternalSystemManager manager=ExternalSystemApiUtil.getManager(key.getExternalSystemId());
   if (project.isDisposed() || manager == null) {
     return RemoteExternalSystemFacade.NULL_OBJECT;
   }
   Pair<RemoteExternalSystemFacade,ExternalSystemExecutionSettings> pair=myRemoteFacades.get(key);
-  if (pair != null && prepare(project,key,pair)) {
+  if (pair != null && prepare(myCommunicationManager,project,key,pair)) {
     return pair.first;
   }
   myLock.lock();
   try {
     pair=myRemoteFacades.get(key);
-    if (pair != null && prepare(project,key,pair)) {
+    if (pair != null && prepare(myCommunicationManager,project,key,pair)) {
       return pair.first;
     }
     if (pair != null) {
-      myCommunicationManager.get().clear();
       myFacadeWrappers.clear();
       myRemoteFacades.clear();
     }
-    return doCreateFacade(key,project);
+    return doCreateFacade(key,project,myCommunicationManager);
   }
   finally {
     myLock.unlock();
