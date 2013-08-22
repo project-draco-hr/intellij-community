@@ -1,0 +1,43 @@
+{
+  if (psiClass == null) {
+    return Collections.emptySet();
+  }
+  final String classQName=psiClass.getQualifiedName();
+  if (classQName == null) {
+    return Collections.emptySet();
+  }
+  final Set<String> excludedQNames=new HashSet<String>();
+  if (!tailElements.isEmpty()) {
+    final Set<String> contextVarTypes=new HashSet<String>();
+    final Map<String,PsiVariable> contextVarNamesToVar=new HashMap<String,PsiVariable>();
+    for (    final PsiVariable var : contextVars) {
+      contextVarTypes.add(var.getType().getCanonicalText());
+      contextVarNamesToVar.put(var.getName(),var);
+    }
+    for (    final PsiElement element : tailElements) {
+      final Collection<PsiMethodCallExpression> methodCallExpressions=PsiTreeUtil.findChildrenOfType(element,PsiMethodCallExpression.class);
+      for (      final PsiMethodCallExpression methodCallExpression : methodCallExpressions) {
+        final PsiExpressionList args=methodCallExpression.getArgumentList();
+        final PsiMethod resolvedMethod=methodCallExpression.resolveMethod();
+        if (resolvedMethod != null) {
+          final PsiType returnType=resolvedMethod.getReturnType();
+          if (returnType != null) {
+            final String returnTypeAsString=returnType.getCanonicalText();
+            for (            final PsiExpression expression : args.getExpressions()) {
+              final String qVarName=expression.getText();
+              if (qVarName != null) {
+                if (contextVarNamesToVar.containsKey(qVarName) || qVarName.equals(varName)) {
+                  excludedQNames.add(returnTypeAsString);
+                }
+              }
+            }
+            if (!contextVarTypes.contains(returnTypeAsString)) {
+              excludedQNames.add(returnTypeAsString);
+            }
+          }
+        }
+      }
+    }
+  }
+  return excludedQNames;
+}

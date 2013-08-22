@@ -49,7 +49,6 @@
       }
     }
   }
-  final PsiManager manager=typeParameter.getManager();
   final GlobalSearchScope scope=parent.getResolveScope();
   PsiType returnType=null;
   if (constraint == null) {
@@ -69,7 +68,6 @@
       }
     }
   }
-  final Pair<PsiType,ConstraintType> result;
   if (constraint == null) {
     if (methodCall instanceof PsiCallExpression) {
       final PsiExpressionList argumentList=((PsiCallExpression)methodCall).getArgumentList();
@@ -95,20 +93,24 @@
           }
         }
       }
-      PsiClassType[] superTypes=typeParameter.getSuperTypes();
+      PsiType[] superTypes=typeParameter.getSuperTypes();
       if (superTypes.length == 0)       return null;
-      PsiType superType=substitutor.substitute(superTypes[0]);
-      if (superType instanceof PsiClassType && ((PsiClassType)superType).isRaw()) {
-        superType=TypeConversionUtil.erasure(superType);
+      final PsiType[] types=new PsiType[superTypes.length];
+      for (int i=0; i < superTypes.length; i++) {
+        PsiType superType=substitutor.substitute(superTypes[i]);
+        if (superType instanceof PsiClassType && ((PsiClassType)superType).isRaw()) {
+          superType=TypeConversionUtil.erasure(superType);
+        }
+        if (superType == null)         superType=PsiType.getJavaLangObject(myManager,scope);
+        if (superType == null)         return null;
+        types[i]=superType;
       }
-      if (superType == null)       superType=PsiType.getJavaLangObject(manager,scope);
-      if (superType == null)       return null;
-      return policy.getInferredTypeWithNoConstraint(manager,superType);
+      return policy.getInferredTypeWithNoConstraint(myManager,PsiIntersectionType.createIntersection(types));
     }
     return null;
   }
   PsiType guess=constraint.getFirst();
-  guess=policy.adjustInferredType(manager,guess,constraint.getSecond());
+  guess=policy.adjustInferredType(myManager,guess,constraint.getSecond());
   if (returnType instanceof PsiClassType && typeParameter.equals(((PsiClassType)returnType).resolve())) {
     PsiClassType[] extendsTypes=typeParameter.getExtendsListTypes();
     PsiSubstitutor newSubstitutor=substitutor.put(typeParameter,guess);
@@ -125,6 +127,5 @@
       }
     }
   }
-  result=new Pair<PsiType,ConstraintType>(guess,constraint.getSecond());
-  return result;
+  return new Pair<PsiType,ConstraintType>(guess,constraint.getSecond());
 }

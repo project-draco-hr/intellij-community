@@ -1,42 +1,29 @@
 {
-  final Ref<GithubInfo> githubInfoRef=new Ref<GithubInfo>();
-  final Ref<IOException> exceptionRef=new Ref<IOException>();
-  ProgressManager.getInstance().run(new Task.Modal(project,"Access to GitHub",true){
-    public void run(    @NotNull ProgressIndicator indicator){
-      try {
-        final Ref<List<RepositoryInfo>> availableReposRef=new Ref<List<RepositoryInfo>>();
+  try {
+    return GithubUtil.computeValueInModal(project,"Access to GitHub",new ThrowableConvertor<ProgressIndicator,GithubInfo,IOException>(){
+      @Override public GithubInfo convert(      ProgressIndicator indicator) throws IOException {
+        final Ref<List<GithubRepo>> availableReposRef=new Ref<List<GithubRepo>>();
         final GithubAuthData auth=GithubUtil.runAndGetValidAuth(project,indicator,new ThrowableConsumer<GithubAuthData,IOException>(){
           @Override public void consume(          GithubAuthData authData) throws IOException {
-            availableReposRef.set(GithubUtil.getAvailableRepos(authData));
+            availableReposRef.set(GithubApiUtil.getUserRepos(authData));
           }
         }
 );
-        if (auth == null || availableReposRef.isNull()) {
-          return;
-        }
         final HashSet<String> names=new HashSet<String>();
-        for (        RepositoryInfo info : availableReposRef.get()) {
+        for (        GithubRepo info : availableReposRef.get()) {
           names.add(info.getName());
         }
-        final GithubUser userInfo=GithubUtil.getCurrentUserInfo(auth);
-        if (userInfo == null) {
-          return;
-        }
-        githubInfoRef.set(new GithubInfo(auth,userInfo,names));
-      }
- catch (      IOException e) {
-        exceptionRef.set(e);
+        final GithubUserDetailed userInfo=GithubApiUtil.getCurrentUserDetailed(auth);
+        return new GithubInfo(auth,userInfo,names);
       }
     }
-  }
 );
-  if (!exceptionRef.isNull()) {
-    GithubNotifications.showErrorDialog(project,"Failed to connect to GitHub",exceptionRef.get().getMessage());
+  }
+ catch (  GithubAuthenticationCanceledException e) {
     return null;
   }
-  if (githubInfoRef.isNull()) {
-    GithubNotifications.showErrorDialog(project,"Failed to connect to GitHub","Failed to gather user information");
+catch (  IOException e) {
+    GithubNotifications.showErrorDialog(project,"Failed to connect to GitHub",e);
     return null;
   }
-  return githubInfoRef.get();
 }

@@ -1,0 +1,46 @@
+{
+  int offsetIgnoringComments=0;
+  int offsetIgnoringCommentsAndStrings=0;
+  int lineLength=0;
+  int unneededWhitespaceCount=0;
+  IElementType lastTokenType=null;
+  TokenSet whitespaceTokens=parserDefinition.getWhitespaceTokens();
+  TokenSet stringLiteralElements=parserDefinition.getStringLiteralElements();
+  TokenSet commentTokens=parserDefinition.getCommentTokens();
+  for (IElementType tokenType=lexer.getTokenType(); tokenType != null; lexer.advance(), tokenType=lexer.getTokenType()) {
+    if (commentTokens.contains(tokenType)) {
+      lastTokenType=tokenType;
+      continue;
+    }
+    int tokenLength=lexer.getTokenEnd() - lexer.getTokenStart();
+    offsetIgnoringComments+=tokenLength;
+    if (stringLiteralElements.contains(tokenType)) {
+      lineLength+=tokenLength;
+      lastTokenType=tokenType;
+      continue;
+    }
+    offsetIgnoringCommentsAndStrings+=tokenLength;
+    if (whitespaceTokens.contains(tokenType)) {
+      if (!commentTokens.contains(lastTokenType) && tokenLength > 1) {
+        return false;
+      }
+      if (lexer.getTokenText().contains("\n")) {
+        if (lineLength > MIN_LINE_LENGTH) {
+          break;
+        }
+        lineLength=0;
+      }
+      if (" ".equals(lexer.getTokenText()) && noWSRequireAfterTokenSet.contains(lastTokenType)) {
+        unneededWhitespaceCount++;
+      }
+    }
+ else {
+      lineLength+=tokenLength;
+    }
+    if (offsetIgnoringComments >= MAX_OFFSET) {
+      break;
+    }
+    lastTokenType=tokenType;
+  }
+  return offsetIgnoringComments >= MIN_SIZE && (unneededWhitespaceCount + 0.0d) / offsetIgnoringCommentsAndStrings < MAX_UNNEEDED_OFFSET_PERCENTAGE;
+}

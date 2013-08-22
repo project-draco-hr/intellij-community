@@ -5,12 +5,11 @@
       result=myLoadedContentsQueue.poll();
       if (result == null) {
         VirtualFile virtualFileToLoad=myFilesToLoadQueue.poll();
-        while (virtualFileToLoad != null) {
+        if (virtualFileToLoad != null) {
+          FileContent content=new FileContent(virtualFileToLoad);
           if (isValidFile(virtualFileToLoad)) {
-            FileContent content=new FileContent(virtualFileToLoad);
             try {
               content.getBytes();
-              return content;
             }
  catch (            Throwable t) {
               if (t instanceof IOException || t instanceof InvalidVirtualFileAccessException) {
@@ -19,19 +18,24 @@
  else {
                 LOG.error(t);
               }
+              content.setEmptyContent();
             }
           }
-          virtualFileToLoad=myFilesToLoadQueue.poll();
+ else {
+            content.setEmptyContent();
+          }
+          return content;
         }
-        while (!myContentLoadingThreadTerminated) {
+        do {
           try {
-            result=myLoadedContentsQueue.poll(300,TimeUnit.MILLISECONDS);
+            result=myLoadedContentsQueue.poll(10,TimeUnit.MILLISECONDS);
             if (result != null)             break;
           }
  catch (          InterruptedException ex) {
             throw new RuntimeException(ex);
           }
         }
+ while (!myContentLoadingThreadTerminated);
       }
     }
  else {
@@ -57,7 +61,7 @@
   }
 synchronized (myProceedWithLoadingLock) {
     myLoadedBytesInQueue-=result.getLength();
-    myProceedWithLoadingLock.notifyAll();
+    if (myLoadedBytesInQueue < MAX_SIZE_OF_BYTES_IN_QUEUE)     myProceedWithLoadingLock.notifyAll();
   }
   return result;
 }

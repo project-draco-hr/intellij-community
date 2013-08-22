@@ -3,7 +3,6 @@
   Set<RangeHighlighter> highlighters=new THashSet<RangeHighlighter>();
   getNearestHighlighters(this,me,width,highlighters);
   getNearestHighlighters((MarkupModelEx)DocumentMarkupModel.forDocument(myEditor.getDocument(),getEditor().getProject(),true),me,width,highlighters);
-  if (highlighters.isEmpty())   return false;
   int minDelta=Integer.MAX_VALUE;
   int y=e.getY();
   for (  RangeHighlighter each : highlighters) {
@@ -16,7 +15,26 @@
     }
   }
   me=new MouseEvent((Component)e.getSource(),e.getID(),e.getWhen(),e.getModifiers(),e.getX(),y + 1,e.getClickCount(),e.isPopupTrigger());
-  TooltipRenderer bigRenderer=myTooltipRendererProvider.calcTooltipRenderer(highlighters);
+  boolean bigEditorView=false;
+  TooltipRenderer bigRenderer=null;
+  if (ApplicationManager.getApplication().isInternal()) {
+    int line=myEditor.offsetToLogicalLine(yPositionToOffset(y,true));
+    int startOffset=myEditor.logicalPositionToOffset(new LogicalPosition(Math.max(0,line - getMinHeight()),0));
+    LogicalPosition endPosition=new LogicalPosition(Math.max(0,line + getMinHeight()),0);
+    int endOffset=myEditor.logicalPositionToOffset(endPosition);
+    Rectangle rect=myEditor.getScrollingModel().getVisibleArea();
+    Point point=myEditor.visualPositionToXY(myEditor.offsetToVisualPosition(startOffset));
+    bigEditorView=!rect.contains(point);
+    if (bigEditorView) {
+      getNearestHighlighters(this,me,width,highlighters,false);
+      getNearestHighlighters((MarkupModelEx)DocumentMarkupModel.forDocument(myEditor.getDocument(),getEditor().getProject(),true),me,width,highlighters,false);
+      bigRenderer=new MyTooltipRenderer(new DocumentFragment(myEditor.getDocument(),startOffset,endOffset),highlighters);
+    }
+  }
+  if (!bigEditorView) {
+    if (highlighters.isEmpty())     return false;
+    bigRenderer=myTooltipRendererProvider.calcTooltipRenderer(highlighters);
+  }
   if (bigRenderer != null) {
     showTooltip(me,bigRenderer,new HintHint(me).setAwtTooltip(true).setPreferredPosition(Balloon.Position.atLeft));
     return true;

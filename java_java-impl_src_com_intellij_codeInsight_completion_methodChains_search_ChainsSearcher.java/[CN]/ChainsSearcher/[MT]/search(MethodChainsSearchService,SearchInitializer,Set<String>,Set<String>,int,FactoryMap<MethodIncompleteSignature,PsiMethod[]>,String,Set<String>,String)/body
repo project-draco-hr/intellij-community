@@ -1,0 +1,74 @@
+{
+  final Set<String> allExcludedNames=MethodChainsSearchUtil.unionToHashSet(excludedParamsTypesQNames,targetQName);
+  ProgressManager.checkCanceled();
+  final SearchInitializer.InitResult initResult=initializer.init(excludedEdgeNames,toSet,searchService,contextMethodName);
+  final Map<MethodIncompleteSignature,MethodsChain> knownDistance=initResult.getChains();
+  final PriorityQueue<WeightAware<MethodIncompleteSignature>> q=new PriorityQueue<WeightAware<MethodIncompleteSignature>>(initResult.getVertexes());
+  MethodsChain result=initResult.getCurrentBestTargetChain();
+  int maxWeight=0;
+  for (  final MethodsChain methodsChain : knownDistance.values()) {
+    if (methodsChain.getChainWeight() > maxWeight) {
+      maxWeight=methodsChain.getChainWeight();
+    }
+  }
+  final WeightAware<MethodIncompleteSignature> maxVertex=q.peek();
+  final int maxDistance;
+  if (maxVertex != null) {
+    maxDistance=maxVertex.getWeight();
+  }
+ else {
+    return null;
+  }
+  while (!q.isEmpty()) {
+    final WeightAware<MethodIncompleteSignature> currentVertex=q.poll();
+    final int currentVertexDistance=currentVertex.getWeight();
+    if (currentVertexDistance * Constants.CHAIN_SEARCH_MAGIC_RATIO < maxDistance) {
+      return result;
+    }
+    final MethodIncompleteSignature currentVertexUnderlying=currentVertex.getUnderlying();
+    final MethodsChain currentVertexMethodsChain=knownDistance.get(currentVertexUnderlying);
+    if (currentVertexDistance != currentVertexMethodsChain.getChainWeight()) {
+      continue;
+    }
+    final SortedSet<UsageIndexValue> bigrams=searchService.getBigram(currentVertexUnderlying);
+    int bigramsSumWeight=0;
+    int maxUpdatedWeight=0;
+    for (    final UsageIndexValue indexValue : bigrams) {
+      final MethodIncompleteSignature vertex=indexValue.getMethodIncompleteSignature();
+      final int occurrences=indexValue.getOccurrences();
+      bigramsSumWeight+=occurrences;
+      final boolean canBeResult=vertex.isStatic() || toSet.contains(vertex.getOwner());
+      if (!vertex.getOwner().equals(targetQName) || canBeResult) {
+        final int vertexDistance=Math.min(currentVertexDistance,occurrences);
+        final MethodsChain knownVertexMethodsChain=knownDistance.get(vertex);
+        if ((knownVertexMethodsChain == null || knownVertexMethodsChain.getChainWeight() < vertexDistance) && (result == null || result.getChainWeight() < vertexDistance)) {
+          if (occurrences * Constants.CHAIN_SEARCH_MAGIC_RATIO >= currentVertexMethodsChain.getChainWeight()) {
+            final MethodIncompleteSignature methodInvocation=indexValue.getMethodIncompleteSignature();
+            final PsiMethod[] psiMethods=resolver.get(methodInvocation);
+            if (psiMethods.length != 0 && MethodChainsSearchUtil.checkParametersForTypesQNames(psiMethods,allExcludedNames)) {
+              final MethodsChain newBestMethodsChain=currentVertexMethodsChain.addEdge(psiMethods);
+              if (canBeResult) {
+                result=newBestMethodsChain;
+              }
+ else               if (newBestMethodsChain.size() < pathMaximalLength - 1) {
+                maxUpdatedWeight=Math.max(maxUpdatedWeight,newBestMethodsChain.getChainWeight());
+                q.add(new WeightAware<MethodIncompleteSignature>(indexValue.getMethodIncompleteSignature(),newBestMethodsChain.getChainWeight()));
+              }
+              knownDistance.put(vertex,newBestMethodsChain);
+            }
+          }
+ else           if (!allExcludedNames.contains(currentVertexMethodsChain.getFirstQualifierClass().getQualifiedName()) && searchService.isSingleton(currentVertexMethodsChain.getFirstQualifierClass(),contextMethodName) && (searchService.isRelevantMethodForNotOverriden(currentVertexMethodsChain.getFirstQualifierClass().getQualifiedName(),currentVertexMethodsChain.getOneOfFirst().getName()) || searchService.isRelevantMethodForField(currentVertexMethodsChain.getFirstQualifierClass().getQualifiedName(),currentVertexMethodsChain.getOneOfFirst().getName()))) {
+            result=currentVertexMethodsChain;
+          }
+        }
+      }
+    }
+    if ((currentVertexMethodsChain.isStaticChain() || !allExcludedNames.contains(currentVertexMethodsChain.getFirstQualifierClass().getQualifiedName())) && bigramsSumWeight * Constants.CHAIN_SEARCH_MAGIC_RATIO <= currentVertexDistance && (result == null || result.getChainWeight() < currentVertexDistance) && (currentVertexMethodsChain.isStaticChain() || searchService.isSingleton(currentVertexMethodsChain.getFirstQualifierClass(),contextMethodName) && (searchService.isRelevantMethodForNotOverriden(currentVertexMethodsChain.getFirstQualifierClass().getQualifiedName(),currentVertexMethodsChain.getOneOfFirst().getName()) || searchService.isRelevantMethodForField(currentVertexMethodsChain.getFirstQualifierClass().getQualifiedName(),currentVertexMethodsChain.getOneOfFirst().getName())))) {
+      result=currentVertexMethodsChain;
+    }
+  }
+  if (result != null && result.getChainWeight() * Constants.CHAIN_SEARCH_MAGIC_RATIO >= maxWeight) {
+    return result;
+  }
+  return null;
+}

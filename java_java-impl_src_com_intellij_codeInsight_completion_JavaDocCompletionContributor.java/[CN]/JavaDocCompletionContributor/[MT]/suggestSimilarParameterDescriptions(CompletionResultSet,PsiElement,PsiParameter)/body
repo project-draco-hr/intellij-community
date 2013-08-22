@@ -1,0 +1,40 @@
+{
+  final Set<String> descriptions=ContainerUtil.newHashSet();
+  position.getContainingFile().accept(new PsiRecursiveElementWalkingVisitor(){
+    @Override public void visitElement(    PsiElement element){
+      PsiParameter param1=getDocTagParam(element);
+      if (param1 != null && param1 != param && Comparing.equal(param1.getName(),param.getName()) && Comparing.equal(param1.getType(),param.getType())) {
+        String text="";
+        for (        PsiElement psiElement : ((PsiDocTag)element).getDataElements()) {
+          if (psiElement != ((PsiDocTag)element).getValueElement()) {
+            text+=psiElement.getText();
+          }
+        }
+        text=text.trim();
+        if (text.contains(" ")) {
+          descriptions.add(text);
+        }
+      }
+      super.visitElement(element);
+    }
+  }
+);
+  for (  String description : descriptions) {
+    result.addElement(LookupElementBuilder.create(description).withInsertHandler(new InsertHandler<LookupElement>(){
+      @Override public void handleInsert(      InsertionContext context,      LookupElement item){
+        if (context.getCompletionChar() != Lookup.REPLACE_SELECT_CHAR)         return;
+        context.commitDocument();
+        PsiDocTag docTag=PsiTreeUtil.findElementOfClassAtOffset(context.getFile(),context.getStartOffset(),PsiDocTag.class,false);
+        if (docTag != null) {
+          Document document=context.getDocument();
+          int tagEnd=DocTagSelectioner.getDocTagRange(docTag,document.getCharsSequence(),0).getEndOffset();
+          int tail=context.getTailOffset();
+          if (tail < tagEnd) {
+            document.deleteString(tail,tagEnd);
+          }
+        }
+      }
+    }
+));
+  }
+}

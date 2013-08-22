@@ -31,12 +31,22 @@
     @Override public void visitReferenceExpression(    GrReferenceExpression ref){
       super.visitReferenceExpression(ref);
       final PsiElement resolved=ref.resolve();
-      if (resolved instanceof GrField && ((GrField)resolved).hasModifierProperty(FINAL) && PsiUtil.isLValue(ref)) {
+      if (resolved instanceof GrField && ((GrField)resolved).hasModifierProperty(FINAL)) {
         final GrField field=(GrField)resolved;
         final PsiClass containingClass=field.getContainingClass();
-        if (containingClass == null || !PsiTreeUtil.isAncestor(containingClass,ref,true)) {
-          registerError(ref,GroovyBundle.message("cannot.assign.a.value.to.final.field.0",field.getName()),LocalQuickFix.EMPTY_ARRAY,ProblemHighlightType.GENERIC_ERROR_OR_WARNING);
+        if (PsiUtil.isLValue(ref)) {
+          if (containingClass == null || !PsiTreeUtil.isAncestor(containingClass,ref,true)) {
+            registerError(ref,GroovyBundle.message("cannot.assign.a.value.to.final.field.0",field.getName()),LocalQuickFix.EMPTY_ARRAY,ProblemHighlightType.GENERIC_ERROR_OR_WARNING);
+          }
         }
+ else         if (PsiUtil.isUsedInIncOrDec(ref)) {
+          if (containingClass == null || !isInsideConstructorOrInitializer(containingClass,ref,field.hasModifierProperty(PsiModifier.STATIC))) {
+            registerError(ref,GroovyBundle.message("cannot.assign.a.value.to.final.field.0",field.getName()),LocalQuickFix.EMPTY_ARRAY,ProblemHighlightType.GENERIC_ERROR_OR_WARNING);
+          }
+        }
+      }
+ else       if (resolved instanceof GrParameter && ((GrParameter)resolved).getDeclarationScope() instanceof GrMethod && ((GrParameter)resolved).hasModifierProperty(FINAL)&& PsiUtil.isUsedInIncOrDec(ref)) {
+        registerError(ref,GroovyBundle.message("cannot.assign.a.value.to.final.parameter.0",((GrParameter)resolved).getName()),LocalQuickFix.EMPTY_ARRAY,ProblemHighlightType.GENERIC_ERROR_OR_WARNING);
       }
     }
     @Override public void visitClassInitializer(    GrClassInitializer initializer){

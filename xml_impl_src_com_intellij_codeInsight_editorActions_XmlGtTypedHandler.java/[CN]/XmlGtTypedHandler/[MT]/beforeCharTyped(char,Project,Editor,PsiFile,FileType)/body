@@ -1,6 +1,11 @@
 {
+  final Editor injectedEditor=InjectedLanguageUtil.getEditorForInjectedLanguageNoCommit(editor,editedFile);
+  if (editor != injectedEditor) {
+    editor=injectedEditor;
+    editedFile=PsiDocumentManager.getInstance(project).getPsiFile(injectedEditor.getDocument());
+  }
   final WebEditorOptions webEditorOptions=WebEditorOptions.getInstance();
-  if (c == '>' && webEditorOptions != null && webEditorOptions.isAutomaticallyInsertClosingTag() && (editedFile.getLanguage() instanceof XMLLanguage || editedFile.getViewProvider().getBaseLanguage() instanceof XMLLanguage)) {
+  if (c == '>' && webEditorOptions != null && webEditorOptions.isAutomaticallyInsertClosingTag() && fileContainsXmlLanguage(editedFile)) {
     PsiDocumentManager.getInstance(project).commitAllDocuments();
     PsiFile file=PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument());
     FileViewProvider provider=editedFile.getViewProvider();
@@ -8,6 +13,9 @@
     PsiElement element, elementAtCaret=null;
     if (offset < editor.getDocument().getTextLength()) {
       elementAtCaret=element=provider.findElementAt(offset,XMLLanguage.class);
+      if (element == null && offset > 0) {
+        elementAtCaret=element=provider.findElementAt(offset - 1,XMLLanguage.class);
+      }
       if (!(element instanceof PsiWhiteSpace)) {
         boolean nonAcceptableDelimiter=true;
         if (element instanceof XmlToken) {
@@ -53,7 +61,7 @@
         }
         element=parent.getPrevSibling();
       }
- else       if (parent instanceof XmlTag && !(element.getPrevSibling() instanceof XmlTag)) {
+ else       if (parent instanceof XmlTag && !(element.getPrevSibling() instanceof XmlTag) && !(element.getPrevSibling() instanceof OuterLanguageElement)) {
         element=parent;
       }
  else       if (parent instanceof XmlAttributeValue) {
@@ -73,7 +81,7 @@
     if (element instanceof XmlAttributeValue) {
       element=element.getParent().getParent();
     }
-    while (element instanceof PsiWhiteSpace)     element=element.getPrevSibling();
+    while (element instanceof PsiWhiteSpace || element instanceof OuterLanguageElement)     element=element.getPrevSibling();
     if (element instanceof XmlDocument) {
       element=element.getLastChild();
     }
@@ -94,7 +102,7 @@
       name=name.substring(0,offset - elementAtCaret.getTextOffset());
     }
     if (tag instanceof HtmlTag && HtmlUtil.isSingleHtmlTag(name))     return Result.CONTINUE;
-    if ("".equals(name))     return Result.CONTINUE;
+    if (name.isEmpty())     return Result.CONTINUE;
     int tagOffset=tag.getTextRange().getStartOffset();
     final XmlToken nameToken=XmlUtil.getTokenOfType(tag,XmlTokenType.XML_NAME);
     if (nameToken != null && nameToken.getTextRange().getStartOffset() > offset)     return Result.CONTINUE;

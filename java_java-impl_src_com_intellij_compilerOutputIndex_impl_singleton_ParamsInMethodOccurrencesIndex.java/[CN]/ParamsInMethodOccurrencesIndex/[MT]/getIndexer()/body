@@ -1,0 +1,39 @@
+{
+  return new DataIndexer<String,Multiset<MethodShortSignature>,ClassReader>(){
+    @NotNull @Override public Map<String,Multiset<MethodShortSignature>> map(    final ClassReader inputData){
+      final Map<String,Multiset<MethodShortSignature>> result=new HashMap<String,Multiset<MethodShortSignature>>();
+      inputData.accept(new ClassVisitor(Opcodes.ASM4){
+        @Nullable @Override public MethodVisitor visitMethod(        final int i,        final String name,        final String desc,        final String signature,        final String[] exception){
+          if (CompilerOutputIndexUtil.isSetterOrConstructorMethodName(name)) {
+            return null;
+          }
+          final String[] parameters=AsmUtil.getParamsTypes(desc);
+          final MethodShortSignature thisMethodShortSignature=new MethodShortSignature(name,desc);
+          for (          final String parameter : parameters) {
+            Multiset<MethodShortSignature> methods=result.get(parameter);
+            if (methods == null) {
+              methods=HashMultiset.create();
+              result.put(parameter,methods);
+            }
+            methods.add(thisMethodShortSignature);
+          }
+          return new MethodVisitor(Opcodes.ASM4){
+            @Override public void visitLocalVariable(            final String s,            final String desc,            final String signature,            final Label label,            final Label label2,            final int i){
+              final String varType=AsmUtil.getQualifiedClassName(desc);
+              Multiset<MethodShortSignature> methods=result.get(varType);
+              if (methods == null) {
+                methods=HashMultiset.create();
+                result.put(varType,methods);
+              }
+              methods.add(thisMethodShortSignature);
+            }
+          }
+;
+        }
+      }
+,Opcodes.ASM4);
+      return result;
+    }
+  }
+;
+}

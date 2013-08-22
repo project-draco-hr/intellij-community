@@ -27,14 +27,10 @@
   if (qualifier == null) {
     return;
   }
-  @NonNls final StringBuilder ifStatementText=new StringBuilder("if (");
-  ifStatementText.append(qualifier.getText());
-  ifStatementText.append('.');
   final int index=logMethodNameList.indexOf(referenceName);
   final String conditionMethodText=logConditionMethodNameList.get(index);
-  ifStatementText.append(conditionMethodText);
-  ifStatementText.append(") {}");
-  final PsiIfStatement ifStatement=(PsiIfStatement)factory.createStatementFromText(ifStatementText.toString(),statement);
+  @NonNls final String ifStatementText="if (" + qualifier.getText() + '.'+ conditionMethodText+ ") {}";
+  final PsiIfStatement ifStatement=(PsiIfStatement)factory.createStatementFromText(ifStatementText,statement);
   final PsiBlockStatement blockStatement=(PsiBlockStatement)ifStatement.getThenBranch();
   if (blockStatement == null) {
     return;
@@ -45,8 +41,15 @@
   }
   final PsiStatement firstStatement=logStatements.get(0);
   final PsiElement parent=firstStatement.getParent();
-  final PsiElement result=parent.addBefore(ifStatement,firstStatement);
   final JavaCodeStyleManager codeStyleManager=JavaCodeStyleManager.getInstance(project);
+  if (parent instanceof PsiIfStatement && ((PsiIfStatement)parent).getElseBranch() != null) {
+    final PsiBlockStatement newBlockStatement=(PsiBlockStatement)factory.createStatementFromText("{}",statement);
+    newBlockStatement.getCodeBlock().add(ifStatement);
+    final PsiElement result=firstStatement.replace(newBlockStatement);
+    codeStyleManager.shortenClassReferences(result);
+    return;
+  }
+  final PsiElement result=parent.addBefore(ifStatement,firstStatement);
   codeStyleManager.shortenClassReferences(result);
   for (  PsiStatement logStatement : logStatements) {
     logStatement.delete();

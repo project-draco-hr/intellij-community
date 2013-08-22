@@ -1,4 +1,5 @@
 {
+  mySettings=settings;
   mySignupTextField.addHyperlinkListener(new HyperlinkAdapter(){
     @Override protected void hyperlinkActivated(    final HyperlinkEvent e){
       BrowserUtil.browse(e.getURL());
@@ -8,35 +9,69 @@
   mySignupTextField.setText("<html>Do not have an account at github.com? <a href=\"https://github.com\">" + "Sign up" + "</a></html>");
   mySignupTextField.setBackground(myPane.getBackground());
   mySignupTextField.setCursor(new Cursor(Cursor.HAND_CURSOR));
+  myAuthTypeComboBox.addItem(AUTH_PASSWORD);
+  myAuthTypeComboBox.addItem(AUTH_TOKEN);
   myTestButton.addActionListener(new ActionListener(){
     @Override public void actionPerformed(    ActionEvent e){
-      String password=isPasswordModified() ? getPassword() : settings.getPassword();
       try {
-        if (GithubUtil.checkAuthData(new GithubAuthData(getHost(),getLogin(),password))) {
-          Messages.showInfoMessage(myPane,"Connection successful","Success");
+        GithubUser user=GithubUtil.checkAuthData(getAuthData());
+        if (GithubAuthData.AuthType.TOKEN.equals(getAuthType())) {
+          GithubNotifications.showInfoDialog(myPane,"Success","Connection successful for user " + user.getLogin());
         }
  else {
-          Messages.showErrorDialog(myPane,"Can't login to " + getHost() + " using given credentials","Login Failure");
+          GithubNotifications.showInfoDialog(myPane,"Success","Connection successful");
         }
       }
- catch (      IOException ex) {
-        LOG.info(ex);
-        Messages.showErrorDialog(myPane,String.format("Can't login to %s: %s",getHost(),GithubUtil.getErrorTextFromException(ex)),"Login Failure");
+ catch (      GithubAuthenticationException ex) {
+        GithubNotifications.showErrorDialog(myPane,"Login Failure","Can't login using given credentials: " + ex.getMessage());
       }
-      setPassword(password);
+catch (      IOException ex) {
+        LOG.info(ex);
+        GithubNotifications.showErrorDialog(myPane,"Login Failure","Can't login: " + GithubUtil.getErrorTextFromException(ex));
+      }
     }
   }
 );
-  myPasswordField.getDocument().addDocumentListener(new DocumentListener(){
-    @Override public void insertUpdate(    DocumentEvent e){
-      myPasswordModified=true;
-    }
-    @Override public void removeUpdate(    DocumentEvent e){
-      myPasswordModified=true;
-    }
-    @Override public void changedUpdate(    DocumentEvent e){
-      myPasswordModified=true;
+  myPasswordField.getDocument().addDocumentListener(new DocumentAdapter(){
+    @Override protected void textChanged(    DocumentEvent e){
+      myCredentialsModified=true;
     }
   }
 );
+  DocumentListener passwordEraser=new DocumentAdapter(){
+    @Override protected void textChanged(    DocumentEvent e){
+      if (!myCredentialsModified) {
+        erasePassword();
+      }
+    }
+  }
+;
+  myHostTextField.getDocument().addDocumentListener(passwordEraser);
+  myLoginTextField.getDocument().addDocumentListener(passwordEraser);
+  myPasswordField.addFocusListener(new FocusListener(){
+    @Override public void focusGained(    FocusEvent e){
+      if (!myCredentialsModified && !getPassword().isEmpty()) {
+        erasePassword();
+      }
+    }
+    @Override public void focusLost(    FocusEvent e){
+    }
+  }
+);
+  myAuthTypeComboBox.addItemListener(new ItemListener(){
+    @Override public void itemStateChanged(    ItemEvent e){
+      if (e.getStateChange() == ItemEvent.SELECTED) {
+        String item=e.getItem().toString();
+        if (AUTH_PASSWORD.equals(item)) {
+          ((CardLayout)myCardPanel.getLayout()).show(myCardPanel,AUTH_PASSWORD);
+        }
+ else         if (AUTH_TOKEN.equals(item)) {
+          ((CardLayout)myCardPanel.getLayout()).show(myCardPanel,AUTH_TOKEN);
+        }
+        erasePassword();
+      }
+    }
+  }
+);
+  reset();
 }

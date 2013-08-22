@@ -1,13 +1,16 @@
 {
   final PsiReference psiReference=myTestFixture.getReferenceAtCaretPositionWithAssertion(file + "." + ext);
   assertNull("Reference",psiReference.resolve());
-  assertTrue("QuickFixProvider",psiReference instanceof QuickFixProvider);
-  HighlightInfo info=HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(0,0).descriptionAndTooltip("").create();
-  ((QuickFixProvider)psiReference).registerQuickfix(info,psiReference);
-  assertTrue("One action expected",info.quickFixActionRanges.size() == 1);
-  final Pair<HighlightInfo.IntentionActionDescriptor,TextRange> rangePair=info.quickFixActionRanges.get(0);
-  final IntentionAction action=rangePair.first.getAction();
-  assertTrue("action is enabled",action.isAvailable(myTestFixture.getProject(),myTestFixture.getEditor(),myTestFixture.getFile()));
-  myTestFixture.launchAction(action);
+  assertTrue(psiReference.getClass().getName() + " is not a QuickFixProvider",psiReference instanceof LocalQuickFixProvider);
+  final LocalQuickFix[] fixes=((LocalQuickFixProvider)psiReference).getQuickFixes();
+  assertTrue("One action expected",fixes != null && fixes.length == 1);
+  final Project project=myTestFixture.getProject();
+  new WriteCommandAction.Simple(project,myTestFixture.getFile()){
+    @Override protected void run() throws Throwable {
+      ProblemDescriptor problemDescriptor=InspectionManager.getInstance(project).createProblemDescriptor(psiReference.getElement(),"foo",fixes,ProblemHighlightType.GENERIC_ERROR_OR_WARNING,true);
+      fixes[0].applyFix(project,problemDescriptor);
+    }
+  }
+.execute();
   myTestFixture.checkResultByFile(file + "_after." + ext);
 }

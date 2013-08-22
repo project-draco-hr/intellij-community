@@ -1,3 +1,36 @@
 {
-  return overrideOrImplementMethod(aClass,method,substitutor,createDefaultDecorator(aClass,method,toCopyJavaDoc,insertOverrideIfPossible));
+  if (!method.isValid() || !substitutor.isValid())   return Collections.emptyList();
+  List<PsiMethod> results=new ArrayList<PsiMethod>();
+  for (  final MethodImplementor implementor : getImplementors()) {
+    final PsiMethod[] prototypes=implementor.createImplementationPrototypes(aClass,method);
+    for (    PsiMethod prototype : prototypes) {
+      implementor.createDecorator(aClass,method,toCopyJavaDoc,insertOverrideIfPossible).consume(prototype);
+      results.add(prototype);
+    }
+  }
+  if (results.isEmpty()) {
+    PsiMethod method1=GenerateMembersUtil.substituteGenericMethod(method,substitutor,aClass);
+    PsiElementFactory factory=JavaPsiFacade.getInstance(method.getProject()).getElementFactory();
+    PsiMethod result=(PsiMethod)factory.createClass("Dummy").add(method1);
+    if (PsiUtil.isAnnotationMethod(result)) {
+      PsiAnnotationMemberValue defaultValue=((PsiAnnotationMethod)result).getDefaultValue();
+      if (defaultValue != null) {
+        PsiElement defaultKeyword=defaultValue;
+        while (!(defaultKeyword instanceof PsiKeyword) && defaultKeyword != null) {
+          defaultKeyword=defaultKeyword.getPrevSibling();
+        }
+        if (defaultKeyword == null)         defaultKeyword=defaultValue;
+        defaultValue.getParent().deleteChildRange(defaultKeyword,defaultValue);
+      }
+    }
+    Consumer<PsiMethod> decorator=createDefaultDecorator(aClass,method,toCopyJavaDoc,insertOverrideIfPossible);
+    decorator.consume(result);
+    results.add(result);
+  }
+  for (Iterator<PsiMethod> iterator=results.iterator(); iterator.hasNext(); ) {
+    if (aClass.findMethodBySignature(iterator.next(),false) != null) {
+      iterator.remove();
+    }
+  }
+  return results;
 }

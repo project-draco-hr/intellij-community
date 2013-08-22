@@ -1,0 +1,57 @@
+{
+  PsiExpression[] args=expression.getArgumentList().getExpressions();
+  final int exitPoint=getEndOffset(expression);
+  List<ConditionalGotoInstruction> gotoContractFalse=new SmartList<ConditionalGotoInstruction>();
+  for (int i=args.length - 1; i >= 0; i--) {
+    ValueConstraint arg=contract.arguments[i];
+    if (arg == ValueConstraint.NULL_VALUE || arg == ValueConstraint.NOT_NULL_VALUE) {
+      addInstruction(new PushInstruction(myFactory.getConstFactory().getNull(),null));
+      addInstruction(new BinopInstruction(JavaTokenType.EQEQ,null,expression.getProject()));
+    }
+ else     if (arg != ValueConstraint.TRUE_VALUE && arg != ValueConstraint.FALSE_VALUE) {
+      addInstruction(new PopInstruction());
+      continue;
+    }
+    boolean expectingTrueOnStack=arg == ValueConstraint.NULL_VALUE || arg == ValueConstraint.TRUE_VALUE;
+    ConditionalGotoInstruction condGoto=new ConditionalGotoInstruction(-1,expectingTrueOnStack,null);
+    gotoContractFalse.add(condGoto);
+    addInstruction(condGoto);
+  }
+switch (contract.returnValue) {
+case ANY_VALUE:
+    pushUnknown();
+  addInstruction(new GotoInstruction(exitPoint));
+break;
+case NULL_VALUE:
+addInstruction(new PushInstruction(myFactory.getConstFactory().getNull(),null));
+addInstruction(new GotoInstruction(exitPoint));
+break;
+case NOT_NULL_VALUE:
+PsiType type=expression.getType();
+Nullness nullability=DfaPsiUtil.getElementNullability(type,expression.resolveMethod());
+addInstruction(new PushInstruction(myFactory.createTypeValueWithNullability(type,nullability),null));
+addInstruction(new GotoInstruction(exitPoint));
+break;
+case TRUE_VALUE:
+addInstruction(new PushInstruction(myFactory.getConstFactory().getTrue(),null));
+addInstruction(new GotoInstruction(exitPoint));
+break;
+case FALSE_VALUE:
+addInstruction(new PushInstruction(myFactory.getConstFactory().getFalse(),null));
+addInstruction(new GotoInstruction(exitPoint));
+break;
+case THROW_EXCEPTION:
+int finallyOffset=getFinallyOffset();
+if (finallyOffset != NOT_FOUND) {
+addInstruction(new GosubInstruction(finallyOffset));
+}
+addInstruction(new ReturnInstruction());
+break;
+case SYSTEM_EXIT:
+addInstruction(new ReturnInstruction());
+break;
+}
+for (ConditionalGotoInstruction instruction : gotoContractFalse) {
+instruction.setOffset(myCurrentFlow.getInstructionCount());
+}
+}

@@ -1,0 +1,159 @@
+{
+  if (pattern.trim().length() == 0) {
+    return;
+  }
+  if (myClassModel == null) {
+    myClassModel=new GotoClassModel2(project);
+    myFileModel=new GotoFileModel(project);
+    myActionModel=new GotoActionModel(project,myFocusComponent){
+      @Override public boolean matches(      @NotNull String name,      @NotNull String pattern){
+        final AnAction anAction=ActionManager.getInstance().getAction(name);
+        if (anAction == null)         return true;
+        return NameUtil.buildMatcher("*" + pattern,NameUtil.MatchingCaseSensitivity.NONE).matches(anAction.getTemplatePresentation().getText());
+      }
+      @NotNull @Override public Object[] getElementsByName(      String id,      boolean checkBoxState,      String pattern){
+        final HashMap<AnAction,String> map=new HashMap<AnAction,String>();
+        final AnAction act=myActionManager.getAction(id);
+        if (act != null) {
+          map.put(act,myActionsMap.get(act));
+          if (checkBoxState) {
+            final Set<String> ids=((ActionManagerImpl)myActionManager).getActionIds();
+            for (            AnAction action : map.keySet()) {
+              ids.remove(getActionId(action));
+            }
+            if (ids.contains(id)) {
+              final AnAction anAction=myActionManager.getAction(id);
+              map.put(anAction,null);
+            }
+          }
+        }
+        Object[] objects=map.entrySet().toArray(new Map.Entry[map.size()]);
+        if (Comparing.strEqual(id,SETTINGS_KEY)) {
+          final Set<String> words=myIndex.getProcessedWords(pattern);
+          Set<OptionDescription> optionDescriptions=null;
+          final String actionManagerName=myActionManager.getComponentName();
+          for (          String word : words) {
+            final Set<OptionDescription> descriptions=((SearchableOptionsRegistrarImpl)myIndex).getAcceptableDescriptions(word);
+            if (descriptions != null) {
+              for (Iterator<OptionDescription> iterator=descriptions.iterator(); iterator.hasNext(); ) {
+                OptionDescription description=iterator.next();
+                if (actionManagerName.equals(description.getPath())) {
+                  iterator.remove();
+                }
+              }
+              if (!descriptions.isEmpty()) {
+                if (optionDescriptions == null) {
+                  optionDescriptions=descriptions;
+                }
+ else {
+                  optionDescriptions.retainAll(descriptions);
+                }
+              }
+            }
+ else {
+              optionDescriptions=null;
+              break;
+            }
+          }
+          if (optionDescriptions != null && !optionDescriptions.isEmpty()) {
+            Set<String> currentHits=new HashSet<String>();
+            for (Iterator<OptionDescription> iterator=optionDescriptions.iterator(); iterator.hasNext(); ) {
+              OptionDescription description=iterator.next();
+              final String hit=description.getHit();
+              if (hit == null || !currentHits.add(hit.trim())) {
+                iterator.remove();
+              }
+            }
+            final Object[] descriptions=optionDescriptions.toArray();
+            Arrays.sort(descriptions);
+            objects=ArrayUtil.mergeArrays(objects,descriptions);
+          }
+        }
+        return objects;
+      }
+    }
+;
+    myClasses=myClassModel.getNames(false);
+    myFiles=myFileModel.getNames(false);
+    myActions=myActionModel.getNames(true);
+    myConfigurables.clear();
+    fillConfigurablesIds(null,new IdeConfigurablesGroup().getConfigurables());
+    fillConfigurablesIds(null,new ProjectConfigurablesGroup(project).getConfigurables());
+  }
+  int clsCounter=0;
+  int filesCounter=0;
+  int actionsCount=0;
+  final AccessToken token=ApplicationManager.getApplication().acquireReadActionLock();
+  try {
+    List<MatchResult> classes=collectResults(pattern,myClasses,myClassModel);
+    List<MatchResult> files=collectResults(pattern,myFiles,myFileModel);
+    List<MatchResult> actions=collectResults(pattern,myActions,myActionModel);
+    DefaultListModel listModel=new DefaultListModel();
+    Set<VirtualFile> alreadyAddedFiles=new HashSet<VirtualFile>();
+    for (    MatchResult o : classes) {
+      if (clsCounter > 15)       break;
+      Object[] objects=myClassModel.getElementsByName(o.elementName,false,pattern,myProgressIndicator);
+      for (      Object object : objects) {
+        if (!listModel.contains(object)) {
+          listModel.addElement(object);
+          clsCounter++;
+          if (object instanceof PsiElement) {
+            VirtualFile file=PsiUtilCore.getVirtualFile((PsiElement)object);
+            if (file != null) {
+              alreadyAddedFiles.add(file);
+            }
+          }
+          if (clsCounter > 15)           break;
+        }
+      }
+    }
+    for (    MatchResult o : files) {
+      if (filesCounter > 15)       break;
+      Object[] objects=myFileModel.getElementsByName(o.elementName,false,pattern,myProgressIndicator);
+      for (      Object object : objects) {
+        if (!listModel.contains(object)) {
+          if (object instanceof PsiFile) {
+            object=((PsiFile)object).getVirtualFile();
+          }
+          if (object instanceof VirtualFile && !alreadyAddedFiles.contains((VirtualFile)object) && !((VirtualFile)object).isDirectory()) {
+            listModel.addElement(object);
+            filesCounter++;
+          }
+        }
+        if (filesCounter > 15)         break;
+      }
+    }
+    final Set<AnAction> addedActions=new HashSet<AnAction>();
+    final List<Object> actionsAndSettings=new ArrayList<Object>();
+    for (    MatchResult o : actions) {
+      myProgressIndicator.checkCanceled();
+      Object[] objects=myActionModel.getElementsByName(o.elementName,true,pattern);
+      for (      Object object : objects) {
+        myProgressIndicator.checkCanceled();
+        if (isActionValue(object)) {
+          final AnAction action=(AnAction)((Map.Entry)object).getKey();
+          if (!addedActions.add(action))           continue;
+        }
+        actionsAndSettings.add(object);
+        actionsCount++;
+      }
+    }
+    Collections.sort(actionsAndSettings,new Comparator<Object>(){
+      @Override public int compare(      Object o1,      Object o2){
+        final boolean b1=isSetting(o1);
+        final boolean b2=isSetting(o2);
+        final boolean t1=isToolWindowAction(o1);
+        final boolean t2=isToolWindowAction(o2);
+        return t1 == t2 ? b1 == b2 ? 0 : b1 ? 1 : -1 : t1 ? -1 : 1;
+      }
+    }
+);
+    for (    Object actionOrSetting : actionsAndSettings) {
+      listModel.addElement(actionOrSetting);
+    }
+    updateModel(listModel);
+  }
+  finally {
+    token.finish();
+  }
+}

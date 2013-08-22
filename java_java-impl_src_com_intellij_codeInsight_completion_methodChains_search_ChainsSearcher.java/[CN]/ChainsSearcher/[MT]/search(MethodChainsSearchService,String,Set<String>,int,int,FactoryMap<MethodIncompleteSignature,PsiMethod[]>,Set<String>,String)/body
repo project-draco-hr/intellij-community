@@ -1,0 +1,48 @@
+{
+  final SearchInitializer initializer=createInitializer(targetQName,resolver,searchService,excludedParamsTypesQNames);
+  final ArrayList<MethodsChain> methodsChains=new ArrayList<MethodsChain>(maxResultSize);
+  final MethodsChain firstBestMethodsChain=search(searchService,initializer,contextQNames,Collections.<String>emptySet(),pathMaximalLength,resolver,targetQName,excludedParamsTypesQNames,contextMethodName);
+  if (firstBestMethodsChain != null) {
+    methodsChains.add(firstBestMethodsChain);
+    Set<Set<String>> excludedCombinations=MethodsChain.edgeCombinations(Collections.<Set<String>>emptySet(),firstBestMethodsChain);
+    while (methodsChains.size() <= maxResultSize) {
+      final Set<Set<String>> localExcludedCombinations=excludedCombinations;
+      boolean allLocalsIsNull=true;
+      final int beforeStepChainsCount=methodsChains.size();
+      for (      final Set<String> excludedEdges : localExcludedCombinations) {
+        final MethodsChain local=search(searchService,initializer,contextQNames,excludedEdges,pathMaximalLength,resolver,targetQName,excludedParamsTypesQNames,contextMethodName);
+        if (local != null) {
+          allLocalsIsNull=false;
+        }
+ else {
+          continue;
+        }
+        boolean add=true;
+        for (int i=0; i < methodsChains.size(); i++) {
+          final MethodsChain chain=methodsChains.get(i);
+          final MethodsChain.CompareResult compareResult=MethodsChain.compare(local,chain);
+          if (compareResult == MethodsChain.CompareResult.EQUAL || compareResult == MethodsChain.CompareResult.RIGHT_CONTAINS_LEFT) {
+            add=false;
+            break;
+          }
+ else           if (compareResult == MethodsChain.CompareResult.LEFT_CONTAINS_RIGHT) {
+            methodsChains.set(i,local);
+            add=false;
+            break;
+          }
+        }
+        if (add) {
+          methodsChains.add(local);
+          if (methodsChains.size() >= maxResultSize) {
+            return methodsChains;
+          }
+          excludedCombinations=MethodsChain.edgeCombinations(excludedCombinations,local);
+        }
+      }
+      if (allLocalsIsNull || beforeStepChainsCount == methodsChains.size()) {
+        return methodsChains;
+      }
+    }
+  }
+  return methodsChains;
+}

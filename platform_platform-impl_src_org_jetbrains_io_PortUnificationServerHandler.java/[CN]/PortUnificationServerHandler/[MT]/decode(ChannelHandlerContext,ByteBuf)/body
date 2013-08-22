@@ -1,0 +1,34 @@
+{
+  ChannelPipeline pipeline=context.pipeline();
+  if (detectSsl && SslHandler.isEncrypted(buffer)) {
+    SSLEngine engine=SSL_SERVER_CONTEXT.getValue().createSSLEngine();
+    engine.setUseClientMode(false);
+    pipeline.addLast(new SslHandler(engine),new ChunkedWriteHandler());
+    pipeline.addLast(new PortUnificationServerHandler(delegatingHttpRequestHandler,false,detectGzip));
+  }
+ else {
+    int magic1=buffer.getUnsignedByte(buffer.readerIndex());
+    int magic2=buffer.getUnsignedByte(buffer.readerIndex() + 1);
+    if (detectGzip && magic1 == 31 && magic2 == 139) {
+      pipeline.addLast(new JZlibEncoder(ZlibWrapper.GZIP),new JdkZlibDecoder(ZlibWrapper.GZIP));
+      pipeline.addLast(new PortUnificationServerHandler(delegatingHttpRequestHandler,detectSsl,false));
+    }
+ else {
+      NettyUtil.initHttpHandlers(pipeline);
+      pipeline.addLast(delegatingHttpRequestHandler);
+      if (BuiltInServer.LOG.isDebugEnabled()) {
+        pipeline.addLast(new ChannelOutboundHandlerAdapter(){
+          @Override public void write(          ChannelHandlerContext context,          Object message,          ChannelPromise promise) throws Exception {
+            if (message instanceof HttpMessage) {
+              BuiltInServer.LOG.debug("OUT HTTP:\n" + message);
+            }
+            super.write(context,message,promise);
+          }
+        }
+);
+      }
+    }
+  }
+  pipeline.remove(this);
+  context.fireChannelRead(buffer);
+}
