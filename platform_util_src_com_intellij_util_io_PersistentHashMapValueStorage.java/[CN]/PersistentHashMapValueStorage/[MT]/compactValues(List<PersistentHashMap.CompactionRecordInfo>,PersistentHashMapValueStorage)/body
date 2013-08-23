@@ -15,6 +15,7 @@
   long lastConsumedOffset=lastReadOffset;
   long allRecordsStart=0;
   int fragments=0;
+  int newFragments=0;
   int allRecordsLength=0;
   byte[] stuffFromPreviousRecord=null;
   int bytesRead=(int)(mySize - (mySize / fileBufferLength) * fileBufferLength);
@@ -49,7 +50,7 @@
         }
         int available=myBufferStreamWrapper.available();
         chunkSize=DataInputOutputUtil.readINT(myBufferDataStreamWrapper);
-        prevChunkAddress=readPrevChunkAddress(info.valueAddress + (available - myBufferStreamWrapper.available()));
+        prevChunkAddress=readPrevChunkAddress(info.valueAddress);
         dataOffset=available - myBufferStreamWrapper.available();
         byte[] b;
         if (info.value != null) {
@@ -98,9 +99,11 @@
         }
         if (prevChunkAddress == 0) {
           info.newValueAddress=storage.appendBytes(b,0,chunkSize,info.newValueAddress);
+          ++newFragments;
         }
  else {
           if (retained > softMaxRetainedLimit && b.length > blockSizeToWriteWhenSoftMaxRetainedLimitIsHit || retained > maxRetainedLimit) {
+            ++newFragments;
             info.newValueAddress=storage.appendBytes(b,0,chunkSize,info.newValueAddress);
             info.value=null;
             retained-=b.length;
@@ -127,5 +130,5 @@
     lastReadOffset-=bytesRead;
     bytesRead=fileBufferLength;
   }
-  return fragments;
+  return fragments | ((long)newFragments << 32);
 }
