@@ -1,2 +1,34 @@
 {
+  runInBackground(new ThrowableConsumer<ProgressIndicator,VcsException>(){
+    @Override public void consume(    ProgressIndicator indicator) throws VcsException {
+      Collection<List<? extends TimeCommitParents>> logs=new ArrayList<List<? extends TimeCommitParents>>(myLogProviders.size());
+      Collection<Ref> allRefs=ContainerUtil.newHashSet();
+      for (      Map.Entry<VirtualFile,VcsLogProvider> entry : myLogProviders.entrySet()) {
+        VcsLogProvider logProvider=entry.getValue();
+        VirtualFile root=entry.getKey();
+        List<? extends VcsCommitDetails> firstBlock=logProvider.readFirstBlock(root,ordered);
+        Collection<Ref> refs=logProvider.readAllRefs(root);
+        myDetailsGetter.saveInCache(firstBlock);
+        myMiniDetailsGetter.saveInCache(firstBlock);
+        List<? extends TimeCommitParents> refreshedLog;
+        if (myAllLog == null) {
+          refreshedLog=firstBlock;
+        }
+ else {
+          refreshedLog=myLogJoiner.addCommits(myAllLog,firstBlock,refs);
+        }
+        logs.add(refreshedLog);
+        allRefs.addAll(refs);
+      }
+      List<TimeCommitParents> combinedLog=myMultiRepoJoiner.join(logs);
+      myDataPack=DataPack.build(combinedLog,allRefs,indicator);
+      UIUtil.invokeAndWaitIfNeeded(new Runnable(){
+        @Override public void run(){
+          onSuccess.consume(myDataPack);
+        }
+      }
+);
+    }
+  }
+);
 }
