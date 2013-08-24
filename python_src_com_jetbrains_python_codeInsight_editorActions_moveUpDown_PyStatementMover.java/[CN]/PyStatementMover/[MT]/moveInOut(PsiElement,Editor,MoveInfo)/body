@@ -1,0 +1,39 @@
+{
+  boolean removePass=false;
+  final ScopeRange toMove2=(ScopeRange)info.toMove2;
+  final PsiElement scope=toMove2.getScope();
+  final PsiElement anchor=toMove2.getAnchor();
+  final Project project=scope.getProject();
+  if (scope instanceof PyStatementList && !(elementToMove instanceof PsiComment)) {
+    final PyStatement[] statements=((PyStatementList)scope).getStatements();
+    if (statements.length == 1 && statements[0] == anchor && statements[0] instanceof PyPassStatement) {
+      removePass=true;
+    }
+  }
+  final PsiElement addedElement=toMove2.isAddBefore() ? scope.addBefore(elementToMove,anchor) : scope.addAfter(elementToMove,anchor);
+  addPassStatement(elementToMove,project);
+  elementToMove.delete();
+  final int addedElementLine=editor.getDocument().getLineNumber(addedElement.getTextOffset());
+  final PsiFile file=scope.getContainingFile();
+  adjustLineIndents(editor,scope,project,addedElement);
+  if (removePass) {
+    ApplicationManager.getApplication().runWriteAction(new Runnable(){
+      @Override public void run(){
+        final Document document=editor.getDocument();
+        final int lineNumber=document.getLineNumber(anchor.getTextOffset());
+        final int endOffset=document.getLineCount() <= lineNumber + 1 ? document.getLineEndOffset(lineNumber) : document.getLineStartOffset(lineNumber + 1);
+        document.deleteString(document.getLineStartOffset(lineNumber),endOffset);
+        PsiDocumentManager.getInstance(elementToMove.getProject()).commitAllDocuments();
+      }
+    }
+);
+  }
+  int offset=addedElement.getTextRange().getStartOffset();
+  if (addedElement instanceof PsiComment && offset == 0) {
+    final PsiElement psiElement=PyUtil.findNonWhitespaceAtOffset(file,editor.getDocument().getLineEndOffset(addedElementLine) - 1);
+    if (psiElement != null) {
+      offset=psiElement.getTextOffset();
+    }
+  }
+  return offset;
+}
