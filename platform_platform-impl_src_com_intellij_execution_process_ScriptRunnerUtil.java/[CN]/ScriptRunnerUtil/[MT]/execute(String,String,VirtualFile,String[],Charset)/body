@@ -1,24 +1,31 @@
 {
-  GeneralCommandLine commandLine=new GeneralCommandLine();
-  commandLine.setExePath(exePath);
-  commandLine.setPassParentEnvironment(true);
-  if (scriptFile != null) {
-    commandLine.addParameter(scriptFile.getPresentableUrl());
+  ExecutionException ex;
+  try {
+    return doExecute(exePath,workingDirectory,scriptFile,parameters,charset);
   }
-  commandLine.addParameters(parameters);
-  if (workingDirectory != null) {
-    commandLine.setWorkDirectory(workingDirectory);
+ catch (  ExecutionException e) {
+    ex=e;
   }
-  LOG.debug("Command line: " + commandLine.getCommandLineString());
-  LOG.debug("Command line env: " + commandLine.getEnvironment());
-  final OSProcessHandler processHandler=new ColoredProcessHandler(commandLine.createProcess(),commandLine.getCommandLineString(),charset == null ? EncodingManager.getInstance().getDefaultCharset() : charset);
-  if (LOG.isDebugEnabled()) {
-    processHandler.addProcessListener(new ProcessAdapter(){
-      @Override public void onTextAvailable(      ProcessEvent event,      Key outputType){
-        LOG.debug(outputType + ": " + event.getText());
+  boolean rerun=SystemInfo.isMac;
+  if (rerun) {
+    File exeFile=new File(exePath);
+    rerun=!exeFile.isAbsolute();
+  }
+  if (rerun) {
+    File originalExeFile=PathEnvironmentVariableUtil.findInOriginalPath(exePath);
+    rerun=originalExeFile == null;
+  }
+  if (rerun) {
+    File exeFile=PathEnvironmentVariableUtil.findInPath(exePath);
+    if (exeFile != null) {
+      try {
+        return doExecute(exeFile.getAbsolutePath(),workingDirectory,scriptFile,parameters,charset);
+      }
+ catch (      ExecutionException e) {
+        LOG.info("Standby command failed too",e);
+        throw ex;
       }
     }
-);
   }
-  return processHandler;
+  throw ex;
 }
