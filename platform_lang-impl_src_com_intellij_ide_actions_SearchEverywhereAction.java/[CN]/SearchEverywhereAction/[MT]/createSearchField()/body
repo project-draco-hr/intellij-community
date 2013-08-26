@@ -5,24 +5,16 @@
   editor.getDocument().addDocumentListener(new DocumentAdapter(){
     @Override protected void textChanged(    DocumentEvent e){
       final String pattern=editor.getText();
+      final int len=pattern.trim().length();
       myAlarm.cancelAllRequests();
       myAlarm.addRequest(new Runnable(){
         @Override public void run(){
-          if (StringUtil.isEmpty(pattern.trim())) {
-            SwingUtilities.invokeLater(new Runnable(){
-              @Override public void run(){
-                if (myPopup != null && myPopup.isVisible()) {
-                  myPopup.cancel();
-                }
-              }
-            }
-);
-            return;
+          if (field != null && field.getTextEditor().hasFocus()) {
+            rebuildList(pattern);
           }
-          rebuildList(pattern);
         }
       }
-,Registry.intValue("ide.goto.rebuild.delay"));
+,len == 1 ? 400 : len == 2 ? 300 : len == 3 ? 250 : 30);
     }
   }
 );
@@ -30,6 +22,7 @@
     @Override public void focusGained(    FocusEvent e){
       field.setText("");
       field.getTextEditor().setForeground(UIUtil.getLabelForeground());
+      myTitleIndexes=new TitleIndexes();
       editor.setColumns(25);
       myFocusComponent=e.getOppositeComponent();
       SwingUtilities.invokeLater(new Runnable(){
@@ -40,6 +33,11 @@
         }
       }
 );
+      if (myPopup != null && myPopup.isVisible()) {
+        myPopup.cancel();
+        myPopup=null;
+      }
+      rebuildList("");
     }
     @Override public void focusLost(    FocusEvent e){
       onFocusLost(editor);
@@ -49,7 +47,10 @@
   editor.addKeyListener(new KeyAdapter(){
     @Override public void keyPressed(    KeyEvent e){
       int keyCode=e.getKeyCode();
-      if (keyCode == KeyEvent.VK_ESCAPE && (myPopup == null || !myPopup.isVisible())) {
+      if (keyCode == KeyEvent.VK_ESCAPE) {
+        if (myPopup != null && myPopup.isVisible()) {
+          myPopup.cancel();
+        }
         IdeFocusManager focusManager=IdeFocusManager.findInstanceByComponent(editor);
         focusManager.requestDefaultFocus(true);
       }

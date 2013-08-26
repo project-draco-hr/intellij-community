@@ -31,9 +31,17 @@
   int start=flow.getStartOffset(body);
   int end=flow.getEndOffset(body);
   final List<PsiVariable> writtenVariables=new ArrayList<PsiVariable>(ControlFlowUtil.getWrittenVariables(flow,start,end,false));
+  final List<ProblemDescriptor> problems=new ArrayList<ProblemDescriptor>();
   final HashSet<PsiVariable> ssaVarsSet=new HashSet<PsiVariable>();
   body.accept(new JavaRecursiveElementWalkingVisitor(){
     @Override public void visitCodeBlock(    PsiCodeBlock block){
+      if (block.getParent() instanceof PsiLambdaExpression && block != body) {
+        final List<ProblemDescriptor> descriptors=checkCodeBlock(block,manager,onTheFly);
+        if (descriptors != null) {
+          problems.addAll(descriptors);
+        }
+        return;
+      }
       super.visitCodeBlock(block);
       PsiElement anchor=block;
       if (block.getParent() instanceof PsiSwitchStatement) {
@@ -84,7 +92,7 @@
     }
   }
 );
-  ArrayList<PsiVariable> result=new ArrayList<PsiVariable>(ssaVarsSet);
+  final ArrayList<PsiVariable> result=new ArrayList<PsiVariable>(ssaVarsSet);
   if (body.getParent() instanceof PsiMethod) {
     PsiMethod method=(PsiMethod)body.getParent();
     PsiParameter[] parameters=method.getParameterList().getParameters();
@@ -116,7 +124,6 @@
       iterator.remove();
     }
   }
-  List<ProblemDescriptor> problems=new ArrayList<ProblemDescriptor>(result.size());
   for (  PsiVariable variable : result) {
     final PsiIdentifier nameIdenitier=variable.getNameIdentifier();
     PsiElement problemElement=nameIdenitier != null ? nameIdenitier : variable;
