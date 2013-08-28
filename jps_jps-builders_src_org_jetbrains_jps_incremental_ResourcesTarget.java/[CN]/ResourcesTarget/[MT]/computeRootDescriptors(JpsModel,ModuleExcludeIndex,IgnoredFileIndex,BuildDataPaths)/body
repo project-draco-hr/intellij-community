@@ -2,15 +2,19 @@
   List<ResourceRootDescriptor> roots=new ArrayList<ResourceRootDescriptor>();
   JavaSourceRootType type=isTests() ? JavaSourceRootType.TEST_SOURCE : JavaSourceRootType.SOURCE;
   Iterable<ExcludedJavaSourceRootProvider> excludedRootProviders=JpsServiceManager.getInstance().getExtensions(ExcludedJavaSourceRootProvider.class);
-  roots_loop:   for (  JpsTypedModuleSourceRoot<JpsSimpleElement<JavaSourceRootProperties>> sourceRoot : myModule.getSourceRoots(type)) {
-    for (    ExcludedJavaSourceRootProvider provider : excludedRootProviders) {
-      if (provider.isExcludedFromCompilation(myModule,sourceRoot)) {
-        continue roots_loop;
-      }
+  for (  JpsTypedModuleSourceRoot<JpsSimpleElement<JavaSourceRootProperties>> sourceRoot : myModule.getSourceRoots(type)) {
+    if (!isExcludedFromCompilation(excludedRootProviders,sourceRoot)) {
+      final String packagePrefix=sourceRoot.getProperties().getData().getPackagePrefix();
+      final File rootFile=sourceRoot.getFile();
+      roots.add(new FilteredResourceRootDescriptor(rootFile,this,packagePrefix,computeRootExcludes(rootFile,index)));
     }
-    final String packagePrefix=sourceRoot.getProperties().getData().getPackagePrefix();
-    final File rootFile=sourceRoot.getFile();
-    roots.add(new ResourceRootDescriptor(rootFile,this,false,packagePrefix,computeRootExcludes(rootFile,index)));
+  }
+  JavaResourceRootType resourceType=isTests() ? JavaResourceRootType.TEST_RESOURCE : JavaResourceRootType.RESOURCE;
+  for (  JpsModuleSourceRoot root : myModule.getSourceRoots(resourceType)) {
+    if (!isExcludedFromCompilation(excludedRootProviders,root)) {
+      File rootFile=root.getFile();
+      roots.add(new ResourceRootDescriptor(rootFile,this,"",computeRootExcludes(rootFile,index)));
+    }
   }
   return roots;
 }
