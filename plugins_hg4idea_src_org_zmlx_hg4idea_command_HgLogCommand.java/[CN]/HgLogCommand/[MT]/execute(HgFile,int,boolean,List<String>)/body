@@ -3,12 +3,26 @@
     return Collections.emptyList();
   }
   String template;
-  HgVcs vcs=HgVcs.getInstance(myProject);
-  if (vcs != null && vcs.getGlobalSettings().isRunViaBash() && includeFiles) {
-    template=HgChangesetUtil.makeTemplate(LONG_TEMPLATE_FOR_BASH);
+  boolean shouldParseOldTemplate=false;
+  if (!includeFiles) {
+    template=HgChangesetUtil.makeTemplate(SHORT_TEMPLATE_ITEMS);
   }
  else {
-    template=HgChangesetUtil.makeTemplate(includeFiles ? LONG_TEMPLATE_ITEMS : SHORT_TEMPLATE_ITEMS);
+    HgVcs vcs=HgVcs.getInstance(myProject);
+    if (vcs == null) {
+      LOG.info("Vcs couldn't be null for project");
+      return Collections.emptyList();
+    }
+    if (!vcs.getVersion().isBuildInFunctionSupported()) {
+      template=HgChangesetUtil.makeTemplate(LONG_TEMPLATE_FOR_OLD_VERSIONS);
+      shouldParseOldTemplate=true;
+    }
+ else     if (vcs.getGlobalSettings().isRunViaBash()) {
+      template=HgChangesetUtil.makeTemplate(LONG_TEMPLATE_FOR_BASH);
+    }
+ else {
+      template=HgChangesetUtil.makeTemplate(LONG_TEMPLATE_ITEMS);
+    }
   }
   int expectedItemCount=includeFiles ? LONG_TEMPLATE_ITEMS.length : SHORT_TEMPLATE_ITEMS.length;
   FilePath originalFileName=HgUtil.getOriginalFileName(hgFile.toFilePath(),ChangeListManager.getInstance(myProject));
@@ -70,7 +84,7 @@
           if (numAttributes > FILES_DELETED_INDEX) {
             filesDeleted=parseFileList(attributes[FILES_DELETED_INDEX]);
             if (numAttributes > FILES_COPIED_INDEX) {
-              copies=parseCopiesFileList(attributes[FILES_COPIED_INDEX]);
+              copies=shouldParseOldTemplate ? parseCopiesFileListAsOldVersion(attributes[FILES_COPIED_INDEX]) : parseCopiesFileList(attributes[FILES_COPIED_INDEX]);
               Iterator<String> keys=copies.keySet().iterator();
               while (keys.hasNext()) {
                 String s=keys.next();
