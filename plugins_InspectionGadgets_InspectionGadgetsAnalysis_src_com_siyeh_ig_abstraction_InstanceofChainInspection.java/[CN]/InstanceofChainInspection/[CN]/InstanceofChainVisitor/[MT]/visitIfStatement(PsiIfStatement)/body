@@ -1,18 +1,28 @@
 {
-  super.visitIfStatement(statement);
-  final PsiElement parent=statement.getParent();
+  super.visitIfStatement(ifStatement);
+  final PsiElement parent=ifStatement.getParent();
   if (parent instanceof PsiIfStatement) {
     final PsiIfStatement parentStatement=(PsiIfStatement)parent;
     final PsiStatement elseBranch=parentStatement.getElseBranch();
-    if (statement.equals(elseBranch)) {
+    if (ifStatement.equals(elseBranch)) {
+      return;
+    }
+  }
+  final PsiStatement previousStatement=PsiTreeUtil.getPrevSiblingOfType(ifStatement,PsiStatement.class);
+  if (previousStatement instanceof PsiIfStatement) {
+    final PsiIfStatement previousIfStatement=(PsiIfStatement)previousStatement;
+    if (isInstanceofCheck(previousIfStatement.getCondition())) {
       return;
     }
   }
   int numChecks=0;
-  PsiIfStatement branch=statement;
-  while (branch != null) {
+  PsiIfStatement branch=ifStatement;
+  while (true) {
     final PsiExpression condition=branch.getCondition();
     if (!isInstanceofCheck(condition)) {
+      if (numChecks > 1) {
+        break;
+      }
       return;
     }
     numChecks++;
@@ -20,12 +30,19 @@
     if (elseBranch instanceof PsiIfStatement) {
       branch=(PsiIfStatement)elseBranch;
     }
+ else     if (elseBranch == null) {
+      final PsiStatement nextStatement=PsiTreeUtil.getNextSiblingOfType(branch,PsiStatement.class);
+      if (!(nextStatement instanceof PsiIfStatement)) {
+        break;
+      }
+      branch=(PsiIfStatement)nextStatement;
+    }
  else {
-      branch=null;
+      break;
     }
   }
   if (numChecks < 2) {
     return;
   }
-  registerStatementError(statement);
+  registerStatementError(ifStatement);
 }
