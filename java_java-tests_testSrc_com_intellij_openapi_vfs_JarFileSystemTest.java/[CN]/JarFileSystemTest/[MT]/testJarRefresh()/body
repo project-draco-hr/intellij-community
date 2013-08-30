@@ -1,0 +1,24 @@
+{
+  File jar=IoTestUtil.createTestJar();
+  VirtualFile vFile=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(jar);
+  assertNotNull(vFile);
+  final VirtualFile entry=findByPath(jar.getPath() + JarFileSystem.JAR_SEPARATOR + "entry.txt");
+  assertContent(entry,"test");
+  final Ref<Boolean> updated=Ref.create(false);
+  ApplicationManager.getApplication().getMessageBus().connect(myTestRootDisposable).subscribe(VirtualFileManager.VFS_CHANGES,new BulkFileListener.Adapter(){
+    @Override public void before(    @NotNull List<? extends VFileEvent> events){
+      for (      VFileEvent event : events) {
+        if (event instanceof VFileContentChangeEvent && entry.equals(event.getFile())) {
+          updated.set(true);
+          break;
+        }
+      }
+    }
+  }
+);
+  IoTestUtil.writeEntry(jar,"entry.txt","update");
+  vFile.refresh(false,false);
+  assertTrue(updated.get());
+  assertTrue(entry.isValid());
+  assertContent(entry,"update");
+}
