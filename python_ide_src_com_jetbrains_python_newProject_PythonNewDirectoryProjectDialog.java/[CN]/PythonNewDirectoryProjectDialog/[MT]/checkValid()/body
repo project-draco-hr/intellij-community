@@ -1,0 +1,49 @@
+{
+  super.checkValid();
+  Sdk sdk=getSdk();
+  if (isOKActionEnabled()) {
+    setOKActionEnabled(true);
+    setErrorText(null);
+    myFrameworkCheckbox.setVisible(false);
+    DirectoryProjectGenerator generator=getProjectGenerator();
+    final boolean isPy3k=sdk != null && PythonSdkType.getLanguageLevelForSdk(sdk).isPy3K();
+    if (sdk != null && PythonSdkType.isRemote(sdk) && !acceptsRemoteSdk(generator)) {
+      setOKActionEnabled(false);
+      setErrorText("Please choose a local interpreter");
+    }
+ else     if (generator instanceof PyFrameworkProjectGenerator) {
+      PyFrameworkProjectGenerator frameworkProjectGenerator=(PyFrameworkProjectGenerator)generator;
+      String frameworkName=frameworkProjectGenerator.getFrameworkTitle();
+      if (sdk != null && !isFrameworkInstalled(sdk)) {
+        final PyPackageManagerImpl packageManager=(PyPackageManagerImpl)PyPackageManager.getInstance(sdk);
+        final boolean onlyWithCache=PythonSdkFlavor.getFlavor(sdk) instanceof JythonSdkFlavor || PythonSdkFlavor.getFlavor(sdk) instanceof PyPySdkFlavor;
+        try {
+          if (onlyWithCache && packageManager.cacheIsNotNull() || !onlyWithCache) {
+            final PyPackage pip=packageManager.findPackage("pip");
+            myFrameworkCheckbox.setText("Install " + frameworkName);
+            myFrameworkCheckbox.setMnemonic(frameworkName.charAt(0));
+            myFrameworkCheckbox.setVisible(pip != null);
+            if (!myInstallFrameworkChanged) {
+              myFrameworkCheckbox.setSelected(pip != null);
+            }
+          }
+        }
+ catch (        PyExternalProcessException e) {
+          myFrameworkCheckbox.setVisible(false);
+        }
+        if (!myFrameworkCheckbox.isSelected()) {
+          setErrorText("No " + frameworkName + " support installed in selected interpreter");
+          setOKActionEnabled(false);
+        }
+      }
+      if (isPy3k && !((PyFrameworkProjectGenerator)generator).supportsPython3()) {
+        setErrorText(frameworkName + " is not supported for the selected interpreter");
+        setOKActionEnabled(false);
+      }
+    }
+    if (sdk == null) {
+      setOKActionEnabled(false);
+      setErrorText("No Python interpreter selected");
+    }
+  }
+}
