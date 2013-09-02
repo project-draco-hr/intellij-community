@@ -1,0 +1,49 @@
+{
+  try {
+    final Pair<HttpClient,HttpConnection> pair=createConnection(builder);
+    try {
+      final PostMethod postMethod=new PostMethod(builder.getServerUrl() + "/" + actionName);
+      postMethod.setQueryString(builder.getQueryString());
+      final BufferedInputStream content=file != null ? new BufferedInputStream(new FileInputStream(file)) : null;
+      try {
+        if (content != null) {
+          postMethod.setRequestEntity(new InputStreamRequestEntity(content,file.length()));
+        }
+        postMethod.execute(pair.getFirst().getState(),pair.getSecond());
+        int code=postMethod.getStatusCode();
+        if (code != HttpStatus.SC_OK) {
+          String reason=postMethod.getResponseBodyAsString().trim();
+          if (HttpStatus.SC_UNAUTHORIZED == code) {
+            builder.setUnauthorizedStatus();
+            return;
+          }
+ else           if (HttpStatus.SC_SERVICE_UNAVAILABLE == code) {
+            builder.setDisconnectedStatus();
+            return;
+          }
+ else {
+            throw new IOException(reason);
+          }
+        }
+        InputStream in=postMethod.getResponseBodyAsStream();
+        try {
+          processor.processStream(in);
+        }
+  finally {
+          in.close();
+        }
+      }
+  finally {
+        if (content != null) {
+          content.close();
+        }
+      }
+    }
+  finally {
+      pair.getSecond().close();
+    }
+  }
+ catch (  ConnectException e) {
+    builder.setDisconnectedStatus();
+  }
+}
