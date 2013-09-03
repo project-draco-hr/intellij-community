@@ -1,29 +1,31 @@
 {
-  String[] names=getAllClassNames(parameters.getProject());
+  Project project=parameters.getProject();
+  final PsiShortNamesCache cache=PsiShortNamesCache.getInstance(project);
   final ProgressIndicator indicator=ProgressIndicatorProvider.getGlobalProgressIndicator();
+  final Set<String> names=new THashSet<String>(10000);
+  cache.processAllClassNames(new Processor<String>(){
+    int i=0;
+    @Override public boolean process(    String s){
+      if (indicator != null && i++ % 512 == 0) {
+        indicator.checkCanceled();
+      }
+      if (parameters.nameMatches(s)) {
+        names.add(s);
+      }
+      return true;
+    }
+  }
+,scope,IdFilter.getProjectIdFilter(project,true));
   if (indicator != null) {
     indicator.checkCanceled();
   }
-  List<String> sorted=new ArrayList<String>(names.length);
-  for (int i=0; i < names.length; i++) {
-    String name=names[i];
-    if (parameters.nameMatches(name)) {
-      sorted.add(name);
-    }
-    if (indicator != null && i % 512 == 0) {
-      indicator.checkCanceled();
-    }
-  }
-  if (indicator != null) {
-    indicator.checkCanceled();
-  }
+  List<String> sorted=new ArrayList<String>(names);
   Collections.sort(sorted,new Comparator<String>(){
     @Override public int compare(    final String o1,    final String o2){
       return o1.compareToIgnoreCase(o2);
     }
   }
 );
-  final PsiShortNamesCache cache=PsiShortNamesCache.getInstance(parameters.getProject());
   for (  final String name : sorted) {
     ProgressIndicatorProvider.checkCanceled();
     final PsiClass[] classes=ApplicationManager.getApplication().runReadAction(new Computable<PsiClass[]>(){

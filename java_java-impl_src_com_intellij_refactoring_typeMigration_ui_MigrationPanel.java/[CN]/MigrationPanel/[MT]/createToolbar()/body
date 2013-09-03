@@ -18,27 +18,34 @@
         if (userObject instanceof MigrationRootNode) {
           ProgressManager.getInstance().runProcessWithProgressSynchronously(new Runnable(){
             public void run(){
-              new WriteCommandAction(myProject){
-                protected void run(                Result result) throws Throwable {
-                  final Collection<? extends AbstractTreeNode> children=((MigrationRootNode)userObject).getChildren();
-                  for (                  AbstractTreeNode child : children) {
-                    expandTree((MigrationNode)child);
+              final Collection<? extends AbstractTreeNode> children=((MigrationRootNode)userObject).getChildren();
+              for (              AbstractTreeNode child : children) {
+                expandTree((MigrationNode)child);
+              }
+              final TypeMigrationUsageInfo[] usages=myLabeler.getMigratedUsages();
+              final HashSet<VirtualFile> files=new HashSet<VirtualFile>();
+              for (              TypeMigrationUsageInfo usage : usages) {
+                if (!usage.isExcluded()) {
+                  final PsiElement element=usage.getElement();
+                  if (element != null) {
+                    files.add(element.getContainingFile().getVirtualFile());
                   }
-                  final TypeMigrationUsageInfo[] usages=myLabeler.getMigratedUsages();
-                  final HashSet<VirtualFile> files=new HashSet<VirtualFile>();
-                  for (                  TypeMigrationUsageInfo usage : usages) {
-                    if (!usage.isExcluded()) {
-                      final PsiElement element=usage.getElement();
-                      if (element != null) {
-                        files.add(element.getContainingFile().getVirtualFile());
-                      }
-                    }
-                  }
-                  if (ReadonlyStatusHandler.getInstance(myProject).ensureFilesWritable(VfsUtil.toVirtualFileArray(files)).hasReadonlyFiles())                   return;
-                  TypeMigrationProcessor.change(myLabeler,usages);
                 }
               }
+              ApplicationManager.getApplication().invokeLater(new Runnable(){
+                @Override public void run(){
+                  if (ReadonlyStatusHandler.getInstance(myProject).ensureFilesWritable(VfsUtilCore.toVirtualFileArray(files)).hasReadonlyFiles()) {
+                    return;
+                  }
+                  new WriteCommandAction(myProject){
+                    protected void run(                    Result result) throws Throwable {
+                      TypeMigrationProcessor.change(myLabeler,usages);
+                    }
+                  }
 .execute();
+                }
+              }
+,myProject.getDisposed());
             }
           }
 ,"Type Migration",false,myProject);
