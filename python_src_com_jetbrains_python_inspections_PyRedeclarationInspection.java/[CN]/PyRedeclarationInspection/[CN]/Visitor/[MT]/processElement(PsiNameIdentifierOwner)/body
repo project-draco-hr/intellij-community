@@ -1,0 +1,25 @@
+{
+  final String name=element.getName();
+  final ScopeOwner owner=ScopeUtil.getScopeOwner(element);
+  if (owner != null && name != null) {
+    final Instruction[] instructions=ControlFlowCache.getControlFlow(owner).getInstructions();
+    final int startInstruction=ControlFlowUtil.findInstructionNumberByElement(instructions,element);
+    ControlFlowUtil.iteratePrev(startInstruction,instructions,new Function<Instruction,ControlFlowUtil.Operation>(){
+      @Override public ControlFlowUtil.Operation fun(      Instruction instruction){
+        if (instruction instanceof ReadWriteInstruction && instruction.num() != startInstruction) {
+          final ReadWriteInstruction rwInstruction=(ReadWriteInstruction)instruction;
+          if (name.equals(rwInstruction.getName())) {
+            if (rwInstruction.getAccess().isWriteAccess()) {
+              final PsiElement shadowed=rwInstruction.getElement();
+              final PsiElement identifier=element.getNameIdentifier();
+              registerProblem(identifier != null ? identifier : element,PyBundle.message("INSP.shadows.same.named.$0.above",getKind(shadowed)));
+            }
+            return ControlFlowUtil.Operation.BREAK;
+          }
+        }
+        return ControlFlowUtil.Operation.NEXT;
+      }
+    }
+);
+  }
+}
