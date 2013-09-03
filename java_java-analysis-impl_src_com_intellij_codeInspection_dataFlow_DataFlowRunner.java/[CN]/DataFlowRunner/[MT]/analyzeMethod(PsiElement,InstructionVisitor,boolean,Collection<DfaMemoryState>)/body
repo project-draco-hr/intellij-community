@@ -1,12 +1,12 @@
 {
   try {
-    final Collection<DfaMemoryState> initialStates=createInitialStates(psiBlock,visitor);
-    if (initialStates == null)     return RunnerResult.NOT_APPLICABLE;
+    prepareAnalysis(psiBlock,initialStates);
     final ControlFlow flow=createControlFlowAnalyzer().buildControlFlow(psiBlock,ignoreAssertions);
     if (flow == null)     return RunnerResult.NOT_APPLICABLE;
     int endOffset=flow.getInstructionCount();
     myInstructions=flow.getInstructions();
     myFields=flow.getFields();
+    myNestedClosures.clear();
     if (LOG.isDebugEnabled()) {
       LOG.debug("Analyzing code block: " + psiBlock.getText());
       for (int i=0; i < myInstructions.length; i++) {
@@ -46,17 +46,12 @@
           return RunnerResult.TOO_COMPLEX;
         }
       }
-      if (LOG.isDebugEnabled()) {
-        LOG.debug(instructionState.toString());
-      }
-      DfaInstructionState[] after=instruction.accept(this,instructionState.getMemoryState(),visitor);
-      if (after != null) {
-        for (        DfaInstructionState state : after) {
-          Instruction nextInstruction=state.getInstruction();
-          if ((!(nextInstruction instanceof BranchingInstruction) || !nextInstruction.isMemoryStateProcessed(state.getMemoryState())) && instruction.getIndex() < endOffset) {
-            state.setDistanceFromStart(distance + 1);
-            queue.add(state);
-          }
+      DfaInstructionState[] after=acceptInstruction(visitor,instructionState);
+      for (      DfaInstructionState state : after) {
+        Instruction nextInstruction=state.getInstruction();
+        if ((!(nextInstruction instanceof BranchingInstruction) || !nextInstruction.isMemoryStateProcessed(state.getMemoryState())) && instruction.getIndex() < endOffset) {
+          state.setDistanceFromStart(distance + 1);
+          queue.add(state);
         }
       }
       count++;
