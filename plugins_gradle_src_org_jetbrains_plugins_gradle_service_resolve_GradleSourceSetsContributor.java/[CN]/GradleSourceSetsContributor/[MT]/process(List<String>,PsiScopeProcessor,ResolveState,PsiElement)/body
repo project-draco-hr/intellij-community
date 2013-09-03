@@ -1,0 +1,46 @@
+{
+  if (methodCallInfo.isEmpty()) {
+    return;
+  }
+  if (methodCallInfo.size() > SOURCE_DIRECTORY_CLOSURE_LEVEL) {
+    String method=ContainerUtil.getLastItem(methodCallInfo);
+    if (method != null && !StringUtil.startsWith(method,SOURCE_SETS)) {
+      return;
+    }
+  }
+  final String methodCall=methodCallInfo.get(0);
+  Class configureClosureClazz=null;
+  Class contributorClass=null;
+  if (methodCallInfo.size() == SOURCE_SET_CONTAINER_LEVEL) {
+    configureClosureClazz=SourceSetContainer.class;
+    if (place instanceof GrReferenceExpressionImpl) {
+      Class varClazz=StringUtil.startsWith(methodCall,SOURCE_SETS + '.') ? SourceSetContainer.class : SourceSet.class;
+      GradleResolverUtil.addImplicitVariable(processor,state,(GrReferenceExpressionImpl)place,varClazz);
+    }
+ else {
+      contributorClass=SourceSetContainer.class;
+    }
+  }
+ else   if (methodCallInfo.size() == SOURCE_SET_LEVEL) {
+    configureClosureClazz=SourceSet.class;
+    contributorClass=SourceSet.class;
+  }
+ else   if (methodCallInfo.size() == SOURCE_DIRECTORY_LEVEL) {
+    configureClosureClazz=SourceDirectorySet.class;
+    contributorClass=SourceDirectorySet.class;
+  }
+ else   if (methodCallInfo.size() == SOURCE_DIRECTORY_CLOSURE_LEVEL) {
+    contributorClass=SourceDirectorySet.class;
+  }
+  if (configureClosureClazz != null) {
+    GrLightMethodBuilder methodWithClosure=GradleResolverUtil.createMethodWithClosure(CONFIGURE_CLOSURE_METHOD,place,configureClosureClazz);
+    processor.execute(methodWithClosure,state);
+  }
+  if (contributorClass != null) {
+    GroovyPsiManager psiManager=GroovyPsiManager.getInstance(place.getProject());
+    PsiClass psiClass=psiManager.findClassWithCache(contributorClass.getName(),place.getResolveScope());
+    if (psiClass != null) {
+      psiClass.processDeclarations(processor,state,null,place);
+    }
+  }
+}
