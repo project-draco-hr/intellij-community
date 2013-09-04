@@ -1,7 +1,7 @@
 {
   PsiExpression[] args=expression.getArgumentList().getExpressions();
   final int exitPoint=getEndOffset(expression);
-  List<ConditionalGotoInstruction> gotoContractFalse=new SmartList<ConditionalGotoInstruction>();
+  List<GotoInstruction> gotoContractFalse=new SmartList<GotoInstruction>();
   for (int i=args.length - 1; i >= 0; i--) {
     ValueConstraint arg=contract.arguments[i];
     if (arg == ValueConstraint.NULL_VALUE || arg == ValueConstraint.NOT_NULL_VALUE) {
@@ -13,9 +13,12 @@
       continue;
     }
     boolean expectingTrueOnStack=arg == ValueConstraint.NULL_VALUE || arg == ValueConstraint.TRUE_VALUE;
-    ConditionalGotoInstruction condGoto=new ConditionalGotoInstruction(-1,expectingTrueOnStack,null);
-    gotoContractFalse.add(condGoto);
-    addInstruction(condGoto);
+    ConditionalGotoInstruction continueCheckingContract=addInstruction(new ConditionalGotoInstruction(-1,!expectingTrueOnStack,null));
+    for (int j=0; j < i; j++) {
+      addInstruction(new PopInstruction());
+    }
+    gotoContractFalse.add(addInstruction(new GotoInstruction(-1)));
+    continueCheckingContract.setOffset(myCurrentFlow.getInstructionCount());
   }
 switch (contract.returnValue) {
 case ANY_VALUE:
@@ -51,7 +54,7 @@ case SYSTEM_EXIT:
 addInstruction(new ReturnInstruction());
 break;
 }
-for (ConditionalGotoInstruction instruction : gotoContractFalse) {
+for (GotoInstruction instruction : gotoContractFalse) {
 instruction.setOffset(myCurrentFlow.getInstructionCount());
 }
 }
