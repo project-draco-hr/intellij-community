@@ -1,0 +1,33 @@
+{
+  if (document instanceof DocumentWindow) {
+    final Document delegate=((DocumentWindow)document).getDelegate();
+    final MarkupModelEx baseMarkupModel=(MarkupModelEx)forDocument(delegate,project,true);
+    return new MarkupModelWindow(baseMarkupModel,(DocumentWindow)document);
+  }
+  if (project == null) {
+    MarkupModelEx markupModel=document.getUserData(MARKUP_MODEL_KEY);
+    if (create && markupModel == null) {
+      MarkupModelEx newModel=new MarkupModelImpl((DocumentEx)document);
+      if ((markupModel=((UserDataHolderEx)document).putUserDataIfAbsent(MARKUP_MODEL_KEY,newModel)) != newModel) {
+        newModel.dispose();
+      }
+    }
+    return markupModel;
+  }
+  final DocumentMarkupModelManager documentMarkupModelManager=project.isDisposed() ? null : DocumentMarkupModelManager.getInstance(project);
+  if (documentMarkupModelManager == null || documentMarkupModelManager.isDisposed() || project.isDisposed()) {
+    return new EmptyMarkupModel(document);
+  }
+  ConcurrentMap<Project,MarkupModelImpl> markupModelMap=getMarkupModelMap(document);
+  MarkupModelImpl model=markupModelMap.get(project);
+  if (create && model == null) {
+    MarkupModelImpl newModel=new MarkupModelImpl((DocumentEx)document);
+    if ((model=ConcurrencyUtil.cacheOrGet(markupModelMap,project,newModel)) == newModel) {
+      documentMarkupModelManager.registerDocument((DocumentImpl)document);
+    }
+ else {
+      newModel.dispose();
+    }
+  }
+  return model;
+}
