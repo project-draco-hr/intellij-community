@@ -1,0 +1,32 @@
+{
+  if (isConditional(element)) {
+    return;
+  }
+  final String name=element.getName();
+  final ScopeOwner owner=ScopeUtil.getScopeOwner(element);
+  if (owner != null && name != null) {
+    final Instruction[] instructions=ControlFlowCache.getControlFlow(owner).getInstructions();
+    final int startInstruction=ControlFlowUtil.findInstructionNumberByElement(instructions,element);
+    ControlFlowUtil.iteratePrev(startInstruction,instructions,new Function<Instruction,ControlFlowUtil.Operation>(){
+      @Override public ControlFlowUtil.Operation fun(      Instruction instruction){
+        if (instruction instanceof ReadWriteInstruction && instruction.num() != startInstruction) {
+          final ReadWriteInstruction rwInstruction=(ReadWriteInstruction)instruction;
+          if (name.equals(rwInstruction.getName())) {
+            if (rwInstruction.getAccess().isWriteAccess()) {
+              final List<LocalQuickFix> quickFixes=new ArrayList<LocalQuickFix>();
+              final PsiElement originalElement=rwInstruction.getElement();
+              if (originalElement != null && suggestRename(element,originalElement)) {
+                quickFixes.add(new PyRenameElementQuickFix());
+              }
+              final PsiElement identifier=element.getNameIdentifier();
+              registerProblem(identifier != null ? identifier : element,PyBundle.message("INSP.redeclared.name"),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,null,quickFixes.toArray(new LocalQuickFix[quickFixes.size()]));
+            }
+            return ControlFlowUtil.Operation.BREAK;
+          }
+        }
+        return ControlFlowUtil.Operation.NEXT;
+      }
+    }
+);
+  }
+}
