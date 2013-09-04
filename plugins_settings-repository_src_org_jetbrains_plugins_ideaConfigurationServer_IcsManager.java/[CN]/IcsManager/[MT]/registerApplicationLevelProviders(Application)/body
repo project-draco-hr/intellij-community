@@ -6,8 +6,28 @@
     LOG.error(e);
   }
   connectAndUpdateStorage();
+  ICSStreamProvider streamProvider=new ICSStreamProvider(null){
+    @Override public String[] listSubFiles(    @NotNull String fileSpec,    @NotNull RoamingType roamingType){
+      return serverConnector.listSubFileNames(IcsUrlBuilder.buildPath(fileSpec,roamingType,null));
+    }
+    @Override public void deleteFile(    @NotNull String fileSpec,    @NotNull RoamingType roamingType){
+      final String path=IcsUrlBuilder.buildPath(fileSpec,roamingType,null);
+      ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+        @Override public void run(){
+          try {
+            serverConnector.delete(path);
+          }
+ catch (          IOException e) {
+            LOG.debug(e);
+          }
+        }
+      }
+);
+    }
+  }
+;
   StateStorageManager storageManager=((ApplicationImpl)application).getStateStore().getStateStorageManager();
-  registerProvider(storageManager,RoamingType.PER_USER);
-  registerProvider(storageManager,RoamingType.PER_PLATFORM);
-  registerProvider(storageManager,RoamingType.GLOBAL);
+  storageManager.registerStreamProvider(streamProvider,RoamingType.PER_USER);
+  storageManager.registerStreamProvider(streamProvider,RoamingType.PER_PLATFORM);
+  storageManager.registerStreamProvider(streamProvider,RoamingType.GLOBAL);
 }
