@@ -1,0 +1,75 @@
+{
+  if (!(variable instanceof PsiField)) {
+    return false;
+  }
+  final PsiField field=(PsiField)variable;
+  final PsiClass containingClass=field.getContainingClass();
+  if (containingClass == null) {
+    return false;
+  }
+  final PsiClass topLevelClass=PsiUtil.getTopLevelClass(variable);
+  final VariableAssignedVisitor visitor=new VariableAssignedVisitor(field);
+  if (topLevelClass != null && !containingClass.equals(topLevelClass)) {
+    visitor.setExcludedElement(containingClass);
+    topLevelClass.accept(visitor);
+    if (visitor.isAssigned()) {
+      return true;
+    }
+  }
+  if (field.hasModifierProperty(PsiModifier.STATIC)) {
+    for (    PsiElement child : containingClass.getChildren()) {
+      if (child instanceof PsiClassInitializer) {
+        final PsiClassInitializer classInitializer=(PsiClassInitializer)child;
+        if (classInitializer.hasModifierProperty(PsiModifier.STATIC)) {
+          continue;
+        }
+        classInitializer.accept(visitor);
+      }
+ else       if (child instanceof PsiField) {
+        final PsiField otherField=(PsiField)child;
+        if (otherField.hasModifierProperty(PsiModifier.STATIC)) {
+          continue;
+        }
+        otherField.accept(visitor);
+      }
+ else       if (child instanceof PsiMethod || child instanceof PsiClass) {
+        child.accept(visitor);
+      }
+      if (visitor.isAssigned()) {
+        return true;
+      }
+    }
+  }
+ else {
+    for (    PsiElement child : containingClass.getChildren()) {
+      if (child instanceof PsiField) {
+        final PsiField otherField=(PsiField)child;
+        if (!otherField.hasModifierProperty(PsiModifier.STATIC)) {
+          continue;
+        }
+        otherField.accept(visitor);
+      }
+ else       if (child instanceof PsiClassInitializer) {
+        final PsiClassInitializer classInitializer=(PsiClassInitializer)child;
+        if (!classInitializer.hasModifierProperty(PsiModifier.STATIC)) {
+          continue;
+        }
+        classInitializer.accept(visitor);
+      }
+ else       if (child instanceof PsiMethod) {
+        final PsiMethod method=(PsiMethod)child;
+        if (method.isConstructor()) {
+          continue;
+        }
+        method.accept(visitor);
+      }
+ else       if (child instanceof PsiClass) {
+        child.accept(visitor);
+      }
+      if (visitor.isAssigned()) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
