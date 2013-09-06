@@ -1,0 +1,38 @@
+{
+  MouseEvent me=e;
+  final int line=getLineByEvent(e);
+  Rectangle area=myEditor.getScrollingModel().getVisibleArea();
+  int realY=myEditor.getLineHeight() * line;
+  boolean isVisible=area.contains(area.x,realY);
+  TooltipRenderer bigRenderer;
+  if (!ApplicationManager.getApplication().isInternal() || isVisible) {
+    final Set<RangeHighlighter> highlighters=new THashSet<RangeHighlighter>();
+    getNearestHighlighters(this,me.getY(),highlighters);
+    getNearestHighlighters((MarkupModelEx)DocumentMarkupModel.forDocument(myEditor.getDocument(),getEditor().getProject(),true),me.getY(),highlighters);
+    int minDelta=Integer.MAX_VALUE;
+    int y=e.getY();
+    for (    RangeHighlighter each : highlighters) {
+      ProperTextRange range=offsetsToYPositions(each.getStartOffset(),each.getEndOffset());
+      int eachStartY=range.getStartOffset();
+      int eachEndY=range.getEndOffset();
+      int eachY=eachStartY + (eachEndY - eachStartY) / 2;
+      if (Math.abs(e.getY() - eachY) < minDelta) {
+        y=eachY;
+      }
+    }
+    me=new MouseEvent(e.getComponent(),e.getID(),e.getWhen(),e.getModifiers(),e.getX(),y + 1,e.getClickCount(),e.isPopupTrigger());
+    if (highlighters.isEmpty())     return false;
+    bigRenderer=myTooltipRendererProvider.calcTooltipRenderer(highlighters);
+  }
+ else {
+    final List<RangeHighlighterEx> highlighters=new ArrayList<RangeHighlighterEx>();
+    collectRangeHighlighters(this,line,highlighters);
+    collectRangeHighlighters((MarkupModelEx)DocumentMarkupModel.forDocument(myEditor.getDocument(),getEditor().getProject(),true),line,highlighters);
+    bigRenderer=new EditorFragmentRenderer(line,highlighters,e.getX());
+  }
+  if (bigRenderer != null) {
+    showTooltip(me,bigRenderer,new HintHint(me).setAwtTooltip(true).setPreferredPosition(Balloon.Position.atLeft));
+    return true;
+  }
+  return false;
+}
