@@ -1,0 +1,99 @@
+{
+  final PsiElement element=usage.getElement();
+  if (!(element instanceof GrReferenceExpression))   return false;
+  final FieldDescriptor fieldDescriptor=usage.getFieldDescriptor();
+  PsiField field=fieldDescriptor.getField();
+  boolean processGet=descriptor.isToEncapsulateGet();
+  boolean processSet=descriptor.isToEncapsulateSet() && !field.hasModifierProperty(PsiModifier.FINAL);
+  if (!processGet && !processSet)   return true;
+  final GrReferenceExpression expr=(GrReferenceExpression)element;
+  final GroovyPsiElementFactory factory=GroovyPsiElementFactory.getInstance(descriptor.getTargetClass().getProject());
+  try {
+    final PsiElement parent=expr.getParent();
+    if (parent instanceof GrAssignmentExpression && expr.equals(((GrAssignmentExpression)parent).getLValue())) {
+      GrAssignmentExpression assignment=(GrAssignmentExpression)parent;
+      if (assignment.getRValue() != null) {
+        PsiElement opSign=assignment.getOperationToken();
+        IElementType opType=assignment.getOperationTokenType();
+        if (opType == GroovyTokenTypes.mASSIGN) {
+          if (!processSet || (checkSetterIsSimple(field,setter) && checkFieldIsInaccessible(field,expr)))           return true;
+          final GrExpression setterArgument=assignment.getRValue();
+          GrMethodCallExpression methodCall=createSetterCall(fieldDescriptor,setterArgument,expr,descriptor.getTargetClass(),setter);
+          if (methodCall != null) {
+            tryToSimplify((GrMethodCallExpression)assignment.replaceWithExpression(methodCall,true));
+          }
+        }
+ else {
+          if (checkAccessorsAreSimpleAndFieldIsInaccessible(field,setter,getter,expr)) {
+            return true;
+          }
+          String opName=opSign.getText();
+          LOG.assertTrue(StringUtil.endsWithChar(opName,'='));
+          opName=opName.substring(0,opName.length() - 1);
+          GrExpression getExpr=expr;
+          if (processGet) {
+            final GrExpression getterCall=createGetterCall(fieldDescriptor,expr,descriptor.getTargetClass(),getter);
+            if (getterCall != null) {
+              getExpr=getterCall;
+            }
+          }
+          @NonNls String text="a" + opName + "b";
+          GrBinaryExpression binExpr=(GrBinaryExpression)factory.createExpressionFromText(text,expr);
+          tryToSimplify((GrMethodCallExpression)binExpr.getLeftOperand().replaceWithExpression(getExpr,true));
+          binExpr.getRightOperand().replaceWithExpression(assignment.getRValue(),true);
+          GrExpression setExpr;
+          if (processSet) {
+            setExpr=createSetterCall(fieldDescriptor,binExpr,expr,descriptor.getTargetClass(),setter);
+          }
+ else {
+            text="a = b";
+            GrAssignmentExpression newAssignment=(GrAssignmentExpression)factory.createExpressionFromText(text,null);
+            newAssignment.getLValue().replaceWithExpression(expr,true);
+            newAssignment.getRValue().replaceWithExpression(binExpr,true);
+            setExpr=newAssignment;
+          }
+          tryToSimplify((GrMethodCallExpression)assignment.replaceWithExpression(setExpr,true));
+        }
+      }
+    }
+ else     if (parent instanceof GrUnaryExpression && (((GrUnaryExpression)parent).getOperationTokenType() == GroovyTokenTypes.mINC || ((GrUnaryExpression)parent).getOperationTokenType() == GroovyTokenTypes.mDEC)) {
+      if (checkAccessorsAreSimpleAndFieldIsInaccessible(field,setter,getter,expr)) {
+        return true;
+      }
+      IElementType sign=((GrUnaryExpression)parent).getOperationTokenType();
+      GrExpression getExpr=expr;
+      if (processGet) {
+        final GrExpression getterCall=createGetterCall(fieldDescriptor,expr,descriptor.getTargetClass(),getter);
+        if (getterCall != null) {
+          getExpr=getterCall;
+        }
+      }
+      @NonNls String text=sign == GroovyTokenTypes.mINC ? "a+1" : "a-1";
+      GrBinaryExpression binExpr=(GrBinaryExpression)factory.createExpressionFromText(text,parent);
+      tryToSimplify((GrMethodCallExpression)binExpr.getLeftOperand().replaceWithExpression(getExpr,true));
+      GrExpression setExpr;
+      if (processSet) {
+        setExpr=createSetterCall(fieldDescriptor,binExpr,expr,descriptor.getTargetClass(),setter);
+      }
+ else {
+        text="a = b";
+        GrAssignmentExpression assignment=(GrAssignmentExpression)factory.createExpressionFromText(text,null);
+        assignment.getLValue().replaceWithExpression(expr,true);
+        assignment.getRValue().replaceWithExpression(binExpr,true);
+        setExpr=assignment;
+      }
+      tryToSimplify((GrMethodCallExpression)((GrUnaryExpression)parent).replaceWithExpression(setExpr,true));
+    }
+ else {
+      if (!processGet || (checkGetterIsSimple(field,getter) && checkFieldIsInaccessible(field,expr)))       return true;
+      GrExpression methodCall=createGetterCall(fieldDescriptor,expr,descriptor.getTargetClass(),getter);
+      if (methodCall != null) {
+        tryToSimplify(((GrMethodCallExpression)expr.replaceWithExpression(methodCall,true)));
+      }
+    }
+  }
+ catch (  IncorrectOperationException e) {
+    LOG.error(e);
+  }
+  return true;
+}
