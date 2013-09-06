@@ -1,0 +1,40 @@
+{
+  PsiFile psiFile=parameters.getOriginalFile();
+  if (!(psiFile instanceof XmlFile))   return;
+  if (!MavenDomUtil.isProjectFile(psiFile))   return;
+  DomFileDescription<?> description=DomManager.getDomManager(psiFile.getProject()).getDomFileDescription((XmlFile)psiFile);
+  if (!(description instanceof MavenDomProjectModelDescription))   return;
+  result.runRemainingContributors(parameters,new Consumer<CompletionResult>(){
+    @Override public void consume(    CompletionResult r){
+      final LookupElement lookupElement=r.getLookupElement();
+      if (myHandledTags.contains(lookupElement.getLookupString())) {
+        LookupElement decorator=LookupElementDecorator.withInsertHandler(lookupElement,new InsertHandler<LookupElementDecorator<LookupElement>>(){
+          @Override public void handleInsert(          final InsertionContext context,          LookupElementDecorator<LookupElement> item){
+            lookupElement.handleInsert(context);
+            Object object=lookupElement.getObject();
+            if ("dependency".equals(lookupElement.getLookupString()) && object instanceof XmlTag && "maven-4.0.0.xsd".equals(((XmlTag)object).getContainingFile().getName())) {
+              context.commitDocument();
+              PsiElement psiElement=context.getFile().findElementAt(context.getEditor().getCaretModel().getOffset());
+              XmlTag xmlTag=PsiTreeUtil.getParentOfType(psiElement,XmlTag.class);
+              if (xmlTag != null) {
+                DomElement domElement=DomManager.getDomManager(context.getProject()).getDomElement(xmlTag);
+                if (domElement instanceof MavenDomDependency) {
+                  context.setLaterRunnable(new Runnable(){
+                    @Override public void run(){
+                      new CodeCompletionHandlerBase(CompletionType.BASIC).invokeCompletion(context.getProject(),context.getEditor());
+                    }
+                  }
+);
+                }
+              }
+            }
+          }
+        }
+);
+        r=r.withLookupElement(decorator);
+      }
+      result.passResult(r);
+    }
+  }
+);
+}
