@@ -25,15 +25,15 @@
     GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,"No current branch");
     return;
   }
-  final GithubInfo info=loadGithubInfoWithModal(project,userAndRepo,upstreamUserAndRepo);
+  final Map<String,String> forks=new HashMap<String,String>();
+  final Set<RemoteBranch> branches=new HashSet<RemoteBranch>();
+  addAvailableBranchesFromGit(repository,forks,branches);
+  final GithubInfo info=loadGithubInfoWithModal(project,userAndRepo,upstreamUserAndRepo,forks,branches);
   if (info == null) {
     return;
   }
-  final Set<RemoteBranch> branches=getAvailableBranchesFromGit(repository);
-  branches.addAll(info.getBranches());
-  final BranchesInfo branchesInfo=new BranchesInfo(info.getRepo(),upstreamUserAndRepo,branches);
   GithubRepo parent=info.getRepo().getParent();
-  String suggestedBranch=parent == null ? null : parent.getUserName() + ":" + parent.getDefaultBranch();
+  String suggestedBranch=parent == null || parent.getDefaultBranch() == null ? null : parent.getUserName() + ":" + parent.getDefaultBranch();
   Collection<String> suggestions=ContainerUtil.map(branches,new Function<RemoteBranch,String>(){
     @Override public String fun(    RemoteBranch remoteBranch){
       return remoteBranch.getReference();
@@ -42,7 +42,7 @@
 );
   Consumer<String> showDiff=new Consumer<String>(){
     @Override public void consume(    String ref){
-      showDiffByRef(project,ref,repository,currentBranch.getName(),info.getAuthData(),branchesInfo);
+      showDiffByRef(project,ref,repository,currentBranch.getName(),info.getAuthData(),forks,branches,info.getRepo().getSource());
     }
   }
 ;
@@ -62,8 +62,9 @@
       }
       String from=info.getRepo().getUserName() + ":" + currentBranch.getName();
       String onto=dialog.getTargetBranch();
+      String targetUser=onto.substring(0,onto.indexOf(':'));
       GithubAuthData auth=info.getAuthData();
-      GithubFullPath targetRepo=findTargetRepository(project,auth,onto,branchesInfo);
+      GithubFullPath targetRepo=findRepositoryByUser(project,targetUser,forks,auth,info.getRepo().getSource());
       if (targetRepo == null) {
         GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,"Can't find repository for specified branch: " + onto);
         return;
