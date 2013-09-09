@@ -3,17 +3,15 @@
   if (detectSsl && SslHandler.isEncrypted(buffer)) {
     SSLEngine engine=SSL_SERVER_CONTEXT.getValue().createSSLEngine();
     engine.setUseClientMode(false);
-    pipeline.addLast(new SslHandler(engine),new ChunkedWriteHandler());
-    pipeline.addLast(new PortUnificationServerHandler(delegatingHttpRequestHandler,false,detectGzip));
+    pipeline.addLast(new SslHandler(engine),new ChunkedWriteHandler(),new PortUnificationServerHandler(delegatingHttpRequestHandler,false,detectGzip));
   }
  else {
     int magic1=buffer.getUnsignedByte(buffer.readerIndex());
     int magic2=buffer.getUnsignedByte(buffer.readerIndex() + 1);
     if (detectGzip && magic1 == 31 && magic2 == 139) {
-      pipeline.addLast(new JZlibEncoder(ZlibWrapper.GZIP),new JdkZlibDecoder(ZlibWrapper.GZIP));
-      pipeline.addLast(new PortUnificationServerHandler(delegatingHttpRequestHandler,detectSsl,false));
+      pipeline.addLast(new JZlibEncoder(ZlibWrapper.GZIP),new JdkZlibDecoder(ZlibWrapper.GZIP),new PortUnificationServerHandler(delegatingHttpRequestHandler,detectSsl,false));
     }
- else {
+ else     if (isHttp(magic1,magic2)) {
       NettyUtil.initHttpHandlers(pipeline);
       pipeline.addLast(delegatingHttpRequestHandler);
       if (BuiltInServer.LOG.isDebugEnabled()) {
@@ -28,7 +26,16 @@
 );
       }
     }
+ else     if (magic1 == 'C' && magic2 == 'H') {
+      buffer.skipBytes(2);
+      pipeline.addLast(new CustomHandlerDelegator());
+    }
+ else {
+      BuiltInServer.LOG.warn("unknown request, first two bytes " + magic1 + " "+ magic2);
+      context.close();
+    }
   }
+  ensureThatExceptionHandlerIsLast(pipeline);
   pipeline.remove(this);
   context.fireChannelRead(buffer);
 }

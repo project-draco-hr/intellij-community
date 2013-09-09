@@ -26,12 +26,12 @@
       scheduleDeletion(file);
       continue;
     }
-    boolean checkFurther=true;
     NewVirtualFile parent=file.getParent();
-    if (parent != null && (checkAndScheduleAttributesChange(parent,file,attributes) || checkAndScheduleSymLinkTargetChange(parent,file,attributes,fs))) {
-      checkFurther=false;
+    if (parent != null && checkAndScheduleFileTypeChange(parent,file,attributes)) {
+      file.markClean();
+      continue;
     }
- else     if (file.isDirectory()) {
+    if (file.isDirectory()) {
       VirtualDirectoryImpl dir=(VirtualDirectoryImpl)file;
       boolean fullSync=dir.allChildrenLoaded();
       if (fullSync) {
@@ -104,18 +104,24 @@
         scheduleUpdateContent(file);
       }
     }
-    if (checkFurther) {
-      boolean currentWritable=persistence.isWritable(file);
-      boolean upToDateWritable=attributes.isWritable();
-      if (currentWritable != upToDateWritable) {
-        scheduleAttributeChange(file,VirtualFile.PROP_WRITABLE,currentWritable,upToDateWritable);
+    boolean currentWritable=persistence.isWritable(file);
+    boolean upToDateWritable=attributes.isWritable();
+    if (currentWritable != upToDateWritable) {
+      scheduleAttributeChange(file,VirtualFile.PROP_WRITABLE,currentWritable,upToDateWritable);
+    }
+    if (SystemInfo.isWindows) {
+      boolean currentHidden=file.is(VFileProperty.HIDDEN);
+      boolean upToDateHidden=attributes.isHidden();
+      if (currentHidden != upToDateHidden) {
+        scheduleAttributeChange(file,VirtualFile.PROP_HIDDEN,currentHidden,upToDateHidden);
       }
-      if (SystemInfo.isWindows) {
-        boolean currentHidden=file.is(VFileProperty.HIDDEN);
-        boolean upToDateHidden=attributes.isHidden();
-        if (currentHidden != upToDateHidden) {
-          scheduleAttributeChange(file,VirtualFile.PROP_HIDDEN,currentHidden,upToDateHidden);
-        }
+    }
+    if (attributes.isSymLink()) {
+      String currentTarget=file.getCanonicalPath();
+      String upToDateTarget=fs.resolveSymLink(file);
+      String upToDateVfsTarget=upToDateTarget != null ? FileUtil.toSystemIndependentName(upToDateTarget) : null;
+      if (!Comparing.equal(currentTarget,upToDateVfsTarget)) {
+        scheduleAttributeChange(file,VirtualFile.PROP_SYMLINK_TARGET,currentTarget,upToDateVfsTarget);
       }
     }
     file.markClean();

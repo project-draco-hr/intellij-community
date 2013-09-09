@@ -1,0 +1,93 @@
+{
+  final HintManagerImpl hintManager=HintManagerImpl.getInstanceImpl();
+  JPanel magic=new JPanel(){
+    private static final int R=6;
+    private BufferedImage myImage=null;
+    @Override public Dimension getPreferredSize(){
+      int width=0;
+      if (editor instanceof EditorEx) {
+        width=((EditorEx)editor).getGutterComponentEx().getWidth();
+      }
+      width+=Math.min(editor.getScrollingModel().getVisibleArea().width,editor.getContentComponent().getWidth());
+      return new Dimension(width - 6,editor.getLineHeight() * (myPreviewLines * 2 + 1));
+    }
+    @Override protected void paintComponent(    Graphics g){
+      if (myImage == null) {
+        Dimension size=getPreferredSize();
+        myImage=UIUtil.createImage(size.width,size.height,Transparency.TRANSLUCENT);
+        Graphics graphics=myImage.getGraphics();
+        int width=0;
+        Graphics2D g2d=(Graphics2D)graphics;
+        UISettings.setupAntialiasing(graphics);
+        int lineShift=-editor.getLineHeight() * (myLine - myPreviewLines);
+        int popupStartOffset=myEditor.getDocument().getLineStartOffset(Math.max(0,myLine - myPreviewLines));
+        int popupEndOffset=myEditor.getDocument().getLineEndOffset(Math.min(myEditor.getDocument().getLineCount() - 1,myLine + myPreviewLines));
+        List<RangeHighlighterEx> exs=new ArrayList<RangeHighlighterEx>();
+        for (        RangeHighlighterEx rangeHighlighter : myHighlighters) {
+          if (rangeHighlighter.getEndOffset() > popupStartOffset && rangeHighlighter.getStartOffset() < popupEndOffset) {
+            exs.add(rangeHighlighter);
+          }
+        }
+        g2d.setTransform(AffineTransform.getTranslateInstance(5 - myMouseX,lineShift));
+        if (editor instanceof EditorEx) {
+          EditorGutterComponentEx gutterComponentEx=((EditorEx)editor).getGutterComponentEx();
+          width=gutterComponentEx.getWidth();
+          graphics.setClip(0,0,width,gutterComponentEx.getHeight());
+          gutterComponentEx.paint(graphics);
+        }
+        JComponent contentComponent=editor.getContentComponent();
+        graphics.setClip(width,0,contentComponent.getWidth(),contentComponent.getHeight());
+        g2d.setTransform(AffineTransform.getTranslateInstance(width + 5 - myMouseX,lineShift));
+        contentComponent.paint(graphics);
+        Collections.sort(exs,new Comparator<RangeHighlighterEx>(){
+          public int compare(          RangeHighlighterEx ex1,          RangeHighlighterEx ex2){
+            LogicalPosition startPos1=myEditor.offsetToLogicalPosition(ex1.getAffectedAreaStartOffset());
+            LogicalPosition startPos2=myEditor.offsetToLogicalPosition(ex2.getAffectedAreaStartOffset());
+            if (startPos1.line != startPos2.line)             return 0;
+            return startPos1.column - startPos2.column;
+          }
+        }
+);
+        Map<Integer,Integer> rightEdges=new com.intellij.util.containers.hash.HashMap<Integer,Integer>();
+        for (        RangeHighlighterEx ex : exs) {
+          int hStartOffset=ex.getAffectedAreaStartOffset();
+          int hEndOffset=ex.getAffectedAreaEndOffset();
+          Object tooltip=ex.getErrorStripeTooltip();
+          if (tooltip == null)           continue;
+          String s=String.valueOf(tooltip);
+          if (s.isEmpty())           continue;
+          LogicalPosition logicalPosition=editor.offsetToLogicalPosition(hStartOffset);
+          Point placeToShow=editor.logicalPositionToXY(logicalPosition);
+          placeToShow.y-=(0 - editor.getLineHeight() * 3 / 2);
+          int w=graphics.getFontMetrics().stringWidth(s);
+          int a=graphics.getFontMetrics().getAscent();
+          int h=editor.getLineHeight();
+          Integer rightEdge=rightEdges.get(logicalPosition.line);
+          if (rightEdge == null)           rightEdge=0;
+          placeToShow.x=Math.max(placeToShow.x,rightEdge);
+          rightEdge=Math.max(rightEdge,placeToShow.x + w + 3 * R);
+          rightEdges.put(logicalPosition.line,rightEdge);
+          GraphicsUtil.setupAAPainting(graphics);
+          graphics.setColor(MessageType.WARNING.getPopupBackground());
+          graphics.fillRoundRect(placeToShow.x - R,placeToShow.y - a,w + 2 * R,h,R,R);
+          graphics.setColor(new JBColor(JBColor.GRAY,Gray._200));
+          graphics.drawRoundRect(placeToShow.x - R,placeToShow.y - a,w + 2 * R,h,R,R);
+          graphics.setColor(JBColor.foreground());
+          graphics.drawString(s,placeToShow.x,placeToShow.y + 2);
+        }
+      }
+      g.drawImage(myImage,0,0,this);
+    }
+  }
+;
+  LightweightHint hint=new LightweightHint(magic);
+  hint.addHintListener(new HintListener(){
+    @Override public void hintHidden(    EventObject event){
+      myEditorPreviewIsShown=false;
+    }
+  }
+);
+  hintManager.showEditorHint(hint,editor,intInfo.getOriginalPoint(),HintManager.HIDE_BY_ANY_KEY | HintManager.HIDE_BY_TEXT_CHANGE | HintManager.HIDE_BY_OTHER_HINT| HintManager.HIDE_BY_SCROLLING,0,false,intInfo);
+  myEditorPreviewIsShown=true;
+  return hint;
+}
