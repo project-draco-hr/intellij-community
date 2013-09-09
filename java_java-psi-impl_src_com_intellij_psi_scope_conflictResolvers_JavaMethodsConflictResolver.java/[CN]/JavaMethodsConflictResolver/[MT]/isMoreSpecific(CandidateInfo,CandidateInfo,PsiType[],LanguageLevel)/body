@@ -1,0 +1,59 @@
+{
+  Specifics moreSpecific=Specifics.NEITHER;
+  final PsiMethod methodElement=(PsiMethod)method.getElement();
+  final PsiMethod conflictElement=(PsiMethod)conflict.getElement();
+  if (methodElement != null && conflictElement != null && methodElement.isVarArgs() == conflictElement.isVarArgs() && methodElement.getParameterList().getParametersCount() <= actualParameterTypes.length && conflictElement.getParameterList().getParametersCount() <= actualParameterTypes.length) {
+    for (int functionalInterfaceIdx=0; functionalInterfaceIdx < actualParameterTypes.length; functionalInterfaceIdx++) {
+      final PsiType interfaceReturnType=getReturnType(functionalInterfaceIdx,method);
+      final PsiType interfaceReturnType1=getReturnType(functionalInterfaceIdx,conflict);
+      if (actualParameterTypes[functionalInterfaceIdx] instanceof PsiLambdaExpressionType || actualParameterTypes[functionalInterfaceIdx] instanceof PsiMethodReferenceType) {
+        if (interfaceReturnType != null && interfaceReturnType1 != null && !Comparing.equal(interfaceReturnType,interfaceReturnType1)) {
+          final TypeKind typeKind=getKind(actualParameterTypes[functionalInterfaceIdx]);
+          Specifics moreSpecific1=Specifics.NEITHER;
+          if (typeKind != TypeKind.NONE_DETERMINED) {
+            final boolean isPrimitive=typeKind == TypeKind.PRIMITIVE;
+            if (interfaceReturnType instanceof PsiPrimitiveType) {
+              if (interfaceReturnType1 instanceof PsiPrimitiveType && TypeConversionUtil.isAssignable(interfaceReturnType,interfaceReturnType1)) {
+                moreSpecific1=isPrimitive ? Specifics.SECOND : Specifics.FIRST;
+              }
+ else {
+                moreSpecific1=isPrimitive ? Specifics.FIRST : Specifics.SECOND;
+              }
+            }
+ else             if (interfaceReturnType1 instanceof PsiPrimitiveType) {
+              moreSpecific1=isPrimitive ? Specifics.SECOND : Specifics.FIRST;
+            }
+          }
+          if (moreSpecific1 == Specifics.NEITHER && (interfaceReturnType != PsiType.VOID && interfaceReturnType1 != PsiType.VOID)) {
+            final PsiSubstitutor siteSubstitutor1=((MethodCandidateInfo)method).getSiteSubstitutor();
+            final PsiSubstitutor siteSubstitutor2=((MethodCandidateInfo)conflict).getSiteSubstitutor();
+            final PsiTypeParameter[] typeParameters1=methodElement.getTypeParameters();
+            final PsiTypeParameter[] typeParameters2=conflictElement.getTypeParameters();
+            final PsiType[] types1AtSite={interfaceReturnType1};
+            final PsiType[] types2AtSite={interfaceReturnType};
+            final PsiSubstitutor methodSubstitutor1=calculateMethodSubstitutor(typeParameters1,methodElement,siteSubstitutor1,types2AtSite,types1AtSite,languageLevel);
+            final PsiSubstitutor methodSubstitutor2=calculateMethodSubstitutor(typeParameters2,conflictElement,siteSubstitutor2,types1AtSite,types2AtSite,languageLevel);
+            final boolean applicable12=TypeConversionUtil.isAssignable(interfaceReturnType1,methodSubstitutor1.substitute(interfaceReturnType));
+            final boolean applicable21=TypeConversionUtil.isAssignable(interfaceReturnType,methodSubstitutor2.substitute(interfaceReturnType1));
+            if (applicable12 || applicable21) {
+              if (!applicable21) {
+                moreSpecific1=Specifics.FIRST;
+              }
+              if (!applicable12) {
+                moreSpecific1=Specifics.SECOND;
+              }
+            }
+          }
+          if (moreSpecific != Specifics.NEITHER && moreSpecific != moreSpecific1) {
+            return Specifics.NEITHER;
+          }
+          moreSpecific=moreSpecific1;
+        }
+      }
+ else       if (interfaceReturnType != null && interfaceReturnType1 != null) {
+        return Specifics.NEITHER;
+      }
+    }
+  }
+  return moreSpecific;
+}
