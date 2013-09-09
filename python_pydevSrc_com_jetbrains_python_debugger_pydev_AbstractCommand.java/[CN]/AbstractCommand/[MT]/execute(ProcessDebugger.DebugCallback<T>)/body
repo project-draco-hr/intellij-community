@@ -1,0 +1,37 @@
+{
+  final int sequence=myDebugger.getNextSequence();
+  final ResponseProcessor<T> processor=getResponseProcessor();
+  if (processor != null) {
+    myDebugger.placeResponse(sequence,null);
+  }
+  try {
+    ProtocolFrame frame=new ProtocolFrame(myCommandCode,sequence,getPayload());
+    boolean frameSent=myDebugger.sendFrame(frame);
+    if (processor == null)     return;
+    if (!frameSent) {
+      throw new PyDebuggerException("Couldn't send frame " + myCommandCode);
+    }
+  }
+ catch (  PyDebuggerException e) {
+    callback.error(e);
+    return;
+  }
+  ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+    @Override public void run(){
+      try {
+        ProtocolFrame frame=myDebugger.waitForResponse(sequence);
+        if (frame == null) {
+          if (!myDebugger.isConnected()) {
+            throw new PyDebuggerException("No connection (command:  " + myCommandCode + " )");
+          }
+          throw new PyDebuggerException("Timeout waiting for response on " + myCommandCode);
+        }
+        callback.ok(processor.processResponse(frame));
+      }
+ catch (      PyDebuggerException e) {
+        callback.error(e);
+      }
+    }
+  }
+);
+}
