@@ -1,15 +1,78 @@
 {
-  String token=IcsManager.getInstance().getSettings().token;
-  if (StringUtil.isEmptyOrSpaces(token)) {
-    return false;
-  }
+  CredentialItem.Username userNameItem=null;
+  CredentialItem.Password passwordItem=null;
   for (  CredentialItem item : items) {
     if (item instanceof CredentialItem.Username) {
-      ((CredentialItem.Username)item).setValue(token);
+      userNameItem=(CredentialItem.Username)item;
     }
  else     if (item instanceof CredentialItem.Password) {
-      ((CredentialItem.Password)item).setValue(X_OAUTH_PASSWORD);
+      passwordItem=(CredentialItem.Password)item;
     }
+  }
+  if (userNameItem != null || passwordItem != null) {
+    String u=uri.getUser();
+    String p;
+    if (u == null) {
+      u=username;
+      p=password;
+    }
+ else {
+      p=StringUtil.nullize(uri.getPass(),true);
+      if (u.equals(username) && p == null) {
+        p=password;
+      }
+    }
+    boolean ok;
+    if (u != null && p != null) {
+      ok=true;
+    }
+ else {
+      final Ref<AuthDialog> dialogRef=Ref.create();
+      final String finalU=u;
+      final String finalP=p;
+      UIUtil.invokeAndWaitIfNeeded(new Runnable(){
+        @Override public void run(){
+          AuthDialog dialog=new AuthDialog("Login required","Login to " + uri,finalU,finalP);
+          dialogRef.set(dialog);
+          dialog.show();
+        }
+      }
+);
+      ok=dialogRef.get().isOK();
+      if (ok) {
+        u=dialogRef.get().getUsername();
+        p=dialogRef.get().getPassword();
+        if (StringUtil.isEmptyOrSpaces(p)) {
+          p="x-oauth-basic";
+        }
+      }
+    }
+    if (ok) {
+      if (userNameItem != null) {
+        userNameItem.setValue(u);
+      }
+      if (passwordItem != null) {
+        passwordItem.setValue(p.toCharArray());
+      }
+      password=p;
+      username=u;
+      taskProcessor.add(new ThrowableRunnable<Exception>(){
+        @Override public void run() throws Exception {
+          File loginDataFile=getPasswordStorageFile();
+          FileUtil.createParentDirs(loginDataFile);
+          DataOutputStream out=new DataOutputStream(new FileOutputStream(loginDataFile));
+          try {
+            IOUtil.writeString(PasswordUtil.encodePassword(username),out);
+            IOUtil.writeString(PasswordUtil.encodePassword(password),out);
+          }
+  finally {
+            out.close();
+          }
+        }
+      }
+);
+    }
+    return ok;
   }
   return true;
 }
