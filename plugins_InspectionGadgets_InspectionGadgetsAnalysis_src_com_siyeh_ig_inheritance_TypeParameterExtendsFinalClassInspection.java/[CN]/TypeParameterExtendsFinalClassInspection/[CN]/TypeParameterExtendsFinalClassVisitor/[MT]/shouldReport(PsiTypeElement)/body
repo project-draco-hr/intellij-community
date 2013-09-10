@@ -1,0 +1,51 @@
+{
+  final PsiElement ancestor=PsiTreeUtil.skipParentsOfType(typeElement,PsiTypeElement.class,PsiJavaCodeReferenceElement.class,PsiReferenceParameterList.class);
+  if (ancestor instanceof PsiParameter) {
+    final PsiParameter parameter=(PsiParameter)ancestor;
+    final PsiElement scope=parameter.getDeclarationScope();
+    if (scope instanceof PsiMethod) {
+      final PsiMethod method=(PsiMethod)scope;
+      if (MethodUtils.hasSuper(method)) {
+        return false;
+      }
+    }
+ else     if (scope instanceof PsiForeachStatement) {
+      final PsiForeachStatement foreachStatement=(PsiForeachStatement)scope;
+      final PsiParameter iterationParameter=foreachStatement.getIterationParameter();
+      final PsiType iterationType=iterationParameter.getType();
+      final PsiExpression iteratedValue=foreachStatement.getIteratedValue();
+      if (iteratedValue == null) {
+        return false;
+      }
+      final PsiType type=JavaGenericsUtil.getCollectionItemType(iteratedValue);
+      if (type == null || !TypeConversionUtil.isAssignable(iterationType,type)) {
+        return false;
+      }
+      if (type.equals(iterationType)) {
+        return false;
+      }
+      if (!(type instanceof PsiCapturedWildcardType)) {
+        return true;
+      }
+      final PsiCapturedWildcardType capturedWildcardType=(PsiCapturedWildcardType)type;
+      final PsiType upperBound=capturedWildcardType.getUpperBound();
+      if (iterationType.equals(upperBound)) {
+        return false;
+      }
+    }
+  }
+ else   if (ancestor instanceof PsiLocalVariable) {
+    final PsiLocalVariable localVariable=(PsiLocalVariable)ancestor;
+    final PsiExpression initializer=localVariable.getInitializer();
+    if (initializer == null) {
+      return true;
+    }
+    final PsiType type=initializer.getType();
+    final PsiType expectedType=GenericsUtil.getVariableTypeByExpressionType(type);
+    final PsiType variableType=localVariable.getType();
+    if (variableType.equals(expectedType)) {
+      return false;
+    }
+  }
+  return true;
+}
