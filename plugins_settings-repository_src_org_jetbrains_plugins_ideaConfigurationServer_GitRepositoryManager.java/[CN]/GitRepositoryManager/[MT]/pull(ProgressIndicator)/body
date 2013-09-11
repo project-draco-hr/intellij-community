@@ -1,7 +1,41 @@
 {
   return execute(new ThrowableConsumer<ProgressIndicator,Exception>(){
-    @Override public void consume(    ProgressIndicator indicator) throws Exception {
-      git.pull().setProgressMonitor(new JGitProgressMonitor(indicator)).setCredentialsProvider(getCredentialsProvider()).setRebase(true).call();
+    @Override public void consume(    @NotNull ProgressIndicator indicator) throws Exception {
+      JGitProgressMonitor progressMonitor=new JGitProgressMonitor(indicator);
+      git.fetch().setRemoveDeletedRefs(true).setProgressMonitor(progressMonitor).setCredentialsProvider(getCredentialsProvider()).call();
+      int attemptCount=0;
+      do {
+        MergeResult.MergeStatus status=git.merge().include(getUpstreamBranchRef()).setFastForward(MergeCommand.FastForwardMode.FF_ONLY).call().getMergeStatus();
+        if (status.isSuccessful()) {
+          rebase(progressMonitor);
+          return;
+        }
+ else         if (status != MergeResult.MergeStatus.ABORTED) {
+          break;
+        }
+      }
+ while (++attemptCount < 3);
+    }
+    private org.eclipse.jgit.lib.Ref getUpstreamBranchRef() throws IOException {
+      return git.getRepository().getRef(Constants.DEFAULT_REMOTE_NAME + '/' + Constants.MASTER);
+    }
+    private void rebase(    @NotNull JGitProgressMonitor progressMonitor) throws GitAPIException {
+      RebaseResult result=null;
+      do {
+        if (result == null) {
+          result=git.rebase().setUpstream(Constants.DEFAULT_REMOTE_NAME + '/' + Constants.MASTER).setProgressMonitor(progressMonitor).call();
+        }
+ else         if (result.getStatus() == RebaseResult.Status.CONFLICTS) {
+          throw new UnsupportedOperationException();
+        }
+ else         if (result.getStatus() == RebaseResult.Status.NOTHING_TO_COMMIT) {
+          result=git.rebase().setOperation(RebaseCommand.Operation.SKIP).call();
+        }
+ else {
+          throw new UnsupportedOperationException();
+        }
+      }
+ while (!result.getStatus().isSuccessful());
     }
   }
 ,indicator);
