@@ -1,0 +1,41 @@
+{
+  String result=command.getOutput();
+  if (StringUtil.isEmptyOrSpaces(result)) {
+    throw new SVNException(SVNErrorMessage.create(SVNErrorCode.FS_GENERAL,"Status request returned nothing for command: " + command.myCommandLine.getCommandLineString()));
+  }
+  try {
+    final SvnStatusHandler[] svnHandl=new SvnStatusHandler[1];
+    svnHandl[0]=createStatusHandler(revision,handler,base,infoBase,svnHandl);
+    SAXParser parser=SAXParserFactory.newInstance().newSAXParser();
+    parser.parse(new ByteArrayInputStream(result.getBytes(CharsetToolkit.UTF8_CHARSET)),svnHandl[0]);
+    if (!svnHandl[0].isAnythingReported()) {
+      if (!SvnUtil.isSvnVersioned(myProject,path)) {
+        throw new SVNException(SVNErrorMessage.create(SVNErrorCode.WC_NOT_DIRECTORY,"Command - " + command.getCommandText() + ". Result - "+ result));
+      }
+ else {
+        PortableStatus status=new PortableStatus();
+        status.setPath(path.getAbsolutePath());
+        status.setContentsStatus(SVNStatusType.STATUS_NORMAL);
+        status.setInfoGetter(new Getter<SVNInfo>(){
+          @Override public SVNInfo get(){
+            return createInfoGetter(null).convert(path);
+          }
+        }
+);
+        handler.handleStatus(status);
+      }
+    }
+  }
+ catch (  SvnExceptionWrapper e) {
+    throw (SVNException)e.getCause();
+  }
+catch (  IOException e) {
+    throw new SVNException(SVNErrorMessage.create(SVNErrorCode.IO_ERROR,e),e);
+  }
+catch (  ParserConfigurationException e) {
+    throw new SVNException(SVNErrorMessage.create(SVNErrorCode.IO_ERROR,e),e);
+  }
+catch (  SAXException e) {
+    throw new SVNException(SVNErrorMessage.create(SVNErrorCode.IO_ERROR,e),e);
+  }
+}
