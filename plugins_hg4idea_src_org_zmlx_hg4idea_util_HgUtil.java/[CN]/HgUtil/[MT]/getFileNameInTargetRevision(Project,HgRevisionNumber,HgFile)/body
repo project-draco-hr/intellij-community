@@ -1,10 +1,28 @@
 {
-  HgStatusCommand statCommand=new HgStatusCommand.Builder(true).unknown(false).baseRevision(vcsRevisionNumber).build(project);
-  Set<HgChange> changes=statCommand.execute(localHgFile.getRepo());
-  for (  HgChange change : changes) {
-    if (change.afterFile().equals(localHgFile)) {
-      return change.beforeFile();
+  if (localHgFile.toFilePath().getVirtualFile() == null) {
+    return localHgFile;
+  }
+  HgLogCommand logCommand=new HgLogCommand(project);
+  logCommand.setFollowCopies(true);
+  List<HgFileRevision> revisions=Collections.emptyList();
+  String targetName=localHgFile.getRelativePath();
+  int targetRevNumber=Integer.valueOf(vcsRevisionNumber.getRevision());
+  try {
+    revisions=logCommand.execute(localHgFile,-1,true,Arrays.asList("-r",".:0"));
+  }
+ catch (  HgCommandException e) {
+    LOG.warn("Could not find filename in target revision: " + localHgFile.toString(),e);
+  }
+  for (  HgFileRevision revision : revisions) {
+    if (Integer.valueOf(revision.getRevisionNumber().getRevision()) <= targetRevNumber) {
+      break;
+    }
+    for (    Entry<String,String> entry : revision.getCopiedFiles().entrySet()) {
+      if (entry.getValue().equals(targetName)) {
+        targetName=entry.getKey();
+      }
     }
   }
-  return localHgFile;
+  VirtualFile root=localHgFile.getRepo();
+  return new HgFile(root,new File(root.getPath(),targetName));
 }
