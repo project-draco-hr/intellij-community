@@ -1,0 +1,30 @@
+{
+  XmlFile pluginXml=PluginModuleType.getPluginXml(module);
+  if (pluginXml == null)   return Collections.emptyMap();
+  DomFileElement<IdeaPlugin> fileElement=DomManager.getDomManager(module.getProject()).getFileElement(pluginXml,IdeaPlugin.class);
+  if (fileElement == null)   return Collections.emptyMap();
+  Map<Module,String> jpsPluginToOutputPath=new HashMap<Module,String>();
+  IdeaPlugin plugin=fileElement.getRootElement();
+  List<Extensions> extensions=plugin.getExtensions();
+  for (  Extensions extensionGroup : extensions) {
+    XmlTag extensionsTag=extensionGroup.getXmlTag();
+    String defaultExtensionNs=extensionsTag.getAttributeValue("defaultExtensionNs");
+    for (    XmlTag tag : extensionsTag.getSubTags()) {
+      String name=tag.getLocalName();
+      String qualifiedName=defaultExtensionNs != null ? defaultExtensionNs + "." + name : name;
+      if (CompileServerPlugin.EP_NAME.getName().equals(qualifiedName)) {
+        String classpath=tag.getAttributeValue("classpath");
+        if (classpath != null) {
+          for (          String path : StringUtil.split(classpath,";")) {
+            String moduleName=FileUtil.getNameWithoutExtension(PathUtil.getFileName(path));
+            Module jpsModule=ModuleManager.getInstance(module.getProject()).findModuleByName(moduleName);
+            if (jpsModule != null) {
+              jpsPluginToOutputPath.put(jpsModule,path);
+            }
+          }
+        }
+      }
+    }
+  }
+  return jpsPluginToOutputPath;
+}
