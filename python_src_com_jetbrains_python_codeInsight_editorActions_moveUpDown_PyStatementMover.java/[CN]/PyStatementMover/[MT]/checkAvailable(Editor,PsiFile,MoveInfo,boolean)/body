@@ -1,11 +1,31 @@
 {
   if (!(file instanceof PyFile))   return false;
   final int offset=editor.getCaretModel().getOffset();
-  PsiElement elementToMove=PyUtil.findNonWhitespaceAtOffset(file,offset);
-  if (elementToMove == null)   return false;
-  elementToMove=getCommentOrStatement(editor.getDocument(),elementToMove);
-  info.toMove=new MyLineRange(elementToMove);
-  info.toMove2=getDestinationScope(file,editor,elementToMove,down);
+  final SelectionModel selectionModel=editor.getSelectionModel();
+  if (!selectionModel.hasSelection()) {
+    PsiElement elementToMove=PyUtil.findNonWhitespaceAtOffset(file,offset);
+    if (elementToMove == null)     return false;
+    elementToMove=getCommentOrStatement(editor.getDocument(),elementToMove);
+    info.toMove=new MyLineRange(elementToMove,elementToMove);
+    info.toMove2=getDestinationScope(file,editor,elementToMove,down);
+  }
+ else {
+    final int start=selectionModel.getSelectionStart();
+    final int end=selectionModel.getSelectionEnd() - 1;
+    PsiElement elementToMove1=PyUtil.findNonWhitespaceAtOffset(file,start);
+    PsiElement elementToMove2=PyUtil.findNonWhitespaceAtOffset(file,end);
+    if (elementToMove1 == null || elementToMove2 == null)     return false;
+    elementToMove1=getCommentOrStatement(editor.getDocument(),elementToMove1);
+    elementToMove2=getCommentOrStatement(editor.getDocument(),elementToMove2);
+    if (PsiTreeUtil.isAncestor(elementToMove1,elementToMove2,false)) {
+      elementToMove2=elementToMove1;
+    }
+ else     if (PsiTreeUtil.isAncestor(elementToMove2,elementToMove1,false)) {
+      elementToMove1=elementToMove2;
+    }
+    info.toMove=new MyLineRange(elementToMove1,elementToMove2);
+    info.toMove2=getDestinationScope(file,editor,down ? elementToMove2 : elementToMove1,down);
+  }
   info.indentTarget=false;
   info.indentSource=false;
   return true;
