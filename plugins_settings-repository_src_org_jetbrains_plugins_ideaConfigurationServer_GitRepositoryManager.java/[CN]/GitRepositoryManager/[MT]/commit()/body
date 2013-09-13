@@ -1,9 +1,16 @@
 {
   return execute(new ThrowableConsumer<ProgressIndicator,Exception>(){
-    @Override public void consume(    ProgressIndicator indicator) throws Exception {
-      addFilesToGit();
-      PersonIdent ident=new PersonIdent(ApplicationInfoEx.getInstanceEx().getFullApplicationName(),"dev@null.org");
-      git.commit().setAuthor(ident).setCommitter(ident).setMessage("").call();
+    @Override public void consume(    @NotNull ProgressIndicator indicator) throws Exception {
+      boolean someFilesWereModified=addFilesToGit();
+      if (!isFirstCommitAfterApplicationStart && !someFilesWereModified && !someFilesWereRemoved) {
+        LOG.debug("skip scheduled commit, nothing to commit (fast check)");
+        return;
+      }
+      someFilesWereRemoved=false;
+      PersonIdent author=new PersonIdent(git.getRepository());
+      PersonIdent committer=new PersonIdent(ApplicationInfoEx.getInstanceEx().getFullApplicationName(),author.getEmailAddress());
+      git.commit().setAuthor(author).setCommitter(committer).setAll(isFirstCommitAfterApplicationStart).setMessage("").call();
+      isFirstCommitAfterApplicationStart=false;
     }
   }
 ,new EmptyProgressIndicator());
