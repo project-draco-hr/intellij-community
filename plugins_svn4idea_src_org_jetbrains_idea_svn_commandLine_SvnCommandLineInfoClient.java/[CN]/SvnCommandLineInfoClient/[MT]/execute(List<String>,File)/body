@@ -1,0 +1,40 @@
+{
+  final ProcessOutput output=new ProcessOutput();
+  LineCommandListener listener=new LineCommandListener(){
+    @Override public void onLineAvailable(    String line,    Key outputType){
+      if (outputType == ProcessOutputTypes.STDOUT) {
+        output.appendStdout(line);
+      }
+    }
+  }
+;
+  try {
+    SvnCommand command=CommandUtil.execute(SvnVcs.getInstance(myProject),SvnTarget.fromFile(path),SvnCommandName.info,parameters,listener);
+    return command.getOutput();
+  }
+ catch (  VcsException e) {
+    final String text=e.getMessage();
+    final boolean notEmpty=!StringUtil.isEmptyOrSpaces(text);
+    if (notEmpty && text.contains("W155010")) {
+      return null;
+    }
+    if (notEmpty && text.contains("is not a working copy")) {
+      if (StringUtil.isNotEmpty(output.getStdout())) {
+        return output.getStdout() + "</info>";
+      }
+ else {
+        throw new SVNException(SVNErrorMessage.create(SVNErrorCode.WC_NOT_WORKING_COPY,e),e);
+      }
+    }
+ else     if (notEmpty && text.contains("some targets don't exist")) {
+      throw new SVNException(SVNErrorMessage.create(SVNErrorCode.ILLEGAL_TARGET,e),e);
+    }
+ else     if (notEmpty && text.contains(String.valueOf(SVNErrorCode.WC_UPGRADE_REQUIRED.getCode()))) {
+      throw new SVNException(SVNErrorMessage.create(SVNErrorCode.WC_UPGRADE_REQUIRED,e),e);
+    }
+ else     if (notEmpty && (text.contains("upgrade your Subversion client") || text.contains(String.valueOf(SVNErrorCode.WC_UNSUPPORTED_FORMAT.getCode())))) {
+      throw new SVNException(SVNErrorMessage.create(SVNErrorCode.WC_UNSUPPORTED_FORMAT,e),e);
+    }
+    throw new SVNException(SVNErrorMessage.create(SVNErrorCode.IO_ERROR,e),e);
+  }
+}
