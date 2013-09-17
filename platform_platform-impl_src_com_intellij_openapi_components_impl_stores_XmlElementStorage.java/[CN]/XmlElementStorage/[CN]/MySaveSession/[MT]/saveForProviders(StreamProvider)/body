@@ -1,0 +1,43 @@
+{
+  for (  final RoamingType roamingType : RoamingType.values()) {
+    if (roamingType == RoamingType.DISABLED) {
+      continue;
+    }
+    Document document=getDocumentToSave();
+    if (document.getRootElement().getChildren().isEmpty()) {
+      continue;
+    }
+    Document actualDocument;
+    ElementFilter roamingFilter=new ElementFilter(StorageData.COMPONENT){
+      @Override public boolean matches(      Object obj){
+        return super.matches(obj) && myComponentRoamingManager.getRoamingType(((Element)obj).getAttributeValue(StorageData.NAME)) != roamingType;
+      }
+    }
+;
+    if (document.getRootElement().getContent(roamingFilter).iterator().hasNext()) {
+      actualDocument=document.clone();
+      Iterator<Element> iterator=actualDocument.getRootElement().getContent(roamingFilter).iterator();
+      while (iterator.hasNext()) {
+        iterator.next();
+        iterator.remove();
+      }
+      if (actualDocument.getRootElement().getChildren().isEmpty()) {
+        continue;
+      }
+    }
+ else {
+      actualDocument=document;
+    }
+    try {
+      StorageUtil.sendContent(streamProvider,myFileSpec,actualDocument,roamingType,true);
+      TObjectLongHashMap<String> versions=loadVersions(actualDocument.getRootElement().getChildren(StorageData.COMPONENT));
+      if (!versions.isEmpty()) {
+        Document versionDoc=new Document(StateStorageManagerImpl.createComponentVersionsXml(versions));
+        StorageUtil.sendContent(streamProvider,myFileSpec + VERSION_FILE_SUFFIX,versionDoc,roamingType,true);
+      }
+    }
+ catch (    IOException e) {
+      LOG.warn(e);
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  final FileType type=file.getFileType();
+  if (type != StdFileTypes.XML && type != RncFileType.getInstance()) {
+    return null;
+  }
+  final XmlFile xmlfile=(XmlFile)file;
+  final XmlDocument document=xmlfile.getDocument();
+  if (document == null) {
+    return null;
+  }
+  if (type == StdFileTypes.XML) {
+    final XmlTag rootTag=document.getRootTag();
+    if (rootTag == null) {
+      return null;
+    }
+    if (!ApplicationLoader.RNG_NAMESPACE.equals(rootTag.getNamespace())) {
+      return null;
+    }
+  }
+ else {
+    if (!ApplicationManager.getApplication().isUnitTestMode() && MyErrorFinder.hasError(xmlfile)) {
+      return null;
+    }
+  }
+  final Document doc=PsiDocumentManager.getInstance(file.getProject()).getDocument(file);
+  final MyValidationMessageConsumer consumer=new MyValidationMessageConsumer();
+  ErrorHandler eh=new DefaultHandler(){
+    @Override public void warning(    SAXParseException e){
+      handleError(e,file,doc,consumer.warning());
+    }
+    @Override public void error(    SAXParseException e){
+      handleError(e,file,doc,consumer.error());
+    }
+  }
+;
+  RngParser.parsePattern(file,eh,true);
+  return consumer;
+}
