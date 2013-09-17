@@ -1,36 +1,38 @@
 {
   final FileType type=file.getFileType();
   if (type != StdFileTypes.XML && type != RncFileType.getInstance()) {
-    return;
+    return null;
   }
   final XmlFile xmlfile=(XmlFile)file;
   final XmlDocument document=xmlfile.getDocument();
   if (document == null) {
-    return;
+    return null;
   }
   if (type == StdFileTypes.XML) {
     final XmlTag rootTag=document.getRootTag();
     if (rootTag == null) {
-      return;
+      return null;
     }
     if (!ApplicationLoader.RNG_NAMESPACE.equals(rootTag.getNamespace())) {
-      return;
+      return null;
     }
   }
  else {
     if (!ApplicationManager.getApplication().isUnitTestMode() && MyErrorFinder.hasError(xmlfile)) {
-      return;
+      return null;
     }
   }
   final Document doc=PsiDocumentManager.getInstance(file.getProject()).getDocument(file);
+  final MyValidationMessageConsumer consumer=new MyValidationMessageConsumer();
   ErrorHandler eh=new DefaultHandler(){
-    public void warning(    SAXParseException e) throws SAXException {
-      handleError(e,file,doc,new WarningMessageConsumer(holder));
+    @Override public void warning(    SAXParseException e){
+      handleError(e,file,doc,consumer.warning());
     }
-    public void error(    SAXParseException e) throws SAXException {
-      handleError(e,file,doc,new ErrorMessageConsumer(holder));
+    @Override public void error(    SAXParseException e){
+      handleError(e,file,doc,consumer.error());
     }
   }
 ;
   RngParser.parsePattern(file,eh,true);
+  return consumer;
 }
