@@ -1,17 +1,24 @@
 {
   myRanges2markersCache=new THashMap<TextRange,RangeMarker>();
-  myTransferToEDTQueue=new TransferToEDTQueue<HighlightInfo>("Apply highlighting results",new Processor<HighlightInfo>(){
+  Condition<Object> stopCondition=new Condition<Object>(){
+    @Override public boolean value(    Object o){
+      return myProject.isDisposed() || getProgressIndicator().isCanceled();
+    }
+  }
+;
+  myAddHighlighterInEDTQueue=new TransferToEDTQueue<HighlightInfo>("Apply highlighting results",new Processor<HighlightInfo>(){
     @Override public boolean process(    HighlightInfo info){
-      ApplicationManager.getApplication().assertIsDispatchThread();
       final EditorColorsScheme colorsScheme=getColorsScheme();
       UpdateHighlightersUtil.addHighlighterToEditorIncrementally(myProject,myDocument,getPsiFile(),restrictRange.getStartOffset(),restrictRange.getEndOffset(),info,colorsScheme,Pass.UPDATE_ALL,myRanges2markersCache);
       return true;
     }
   }
-,new Condition<Object>(){
-    @Override public boolean value(    Object o){
-      return myProject.isDisposed() || getProgressIndicator().isCanceled();
+,stopCondition,200);
+  myDisposeHighlighterInEDTQueue=new TransferToEDTQueue<RangeHighlighterEx>("Dispose abandoned highlighter",new Processor<RangeHighlighterEx>(){
+    @Override public boolean process(    @NotNull RangeHighlighterEx highlighter){
+      highlighter.dispose();
+      return true;
     }
   }
-,200);
+,stopCondition,200);
 }
