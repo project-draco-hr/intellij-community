@@ -1,0 +1,45 @@
+{
+  runInBackground(new ThrowableConsumer<ProgressIndicator,VcsException>(){
+    @Override public void consume(    ProgressIndicator indicator) throws VcsException {
+      boolean ordered=!isFullLogReady();
+      Map<VirtualFile,List<TimeCommitParents>> logsToBuild=ContainerUtil.newHashMap();
+      Collection<VcsRef> allRefs=ContainerUtil.newHashSet();
+      for (      Map.Entry<VirtualFile,VcsLogProvider> entry : myLogProviders.entrySet()) {
+        VirtualFile root=entry.getKey();
+        VcsLogProvider logProvider=entry.getValue();
+        List<? extends VcsCommitDetails> firstBlock=logProvider.readFirstBlock(root,ordered);
+        Collection<VcsRef> newRefs=logProvider.readAllRefs(root);
+        myDetailsGetter.saveInCache(firstBlock);
+        myMiniDetailsGetter.saveInCache(firstBlock);
+        List<TimeCommitParents> refreshedLog;
+        if (ordered) {
+          refreshedLog=new ArrayList<TimeCommitParents>(firstBlock);
+        }
+ else {
+          refreshedLog=myLogJoiner.addCommits(myLogData.getLog(root),myLogData.getRefs(root),firstBlock,newRefs);
+        }
+        if (myFullLogShowing) {
+          logsToBuild.put(root,refreshedLog);
+        }
+ else {
+          int bottomIndex=firstBlock.size() - 1;
+          if (myDataPack != null) {
+            bottomIndex=myDataPack.getGraphModel().getGraph().getNodeRows().size() - 1;
+          }
+          logsToBuild.put(root,refreshedLog.subList(0,Math.min(bottomIndex,refreshedLog.size())));
+        }
+        allRefs.addAll(newRefs);
+        myLogData.setRefs(root,newRefs);
+      }
+      List<TimeCommitParents> compoundLog=myMultiRepoJoiner.join(logsToBuild.values());
+      myDataPack=DataPack.build(compoundLog,allRefs,indicator);
+      UIUtil.invokeAndWaitIfNeeded(new Runnable(){
+        @Override public void run(){
+          onSuccess.consume(myDataPack);
+        }
+      }
+);
+    }
+  }
+);
+}
