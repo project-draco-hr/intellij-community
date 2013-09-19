@@ -28,6 +28,37 @@
     return true;
   }
   if (myExpression instanceof PsiCallExpression) {
+    final JavaResolveResult resolveResult=((PsiCallExpression)myExpression).resolveMethodGenerics();
+    final PsiMethod method=(PsiMethod)resolveResult.getElement();
+    if (method != null) {
+      final PsiTypeParameter[] typeParameters=method.getTypeParameters();
+      if (typeParameters.length == 0) {
+        final PsiType exprType=myExpression.getType();
+        if (exprType != null && !exprType.equals(PsiType.NULL)) {
+          constraints.add(new TypeCompatibilityConstraint(myT,exprType));
+        }
+      }
+ else {
+        final PsiExpressionList argumentList=((PsiCallExpression)myExpression).getArgumentList();
+        PsiType returnType=method.getReturnType();
+        if (argumentList != null && returnType != null) {
+          final InferenceSession callSession=new InferenceSession(typeParameters,method.getParameterList().getParameters(),argumentList.getExpressions(),PsiSubstitutor.EMPTY,null,myExpression.getManager());
+          for (          PsiTypeParameter typeParameter : session.getTypeParams()) {
+            callSession.addCapturedVariable(typeParameter);
+          }
+          callSession.addConstraint(new TypeCompatibilityConstraint(myT,returnType));
+          final PsiSubstitutor callSubstitutor=callSession.infer();
+          if (myExpression instanceof PsiMethodCallExpression) {
+            returnType=PsiMethodCallExpressionImpl.captureReturnType((PsiMethodCallExpression)myExpression,method,returnType,callSubstitutor);
+          }
+ else {
+            returnType=callSubstitutor.substitute(returnType);
+          }
+          constraints.add(new TypeCompatibilityConstraint(myT,returnType));
+        }
+      }
+    }
+    return true;
   }
   if (myExpression instanceof PsiMethodReferenceExpression) {
   }
