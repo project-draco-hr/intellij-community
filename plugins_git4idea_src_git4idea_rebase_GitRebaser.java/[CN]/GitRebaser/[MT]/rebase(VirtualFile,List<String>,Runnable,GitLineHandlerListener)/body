@@ -1,0 +1,36 @@
+{
+  final GitLineHandler rebaseHandler=createHandler(root);
+  rebaseHandler.addParameters(parameters);
+  if (lineListener != null) {
+    rebaseHandler.addLineListener(lineListener);
+  }
+  final GitRebaseProblemDetector rebaseConflictDetector=new GitRebaseProblemDetector();
+  rebaseHandler.addLineListener(rebaseConflictDetector);
+  GitUntrackedFilesOverwrittenByOperationDetector untrackedFilesDetector=new GitUntrackedFilesOverwrittenByOperationDetector(root);
+  rebaseHandler.addLineListener(untrackedFilesDetector);
+  String progressTitle="Rebasing";
+  GitTask rebaseTask=new GitTask(myProject,rebaseHandler,progressTitle);
+  rebaseTask.setProgressIndicator(myProgressIndicator);
+  rebaseTask.setProgressAnalyzer(new GitStandardProgressAnalyzer());
+  final AtomicReference<GitUpdateResult> updateResult=new AtomicReference<GitUpdateResult>();
+  final AtomicBoolean failure=new AtomicBoolean();
+  rebaseTask.executeInBackground(true,new GitTaskResultHandlerAdapter(){
+    @Override protected void onSuccess(){
+      updateResult.set(GitUpdateResult.SUCCESS);
+    }
+    @Override protected void onCancel(){
+      if (onCancel != null) {
+        onCancel.run();
+      }
+      updateResult.set(GitUpdateResult.CANCEL);
+    }
+    @Override protected void onFailure(){
+      failure.set(true);
+    }
+  }
+);
+  if (failure.get()) {
+    updateResult.set(handleRebaseFailure(root,rebaseHandler,rebaseConflictDetector,untrackedFilesDetector));
+  }
+  return updateResult.get();
+}
