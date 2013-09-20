@@ -1,0 +1,59 @@
+{
+  final Project project=CommonDataKeys.PROJECT.getData(DataManager.getInstance().getDataContext(getField().getTextEditor()));
+  if (isMoreItem(index)) {
+    String actionId=null;
+    if (index == myMoreClassesIndex)     actionId="GotoClass";
+ else     if (index == myMoreFilesIndex)     actionId="GotoFile";
+ else     if (index == myMoreSettingsIndex)     actionId="ShowSettings";
+ else     if (index == myMoreActionsIndex)     actionId="GotoAction";
+    if (actionId != null) {
+      final AnAction action=ActionManager.getInstance().getAction(actionId);
+      GotoActionAction.openOptionOrPerformAction(action,getField().getText(),project,getField(),myActionEvent);
+      if (myPopup != null && myPopup.isVisible()) {
+        myPopup.cancel();
+      }
+      return;
+    }
+  }
+  final String pattern=getField().getText();
+  final Object value=myList.getSelectedValue();
+  IdeFocusManager focusManager=IdeFocusManager.findInstanceByComponent(field.getTextEditor());
+  if (myPopup != null && myPopup.isVisible()) {
+    myPopup.cancel();
+  }
+  AccessToken token=ApplicationManager.getApplication().acquireReadActionLock();
+  try {
+    if (value instanceof PsiElement) {
+      NavigationUtil.activateFileWithPsiElement((PsiElement)value,true);
+      return;
+    }
+ else     if (isVirtualFile(value)) {
+      OpenFileDescriptor navigatable=new OpenFileDescriptor(project,(VirtualFile)value);
+      if (navigatable.canNavigate()) {
+        navigatable.navigate(true);
+        return;
+      }
+    }
+ else {
+      focusManager.requestDefaultFocus(true);
+      IdeFocusManager.getInstance(project).doWhenFocusSettlesDown(new Runnable(){
+        @Override public void run(){
+          if (value instanceof BooleanOptionDescription) {
+            final BooleanOptionDescription option=(BooleanOptionDescription)value;
+            option.setOptionState(!option.isOptionEnabled());
+          }
+ else {
+            GotoActionAction.openOptionOrPerformAction(value,pattern,project,myContextComponent,myActionEvent);
+          }
+        }
+      }
+);
+      return;
+    }
+  }
+  finally {
+    token.finish();
+    onFocusLost(field.getTextEditor());
+  }
+  focusManager.requestDefaultFocus(true);
+}
