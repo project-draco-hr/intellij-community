@@ -1,49 +1,20 @@
 {
-  boolean result=false;
-  for (  final RoamingType roamingType : RoamingType.values()) {
-    if (roamingType == RoamingType.DISABLED || !streamProvider.isApplicable(myFileSpec,roamingType)) {
-      continue;
-    }
-    Document document=getDocumentToSave();
-    if (document.getRootElement().getChildren().isEmpty()) {
-      continue;
-    }
-    Document actualDocument;
-    ElementFilter roamingFilter=new ElementFilter(StorageData.COMPONENT){
-      @Override public boolean matches(      Object obj){
-        return super.matches(obj) && myComponentRoamingManager.getRoamingType(((Element)obj).getAttributeValue(StorageData.NAME)) != roamingType;
-      }
-    }
-;
-    if (document.getRootElement().getContent(roamingFilter).iterator().hasNext()) {
-      actualDocument=document.clone();
-      Iterator<Element> iterator=actualDocument.getRootElement().getContent(roamingFilter).iterator();
-      while (iterator.hasNext()) {
-        iterator.next();
-        iterator.remove();
-      }
-      if (actualDocument.getRootElement().getChildren().isEmpty()) {
-        continue;
-      }
-    }
- else {
-      actualDocument=document;
-    }
-    try {
-      if (StorageUtil.doSendContent(streamProvider,myFileSpec,actualDocument,roamingType,true)) {
-        result=true;
-      }
-      if (streamProvider.isVersioningRequired()) {
-        TObjectLongHashMap<String> versions=loadVersions(actualDocument.getRootElement().getChildren(StorageData.COMPONENT));
-        if (!versions.isEmpty()) {
-          Document versionDoc=new Document(StateStorageManagerImpl.createComponentVersionsXml(versions));
-          StorageUtil.doSendContent(streamProvider,myFileSpec + VERSION_FILE_SUFFIX,versionDoc,roamingType,true);
-        }
-      }
-    }
- catch (    IOException e) {
-      LOG.warn(e);
-    }
+  if (!streamProvider.isApplicable(myFileSpec,RoamingType.PER_USER)) {
+    return false;
   }
-  return result;
+  Document document=getDocumentToSave();
+  Element rootElement=document.getRootElement();
+  if (rootElement.getChildren().isEmpty()) {
+    return false;
+  }
+  if (rootElement.getContent(new RoamingElementFilter(RoamingType.DISABLED)).iterator().hasNext()) {
+    return false;
+  }
+  RoamingElementFilter perPlatformFilter=new RoamingElementFilter(RoamingType.PER_PLATFORM);
+  if (rootElement.getContent(perPlatformFilter).iterator().hasNext()) {
+    return doSaveForProvider(rootElement,new RoamingElementFilter(RoamingType.PER_USER)) || doSaveForProvider(rootElement,perPlatformFilter);
+  }
+ else {
+    return doSaveForProvider(document,RoamingType.PER_USER,streamProvider);
+  }
 }
