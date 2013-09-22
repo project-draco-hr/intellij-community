@@ -1,0 +1,37 @@
+{
+  for (  final DfaMemoryStateImpl state : myStates) {
+    ProgressManager.checkCanceled();
+    MultiMap<DfaVariableValue,DfaValue> distincts=getDistinctsMap(state);
+    for (    DfaVariableValue var : distincts.keySet()) {
+      Map<DfaValue,Collection<DfaMemoryStateImpl>> statesByValue=getCompatibleStatesByValue(state,var,distincts);
+      if (statesByValue == null) {
+        continue;
+      }
+      DfaMemoryStateImpl copy=state.createCopy();
+      copy.flushVariable(var);
+      final Set<DfaMemoryStateImpl> complementaryStates=findComplementaryStates(var,statesByValue,copy);
+      if (complementaryStates == null) {
+        continue;
+      }
+      complementaryStates.add(state);
+      for (      DfaMemoryStateImpl removedState : complementaryStates) {
+        for (        DfaVariableValue unknownVar : removedState.getUnknownVariables()) {
+          copy.doFlush(unknownVar,true);
+        }
+        if (removedState.getVariableState(var).isNullable()) {
+          copy.getVariableState(var).setNullable(true);
+        }
+      }
+      Set<DfaMemoryStateImpl> result=ContainerUtil.newHashSet();
+      result.add(copy);
+      result.addAll(ContainerUtil.filter(myStates,new Condition<DfaMemoryStateImpl>(){
+        @Override public boolean value(        DfaMemoryStateImpl state){
+          return !complementaryStates.contains(state);
+        }
+      }
+));
+      return result;
+    }
+  }
+  return null;
+}
