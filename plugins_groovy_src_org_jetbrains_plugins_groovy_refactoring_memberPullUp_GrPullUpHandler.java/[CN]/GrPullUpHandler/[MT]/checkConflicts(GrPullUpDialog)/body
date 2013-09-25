@@ -1,0 +1,25 @@
+{
+  List<GrMemberInfo> _infos=dialog.getSelectedMemberInfos();
+  final GrMemberInfo[] infos=_infos.toArray(new GrMemberInfo[_infos.size()]);
+  final PsiClass superClass=dialog.getSuperClass();
+  if (!checkWritable(superClass,infos))   return false;
+  final MultiMap<PsiElement,String> conflicts=new MultiMap<PsiElement,String>();
+  if (!ProgressManager.getInstance().runProcessWithProgressSynchronously(new Runnable(){
+    public void run(){
+      final PsiDirectory targetDirectory=superClass.getContainingFile().getContainingDirectory();
+      final PsiPackage targetPackage=targetDirectory != null ? JavaDirectoryService.getInstance().getPackage(targetDirectory) : null;
+      conflicts.putAllValues(PullUpConflictsUtil.checkConflicts(infos,mySubclass,superClass,targetPackage,targetDirectory,dialog.getContainmentVerifier()));
+    }
+  }
+,RefactoringBundle.message("detecting.possible.conflicts"),true,myProject)) {
+    return false;
+  }
+  if (!conflicts.isEmpty()) {
+    ConflictsDialog conflictsDialog=new ConflictsDialog(myProject,conflicts);
+    conflictsDialog.show();
+    final boolean ok=conflictsDialog.isOK();
+    if (!ok && conflictsDialog.isShowConflicts())     dialog.close(DialogWrapper.CANCEL_EXIT_CODE);
+    return ok;
+  }
+  return true;
+}
