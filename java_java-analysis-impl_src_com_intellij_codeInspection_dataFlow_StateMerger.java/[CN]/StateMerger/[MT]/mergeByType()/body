@@ -1,10 +1,19 @@
 {
+  MultiMap<Pair<DfaVariableValue,DfaPsiType>,DfaMemoryStateImpl> byInstanceof=new MultiMap<Pair<DfaVariableValue,DfaPsiType>,DfaMemoryStateImpl>();
+  for (  final DfaMemoryStateImpl state : myStates) {
+    ProgressManager.checkCanceled();
+    for (    DfaVariableValue value : state.getChangedVariable()) {
+      for (      DfaPsiType instanceofValue : state.getVariableState(value).myInstanceofValues) {
+        byInstanceof.putValue(Pair.create(value,instanceofValue),state);
+      }
+    }
+  }
   for (  final DfaMemoryStateImpl state : myStates) {
     ProgressManager.checkCanceled();
     for (    final DfaVariableValue var : state.getChangedVariable()) {
       for (      final DfaPsiType notInstanceof : state.getVariableState(var).myNotInstanceofValues) {
         final DfaVariableState varStateWithoutType=getVarStateWithoutType(state,var,notInstanceof);
-        List<DfaMemoryStateImpl> complementaryStates=ContainerUtil.filter(myStatesByInstanceof.get(Pair.create(var,notInstanceof)),new Condition<DfaMemoryStateImpl>(){
+        List<DfaMemoryStateImpl> complementaryStates=ContainerUtil.filter(byInstanceof.get(Pair.create(var,notInstanceof)),new Condition<DfaMemoryStateImpl>(){
           @Override public boolean value(          DfaMemoryStateImpl another){
             return seemCompatible(state,another,var) && varStateWithoutType.equals(getVarStateWithoutType(another,var,notInstanceof)) && areEquivalentModuloVar(another,state,var);
           }
@@ -17,7 +26,8 @@
         copy.flushVariable(var);
         copy.setVariableState(var,varStateWithoutType);
         complementaryStates.add(state);
-        postProcessMergedState(var,copy,complementaryStates);
+        mergeNullableState(var,copy,complementaryStates);
+        mergeUnknowns(copy,complementaryStates);
         return getMergeResult(copy,ContainerUtil.newHashSet(complementaryStates));
       }
     }
