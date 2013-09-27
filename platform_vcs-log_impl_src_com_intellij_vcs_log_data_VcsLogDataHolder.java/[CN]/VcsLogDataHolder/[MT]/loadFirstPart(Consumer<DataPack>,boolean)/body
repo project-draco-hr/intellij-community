@@ -10,18 +10,24 @@
       for (      Map.Entry<VirtualFile,VcsLogProvider> entry : myLogProviders.entrySet()) {
         VirtualFile root=entry.getKey();
         VcsLogProvider logProvider=entry.getValue();
-        List<? extends VcsCommitDetails> firstBlock=logProvider.readFirstBlock(root,ordered);
+        List<? extends VcsFullCommitDetails> firstBlockDetails=logProvider.readFirstBlock(root,ordered);
         Collection<VcsRef> newRefs=logProvider.readAllRefs(root);
-        myDetailsGetter.saveInCache(firstBlock);
-        myMiniDetailsGetter.saveInCache(firstBlock);
+        myDetailsGetter.saveInCache(firstBlockDetails);
+        myMiniDetailsGetter.saveInCache(firstBlockDetails);
+        List<TimeCommitParents> firstBlockCommits=ContainerUtil.map(firstBlockDetails,new Function<VcsFullCommitDetails,TimeCommitParents>(){
+          @Override public TimeCommitParents fun(          VcsFullCommitDetails details){
+            return new TimeCommitParents(details.getHash(),details.getParents(),details.getAuthorTime());
+          }
+        }
+);
         List<TimeCommitParents> refreshedLog;
         int newCommitsCount;
         if (ordered) {
-          refreshedLog=new ArrayList<TimeCommitParents>(firstBlock);
+          refreshedLog=new ArrayList<TimeCommitParents>(firstBlockCommits);
           newCommitsCount=0;
         }
  else {
-          Pair<List<TimeCommitParents>,Integer> joinResult=myLogJoiner.addCommits(myLogData.getLog(root),myLogData.getRefs(root),firstBlock,newRefs);
+          Pair<List<TimeCommitParents>,Integer> joinResult=myLogJoiner.addCommits(myLogData.getLog(root),myLogData.getRefs(root),firstBlockCommits,newRefs);
           refreshedLog=joinResult.getFirst();
           newCommitsCount=joinResult.getSecond();
         }
@@ -34,7 +40,7 @@
             commitsToShow=myDataPack.getGraphModel().getGraph().getNodeRows().size() + newCommitsCount;
           }
  else {
-            commitsToShow=firstBlock.size();
+            commitsToShow=firstBlockDetails.size();
           }
           logsToBuild.put(root,refreshedLog.subList(0,Math.min(commitsToShow,refreshedLog.size())));
         }
