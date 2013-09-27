@@ -24,25 +24,21 @@
       PsiUtil.setModifierProperty(methodCopy,PsiModifier.ABSTRACT,false);
     }
     replaceMovedMemberTypeParameters(methodCopy,PsiUtil.typeParametersIterable(mySourceClass),substitutor,elementFactory);
-    myDocCommentPolicy.processCopiedJavaDoc(methodCopy.getDocComment(),method.getDocComment(),isOriginalMethodAbstract);
-    final PsiMember movedElement=anchor != null ? (PsiMember)myTargetSuperClass.addBefore(methodCopy,anchor) : (PsiMember)myTargetSuperClass.add(methodCopy);
+    final GrMethod movedElement=anchor != null ? (GrMethod)myTargetSuperClass.addBefore(methodCopy,anchor) : (GrMethod)myTargetSuperClass.add(methodCopy);
     CodeStyleSettings styleSettings=CodeStyleSettingsManager.getSettings(method.getProject());
     if (styleSettings.INSERT_OVERRIDE_ANNOTATION) {
       if (PsiUtil.isLanguageLevel5OrHigher(mySourceClass) && !myTargetSuperClass.isInterface() || PsiUtil.isLanguageLevel6OrHigher(mySourceClass)) {
         new AddAnnotationFix(CommonClassNames.JAVA_LANG_OVERRIDE,method).invoke(method.getProject(),null,mySourceClass.getContainingFile());
       }
     }
-    if (!PsiUtil.isLanguageLevel6OrHigher(mySourceClass) && myTargetSuperClass.isInterface()) {
-      if (isOriginalMethodAbstract) {
-        for (        PsiMethod oMethod : OverridingMethodsSearch.search(method)) {
-          deleteOverrideAnnotationIfFound(oMethod);
-        }
-      }
-      deleteOverrideAnnotationIfFound(method);
+    GrDocComment oldDoc=method.getDocComment();
+    if (oldDoc != null) {
+      GrDocCommentUtil.setDocComment(movedElement,oldDoc);
     }
+    myDocCommentPolicy.processCopiedJavaDoc(methodCopy.getDocComment(),oldDoc,isOriginalMethodAbstract);
     myMembersAfterMove.add(movedElement);
     if (isOriginalMethodAbstract) {
-      method.delete();
+      deleteMemberWithDocComment(method);
     }
   }
  else {
@@ -51,13 +47,15 @@
     }
     replaceMovedMemberTypeParameters(methodCopy,PsiUtil.typeParametersIterable(mySourceClass),substitutor,elementFactory);
     final PsiMethod superClassMethod=myTargetSuperClass.findMethodBySignature(methodCopy,false);
+    final GrMethod movedElement;
     if (superClassMethod != null && superClassMethod.hasModifierProperty(PsiModifier.ABSTRACT)) {
-      superClassMethod.replace(methodCopy);
+      movedElement=(GrMethod)superClassMethod.replace(methodCopy);
     }
  else {
-      final PsiMember movedElement=anchor != null ? (PsiMember)myTargetSuperClass.addBefore(methodCopy,anchor) : (PsiMember)myTargetSuperClass.add(methodCopy);
+      movedElement=anchor != null ? (GrMethod)myTargetSuperClass.addBefore(methodCopy,anchor) : (GrMethod)myTargetSuperClass.add(methodCopy);
       myMembersAfterMove.add(movedElement);
     }
-    method.delete();
+    GrDocCommentUtil.setDocComment(movedElement,method.getDocComment());
+    deleteMemberWithDocComment(method);
   }
 }
