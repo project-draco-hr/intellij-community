@@ -1,6 +1,6 @@
 {
   EditorEventMulticaster eventMulticaster=EditorFactory.getInstance().getEventMulticaster();
-  EditorMouseAdapter myEditorMouseListener=new EditorMouseAdapter(){
+  eventMulticaster.addEditorMouseListener(new EditorMouseAdapter(){
     @Nullable private EditorMouseEvent myMousePressedEvent;
     @Nullable private Breakpoint toggleBreakpoint(    final boolean mostSuitingBreakpoint,    final int line,    boolean temporary){
       final Editor editor=FileEditorManager.getInstance(myProject).getSelectedTextEditor();
@@ -10,6 +10,9 @@
       final Document document=editor.getDocument();
       final PsiFile psiFile=PsiDocumentManager.getInstance(myProject).getPsiFile(document);
       if (!JavaBreakpointType.doCanPutAt(psiFile)) {
+        return null;
+      }
+      if (SystemProperties.getBooleanProperty("java.debugger.xBreakpoint",false) && XBreakpointType.EXTENSION_POINT_NAME.findExtension(JavaBreakpointType.class).canPutAt(psiFile.getVirtualFile(),line,myProject)) {
         return null;
       }
       PsiDocumentManager.getInstance(myProject).commitDocument(document);
@@ -129,15 +132,14 @@
       }
     }
   }
-;
-  eventMulticaster.addEditorMouseListener(myEditorMouseListener,myProject);
-  final DocumentListener myDocumentListener=new DocumentAdapter(){
+,myProject);
+  eventMulticaster.addDocumentListener(new DocumentAdapter(){
     private final Alarm myUpdateAlarm=new Alarm();
     @Override public void documentChanged(    @NotNull final DocumentEvent e){
       final Document document=e.getDocument();
 synchronized (BreakpointManager.this) {
-        List<BreakpointWithHighlighter> breakpoints=myDocumentBreakpoints.get(document);
-        if (breakpoints != null) {
+        Collection<BreakpointWithHighlighter> breakpoints=myDocumentBreakpoints.get(document);
+        if (!breakpoints.isEmpty()) {
           myUpdateAlarm.cancelAllRequests();
           final List<BreakpointWithHighlighter> breakpointsToUpdate=new ArrayList<BreakpointWithHighlighter>(breakpoints);
           myUpdateAlarm.addRequest(new Runnable(){
@@ -153,6 +155,5 @@ synchronized (BreakpointManager.this) {
       }
     }
   }
-;
-  eventMulticaster.addDocumentListener(myDocumentListener,myProject);
+,myProject);
 }
