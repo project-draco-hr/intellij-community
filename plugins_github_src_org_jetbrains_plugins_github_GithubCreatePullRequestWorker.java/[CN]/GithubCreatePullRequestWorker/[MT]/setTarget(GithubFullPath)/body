@@ -1,0 +1,54 @@
+{
+  try {
+    GithubInfo info=GithubUtil.computeValueInModal(myProject,"Access to GitHub",new ThrowableConvertor<ProgressIndicator,GithubInfo,IOException>(){
+      @Override public GithubInfo convert(      ProgressIndicator indicator) throws IOException {
+        GitRemote targetRemote=GithubUtil.findGithubRemote(myGitRepository,forkPath);
+        String targetRemoteName=targetRemote == null ? null : targetRemote.getName();
+        if (targetRemoteName == null) {
+          final AtomicReference<Integer> responseRef=new AtomicReference<Integer>();
+          ApplicationManager.getApplication().invokeAndWait(new Runnable(){
+            @Override public void run(){
+              responseRef.set(GithubNotifications.showYesNoDialog(myProject,"Can't find remote","Configure remote for '" + forkPath.getUser() + "'?"));
+            }
+          }
+,indicator.getModalityState());
+          if (responseRef.get() == Messages.YES) {
+            targetRemoteName=configureRemote(myProject,myGitRepository,forkPath);
+          }
+        }
+        final AtomicReference<List<String>> reposRef=new AtomicReference<List<String>>();
+        final GithubAuthData auth=runAndGetValidAuthIfNeeded(myProject,myAuth,indicator,new ThrowableConsumer<GithubAuthData,IOException>(){
+          @Override public void consume(          GithubAuthData authData) throws IOException {
+            reposRef.set(ContainerUtil.map(GithubApiUtil.getRepoBranches(authData,forkPath.getUser(),forkPath.getRepository()),new Function<GithubBranch,String>(){
+              @Override public String fun(              GithubBranch githubBranch){
+                return githubBranch.getName();
+              }
+            }
+));
+          }
+        }
+);
+        if (targetRemoteName != null) {
+          GitFetchResult result=new GitFetcher(myProject,indicator,false).fetch(myGitRepository.getRoot(),targetRemoteName,null);
+          if (!result.isSuccess()) {
+            GitFetcher.displayFetchResult(myProject,result,null,result.getErrors());
+            targetRemoteName=null;
+          }
+        }
+        return new GithubInfo(auth,reposRef.get(),targetRemoteName);
+      }
+    }
+);
+    myAuth=info.getAuthData();
+    myForkPath=forkPath;
+    myTargetRemote=info.getTargetRemote();
+    return info.getBranches();
+  }
+ catch (  GithubAuthenticationCanceledException e) {
+    return null;
+  }
+catch (  IOException e) {
+    GithubNotifications.showErrorDialog(myProject,CANNOT_CREATE_PULL_REQUEST,e);
+    return null;
+  }
+}
