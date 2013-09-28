@@ -1,16 +1,21 @@
 {
   return execute(new ThrowableConsumer<ProgressIndicator,Exception>(){
     @Override public void consume(    @NotNull ProgressIndicator indicator) throws Exception {
-      boolean someFilesWereModified=addFilesToGit();
-      if (!isFirstCommitAfterApplicationStart && !someFilesWereModified && !someFilesWereRemoved) {
-        LOG.debug("skip scheduled commit, nothing to commit (fast check)");
-        return;
+      IndexDiff index=new IndexDiff(git.getRepository(),Constants.HEAD,new FileTreeIterator(git.getRepository()));
+      if (!index.diff() || (index.getAdded().isEmpty() && index.getChanged().isEmpty() && index.getRemoved().isEmpty())) {
+        if (index.getModified().isEmpty()) {
+          LOG.debug("skip scheduled commit, nothing to commit");
+          return;
+        }
+        AddCommand addCommand=git.add();
+        for (        String path : index.getModified()) {
+          addCommand.addFilepattern(path);
+        }
+        addCommand.call();
       }
-      someFilesWereRemoved=false;
       PersonIdent author=new PersonIdent(git.getRepository());
       PersonIdent committer=new PersonIdent(ApplicationInfoEx.getInstanceEx().getFullApplicationName(),author.getEmailAddress());
-      git.commit().setAuthor(author).setCommitter(committer).setAll(isFirstCommitAfterApplicationStart).setMessage("").call();
-      isFirstCommitAfterApplicationStart=false;
+      git.commit().setAuthor(author).setCommitter(committer).setMessage("").call();
     }
   }
 ,new EmptyProgressIndicator());
