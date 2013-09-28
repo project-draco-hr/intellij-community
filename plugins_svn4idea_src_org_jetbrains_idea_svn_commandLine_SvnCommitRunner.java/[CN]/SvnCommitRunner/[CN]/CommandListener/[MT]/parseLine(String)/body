@@ -6,6 +6,25 @@
     }
     return;
   }
+  if (line.startsWith(CommitEventType.skipped.getText())) {
+    File target=null;
+    if (myHandler != null) {
+      int pathStart=line.indexOf('\'');
+      if (pathStart > -1) {
+        int pathEnd=line.indexOf('\'',pathStart + 1);
+        if (pathEnd > -1) {
+          target=toFile(line.substring(pathStart + 1,pathEnd));
+        }
+      }
+      if (target != null) {
+        myHandler.commitEvent(CommitEventType.skipped,myBase);
+      }
+ else {
+        LOG.info("Can not parse 'Skipped' path " + line);
+      }
+    }
+    return;
+  }
   if (line.startsWith(CommitEventType.committedRevision.getText())) {
     final String substring=line.substring(CommitEventType.committedRevision.getText().length());
     int cnt=0;
@@ -38,20 +57,17 @@
   }
  else {
     if (myHandler == null)     return;
-    final int idxSpace=line.indexOf("  ");
-    if (idxSpace == -1) {
-      LOG.info("Can not parse event type: " + line);
-      return;
+    Matcher matcher=CHANGED_PATH.matcher(line);
+    if (matcher.matches()) {
+      final CommitEventType type=CommitEventType.create(matcher.group(1));
+      if (type == null) {
+        LOG.info("Can not parse event type: " + line);
+        return;
+      }
+      myHandler.commitEvent(type,toFile(matcher.group(4)));
     }
-    final CommitEventType type=CommitEventType.create(line.substring(0,idxSpace));
-    if (type == null) {
-      LOG.info("Can not parse event type: " + line);
-      return;
+ else {
+      LOG.info("Can not parse output: " + line);
     }
-    File target=new File(new String(line.substring(idxSpace + 1).trim()));
-    if (!target.isAbsolute()) {
-      target=new File(myBase,target.getPath());
-    }
-    myHandler.commitEvent(type,target);
   }
 }

@@ -5,21 +5,22 @@
     final DfaValue arg=memState.pop();
     PsiExpression expr=args[(args.length - i - 1)];
     if (map.get(expr) == Nullness.NOT_NULL) {
-      if (!memState.checkNotNullable(arg)) {
-        onPassingNullParameter(expr);
+      if (!checkNotNullable(memState,arg,NullabilityProblem.passingNullableToNotNullParameter,expr)) {
         if (arg instanceof DfaVariableValue) {
           memState.setVarValue((DfaVariableValue)arg,runner.getFactory().createTypeValue(((DfaVariableValue)arg).getVariableType(),Nullness.NOT_NULL));
         }
       }
     }
- else     if (map.get(expr) == Nullness.UNKNOWN && !memState.checkNotNullable(arg)) {
-      onPassingNullParameterToNonAnnotated(runner,expr);
+ else     if (map.get(expr) == Nullness.UNKNOWN) {
+      checkNotNullable(memState,arg,NullabilityProblem.passingNullableArgumentToNonAnnotatedParameter,expr);
     }
   }
   @NotNull final DfaValue qualifier=memState.pop();
   try {
-    if (!memState.checkNotNullable(qualifier)) {
-      onInstructionProducesNPE(instruction);
+    boolean unboxing=instruction.getMethodType() == MethodCallInstruction.MethodType.UNBOXING;
+    NullabilityProblem problem=unboxing ? NullabilityProblem.unboxingNullable : NullabilityProblem.callNPE;
+    PsiExpression anchor=unboxing ? instruction.getContext() : instruction.getCallExpression();
+    if (!checkNotNullable(memState,qualifier,problem,anchor)) {
       if (qualifier instanceof DfaVariableValue) {
         memState.setVarValue((DfaVariableValue)qualifier,runner.getFactory().createTypeValue(((DfaVariableValue)qualifier).getVariableType(),Nullness.NOT_NULL));
       }

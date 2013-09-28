@@ -1,12 +1,38 @@
 {
-  final PsiElement element=descriptor.getPsiElement();
-  final PsiDocComment comment=PsiTreeUtil.getParentOfType(element,PsiDocComment.class);
-  if (comment == null) {
+  final TextRange range=descriptor.getTextRangeInElement();
+  PsiElement element=descriptor.getPsiElement();
+  final PsiFile file=PsiTreeUtil.getParentOfType(element,PsiFile.class);
+  if (file == null) {
     return;
   }
-  @NonNls final StringBuilder newCommentText=new StringBuilder();
-  buildNewCommentText(comment,element,false,newCommentText);
-  final PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
-  final PsiDocComment newComment=factory.createDocCommentFromText(newCommentText.toString());
-  comment.replace(newComment);
+  final Document document=PsiDocumentManager.getInstance(project).getDocument(file);
+  if (document == null) {
+    return;
+  }
+  final int startOffset=range.getStartOffset();
+  final int replaceStartOffset=element.getTextOffset() + startOffset;
+  final int endOffset=range.getEndOffset();
+  @NonNls String text=element.getText();
+  if (!"<code>".equals(text.substring(startOffset,endOffset))) {
+    return;
+  }
+  @NonNls final StringBuilder newCommentText=new StringBuilder("{@code");
+  int endTag=text.indexOf("</code>",startOffset);
+  boolean first=true;
+  while (endTag < 0) {
+    appendElementText(text,endOffset,text.length(),first,newCommentText);
+    first=false;
+    element=element.getNextSibling();
+    if (element == null)     return;
+    text=element.getText();
+    endTag=text.indexOf("</code>");
+  }
+  appendElementText(text,endOffset,endTag,first,newCommentText);
+  newCommentText.append('}');
+  final int replaceEndOffset=element.getTextOffset() + endTag + 7;
+  final String oldText=document.getText(new TextRange(replaceStartOffset,replaceEndOffset));
+  if (!oldText.startsWith("<code>") || !oldText.endsWith("</code>")) {
+    return;
+  }
+  document.replaceString(replaceStartOffset,replaceEndOffset,newCommentText);
 }

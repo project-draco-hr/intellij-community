@@ -1,35 +1,45 @@
 {
-  super.visitMethodCallExpression(expression);
-  final PsiExpressionList argumentList=expression.getArgumentList();
-  if (argumentList == null) {
+  super.visitMethodCallExpression(methodCallExpression);
+  if (!MethodCallUtils.isCallToRegexMethod(methodCallExpression)) {
     return;
   }
+  final PsiExpressionList argumentList=methodCallExpression.getArgumentList();
   final PsiExpression[] arguments=argumentList.getExpressions();
   if (arguments.length == 0) {
     return;
   }
-  final PsiExpression argument=arguments[0];
-  if (!ExpressionUtils.hasStringType(argument)) {
+  final PsiExpression firstArgument=arguments[0];
+  if (!ExpressionUtils.hasStringType(firstArgument)) {
     return;
   }
-  if (!PsiUtil.isConstantExpression(argument)) {
-    return;
-  }
-  final PsiType regexType=argument.getType();
-  final String value=(String)ConstantExpressionUtil.computeCastTo(argument,regexType);
+  final String value=(String)ExpressionUtils.computeConstantExpression(firstArgument);
   if (value == null) {
     return;
   }
-  if (!MethodCallUtils.isCallToRegexMethod(expression)) {
+  final PsiReferenceExpression methodExpression=methodCallExpression.getMethodExpression();
+  if ("compile".equals(methodExpression.getReferenceName()) && arguments.length == 2) {
+    final PsiExpression secondArgument=arguments[1];
+    final Object flags=ExpressionUtils.computeConstantExpression(secondArgument);
+    if (flags instanceof Integer) {
+      try {
+        Pattern.compile(value,((Integer)flags).intValue());
+      }
+ catch (      PatternSyntaxException e) {
+        registerError(firstArgument,e.getDescription());
+      }
+catch (      NullPointerException e) {
+        registerError(firstArgument);
+      }
+    }
     return;
   }
   try {
     Pattern.compile(value);
   }
  catch (  PatternSyntaxException e) {
-    registerError(argument,e.getDescription());
+    registerError(firstArgument,e.getDescription());
   }
 catch (  NullPointerException e) {
-    registerError(argument);
+    registerError(firstArgument);
   }
 }

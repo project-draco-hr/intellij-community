@@ -1,0 +1,63 @@
+{
+  GroovyPsiElementFactory elementFactory=GroovyPsiElementFactory.getInstance(myProject);
+  GrMethod method=(GrMethod)info.getMember();
+  PsiMethod sibling=method;
+  PsiMethod anchor=null;
+  while (sibling != null) {
+    sibling=PsiTreeUtil.getNextSiblingOfType(sibling,PsiMethod.class);
+    if (sibling != null) {
+      anchor=MethodSignatureUtil.findMethodInSuperClassBySignatureInDerived(method.getContainingClass(),myTargetSuperClass,sibling.getSignature(PsiSubstitutor.EMPTY),false);
+      if (anchor != null) {
+        break;
+      }
+    }
+  }
+  GrMethod methodCopy=(GrMethod)method.copy();
+  if (method.findSuperMethods(myTargetSuperClass).length == 0) {
+    deleteOverrideAnnotationIfFound(methodCopy);
+  }
+  final boolean isOriginalMethodAbstract=method.hasModifierProperty(PsiModifier.ABSTRACT) || method.hasModifierProperty(PsiModifier.DEFAULT);
+  if (myTargetSuperClass.isInterface() || info.isToAbstract()) {
+    GroovyChangeContextUtil.clearContextInfo(method);
+    RefactoringUtil.makeMethodAbstract(myTargetSuperClass,methodCopy);
+    if (myTargetSuperClass.isInterface()) {
+      PsiUtil.setModifierProperty(methodCopy,PsiModifier.ABSTRACT,false);
+    }
+    replaceMovedMemberTypeParameters(methodCopy,PsiUtil.typeParametersIterable(mySourceClass),substitutor,elementFactory);
+    myDocCommentPolicy.processCopiedJavaDoc(methodCopy.getDocComment(),method.getDocComment(),isOriginalMethodAbstract);
+    final PsiMember movedElement=anchor != null ? (PsiMember)myTargetSuperClass.addBefore(methodCopy,anchor) : (PsiMember)myTargetSuperClass.add(methodCopy);
+    CodeStyleSettings styleSettings=CodeStyleSettingsManager.getSettings(method.getProject());
+    if (styleSettings.INSERT_OVERRIDE_ANNOTATION) {
+      if (PsiUtil.isLanguageLevel5OrHigher(mySourceClass) && !myTargetSuperClass.isInterface() || PsiUtil.isLanguageLevel6OrHigher(mySourceClass)) {
+        new AddAnnotationFix(CommonClassNames.JAVA_LANG_OVERRIDE,method).invoke(method.getProject(),null,mySourceClass.getContainingFile());
+      }
+    }
+    if (!PsiUtil.isLanguageLevel6OrHigher(mySourceClass) && myTargetSuperClass.isInterface()) {
+      if (isOriginalMethodAbstract) {
+        for (        PsiMethod oMethod : OverridingMethodsSearch.search(method)) {
+          deleteOverrideAnnotationIfFound(oMethod);
+        }
+      }
+      deleteOverrideAnnotationIfFound(method);
+    }
+    myMembersAfterMove.add(movedElement);
+    if (isOriginalMethodAbstract) {
+      method.delete();
+    }
+  }
+ else {
+    if (isOriginalMethodAbstract) {
+      PsiUtil.setModifierProperty(myTargetSuperClass,PsiModifier.ABSTRACT,true);
+    }
+    replaceMovedMemberTypeParameters(methodCopy,PsiUtil.typeParametersIterable(mySourceClass),substitutor,elementFactory);
+    final PsiMethod superClassMethod=myTargetSuperClass.findMethodBySignature(methodCopy,false);
+    if (superClassMethod != null && superClassMethod.hasModifierProperty(PsiModifier.ABSTRACT)) {
+      superClassMethod.replace(methodCopy);
+    }
+ else {
+      final PsiMember movedElement=anchor != null ? (PsiMember)myTargetSuperClass.addBefore(methodCopy,anchor) : (PsiMember)myTargetSuperClass.add(methodCopy);
+      myMembersAfterMove.add(movedElement);
+    }
+    method.delete();
+  }
+}

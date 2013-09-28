@@ -6,11 +6,14 @@
   }
   CommentsLiteralsSearchData data=model.getUserData(ourCommentsLiteralsSearchDataKey);
   if (data == null || !Comparing.equal(data.lastFile,file)) {
-    SyntaxHighlighter lexer;
+    SyntaxHighlighter highlighter=getHighlighter(file,lang);
+    if (highlighter == null) {
+      LOG.error("Syntax highlighter is null:" + file);
+      return NOT_FOUND_RESULT;
+    }
     TokenSet tokensOfInterest=TokenSet.EMPTY;
     Set<Language> relevantLanguages=null;
     if (lang != null) {
-      lexer=getHighlighter(file,lang);
       final Language finalLang=lang;
       relevantLanguages=ApplicationManager.getApplication().runReadAction(new Computable<Set<Language>>(){
         @Override public Set<Language> compute(){
@@ -46,24 +49,23 @@
         }
       }
     }
- else     if (ftype instanceof AbstractFileType) {
-      if (model.isInCommentsOnly()) {
-        tokensOfInterest=TokenSet.create(CustomHighlighterTokenType.LINE_COMMENT,CustomHighlighterTokenType.MULTI_LINE_COMMENT);
-      }
-      if (model.isInStringLiteralsOnly()) {
-        tokensOfInterest=TokenSet.orSet(tokensOfInterest,TokenSet.create(CustomHighlighterTokenType.STRING,CustomHighlighterTokenType.SINGLE_QUOTED_STRING));
-      }
-      lexer=new CustomFileHighlighter(((AbstractFileType)ftype).getSyntaxTable());
-    }
  else {
-      return NOT_FOUND_RESULT;
+      relevantLanguages=ContainerUtil.newHashSet();
+      if (ftype instanceof AbstractFileType) {
+        if (model.isInCommentsOnly()) {
+          tokensOfInterest=TokenSet.create(CustomHighlighterTokenType.LINE_COMMENT,CustomHighlighterTokenType.MULTI_LINE_COMMENT);
+        }
+        if (model.isInStringLiteralsOnly()) {
+          tokensOfInterest=TokenSet.orSet(tokensOfInterest,TokenSet.create(CustomHighlighterTokenType.STRING,CustomHighlighterTokenType.SINGLE_QUOTED_STRING));
+        }
+      }
     }
     Matcher matcher=model.isRegularExpressions() ? compileRegExp(model,"") : null;
     StringSearcher searcher=matcher != null ? null : createStringSearcher(model);
-    data=new CommentsLiteralsSearchData(file,relevantLanguages,lexer,tokensOfInterest,searcher,matcher);
+    data=new CommentsLiteralsSearchData(file,relevantLanguages,highlighter,tokensOfInterest,searcher,matcher);
     model.putUserData(ourCommentsLiteralsSearchDataKey,data);
   }
-  final Lexer lexer=data.highlighter.getHighlightingLexer();
+  final Lexer lexer=data.highlightingLexer;
   lexer.start(text,model.isForward() && data.startOffset < offset ? data.startOffset : 0,text.length(),0);
   IElementType tokenType;
   TokenSet tokens=data.tokensOfInterest;
@@ -79,8 +81,10 @@
       if (model.isInStringLiteralsOnly()) {
         char c=text.charAt(start);
         if (c == '"' || c == '\'') {
-          ++start;
-          if (c == text.charAt(end - 1))           --end;
+          while (start < end && c == text.charAt(start)) {
+            ++start;
+            if (c == text.charAt(end - 1) && start < end)             --end;
+          }
         }
       }
       while (true) {
@@ -115,7 +119,7 @@
             return findResult;
           }
  else {
-            if (findResult.getStartOffset() >= offset)             return prevFindResult;
+            if (findResult.getEndOffset() >= offset)             return prevFindResult;
             prevFindResult=findResult;
             start=findResult.getEndOffset();
             continue;
