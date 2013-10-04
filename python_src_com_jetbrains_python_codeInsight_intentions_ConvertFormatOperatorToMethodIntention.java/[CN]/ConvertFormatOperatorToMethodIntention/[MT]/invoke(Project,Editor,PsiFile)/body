@@ -1,47 +1,48 @@
 {
-  PyBinaryExpression element=PsiTreeUtil.getParentOfType(file.findElementAt(editor.getCaretModel().getOffset()),PyBinaryExpression.class,false);
-  PyElementGenerator elementGenerator=PyElementGenerator.getInstance(project);
+  final PsiElement elementAt=file.findElementAt(editor.getCaretModel().getOffset());
+  final PyBinaryExpression element=PsiTreeUtil.getParentOfType(elementAt,PyBinaryExpression.class,false);
+  if (element == null)   return;
+  final PyElementGenerator elementGenerator=PyElementGenerator.getInstance(project);
   final PyExpression rightExpression=sure(element).getRightExpression();
   if (rightExpression == null) {
     return;
   }
-  PyExpression rhs=PyPsiUtils.flattenParens(rightExpression);
-  String param_text=sure(rhs).getText();
-  final PyStringLiteralExpression leftExpression=(PyStringLiteralExpression)element.getLeftExpression();
-  Pair<StringBuilder,Boolean> converted=convertFormat(leftExpression);
-  StringBuilder target=converted.getFirst();
-  String separator="";
-  Pair<String,PsiElement> crop=collectWhitespace(leftExpression);
-  String maybe_separator=crop.getFirst();
-  if (!"".equals(maybe_separator) && !" ".equals(maybe_separator))   separator=maybe_separator;
- else {
-    crop=collectWhitespace(crop.getSecond());
-    maybe_separator=crop.getFirst();
-    if (!"".equals(maybe_separator) && !" ".equals(maybe_separator))     separator=maybe_separator;
+  final PyExpression rhs=PyPsiUtils.flattenParens(rightExpression);
+  if (rhs == null)   return;
+  final String paramText=sure(rhs).getText();
+  final TypeEvalContext context=TypeEvalContext.userInitiated(file);
+  final PyType rhsType=context.getType(rhs);
+  String prefix="";
+  if (PyTypeChecker.match(PyBuiltinCache.getInstance(rhs).getObjectType("unicode"),rhsType,context)) {
+    prefix="u";
   }
+  final PyStringLiteralExpression leftExpression=(PyStringLiteralExpression)element.getLeftExpression();
+  final Pair<StringBuilder,Boolean> converted=convertFormat(leftExpression,prefix);
+  final StringBuilder target=converted.getFirst();
+  final String separator=getSeparator(leftExpression);
   target.append(separator).append(".format");
-  if (rhs instanceof PyDictLiteralExpression)   target.append("(**").append(param_text).append(")");
+  if (rhs instanceof PyDictLiteralExpression)   target.append("(**").append(paramText).append(")");
  else   if (rhs instanceof PyCallExpression) {
-    final PyCallExpression call_expression=(PyCallExpression)rhs;
-    final PyExpression callee=call_expression.getCallee();
+    final PyCallExpression callExpression=(PyCallExpression)rhs;
+    final PyExpression callee=callExpression.getCallee();
     if (callee instanceof PyReferenceExpression) {
-      PsiElement maybe_dict=((PyReferenceExpression)callee).getReference().resolve();
-      if (maybe_dict instanceof PyFunction) {
-        PyFunction dict_init=(PyFunction)maybe_dict;
-        if (PyNames.INIT.equals(dict_init.getName())) {
-          final PyClassType dict_type=PyBuiltinCache.getInstance(file).getDictType();
-          if (dict_type != null && dict_type.getPyClass() == dict_init.getContainingClass()) {
-            target.append(sure(sure(call_expression.getArgumentList()).getNode()).getChars());
+      PsiElement maybeDict=((PyReferenceExpression)callee).getReference().resolve();
+      if (maybeDict instanceof PyFunction) {
+        PyFunction dictInit=(PyFunction)maybeDict;
+        if (PyNames.INIT.equals(dictInit.getName())) {
+          final PyClassType dictType=PyBuiltinCache.getInstance(file).getDictType();
+          if (dictType != null && dictType.getPyClass() == dictInit.getContainingClass()) {
+            target.append(sure(sure(callExpression.getArgumentList()).getNode()).getChars());
           }
         }
  else {
           target.append("(");
           if (converted.getSecond())           target.append("**");
-          target.append(param_text).append(")");
+          target.append(paramText).append(")");
         }
       }
     }
   }
- else   target.append("(").append(param_text).append(")");
-  element.replace(elementGenerator.createExpressionFromText(target.toString()));
+ else   target.append("(").append(paramText).append(")");
+  element.replace(elementGenerator.createExpressionFromText(LanguageLevel.forElement(element),target.toString()));
 }
