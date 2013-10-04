@@ -1,32 +1,38 @@
 {
-  if (element instanceof JqlSimpleClause) {
-    JqlSimpleClause clause=(JqlSimpleClause)element;
-    JqlTerminalClause.Type clauseType=clause.getType();
-    JqlOperand operand=clause.getOperand();
-    if (clauseType == null || operand == null) {
-      return;
+  element.accept(new JqlElementVisitor(){
+    @Override public void visitEmptyValue(    JqlEmptyValue emptyValue){
+      JqlSimpleClause clause=PsiTreeUtil.getParentOfType(emptyValue,JqlSimpleClause.class);
+      if (clause != null && !isEmptyClause(clause)) {
+        holder.createErrorAnnotation(emptyValue,String.format("Not expecting '%s' here",emptyValue.getText()));
+      }
     }
-    boolean isListLiteral=operand instanceof JqlList;
-    boolean isListFunction=false;
-    if (operand instanceof JqlFunctionCall) {
-      JqlFunctionCall functionCall=(JqlFunctionCall)operand;
-      JqlStandardFunction standardFunction=JqlStandardFunction.byName(functionCall.getFunctionName().getText());
-      isListFunction=standardFunction != null && standardFunction.hasMultipleResults();
+    @Override public void visitJqlList(    JqlList list){
+      JqlSimpleClause clause=PsiTreeUtil.getParentOfType(list,JqlSimpleClause.class);
+      if (clause != null && !isListClause(clause)) {
+        holder.createErrorAnnotation(list,String.format("Not expecting list of values here"));
+      }
     }
-    boolean hasListOperand=isListLiteral || isListFunction;
-    if (clauseType.isListOperator() && !hasListOperand) {
-      holder.createErrorAnnotation(operand,"Expecting list of values");
-    }
- else     if (!clauseType.isListOperator() && hasListOperand) {
-      holder.createErrorAnnotation(operand,"Not expecting list of values here");
-    }
-    boolean hasEmptyOperand=operand instanceof JqlEmptyValue;
-    boolean isEmptyClause=clauseType == JqlTerminalClause.Type.IS || clauseType == JqlTerminalClause.Type.IS_NOT;
-    if (isEmptyClause && !hasEmptyOperand) {
-      holder.createErrorAnnotation(operand,"Expecting 'empty' or 'null'");
-    }
- else     if (!isEmptyClause && hasEmptyOperand) {
-      holder.createErrorAnnotation(operand,String.format("Not expecting '%s' here",operand.getText()));
+    @Override public void visitJqlSimpleClause(    JqlSimpleClause clause){
+      JqlOperand operand=clause.getOperand();
+      if (operand == null) {
+        return;
+      }
+      boolean operandIsListLiteral=operand instanceof JqlList;
+      boolean operandIsListFunction=false;
+      if (operand instanceof JqlFunctionCall) {
+        JqlFunctionCall functionCall=(JqlFunctionCall)operand;
+        JqlStandardFunction standardFunction=JqlStandardFunction.byName(functionCall.getFunctionName().getText());
+        operandIsListFunction=standardFunction != null && standardFunction.hasMultipleResults();
+      }
+      boolean hasListOperand=operandIsListLiteral || operandIsListFunction;
+      if (isListClause(clause) && !hasListOperand) {
+        holder.createErrorAnnotation(operand,"Expecting list of values here");
+      }
+      boolean hasEmptyOperand=operand instanceof JqlEmptyValue;
+      if (isEmptyClause(clause) && !hasEmptyOperand) {
+        holder.createErrorAnnotation(operand,"Expecting 'empty' or 'null' here");
+      }
     }
   }
+);
 }
