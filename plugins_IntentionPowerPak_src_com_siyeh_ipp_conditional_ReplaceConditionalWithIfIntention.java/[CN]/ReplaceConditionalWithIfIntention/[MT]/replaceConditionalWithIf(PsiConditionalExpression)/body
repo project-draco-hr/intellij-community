@@ -10,8 +10,8 @@
  else {
     variable=null;
   }
-  final PsiExpression thenExpression=expression.getThenExpression();
-  final PsiExpression elseExpression=expression.getElseExpression();
+  PsiExpression thenExpression=expression.getThenExpression();
+  PsiExpression elseExpression=expression.getElseExpression();
   final PsiExpression condition=expression.getCondition();
   final PsiExpression strippedCondition=ParenthesesUtils.stripParentheses(condition);
   final StringBuilder newStatement=new StringBuilder();
@@ -24,9 +24,20 @@
     final String name=variable.getName();
     newStatement.append(name);
     newStatement.append('=');
-    final PsiExpression initializer=variable.getInitializer();
+    PsiExpression initializer=variable.getInitializer();
     if (initializer == null) {
       return;
+    }
+    if (initializer instanceof PsiArrayInitializerExpression) {
+      final int conditionIdx=ArrayUtilRt.find(((PsiArrayInitializerExpression)initializer).getInitializers(),expression);
+      if (conditionIdx >= 0) {
+        initializer=(PsiExpression)initializer.replace(RefactoringUtil.convertInitializerToNormalExpression(initializer,variable.getType()));
+        final PsiArrayInitializerExpression arrayInitializer=((PsiNewExpression)initializer).getArrayInitializer();
+        LOG.assertTrue(arrayInitializer != null,initializer.getText());
+        expression=(PsiConditionalExpression)arrayInitializer.getInitializers()[conditionIdx];
+        thenExpression=expression.getThenExpression();
+        elseExpression=expression.getElseExpression();
+      }
     }
     appendElementTextWithoutParentheses(initializer,expression,thenExpression,newStatement);
     newStatement.append("; else ");
