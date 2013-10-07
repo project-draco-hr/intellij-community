@@ -1,11 +1,11 @@
 {
   try {
-    final Object pathObj=myGetPath.invoke(myDefaultFileSystem,path,ArrayUtil.EMPTY_STRING_ARRAY);
-    Map attributes=(Map)myReadAttributes.invoke(null,pathObj,"dos:*",myNoFollowLinkOptions);
-    final boolean isSymbolicLink=(Boolean)attributes.get("isSymbolicLink");
+    Object pathObj=myGetPath.invoke(myDefaultFileSystem,path,ArrayUtil.EMPTY_STRING_ARRAY);
+    Map attributes=(Map)myReadAttributes.invoke(null,pathObj,mySchema,myNoFollowLinkOptions);
+    boolean isSymbolicLink=(Boolean)attributes.get("isSymbolicLink");
     if (isSymbolicLink) {
       try {
-        attributes=(Map)myReadAttributes.invoke(null,pathObj,"dos:*",myLinkOptions);
+        attributes=(Map)myReadAttributes.invoke(null,pathObj,mySchema,myLinkOptions);
       }
  catch (      InvocationTargetException e) {
         final Throwable cause=e.getCause();
@@ -14,13 +14,19 @@
         }
       }
     }
-    final boolean isDirectory=(Boolean)attributes.get("isDirectory");
-    final boolean isOther=(Boolean)attributes.get("isOther");
-    final long size=(Long)attributes.get("size");
-    final long lastModified=(Long)myToMillis.invoke(attributes.get("lastModifiedTime"));
-    final boolean isHidden=(Boolean)attributes.get("hidden");
-    final boolean isWritable=!(Boolean)attributes.get("readonly");
-    return new FileAttributes(isDirectory,isOther,isSymbolicLink,isHidden,size,lastModified,isWritable);
+    boolean isDirectory=(Boolean)attributes.get("isDirectory");
+    boolean isOther=(Boolean)attributes.get("isOther");
+    long size=(Long)attributes.get("size");
+    long lastModified=(Long)myToMillis.invoke(attributes.get("lastModifiedTime"));
+    if (SystemInfo.isWindows) {
+      boolean isHidden=(Boolean)attributes.get("hidden");
+      boolean isWritable=!(Boolean)attributes.get("readonly");
+      return new FileAttributes(isDirectory,isOther,isSymbolicLink,isHidden,size,lastModified,isWritable);
+    }
+ else {
+      boolean isWritable=new File(path).canWrite();
+      return new FileAttributes(isDirectory,isOther,isSymbolicLink,false,size,lastModified,isWritable);
+    }
   }
  catch (  InvocationTargetException e) {
     final Throwable cause=e.getCause();
