@@ -1,16 +1,15 @@
 {
   runInBackground(new ThrowableConsumer<ProgressIndicator,VcsException>(){
     @Override public void consume(    ProgressIndicator indicator) throws VcsException {
-      if (invalidateWholeLog) {
-        myLogData=null;
-      }
-      boolean ordered=!isFullLogReady();
+      boolean initialization=myLogData == null;
+      boolean isFullLogReady=!initialization && myLogData.isFullLogReady();
+      boolean fairRefresh=invalidateWholeLog || !isFullLogReady;
       Map<VirtualFile,List<TimedVcsCommit>> logsToBuild=ContainerUtil.newHashMap();
-      Collection<VcsRef> allRefs=ContainerUtil.newHashSet();
+      Map<VirtualFile,Collection<VcsRef>> refsByRoot=ContainerUtil.newHashMap();
       for (      Map.Entry<VirtualFile,VcsLogProvider> entry : myLogProviders.entrySet()) {
         VirtualFile root=entry.getKey();
         VcsLogProvider logProvider=entry.getValue();
-        List<? extends VcsFullCommitDetails> firstBlockDetails=logProvider.readFirstBlock(root,ordered);
+        List<? extends VcsFullCommitDetails> firstBlockDetails=logProvider.readFirstBlock(root,fairRefresh);
         Collection<VcsRef> newRefs=logProvider.readAllRefs(root);
         myDetailsGetter.saveInCache(firstBlockDetails);
         myMiniDetailsGetter.saveInCache(firstBlockDetails);
@@ -22,38 +21,28 @@
 );
         List<TimedVcsCommit> refreshedLog;
         int newCommitsCount;
-        if (ordered) {
-          refreshedLog=new ArrayList<TimedVcsCommit>(firstBlockCommits);
-          newCommitsCount=0;
+        if (fairRefresh) {
+          refreshedLog=firstBlockCommits;
+          newCommitsCount=-1;
         }
  else {
           Pair<List<TimedVcsCommit>,Integer> joinResult=myLogJoiner.addCommits(myLogData.getLog(root),myLogData.getRefs(root),firstBlockCommits,newRefs);
           refreshedLog=joinResult.getFirst();
           newCommitsCount=joinResult.getSecond();
         }
-        if (myFullLogShowing) {
-          logsToBuild.put(root,refreshedLog);
-        }
- else {
-          int commitsToShow;
-          if (myDataPack != null) {
-            commitsToShow=myDataPack.getGraphModel().getGraph().getNodeRows().size() + newCommitsCount;
-          }
- else {
-            commitsToShow=firstBlockDetails.size();
-          }
-          logsToBuild.put(root,refreshedLog.subList(0,Math.min(commitsToShow,refreshedLog.size())));
-        }
-        allRefs.addAll(newRefs);
-        if (myLogData != null) {
-          myLogData.setRefs(root,newRefs);
-        }
+        logsToBuild.put(root,refreshedLog);
+        refsByRoot.put(root,newRefs);
       }
       List<TimedVcsCommit> compoundLog=myMultiRepoJoiner.join(logsToBuild.values());
-      myDataPack=DataPack.build(compoundLog,allRefs,indicator);
+      Collection<VcsRef> allRefs=new ArrayList<VcsRef>();
+      for (      Collection<VcsRef> refs : refsByRoot.values()) {
+        allRefs.addAll(refs);
+      }
+      final DataPack dataPack=DataPack.build(compoundLog,allRefs,indicator);
+      myLogData=new LogData(logsToBuild,refsByRoot,dataPack,isFullLogReady);
       UIUtil.invokeAndWaitIfNeeded(new Runnable(){
         @Override public void run(){
-          onSuccess.consume(myDataPack);
+          onSuccess.consume(dataPack);
         }
       }
 );
