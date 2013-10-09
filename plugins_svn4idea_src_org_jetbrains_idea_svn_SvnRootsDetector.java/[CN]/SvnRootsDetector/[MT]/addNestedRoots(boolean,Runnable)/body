@@ -1,0 +1,41 @@
+{
+  final List<VirtualFile> basicVfRoots=ObjectsConvertor.convert(myResult.myTopRoots,new Convertor<RootUrlInfo,VirtualFile>(){
+    public VirtualFile convert(    final RootUrlInfo real){
+      return real.getVirtualFile();
+    }
+  }
+);
+  final ChangeListManager clManager=ChangeListManager.getInstance(myVcs.getProject());
+  if (clearState) {
+    myNestedCopiesHolder.getAndClear();
+  }
+  clManager.invokeAfterUpdate(new Runnable(){
+    public void run(){
+      final List<RootUrlInfo> nestedRoots=new ArrayList<RootUrlInfo>();
+      for (      NestedCopyInfo info : myNestedCopiesHolder.getAndClear()) {
+        if (NestedCopyType.external.equals(info.getType()) || NestedCopyType.switched.equals(info.getType())) {
+          RootUrlInfo topRoot=findTopRoot(VfsUtilCore.virtualToIoFile(info.getFile()));
+          if (topRoot != null) {
+            topRoot.setType(info.getType());
+            continue;
+          }
+          if (!refreshPointInfo(info)) {
+            continue;
+          }
+        }
+        registerRootUrlFromNestedPoint(info,nestedRoots);
+      }
+      myResult.myTopRoots.addAll(nestedRoots);
+      myMapping.applyDetectionResult(myResult);
+      callback.run();
+    }
+  }
+,InvokeAfterUpdateMode.SILENT_CALLBACK_POOLED,null,new Consumer<VcsDirtyScopeManager>(){
+    public void consume(    VcsDirtyScopeManager vcsDirtyScopeManager){
+      if (clearState) {
+        vcsDirtyScopeManager.filesDirty(null,basicVfRoots);
+      }
+    }
+  }
+,null);
+}
