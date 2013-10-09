@@ -1,0 +1,29 @@
+{
+  final PsiElement contextParent=context.getParent();
+  if (context instanceof PyStringLiteralExpression && contextParent instanceof PyArgumentList) {
+    final PyStringLiteralExpression stringLiteral=(PyStringLiteralExpression)context;
+    final PyExpression[] args=((PyArgumentList)contextParent).getArguments();
+    int index=ArrayUtil.indexOf(args,context);
+    PyCallExpression call=PsiTreeUtil.getParentOfType(context,PyCallExpression.class);
+    if (call != null) {
+      final PyExpression callee=call.getCallee();
+      if (callee instanceof PyReferenceExpression && canBeRegexpCall(callee)) {
+        final PsiPolyVariantReference ref=((PyReferenceExpression)callee).getReference(PyResolveContext.noImplicits());
+        if (ref != null) {
+          final PsiElement element=ref.resolve();
+          if (element != null && element.getContainingFile().getName().equals("re.py") && isRegexpMethod(element,index)) {
+            List<TextRange> ranges=stringLiteral.getStringValueTextRanges();
+            if (!ranges.isEmpty()) {
+              final Language language=isVerbose(call) ? PythonVerboseRegexpLanguage.INSTANCE : PythonRegexpLanguage.INSTANCE;
+              registrar.startInjecting(language);
+              for (              TextRange range : ranges) {
+                registrar.addPlace("","",stringLiteral,range);
+              }
+              registrar.doneInjecting();
+            }
+          }
+        }
+      }
+    }
+  }
+}
