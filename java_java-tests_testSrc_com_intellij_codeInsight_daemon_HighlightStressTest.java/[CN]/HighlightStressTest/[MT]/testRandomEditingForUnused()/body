@@ -1,0 +1,76 @@
+{
+  configureFromFileText("Stress.java","class X {<caret>}");
+  PsiShortNamesCache cache=PsiShortNamesCache.getInstance(getProject());
+  String[] names=cache.getAllClassNames();
+  final StringBuilder imports=new StringBuilder();
+  final StringBuilder usages=new StringBuilder();
+  int v=0;
+  List<PsiClass> aclasses=new ArrayList<PsiClass>();
+  for (  String name : names) {
+    PsiClass[] classes=cache.getClassesByName(name,GlobalSearchScope.allScope(getProject()));
+    if (classes.length == 0)     continue;
+    PsiClass aClass=classes[0];
+    if (!aClass.hasModifierProperty(PsiModifier.PUBLIC))     continue;
+    if (aClass.getSuperClass() == null)     continue;
+    PsiClassType[] superTypes=aClass.getSuperTypes();
+    if (superTypes.length == 0 || superTypes[0].resolve() == null)     continue;
+    String qualifiedName=aClass.getQualifiedName();
+    if (qualifiedName.startsWith("java.lang.invoke"))     continue;
+    imports.append("import " + qualifiedName + ";\n");
+    usages.append("/**/ " + aClass.getName() + " var"+ v+ " = null; var"+ v+ ".toString();\n");
+    aclasses.add(aClass);
+    v++;
+    if (v > 100)     break;
+  }
+  final String text=imports + "\n class X {{\n" + usages+ "}}";
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    public void run(){
+      getEditor().getDocument().setText(text);
+    }
+  }
+);
+  List<HighlightInfo> errors=DaemonAnalyzerTestCase.filter(doHighlighting(),HighlightSeverity.WARNING);
+  assertEmpty(errors);
+  Random random=new Random();
+  int unused=0;
+  for (int i=0; i < 100; i++) {
+    String s=myFile.getText();
+    int offset;
+    while (true) {
+      offset=random.nextInt(s.length());
+      if (CharArrayUtil.regionMatches(s,offset,"/**/") || CharArrayUtil.regionMatches(s,offset,"//"))       break;
+    }
+    char next=offset < s.length() - 1 ? s.charAt(offset + 1) : 0;
+    if (next == '/') {
+      myEditor.getCaretModel().moveToOffset(offset + 1);
+      type("**");
+      unused--;
+    }
+ else     if (next == '*') {
+      myEditor.getCaretModel().moveToOffset(offset + 1);
+      delete();
+      delete();
+      unused++;
+    }
+ else {
+      continue;
+    }
+    PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
+    getFile().accept(new PsiRecursiveElementVisitor(){
+      @Override public void visitElement(      PsiElement element){
+        assertTrue(element.toString(),element.isValid());
+        super.visitElement(element);
+      }
+    }
+);
+    System.out.println("i = " + i + " "+ next+ " at "+ offset);
+    List<HighlightInfo> infos=doHighlighting();
+    errors=DaemonAnalyzerTestCase.filter(infos,HighlightSeverity.ERROR);
+    assertEmpty(errors);
+    List<HighlightInfo> warns=DaemonAnalyzerTestCase.filter(infos,HighlightSeverity.WARNING);
+    if (unused != warns.size()) {
+      assertEquals(warns.toString(),unused,warns.size());
+    }
+  }
+  FileEditorManagerEx.getInstanceEx(getProject()).closeAllFiles();
+}
