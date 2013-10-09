@@ -1,5 +1,4 @@
 {
-  if (!PsiUtil.isLanguageLevel5OrHigher(place))   return null;
   final List<ProblemDescriptor> problems=new ArrayList<ProblemDescriptor>();
   place.accept(new JavaRecursiveElementWalkingVisitor(){
     @Override public void visitCallExpression(    PsiCallExpression expression){
@@ -16,31 +15,41 @@
       final JavaResolveResult resolveResult=expression.resolveMethodGenerics();
       PsiElement element=resolveResult.getElement();
       final PsiSubstitutor substitutor=resolveResult.getSubstitutor();
-      if (element instanceof PsiMethod && ((PsiMethod)element).isVarArgs()) {
-        PsiMethod method=(PsiMethod)element;
-        PsiParameter[] parameters=method.getParameterList().getParameters();
-        PsiExpressionList argumentList=expression.getArgumentList();
-        if (argumentList != null) {
-          PsiExpression[] args=argumentList.getExpressions();
-          if (parameters.length == args.length) {
-            PsiExpression lastArg=args[args.length - 1];
-            PsiParameter lastParameter=parameters[args.length - 1];
-            PsiType lastParamType=lastParameter.getType();
-            LOG.assertTrue(lastParamType instanceof PsiEllipsisType);
-            if (lastArg instanceof PsiNewExpression && substitutor.substitute(((PsiEllipsisType)lastParamType).toArrayType()).equals(lastArg.getType())) {
-              PsiExpression[] initializers=getInitializers((PsiNewExpression)lastArg);
-              if (initializers != null) {
-                if (isSafeToFlatten(expression,method,initializers)) {
-                  final ProblemDescriptor descriptor=manager.createProblemDescriptor(lastArg,InspectionsBundle.message("inspection.redundant.array.creation.for.varargs.call.descriptor"),myQuickFixAction,ProblemHighlightType.GENERIC_ERROR_OR_WARNING,isOnTheFly);
-                  problems.add(descriptor);
-                }
-              }
-            }
-          }
-        }
+      if (!(element instanceof PsiMethod)) {
+        return;
       }
+      PsiMethod method=(PsiMethod)element;
+      if (!method.isVarArgs()) {
+        return;
+      }
+      PsiParameter[] parameters=method.getParameterList().getParameters();
+      PsiExpressionList argumentList=expression.getArgumentList();
+      if (argumentList == null) {
+        return;
+      }
+      PsiExpression[] args=argumentList.getExpressions();
+      if (parameters.length != args.length) {
+        return;
+      }
+      PsiExpression lastArg=args[args.length - 1];
+      PsiParameter lastParameter=parameters[args.length - 1];
+      PsiType lastParamType=lastParameter.getType();
+      LOG.assertTrue(lastParamType instanceof PsiEllipsisType);
+      if (!(lastArg instanceof PsiNewExpression) || !substitutor.substitute(((PsiEllipsisType)lastParamType).toArrayType()).equals(lastArg.getType())) {
+        return;
+      }
+      PsiExpression[] initializers=getInitializers((PsiNewExpression)lastArg);
+      if (initializers == null) {
+        return;
+      }
+      if (!isSafeToFlatten(expression,method,initializers)) {
+        return;
+      }
+      String message=InspectionsBundle.message("inspection.redundant.array.creation.for.varargs.call.descriptor");
+      ProblemDescriptor descriptor=manager.createProblemDescriptor(lastArg,message,myQuickFixAction,ProblemHighlightType.GENERIC_ERROR_OR_WARNING,isOnTheFly);
+      problems.add(descriptor);
     }
-    private boolean isSafeToFlatten(    PsiCall callExpression,    PsiMethod oldRefMethod,    PsiExpression[] arrayElements){
+    private boolean isSafeToFlatten(    @NotNull PsiCall callExpression,    @NotNull PsiMethod oldRefMethod,    @NotNull PsiExpression[] arrayElements){
       if (arrayElements.length == 1) {
         PsiType type=arrayElements[0].getType();
         if (PsiType.NULL.equals(type) || type instanceof PsiArrayType)         return false;
