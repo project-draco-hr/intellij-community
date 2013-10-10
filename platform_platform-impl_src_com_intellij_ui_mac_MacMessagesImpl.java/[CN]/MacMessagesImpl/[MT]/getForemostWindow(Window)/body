@@ -1,17 +1,12 @@
 {
   Window _window=null;
+  IdeFocusManager ideFocusManager=IdeFocusManager.getGlobalInstance();
   Component focusOwner=IdeFocusManager.findInstance().getFocusOwner();
   if (focusOwner != null) {
     _window=SwingUtilities.getWindowAncestor(focusOwner);
   }
-  if (_window == null && window != null) {
-    focusOwner=window.getMostRecentFocusOwner();
-    if (focusOwner != null) {
-      _window=SwingUtilities.getWindowAncestor(focusOwner);
-    }
-  }
   if (_window == null) {
-    focusOwner=KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusedWindow();
+    focusOwner=ideFocusManager.getLastFocusedFor(ideFocusManager.getLastFocusedFrame());
     if (focusOwner != null) {
       _window=SwingUtilities.getWindowAncestor(focusOwner);
     }
@@ -19,24 +14,19 @@
   if (_window == null) {
     _window=WindowManager.getInstance().findVisibleFrame();
   }
-  if (_window != null) {
-synchronized (_window.getTreeLock()) {
-      try {
-        isModalBlockedMethod.setAccessible(true);
-        if ((Boolean)isModalBlockedMethod.invoke(_window,null)) {
-          getModalBlockerMethod.setAccessible(true);
-          _window=(Dialog)getModalBlockerMethod.invoke(_window,null);
-        }
-      }
- catch (      InvocationTargetException e) {
-        LOG.error(e);
-      }
-catch (      IllegalAccessException e) {
-        LOG.error(e);
-      }
+  if (_window == null && window != null) {
+    focusOwner=window.getMostRecentFocusOwner();
+    if (focusOwner != null) {
+      _window=SwingUtilities.getWindowAncestor(focusOwner);
     }
   }
-  while (getWindowTitle(_window) == null) {
+  if (_window != null) {
+    if (ModalityHelper.isModalBlocked(_window)) {
+      _window=ModalityHelper.getModalBlockerFor(_window);
+    }
+  }
+  LOG.assertTrue(getWindowTitle(_window) != null,"A window without a title should not be used for showing MacMessages");
+  while (_window != null && getWindowTitle(_window) == null) {
     _window=_window.getOwner();
   }
   return _window;

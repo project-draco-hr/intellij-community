@@ -1,5 +1,5 @@
 {
-  if (PsiPolyExpressionUtil.isPolyExpression(context) || context instanceof PsiNewExpression && PsiDiamondType.ourDiamondGuard.currentStack().contains(context)) {
+  if (PsiPolyExpressionUtil.isMethodCallPolyExpression(context,method) || context instanceof PsiNewExpression && PsiDiamondType.ourDiamondGuard.currentStack().contains(context)) {
     final PsiType returnType=method.getReturnType();
     if (!PsiType.VOID.equals(returnType) && returnType != null) {
       PsiType targetType=PsiTypesUtil.getExpectedTypeByParent(context);
@@ -10,8 +10,9 @@
           if (gParent instanceof PsiCallExpression) {
             final PsiExpressionList argumentList=((PsiCallExpression)gParent).getArgumentList();
             if (argumentList != null) {
-              final JavaResolveResult resolveResult=((PsiCallExpression)gParent).resolveMethodGenerics();
-              final PsiElement parentMethod=resolveResult.getElement();
+              final Pair<PsiMethod,PsiSubstitutor> pair=MethodCandidateInfo.getCurrentMethod(argumentList);
+              final JavaResolveResult resolveResult=pair == null ? ((PsiCallExpression)gParent).resolveMethodGenerics() : null;
+              final PsiElement parentMethod=pair != null ? pair.first : resolveResult.getElement();
               if (parentMethod instanceof PsiMethod) {
                 final PsiParameter[] parameters=((PsiMethod)parentMethod).getParameterList().getParameters();
                 PsiElement arg=context;
@@ -19,7 +20,7 @@
                   arg=parent.getParent();
                 }
                 final PsiExpression[] args=argumentList.getExpressions();
-                targetType=getParameterType(parameters,args,ArrayUtilRt.find(args,arg),resolveResult.getSubstitutor());
+                targetType=getParameterType(parameters,args,ArrayUtilRt.find(args,arg),pair != null ? pair.second : resolveResult.getSubstitutor());
               }
             }
           }
@@ -27,9 +28,12 @@
  else         if (parent instanceof PsiConditionalExpression) {
           targetType=PsiTypesUtil.getExpectedTypeByParent((PsiExpression)parent);
         }
+ else         if (parent instanceof PsiLambdaExpression) {
+          targetType=LambdaUtil.getFunctionalInterfaceReturnType(((PsiLambdaExpression)parent).getFunctionalInterfaceType());
+        }
       }
       if (targetType != null) {
-        myConstraints.add(new TypeCompatibilityConstraint(targetType,PsiImplUtil.normalizeWildcardTypeByPosition(returnType,context)));
+        myConstraints.add(new TypeCompatibilityConstraint(GenericsUtil.eliminateWildcards(targetType,false),PsiImplUtil.normalizeWildcardTypeByPosition(returnType,context)));
       }
     }
   }

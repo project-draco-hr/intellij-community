@@ -1,0 +1,60 @@
+{
+  configureFromFileText("Stress.java",text);
+  List<HighlightInfo> list=doHighlighting();
+  int warnings=list.size();
+  Random random=new Random();
+  DaemonCodeAnalyzer.getInstance(getProject()).restart();
+  int N=20;
+  long[] time=new long[N];
+  for (int i=0; i < N; i++) {
+    long start=System.currentTimeMillis();
+    System.out.println("i = " + i);
+    String s=myFile.getText();
+    int offset;
+    while (true) {
+      offset=random.nextInt(s.length());
+      if (s.charAt(offset) == ' ')       break;
+    }
+    myEditor.getCaretModel().moveToOffset(offset);
+    type("/*--*/");
+    Collection<HighlightInfo> infos=doHighlighting();
+    if (warnings != infos.size()) {
+      list=new ArrayList<HighlightInfo>(list);
+      Collections.sort(list,new Comparator<HighlightInfo>(){
+        @Override public int compare(        HighlightInfo o1,        HighlightInfo o2){
+          if (o1.equals(o2))           return 0;
+          if (o1.getActualStartOffset() != o2.getActualStartOffset())           return o1.getActualStartOffset() - o2.getActualStartOffset();
+          return (o1.getText() + o1.getDescription()).compareTo(o2.getText() + o2.getDescription());
+        }
+      }
+);
+      infos=new ArrayList<HighlightInfo>(infos);
+      Collections.sort((ArrayList<HighlightInfo>)infos,new Comparator<HighlightInfo>(){
+        @Override public int compare(        HighlightInfo o1,        HighlightInfo o2){
+          if (o1.equals(o2))           return 0;
+          if (o1.getActualStartOffset() != o2.getActualStartOffset())           return o1.getActualStartOffset() - o2.getActualStartOffset();
+          return (o1.getText() + o1.getDescription()).compareTo(o2.getText() + o2.getDescription());
+        }
+      }
+);
+      System.out.println(">--------------------");
+      for (      HighlightInfo info : list) {
+        System.out.println(info);
+      }
+      System.out.println("---------------------");
+      for (      HighlightInfo info : infos) {
+        System.out.println(info);
+      }
+      System.out.println("<--------------------");
+    }
+    assertEquals(infos.toString(),warnings,infos.size());
+    for (    HighlightInfo info : infos) {
+      assertNotSame(info + "",HighlightSeverity.ERROR,info.getSeverity());
+    }
+    UIUtil.dispatchAllInvocationEvents();
+    long end=System.currentTimeMillis();
+    time[i]=end - start;
+  }
+  FileEditorManagerEx.getInstanceEx(getProject()).closeAllFiles();
+  System.out.println("Average among the N/3 median times: " + PlatformTestUtil.averageAmongMedians(time,3) + "ms");
+}
