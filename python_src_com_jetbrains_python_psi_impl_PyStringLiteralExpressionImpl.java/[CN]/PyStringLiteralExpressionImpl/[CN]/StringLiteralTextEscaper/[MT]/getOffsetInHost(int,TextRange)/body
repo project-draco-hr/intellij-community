@@ -1,10 +1,32 @@
 {
-  final PyDocStringOwner docStringOwner=PsiTreeUtil.getParentOfType(myHost,PyDocStringOwner.class);
-  if (docStringOwner != null && myHost.equals(docStringOwner.getDocStringExpression())) {
-    int offset=offsetInDecoded + rangeInsideHost.getStartOffset();
-    if (offset < rangeInsideHost.getStartOffset())     offset=rangeInsideHost.getStartOffset();
-    if (offset > rangeInsideHost.getEndOffset())     offset=rangeInsideHost.getEndOffset();
-    return offset;
+  final Ref<Integer> resultRef=Ref.create(-1);
+  final Ref<Integer> indexRef=Ref.create(0);
+  final Ref<Integer> lastEndOffsetRef=Ref.create(-1);
+  myHost.iterateCharacterRanges(new TextRangeConsumer(){
+    @Override public boolean process(    int startOffset,    int endOffset,    String value){
+      if (startOffset > rangeInsideHost.getEndOffset()) {
+        return false;
+      }
+      lastEndOffsetRef.set(endOffset);
+      if (startOffset >= rangeInsideHost.getStartOffset()) {
+        final int i=indexRef.get();
+        if (i == offsetInDecoded) {
+          resultRef.set(startOffset);
+          return false;
+        }
+        indexRef.set(i + 1);
+      }
+      return true;
+    }
   }
-  return myHost.valueOffsetToTextOffset(offsetInDecoded);
+);
+  final int result=resultRef.get();
+  if (result != -1) {
+    return result;
+  }
+  final int lastEndOffset=lastEndOffsetRef.get();
+  if (indexRef.get() == offsetInDecoded && lastEndOffset == rangeInsideHost.getEndOffset()) {
+    return lastEndOffset;
+  }
+  return -1;
 }
