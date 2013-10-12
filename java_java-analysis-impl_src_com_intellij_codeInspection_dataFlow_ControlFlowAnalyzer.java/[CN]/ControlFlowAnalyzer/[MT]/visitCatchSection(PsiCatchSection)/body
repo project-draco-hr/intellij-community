@@ -1,6 +1,22 @@
 {
+  startElement(section);
   PsiCodeBlock catchBlock=section.getCatchBlock();
   if (catchBlock != null) {
+    PsiType declaredType=section.getCatchType();
+    List<PsiType> flattened=declaredType instanceof PsiDisjunctionType ? ((PsiDisjunctionType)declaredType).getDisjunctions() : ContainerUtil.createMaybeSingletonList(declaredType);
+    for (    PsiType catchType : flattened) {
+      addInstruction(new PushInstruction(myExceptionHolder,null));
+      addInstruction(new PushInstruction(myFactory.createTypeValue(catchType,Nullness.UNKNOWN),null));
+      addInstruction(new BinopInstruction(JavaTokenType.INSTANCEOF_KEYWORD,null,section.getProject()));
+      addInstruction(new ConditionalGotoInstruction(ControlFlow.deltaOffset(getStartOffset(catchBlock),-5),false,null));
+    }
+    addThrowCode(true);
+    addInstruction(new PushInstruction(myFactory.getVarFactory().createVariableValue(section.getParameter(),false),null));
+    addInstruction(new PushInstruction(myExceptionHolder,null));
+    addInstruction(new AssignInstruction(null));
+    addInstruction(new PopInstruction());
+    addInstruction(new FlushVariableInstruction(myExceptionHolder));
     catchBlock.accept(this);
   }
+  finishElement(section);
 }
