@@ -1,0 +1,49 @@
+{
+  if (myTargetRemote == null) {
+    return;
+  }
+  final FutureResult<DiffInfo> oldFuture=myDiffInfos.get(branch);
+  if (oldFuture != null) {
+    if (after != null) {
+      try {
+        DiffInfo info=oldFuture.tryGet();
+        if (info != null) {
+          after.consume(getDefaultDescriptionMessage(branch,info));
+          return;
+        }
+      }
+ catch (      ExecutionException e) {
+        LOG.error(e);
+        return;
+      }
+      ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+        @Override public void run(){
+          try {
+            DiffInfo info=oldFuture.get();
+            after.consume(getDefaultDescriptionMessage(branch,info));
+          }
+ catch (          InterruptedException e) {
+            LOG.error(e);
+          }
+catch (          ExecutionException e) {
+            LOG.error(e);
+          }
+        }
+      }
+);
+    }
+    return;
+  }
+  final FutureResult<DiffInfo> future=new FutureResult<DiffInfo>();
+  myDiffInfos.put(branch,future);
+  ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+    @Override public void run(){
+      DiffInfo info=loadDiffInfo(myProject,myGitRepository,myCurrentBranch,myTargetRemote + "/" + branch);
+      future.set(info);
+      if (after != null) {
+        after.consume(getDefaultDescriptionMessage(branch,info));
+      }
+    }
+  }
+);
+}
