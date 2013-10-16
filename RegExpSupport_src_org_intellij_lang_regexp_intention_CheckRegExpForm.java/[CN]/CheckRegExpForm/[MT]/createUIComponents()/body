@@ -1,2 +1,72 @@
 {
+  PsiFile file=myParams.first;
+  myProject=file.getProject();
+  myRef=myParams.second;
+  Document document=PsiDocumentManager.getInstance(myProject).getDocument(file);
+  myRegExp=new EditorTextField(document,myProject,RegExpLanguage.INSTANCE.getAssociatedFileType());
+  final String sampleText=PropertiesComponent.getInstance(myProject).getValue(LAST_EDITED_REGEXP,"Sample Text");
+  mySampleText=new EditorTextField(sampleText,myProject,PlainTextFileType.INSTANCE);
+  mySampleText.setBorder(new CompoundBorder(new EmptyBorder(2,2,2,4),new LineBorder(UIUtil.isUnderDarcula() ? Gray._100 : UIUtil.getBorderColor())));
+  mySampleText.setOneLineMode(false);
+  mySampleText.addDocumentListener(new DocumentAdapter(){
+    @Override public void documentChanged(    DocumentEvent e){
+      SwingUtilities.invokeLater(new Runnable(){
+        public void run(){
+          myRootPanel.revalidate();
+          final Balloon balloon=myRef.get();
+          if (balloon != null) {
+            balloon.revalidate();
+          }
+        }
+      }
+);
+    }
+  }
+);
+  myRootPanel=new JPanel(new BorderLayout()){
+    @Override public void addNotify(){
+      super.addNotify();
+      IdeFocusManager.getGlobalInstance().requestFocus(mySampleText,true);
+      new AnAction(){
+        @Override public void actionPerformed(        AnActionEvent e){
+          IdeFocusManager.findInstance().requestFocus(myRegExp.getFocusTarget(),true);
+        }
+      }
+.registerCustomShortcutSet(CustomShortcutSet.fromString("shift TAB"),mySampleText,myRef.get());
+      final AnAction escaper=new AnAction(){
+        @Override public void actionPerformed(        AnActionEvent e){
+          myRef.get().hide();
+        }
+      }
+;
+      escaper.registerCustomShortcutSet(CommonShortcuts.ESCAPE,myRegExp.getFocusTarget(),myRef.get());
+      escaper.registerCustomShortcutSet(CommonShortcuts.ESCAPE,mySampleText.getFocusTarget(),myRef.get());
+      myRef.get().addListener(new JBPopupAdapter(){
+        @Override public void onClosed(        LightweightWindowEvent event){
+          PropertiesComponent.getInstance(myProject).setValue(LAST_EDITED_REGEXP,mySampleText.getText());
+        }
+      }
+);
+      final Alarm updater=new Alarm(Alarm.ThreadToUse.SWING_THREAD,myRef.get());
+      final DocumentAdapter documentListener=new DocumentAdapter(){
+        @Override public void documentChanged(        DocumentEvent e){
+          updater.cancelAllRequests();
+          if (!updater.isDisposed()) {
+            updater.addRequest(new Runnable(){
+              @Override public void run(){
+                updateBalloon();
+              }
+            }
+,200);
+          }
+        }
+      }
+;
+      myRegExp.addDocumentListener(documentListener);
+      mySampleText.addDocumentListener(documentListener);
+      updateBalloon();
+      mySampleText.selectAll();
+    }
+  }
+;
 }
