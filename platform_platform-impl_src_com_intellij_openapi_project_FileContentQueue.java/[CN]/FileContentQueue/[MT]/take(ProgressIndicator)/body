@@ -1,36 +1,36 @@
 {
   final FileContent content=doTake();
-  if (content != null) {
-    final long length=content.getLength();
-    while (true) {
-      try {
-        indicator.checkCanceled();
-      }
- catch (      ProcessCanceledException e) {
-        pushback(content);
-        throw e;
-      }
+  if (content == null) {
+    return null;
+  }
+  final long length=content.getLength();
+  while (true) {
+    try {
+      indicator.checkCanceled();
+    }
+ catch (    ProcessCanceledException e) {
+      pushback(content);
+      throw e;
+    }
 synchronized (myProceedWithProcessingLock) {
-        final boolean requestingLargeSize=length > LARGE_SIZE_REQUEST_THRESHOLD;
-        if (requestingLargeSize) {
-          myLargeSizeRequested=true;
+      final boolean requestingLargeSize=length > LARGE_SIZE_REQUEST_THRESHOLD;
+      if (requestingLargeSize) {
+        myLargeSizeRequested=true;
+      }
+      try {
+        if (myLargeSizeRequested && !requestingLargeSize || myBytesBeingProcessed + length > Math.max(PROCESSED_FILE_BYTES_THRESHOLD,length)) {
+          myProceedWithProcessingLock.wait(300);
         }
-        try {
-          if (myLargeSizeRequested && !requestingLargeSize || myBytesBeingProcessed + length > Math.max(PROCESSED_FILE_BYTES_THRESHOLD,length)) {
-            myProceedWithProcessingLock.wait(300);
-          }
  else {
-            myBytesBeingProcessed+=length;
-            if (requestingLargeSize) {
-              myLargeSizeRequested=false;
-            }
-            return content;
+          myBytesBeingProcessed+=length;
+          if (requestingLargeSize) {
+            myLargeSizeRequested=false;
           }
+          return content;
         }
- catch (        InterruptedException ignore) {
-        }
+      }
+ catch (      InterruptedException ignore) {
       }
     }
   }
-  return content;
 }
