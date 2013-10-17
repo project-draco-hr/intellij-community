@@ -1,0 +1,30 @@
+{
+  context.commitDocument();
+  XmlFile xmlFile=(XmlFile)context.getFile();
+  PsiElement element=xmlFile.findElementAt(context.getStartOffset());
+  XmlTag tag=PsiTreeUtil.getParentOfType(element,XmlTag.class);
+  if (tag == null)   return;
+  XmlTag dependencyTag=tag.getParentTag();
+  DomElement domElement=DomManager.getDomManager(context.getProject()).getDomElement(dependencyTag);
+  if (!(domElement instanceof MavenDomDependency))   return;
+  MavenDomArtifactCoordinates dependency=(MavenDomArtifactCoordinates)domElement;
+  String artifactId=item.getLookupString();
+  String groupId=dependency.getGroupId().getStringValue();
+  if (StringUtil.isEmpty(groupId)) {
+    String g=getUniqueGroupIdOrNull(context.getProject(),artifactId);
+    if (g != null) {
+      dependency.getGroupId().setStringValue(g);
+      groupId=g;
+    }
+ else {
+      if (groupId == null) {
+        dependency.getGroupId().setStringValue("");
+      }
+      XmlTag groupIdTag=dependency.getGroupId().getXmlTag();
+      context.getEditor().getCaretModel().moveToOffset(groupIdTag.getValue().getTextRange().getStartOffset());
+      MavenDependencyCompletionUtil.invokeCompletion(context,CompletionType.SMART);
+      return;
+    }
+  }
+  MavenDependencyCompletionUtil.completeVersion(context,dependency,groupId,artifactId);
+}
