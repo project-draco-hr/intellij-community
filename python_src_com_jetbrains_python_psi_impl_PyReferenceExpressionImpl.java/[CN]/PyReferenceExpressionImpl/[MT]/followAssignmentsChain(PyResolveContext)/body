@@ -1,0 +1,46 @@
+{
+  PyReferenceExpression seeker=this;
+  QualifiedResolveResult ret=null;
+  List<PyExpression> qualifiers=new ArrayList<PyExpression>();
+  PyExpression qualifier=seeker.getQualifier();
+  if (qualifier != null) {
+    qualifiers.add(qualifier);
+  }
+  Set<PsiElement> visited=new HashSet<PsiElement>();
+  visited.add(this);
+  SEARCH:   while (ret == null) {
+    ResolveResult[] targets=seeker.getReference(resolveContext).multiResolve(false);
+    for (    ResolveResult target : targets) {
+      PsiElement elt=target.getElement();
+      if (elt instanceof PyTargetExpression) {
+        PsiElement assigned_from=null;
+        final PyTargetExpression expr=(PyTargetExpression)elt;
+        final TypeEvalContext context=resolveContext.getTypeEvalContext();
+        if (context.maySwitchToAST(expr) || expr.getStub() == null) {
+          assigned_from=expr.findAssignedValue();
+        }
+ else         if (elt instanceof PyTargetExpressionImpl) {
+          assigned_from=((PyTargetExpressionImpl)elt).findAssignedValueByStub(context);
+        }
+        if (assigned_from instanceof PyReferenceExpression) {
+          if (visited.contains(assigned_from)) {
+            break;
+          }
+          visited.add(assigned_from);
+          seeker=(PyReferenceExpression)assigned_from;
+          if (seeker.getQualifier() != null) {
+            qualifiers.add(seeker.getQualifier());
+          }
+          continue SEARCH;
+        }
+ else         if (assigned_from != null)         ret=new QualifiedResolveResultImpl(assigned_from,qualifiers,false);
+      }
+ else       if (ret == null && elt instanceof PyElement && target.isValidResult()) {
+        ret=new QualifiedResolveResultImpl(elt,qualifiers,target instanceof ImplicitResolveResult);
+      }
+    }
+    break;
+  }
+  if (ret == null)   ret=EMPTY_RESULT;
+  return ret;
+}

@@ -1,0 +1,63 @@
+{
+  if (!fragment.getOutputVariables().isEmpty()) {
+    CommonRefactoringUtil.showErrorHint(project,editor,"Cannot perform refactoring from expression with local variables modifications inside code fragment",RefactoringBundle.message("error.title"),"refactoring.extractMethod");
+    return;
+  }
+  if (fragment.isReturnInstructionInside()) {
+    CommonRefactoringUtil.showErrorHint(project,editor,"Cannot extract method with return instructions inside code fragment",RefactoringBundle.message("error.title"),"refactoring.extractMethod");
+    return;
+  }
+  PyFunction function=PsiTreeUtil.getParentOfType(expression,PyFunction.class);
+  final PyUtil.MethodFlags flags=function == null ? null : PyUtil.MethodFlags.of(function);
+  final boolean isClassMethod=flags != null && flags.isClassMethod();
+  final boolean isStaticMethod=flags != null && flags.isClassMethod();
+  final Pair<String,AbstractVariableData[]> data=getNameAndVariableData(project,fragment,expression,isClassMethod,isStaticMethod);
+  if (data.first == null || data.second == null) {
+    return;
+  }
+  final String methodName=data.first;
+  final AbstractVariableData[] variableData=data.second;
+  final SimpleDuplicatesFinder finder=new SimpleDuplicatesFinder(expression,expression,variableData,fragment.getOutputVariables());
+  if (fragment.getOutputVariables().isEmpty()) {
+    CommandProcessor.getInstance().executeCommand(project,new Runnable(){
+      @Override public void run(){
+        ApplicationManager.getApplication().runWriteAction(new Runnable(){
+          @Override public void run(){
+            PyFunction generatedMethod=generateMethodFromExpression(project,methodName,variableData,expression,flags);
+            generatedMethod=insertGeneratedMethod(expression,generatedMethod);
+            final boolean isMethod=PyPsiUtils.isMethodContext(expression);
+            processParameters(project,generatedMethod,variableData,isMethod,isClassMethod,isStaticMethod);
+            final StringBuilder builder=new StringBuilder();
+            if (fragment.isYieldInside()) {
+              builder.append("yield from ");
+            }
+ else {
+              builder.append("return ");
+            }
+            if (isMethod) {
+              appendSelf(expression,builder,isStaticMethod);
+            }
+            builder.append(methodName);
+            builder.append("(").append(createCallArgsString(variableData)).append(")");
+            final PyElementGenerator generator=PyElementGenerator.getInstance(project);
+            final PyElement generated=generator.createFromText(LanguageLevel.forElement(expression),PyElement.class,builder.toString());
+            PsiElement callElement=null;
+            if (generated instanceof PyReturnStatement) {
+              callElement=((PyReturnStatement)generated).getExpression();
+            }
+ else             if (generated instanceof PyExpressionStatement) {
+              callElement=((PyExpressionStatement)generated).getExpression();
+            }
+            if (callElement != null) {
+              callElement=PyReplaceExpressionUtil.replaceExpression(expression,callElement);
+            }
+            if (callElement != null)             processDuplicates(callElement,generatedMethod,finder,editor);
+            setSelectionAndCaret(editor,callElement);
+          }
+        }
+);
+      }
+    }
+,"Extract method",null);
+  }
+}

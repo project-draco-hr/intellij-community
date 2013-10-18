@@ -1,0 +1,53 @@
+{
+  final TypeModel evaluated=myVisited.get(type);
+  if (evaluated != null) {
+    return evaluated;
+  }
+  if (myVisited.containsKey(type)) {
+    return type != null ? _(type.getName()) : _(PyNames.UNKNOWN_TYPE);
+  }
+  myVisited.put(type,null);
+  TypeModel result=null;
+  if (type instanceof PyCollectionType) {
+    final String name=type.getName();
+    final PyType elementType=((PyCollectionType)type).getElementType(myContext);
+    final List<TypeModel> elementTypes=new ArrayList<TypeModel>();
+    if (elementType instanceof PyTupleType) {
+      final PyTupleType tupleType=(PyTupleType)elementType;
+      final int n=tupleType.getElementCount();
+      for (int i=0; i < n; i++) {
+        final PyType t=tupleType.getElementType(i);
+        if (t != null) {
+          elementTypes.add(build(t,true));
+        }
+      }
+    }
+ else     if (elementType != null) {
+      elementTypes.add(build(elementType,true));
+    }
+    if (!elementTypes.isEmpty()) {
+      result=new CollectionOf(name,elementTypes);
+    }
+  }
+ else   if (type instanceof PyUnionType && allowUnions) {
+    if (type instanceof PyDynamicallyEvaluatedType || PyTypeChecker.isUnknown(type)) {
+      result=new UnknownType(build(((PyUnionType)type).excludeNull(),true));
+    }
+ else {
+      result=new OneOf(Collections2.transform(((PyUnionType)type).getMembers(),new Function<PyType,TypeModel>(){
+        @Override public TypeModel apply(        PyType t){
+          return build(t,false);
+        }
+      }
+));
+    }
+  }
+ else   if (type instanceof PyCallableType && !(type instanceof PyClassLikeType)) {
+    result=build((PyCallableType)type);
+  }
+  if (result == null) {
+    result=type != null ? _(type.getName()) : _(PyNames.UNKNOWN_TYPE);
+  }
+  myVisited.put(type,result);
+  return result;
+}

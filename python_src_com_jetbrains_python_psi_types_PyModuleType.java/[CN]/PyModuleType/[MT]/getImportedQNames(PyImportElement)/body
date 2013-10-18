@@ -1,0 +1,44 @@
+{
+  final List<QualifiedName> importedQNames=new ArrayList<QualifiedName>();
+  final PyStatement stmt=element.getContainingImportStatement();
+  if (stmt instanceof PyFromImportStatement) {
+    final PyFromImportStatement fromImportStatement=(PyFromImportStatement)stmt;
+    final QualifiedName importedQName=fromImportStatement.getImportSourceQName();
+    final String visibleName=element.getVisibleName();
+    if (importedQName != null) {
+      importedQNames.add(importedQName);
+      final QualifiedName implicitSubModuleQName=importedQName.append(visibleName);
+      if (implicitSubModuleQName != null) {
+        importedQNames.add(implicitSubModuleQName);
+      }
+    }
+  }
+ else   if (stmt instanceof PyImportStatement) {
+    final QualifiedName importedQName=element.getImportedQName();
+    if (importedQName != null) {
+      importedQNames.add(importedQName);
+    }
+  }
+  if (!ResolveImportUtil.isAbsoluteImportEnabledFor(element)) {
+    PsiFile file=element.getContainingFile();
+    if (file != null) {
+      file=file.getOriginalFile();
+    }
+    final QualifiedName absoluteQName=QualifiedNameFinder.findShortestImportableQName(file);
+    if (file != null && absoluteQName != null) {
+      final QualifiedName prefixQName=PyUtil.isPackage(file) ? absoluteQName : absoluteQName.removeLastComponent();
+      if (prefixQName.getComponentCount() > 0) {
+        final List<QualifiedName> results=new ArrayList<QualifiedName>();
+        results.addAll(importedQNames);
+        for (        QualifiedName qName : importedQNames) {
+          final List<String> components=new ArrayList<String>();
+          components.addAll(prefixQName.getComponents());
+          components.addAll(qName.getComponents());
+          results.add(QualifiedName.fromComponents(components));
+        }
+        return results;
+      }
+    }
+  }
+  return importedQNames;
+}

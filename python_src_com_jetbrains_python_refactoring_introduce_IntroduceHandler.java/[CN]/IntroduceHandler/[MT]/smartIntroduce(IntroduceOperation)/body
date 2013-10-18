@@ -1,0 +1,38 @@
+{
+  final Editor editor=operation.getEditor();
+  final PsiFile file=operation.getFile();
+  int offset=editor.getCaretModel().getOffset();
+  PsiElement elementAtCaret=file.findElementAt(offset);
+  if (!checkIntroduceContext(file,editor,elementAtCaret))   return true;
+  final List<PyExpression> expressions=new ArrayList<PyExpression>();
+  while (elementAtCaret != null) {
+    if (elementAtCaret instanceof PyStatement || elementAtCaret instanceof PyFile) {
+      break;
+    }
+    if (elementAtCaret instanceof PyExpression && isValidIntroduceVariant(elementAtCaret)) {
+      expressions.add((PyExpression)elementAtCaret);
+    }
+    elementAtCaret=elementAtCaret.getParent();
+  }
+  if (expressions.size() == 1 || ApplicationManager.getApplication().isUnitTestMode()) {
+    operation.setElement(expressions.get(0));
+    performActionOnElement(operation);
+    return true;
+  }
+ else   if (expressions.size() > 1) {
+    IntroduceTargetChooser.showChooser(editor,expressions,new Pass<PyExpression>(){
+      @Override public void pass(      PyExpression pyExpression){
+        operation.setElement(pyExpression);
+        performActionOnElement(operation);
+      }
+    }
+,new Function<PyExpression,String>(){
+      public String fun(      PyExpression pyExpression){
+        return pyExpression.getText();
+      }
+    }
+);
+    return true;
+  }
+  return false;
+}

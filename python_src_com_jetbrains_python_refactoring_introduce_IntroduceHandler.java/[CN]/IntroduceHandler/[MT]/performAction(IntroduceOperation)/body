@@ -1,0 +1,80 @@
+{
+  final PsiFile file=operation.getFile();
+  if (!CommonRefactoringUtil.checkReadOnlyStatus(file)) {
+    return;
+  }
+  final Editor editor=operation.getEditor();
+  if (editor.getSettings().isVariableInplaceRenameEnabled()) {
+    final TemplateState templateState=TemplateManagerImpl.getTemplateState(operation.getEditor());
+    if (templateState != null && !templateState.isFinished()) {
+      return;
+    }
+  }
+  PsiElement element1=null;
+  PsiElement element2=null;
+  final SelectionModel selectionModel=editor.getSelectionModel();
+  boolean singleElementSelection=false;
+  if (selectionModel.hasSelection()) {
+    element1=file.findElementAt(selectionModel.getSelectionStart());
+    element2=file.findElementAt(selectionModel.getSelectionEnd() - 1);
+    if (element1 instanceof PsiWhiteSpace) {
+      int startOffset=element1.getTextRange().getEndOffset();
+      element1=file.findElementAt(startOffset);
+    }
+    if (element2 instanceof PsiWhiteSpace) {
+      int endOffset=element2.getTextRange().getStartOffset();
+      element2=file.findElementAt(endOffset - 1);
+    }
+    if (element1 == element2) {
+      singleElementSelection=true;
+    }
+  }
+ else {
+    if (smartIntroduce(operation)) {
+      return;
+    }
+    final CaretModel caretModel=editor.getCaretModel();
+    final Document document=editor.getDocument();
+    int lineNumber=document.getLineNumber(caretModel.getOffset());
+    if ((lineNumber >= 0) && (lineNumber < document.getLineCount())) {
+      element1=file.findElementAt(document.getLineStartOffset(lineNumber));
+      element2=file.findElementAt(document.getLineEndOffset(lineNumber) - 1);
+    }
+  }
+  final Project project=operation.getProject();
+  if (element1 == null || element2 == null) {
+    showCannotPerformError(project,editor);
+    return;
+  }
+  element1=PyRefactoringUtil.getSelectedExpression(project,file,element1,element2);
+  if (element1 == null) {
+    showCannotPerformError(project,editor);
+    return;
+  }
+  if (singleElementSelection && element1 instanceof PyStringLiteralExpression) {
+    final PyStringLiteralExpression literal=(PyStringLiteralExpression)element1;
+    if (literal.getStringNodes().size() > 1) {
+      showCannotPerformError(project,editor);
+      return;
+    }
+    final int offset=element1.getTextOffset();
+    final TextRange selectionRange=TextRange.create(selectionModel.getSelectionStart(),selectionModel.getSelectionEnd());
+    final TextRange elementRange=element1.getTextRange();
+    if (!elementRange.equals(selectionRange) && elementRange.contains(selectionRange)) {
+      final TextRange innerRange=literal.getStringValueTextRange();
+      final TextRange intersection=selectionRange.shiftRight(-offset).intersection(innerRange);
+      final TextRange finalRange=intersection != null ? intersection : selectionRange;
+      final String text=literal.getText();
+      if (getFormatValueExpression(literal) != null && breaksStringFormatting(text,finalRange) || getNewStyleFormatValueExpression(literal) != null && breaksNewStyleStringFormatting(text,finalRange) || breaksStringEscaping(text,finalRange)) {
+        showCannotPerformError(project,editor);
+        return;
+      }
+      element1.putUserData(PyReplaceExpressionUtil.SELECTION_BREAKS_AST_NODE,Pair.create(element1,finalRange));
+    }
+  }
+  if (!checkIntroduceContext(file,editor,element1)) {
+    return;
+  }
+  operation.setElement(element1);
+  performActionOnElement(operation);
+}

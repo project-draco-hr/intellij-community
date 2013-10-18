@@ -1,0 +1,109 @@
+{
+  IElementType parentType=_node.getElementType();
+  IElementType grandparentType=_node.getTreeParent() == null ? null : _node.getTreeParent().getElementType();
+  IElementType childType=child.getElementType();
+  Wrap wrap=null;
+  Indent childIndent=Indent.getNoneIndent();
+  Alignment childAlignment=null;
+  if (childType == PyElementTypes.STATEMENT_LIST) {
+    if (hasLineBreaksBefore(child,1) || needLineBreakInStatement()) {
+      childIndent=Indent.getNormalIndent();
+    }
+  }
+ else   if (childType == PyElementTypes.IMPORT_ELEMENT && hasLineBreaksBefore(child,1)) {
+    childIndent=Indent.getNormalIndent();
+  }
+  if (ourListElementTypes.contains(parentType)) {
+    if ((parentType != PyElementTypes.TUPLE_EXPRESSION || grandparentType == PyElementTypes.PARENTHESIZED_EXPRESSION) && !ourBrackets.contains(childType) && childType != PyTokenTypes.COMMA && !isSliceOperand(child)) {
+      wrap=Wrap.createWrap(WrapType.NORMAL,true);
+    }
+    if (needListAlignment(child) && !isEmptyList(_node.getPsi())) {
+      childAlignment=getAlignmentForChildren();
+    }
+  }
+ else   if (parentType == PyElementTypes.BINARY_EXPRESSION && (PythonDialectsTokenSetProvider.INSTANCE.getExpressionTokens().contains(childType) || PyTokenTypes.OPERATIONS.contains(childType))) {
+    if (isInControlStatement()) {
+      PyParenthesizedExpression parens=PsiTreeUtil.getParentOfType(_node.getPsi(),PyParenthesizedExpression.class,true,PyStatementPart.class);
+      childIndent=parens != null ? Indent.getNormalIndent() : Indent.getContinuationIndent();
+    }
+ else {
+      if (grandparentType == PyElementTypes.BINARY_EXPRESSION && myParent != null) {
+        childAlignment=myParent.getAlignmentForChildren();
+      }
+ else {
+        childAlignment=getAlignmentForChildren();
+      }
+    }
+  }
+  if (parentType == PyElementTypes.LIST_LITERAL_EXPRESSION || parentType == PyElementTypes.LIST_COMP_EXPRESSION) {
+    if (childType == PyTokenTypes.RBRACKET || childType == PyTokenTypes.LBRACKET) {
+      childIndent=Indent.getNoneIndent();
+    }
+ else {
+      childIndent=Indent.getNormalIndent();
+    }
+  }
+ else   if (parentType == PyElementTypes.ARGUMENT_LIST || parentType == PyElementTypes.PARAMETER_LIST) {
+    if (childType == PyTokenTypes.RPAR) {
+      childIndent=Indent.getNoneIndent();
+    }
+ else {
+      childIndent=parentType == PyElementTypes.PARAMETER_LIST || isInControlStatement() ? Indent.getContinuationIndent() : Indent.getNormalIndent();
+    }
+  }
+ else   if (parentType == PyElementTypes.DICT_LITERAL_EXPRESSION || parentType == PyElementTypes.SET_LITERAL_EXPRESSION || parentType == PyElementTypes.SET_COMP_EXPRESSION || parentType == PyElementTypes.DICT_COMP_EXPRESSION) {
+    if (childType == PyTokenTypes.RBRACE || !hasLineBreaksBefore(child,1)) {
+      childIndent=Indent.getNoneIndent();
+    }
+ else {
+      childIndent=Indent.getNormalIndent();
+    }
+  }
+ else   if (parentType == PyElementTypes.STRING_LITERAL_EXPRESSION) {
+    if (PyTokenTypes.STRING_NODES.contains(childType)) {
+      childAlignment=getAlignmentForChildren();
+    }
+  }
+ else   if (parentType == PyElementTypes.FROM_IMPORT_STATEMENT) {
+    if ((childType == PyElementTypes.IMPORT_ELEMENT || childType == PyTokenTypes.RPAR) && _node.findChildByType(PyTokenTypes.LPAR) != null) {
+      if (myContext.getPySettings().ALIGN_MULTILINE_IMPORTS) {
+        childAlignment=getAlignmentForChildren();
+      }
+ else {
+        childIndent=Indent.getNormalIndent();
+      }
+    }
+  }
+ else   if (parentType == PyElementTypes.KEY_VALUE_EXPRESSION) {
+    PyKeyValueExpression keyValue=(PyKeyValueExpression)_node.getPsi();
+    if (keyValue != null && child.getPsi() == keyValue.getValue()) {
+      childIndent=Indent.getNormalIndent();
+    }
+  }
+ else   if (parentType == PyElementTypes.PARENTHESIZED_EXPRESSION || parentType == PyElementTypes.GENERATOR_EXPRESSION) {
+    if (childType == PyTokenTypes.RPAR || !hasLineBreaksBefore(child,1)) {
+      childIndent=Indent.getNoneIndent();
+    }
+ else {
+      childIndent=Indent.getNormalIndent();
+    }
+  }
+ else   if (parentType == PyElementTypes.SUBSCRIPTION_EXPRESSION) {
+    PyExpression indexExpression=((PySubscriptionExpression)_node.getPsi()).getIndexExpression();
+    if (indexExpression != null && child == indexExpression.getNode()) {
+      childIndent=Indent.getNormalIndent();
+    }
+  }
+  if (isAfterStatementList(child) && !hasLineBreaksBefore(child,2)) {
+    childIndent=Indent.getNormalIndent();
+  }
+  ASTNode prev=child.getTreePrev();
+  while (prev != null && prev.getElementType() == TokenType.WHITE_SPACE) {
+    if (prev.getText().contains("\\") && !childIndent.equals(Indent.getContinuationIndent()) && !childIndent.equals(Indent.getContinuationIndent(true))) {
+      childIndent=Indent.getNormalIndent();
+      break;
+    }
+    prev=prev.getTreePrev();
+  }
+  return new PyBlock(this,child,childAlignment,childIndent,wrap,myContext);
+}

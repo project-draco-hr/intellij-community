@@ -1,0 +1,52 @@
+{
+  if (!myElement.isValid() || !FileModificationService.getInstance().preparePsiElementForWrite(myElement))   return;
+  PyFunctionBuilder functionBuilder=new PyFunctionBuilder(myReference.getText());
+  final PyArgumentList argumentList=myElement.getArgumentList();
+  if (argumentList != null && !PsiTreeUtil.isAncestor(argumentList,myReference,false)) {
+    for (    PyExpression param : argumentList.getArguments()) {
+      if (param instanceof PyKeywordArgument) {
+        functionBuilder.parameter(((PyKeywordArgument)param).getKeyword());
+      }
+ else       if (param instanceof PyReferenceExpression) {
+        PyReferenceExpression refex=(PyReferenceExpression)param;
+        functionBuilder.parameter(refex.getReferencedName());
+      }
+ else {
+        functionBuilder.parameter("param");
+      }
+    }
+  }
+ else {
+    functionBuilder.parameter("args");
+  }
+  PyFunction function=functionBuilder.buildFunction(project,LanguageLevel.getDefault());
+  PyFunction parentFunction=PsiTreeUtil.getTopmostParentOfType(myElement,PyFunction.class);
+  if (parentFunction != null) {
+    PyClass parentClass=PsiTreeUtil.getTopmostParentOfType(parentFunction,PyClass.class);
+    if (parentClass != null) {
+      PsiElement parent=parentClass.getParent();
+      function=(PyFunction)parent.addBefore(function,parentClass);
+    }
+ else {
+      PsiElement parent=parentFunction.getParent();
+      function=(PyFunction)parent.addBefore(function,parentFunction);
+    }
+  }
+ else {
+    PyStatement statement=PsiTreeUtil.getTopmostParentOfType(myElement,PyStatement.class);
+    if (statement != null) {
+      PsiElement parent=statement.getParent();
+      if (parent != null)       function=(PyFunction)parent.addBefore(function,statement);
+    }
+  }
+  function=CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(function);
+  final TemplateBuilder builder=TemplateBuilderFactory.getInstance().createTemplateBuilder(function);
+  ParamHelper.walkDownParamArray(function.getParameterList().getParameters(),new ParamHelper.ParamVisitor(){
+    public void visitNamedParameter(    PyNamedParameter param,    boolean first,    boolean last){
+      builder.replaceElement(param,param.getName());
+    }
+  }
+);
+  builder.replaceElement(function.getStatementList(),PyNames.PASS);
+  builder.run();
+}

@@ -1,0 +1,40 @@
+{
+  PyFunction problemFunction=PsiTreeUtil.getParentOfType(descriptor.getPsiElement(),PyFunction.class);
+  if (problemFunction == null)   return;
+  PyFunction superInit=mySuper.findMethodByName(PyNames.INIT,true);
+  if (superInit == null)   return;
+  StringBuilder superCall=new StringBuilder();
+  PyClass klass=problemFunction.getContainingClass();
+  boolean addComma=true;
+  if (klass != null && klass.isNewStyleClass()) {
+    addComma=false;
+    if (LanguageLevel.forElement(klass).isPy3K())     superCall.append("super().__init__(");
+ else     superCall.append("super(").append(klass.getName()).append(", self).__init__(");
+  }
+ else {
+    superCall.append(mySuperName);
+    superCall.append(".__init__(self");
+  }
+  StringBuilder newFunction=new StringBuilder("def __init__(self");
+  buildParameterList(problemFunction,superInit,superCall,newFunction,addComma);
+  superCall.append(")");
+  final PyStatementList statementList=problemFunction.getStatementList();
+  PyExpression docstring=null;
+  final PyStatement[] statements=statementList == null ? new PyStatement[0] : statementList.getStatements();
+  if (statements.length != 0 && statements[0] instanceof PyExpressionStatement) {
+    PyExpressionStatement st=(PyExpressionStatement)statements[0];
+    if (st.getExpression() instanceof PyStringLiteralExpression)     docstring=st.getExpression();
+  }
+  newFunction.append("):\n\t");
+  if (docstring != null)   newFunction.append(docstring.getText()).append("\n\t");
+  newFunction.append(superCall).append("\n\t");
+  boolean first=true;
+  for (  PyStatement statement : statements) {
+    if (first && docstring != null || statement instanceof PyPassStatement) {
+      first=false;
+      continue;
+    }
+    newFunction.append(statement.getText()).append("\n\t");
+  }
+  problemFunction.replace(PyElementGenerator.getInstance(project).createFromText(LanguageLevel.forElement(problemFunction),PyFunction.class,newFunction.toString()));
+}

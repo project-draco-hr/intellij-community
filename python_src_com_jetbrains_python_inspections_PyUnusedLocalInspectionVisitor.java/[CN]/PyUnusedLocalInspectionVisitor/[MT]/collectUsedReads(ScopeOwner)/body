@@ -1,0 +1,64 @@
+{
+  final Instruction[] instructions=ControlFlowCache.getControlFlow(owner).getInstructions();
+  for (int i=0; i < instructions.length; i++) {
+    final Instruction instruction=instructions[i];
+    if (instruction instanceof ReadWriteInstruction) {
+      final ReadWriteInstruction readWriteInstruction=(ReadWriteInstruction)instruction;
+      final ReadWriteInstruction.ACCESS access=readWriteInstruction.getAccess();
+      if (!access.isReadAccess()) {
+        continue;
+      }
+      final String name=readWriteInstruction.getName();
+      if (name == null) {
+        continue;
+      }
+      final PsiElement element=instruction.getElement();
+      if (element == null || !PsiTreeUtil.isAncestor(owner,element,false)) {
+        continue;
+      }
+      final int startInstruction;
+      if (access.isWriteAccess()) {
+        final PyAugAssignmentStatement augAssignmentStatement=PyAugAssignmentStatementNavigator.getStatementByTarget(element);
+        startInstruction=ControlFlowUtil.findInstructionNumberByElement(instructions,augAssignmentStatement);
+      }
+ else {
+        startInstruction=i;
+      }
+      if (element instanceof PyReferenceExpression) {
+        final PyReferenceExpression ref=(PyReferenceExpression)element;
+        final ScopeOwner declOwner=ScopeUtil.getDeclarationScopeOwner(ref,name);
+        if (declOwner != null && declOwner != owner) {
+          Collection<PsiElement> writeElements=ScopeUtil.getReadWriteElements(name,declOwner,false,true);
+          for (          PsiElement e : writeElements) {
+            myUsedElements.add(e);
+            myUnusedElements.remove(e);
+          }
+        }
+      }
+      ControlFlowUtil.iteratePrev(startInstruction,instructions,new Function<Instruction,ControlFlowUtil.Operation>(){
+        public ControlFlowUtil.Operation fun(        final Instruction inst){
+          final PsiElement element=inst.getElement();
+          if (element instanceof PyFunction) {
+            if (name.equals(((PyFunction)element).getName())) {
+              myUsedElements.add(element);
+              myUnusedElements.remove(element);
+              return ControlFlowUtil.Operation.CONTINUE;
+            }
+          }
+ else           if (inst instanceof ReadWriteInstruction) {
+            final ReadWriteInstruction rwInstruction=(ReadWriteInstruction)inst;
+            if (rwInstruction.getAccess().isWriteAccess() && name.equals(rwInstruction.getName())) {
+              if (element != null && PsiTreeUtil.isAncestor(owner,element,false)) {
+                myUsedElements.add(element);
+                myUnusedElements.remove(element);
+              }
+              return ControlFlowUtil.Operation.CONTINUE;
+            }
+          }
+          return ControlFlowUtil.Operation.NEXT;
+        }
+      }
+);
+    }
+  }
+}

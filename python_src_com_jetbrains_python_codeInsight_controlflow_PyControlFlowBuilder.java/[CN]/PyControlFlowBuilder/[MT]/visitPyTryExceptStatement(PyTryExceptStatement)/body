@@ -1,0 +1,118 @@
+{
+  myBuilder.startNode(node);
+  final PyTryPart tryPart=node.getTryPart();
+  myBuilder.startNode(tryPart);
+  tryPart.accept(this);
+  final PyElsePart elsePart=node.getElsePart();
+  if (elsePart != null) {
+    myBuilder.startNode(elsePart);
+    elsePart.accept(this);
+  }
+  myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
+  final List<Instruction> exceptInstructions=emptyMutableList();
+  List<Pair<PsiElement,Instruction>> pendingBackup=emptyMutableList();
+  for (  PyExceptPart exceptPart : node.getExceptParts()) {
+    pendingBackup.addAll(myBuilder.pending);
+    myBuilder.pending=emptyMutableList();
+    myBuilder.flowAbrupted();
+    final Instruction exceptInstruction=myBuilder.startNode(exceptPart);
+    exceptPart.accept(this);
+    myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
+    exceptInstructions.add(exceptInstruction);
+  }
+  for (  Pair<PsiElement,Instruction> pair : pendingBackup) {
+    myBuilder.addPendingEdge(pair.first,pair.second);
+  }
+  final List<Instruction> normalExits=new ArrayList<Instruction>();
+  final PyFinallyPart finallyPart=node.getFinallyPart();
+  final Instruction finallyFailInstruction;
+  if (finallyPart != null) {
+    myBuilder.processPending(new ControlFlowBuilder.PendingProcessor(){
+      public void process(      final PsiElement pendingScope,      final Instruction instruction){
+        final PsiElement pendingElement=instruction.getElement();
+        if (pendingElement != null) {
+          final boolean isPending=PsiTreeUtil.isAncestor(node,pendingElement,false) && !PsiTreeUtil.isAncestor(finallyPart,pendingElement,false);
+          if (isPending && pendingScope != null) {
+            normalExits.add(instruction);
+          }
+ else {
+            myBuilder.addPendingEdge(pendingScope,instruction);
+          }
+        }
+      }
+    }
+);
+  }
+  if (finallyPart != null) {
+    myBuilder.flowAbrupted();
+    finallyFailInstruction=myBuilder.startNode(finallyPart);
+    finallyPart.accept(this);
+    myBuilder.addPendingEdge(null,myBuilder.prevInstruction);
+    myBuilder.flowAbrupted();
+  }
+ else {
+    finallyFailInstruction=null;
+  }
+  for (  Instruction instruction : myBuilder.instructions) {
+    final PsiElement e=instruction.getElement();
+    if (e == null || !canRaiseExceptions(instruction)) {
+      continue;
+    }
+    if (PsiTreeUtil.getParentOfType(e,PyTryPart.class,false) == tryPart) {
+      for (      Instruction inst : exceptInstructions) {
+        myBuilder.addEdge(instruction,inst);
+      }
+      if (finallyPart != null) {
+        myBuilder.addEdge(instruction,finallyFailInstruction);
+      }
+    }
+    if (finallyPart != null) {
+      for (      PyExceptPart exceptPart : node.getExceptParts()) {
+        if (PsiTreeUtil.isAncestor(exceptPart,e,false)) {
+          myBuilder.addEdge(instruction,finallyFailInstruction);
+        }
+      }
+      if (PsiTreeUtil.isAncestor(elsePart,e,false)) {
+        myBuilder.addEdge(instruction,finallyFailInstruction);
+      }
+    }
+  }
+  if (finallyPart != null) {
+    myBuilder.processPending(new ControlFlowBuilder.PendingProcessor(){
+      @Override public void process(      PsiElement pendingScope,      Instruction instruction){
+        final PsiElement e=instruction.getElement();
+        if (e != null) {
+          if (PsiTreeUtil.isAncestor(finallyPart,e,false)) {
+            myBuilder.addPendingEdge(null,instruction);
+          }
+ else           if (pendingScope == null && PsiTreeUtil.isAncestor(node,e,false)) {
+            myBuilder.addEdge(instruction,finallyFailInstruction);
+          }
+ else {
+            myBuilder.addPendingEdge(pendingScope,instruction);
+          }
+        }
+      }
+    }
+);
+    final Instruction finallyInstruction;
+    if (!normalExits.isEmpty()) {
+      pendingBackup=emptyMutableList();
+      pendingBackup.addAll(myBuilder.pending);
+      myBuilder.pending=emptyMutableList();
+      myBuilder.flowAbrupted();
+      Instruction finallySuccessInstruction=myBuilder.startNode(finallyPart);
+      finallyPart.accept(this);
+      for (      Pair<PsiElement,Instruction> pair : pendingBackup) {
+        myBuilder.addPendingEdge(pair.first,pair.second);
+      }
+      finallyInstruction=finallySuccessInstruction;
+    }
+ else {
+      finallyInstruction=finallyFailInstruction;
+    }
+    for (    Instruction instr : normalExits) {
+      myBuilder.addEdge(instr,finallyInstruction);
+    }
+  }
+}

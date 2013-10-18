@@ -1,0 +1,56 @@
+{
+  final Matcher editableEggMatcher=EDITABLE_EGG.matcher(line);
+  if (!editableEggMatcher.matches()) {
+    return null;
+  }
+  final boolean editable=editableEggMatcher.group(1) != null;
+  final String url=editableEggMatcher.group(2);
+  String egg=editableEggMatcher.group(4);
+  if (url == null) {
+    return null;
+  }
+  if (egg == null) {
+    try {
+      final URI uri=new URI(url);
+      if (uri.getScheme() != null) {
+        String path=uri.getPath();
+        if (path != null) {
+          final String[] split=path.split("@",2);
+          path=split[0];
+          final Matcher vcsPathMatcher=VCS_PATH.matcher(path);
+          if (!vcsPathMatcher.matches()) {
+            return null;
+          }
+          egg=vcsPathMatcher.group(1);
+          final String gitSuffix=".git";
+          if (egg.endsWith(gitSuffix)) {
+            egg=egg.substring(0,egg.length() - gitSuffix.length());
+          }
+        }
+      }
+    }
+ catch (    URISyntaxException e) {
+      return null;
+    }
+  }
+  if (egg == null) {
+    return null;
+  }
+  boolean isName=true;
+  final List<String> nameParts=new ArrayList<String>();
+  final List<String> versionParts=new ArrayList<String>();
+  for (  String part : StringUtil.split(egg,"-")) {
+    if (part.matches("[0-9].*") || "dev".equals(part)) {
+      isName=false;
+    }
+    if (isName) {
+      nameParts.add(part);
+    }
+ else {
+      versionParts.add(part);
+    }
+  }
+  final String name=normalizeName(StringUtil.join(nameParts,"-"));
+  final String version=!versionParts.isEmpty() ? normalizeVersion(StringUtil.join(versionParts,"-")) : null;
+  return new PyRequirement(name,version,url,editable);
+}

@@ -1,0 +1,51 @@
+{
+  Collection<String> candidates=new LinkedHashSet<String>(){
+    @Override public boolean add(    String s){
+      if (PyNames.isReserved(s)) {
+        return false;
+      }
+      return super.add(s);
+    }
+  }
+;
+  String text=expression.getText();
+  final Pair<PsiElement,TextRange> selection=expression.getUserData(PyReplaceExpressionUtil.SELECTION_BREAKS_AST_NODE);
+  if (selection != null) {
+    text=selection.getSecond().substring(text);
+  }
+  if (expression instanceof PyCallExpression) {
+    final PyExpression callee=((PyCallExpression)expression).getCallee();
+    if (callee != null) {
+      text=callee.getText();
+    }
+  }
+  if (text != null) {
+    candidates.addAll(NameSuggesterUtil.generateNames(text));
+  }
+  final TypeEvalContext context=TypeEvalContext.userInitiated(expression.getContainingFile());
+  PyType type=context.getType(expression);
+  if (type != null && type != PyNoneType.INSTANCE) {
+    String typeName=type.getName();
+    if (typeName != null) {
+      if (type.isBuiltin(context)) {
+        typeName=typeName.substring(0,1);
+      }
+      candidates.addAll(NameSuggesterUtil.generateNamesByType(typeName));
+    }
+  }
+  final PyKeywordArgument kwArg=PsiTreeUtil.getParentOfType(expression,PyKeywordArgument.class);
+  if (kwArg != null && kwArg.getValueExpression() == expression) {
+    candidates.add(kwArg.getKeyword());
+  }
+  final PyArgumentList argList=PsiTreeUtil.getParentOfType(expression,PyArgumentList.class);
+  if (argList != null) {
+    final CallArgumentsMapping result=argList.analyzeCall(PyResolveContext.noImplicits());
+    if (result.getMarkedCallee() != null) {
+      final PyNamedParameter namedParameter=result.getPlainMappedParams().get(expression);
+      if (namedParameter != null) {
+        candidates.add(namedParameter.getName());
+      }
+    }
+  }
+  return candidates;
+}

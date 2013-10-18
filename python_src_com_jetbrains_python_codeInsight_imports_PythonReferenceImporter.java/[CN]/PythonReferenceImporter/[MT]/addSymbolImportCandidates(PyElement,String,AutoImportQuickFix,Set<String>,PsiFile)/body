@@ -1,0 +1,30 @@
+{
+  Project project=node.getProject();
+  List<PsiElement> symbols=new ArrayList<PsiElement>();
+  symbols.addAll(PyClassNameIndex.find(refText,project,true));
+  GlobalSearchScope scope=PyProjectScopeBuilder.excludeSdkTestsScope(node);
+  if (!isQualifier(node)) {
+    symbols.addAll(PyFunctionNameIndex.find(refText,project,scope));
+  }
+  symbols.addAll(PyVariableNameIndex.find(refText,project,scope));
+  if (isPossibleModuleReference(node)) {
+    symbols.addAll(findImportableModules(node.getContainingFile(),refText,project,scope));
+  }
+  if (!symbols.isEmpty()) {
+    for (    PsiElement symbol : symbols) {
+      if (isIndexableTopLevel(symbol)) {
+        PsiFileSystemItem srcfile=symbol instanceof PsiFileSystemItem ? ((PsiFileSystemItem)symbol).getParent() : symbol.getContainingFile();
+        if (srcfile != null && isAcceptableForImport(node,existingImportFile,srcfile)) {
+          QualifiedName importPath=QualifiedNameFinder.findCanonicalImportPath(symbol,node);
+          if (symbol instanceof PsiFileSystemItem && importPath != null) {
+            importPath=importPath.removeTail(1);
+          }
+          if (importPath != null && !seenFileNames.contains(importPath.toString())) {
+            fix.addImport(symbol,srcfile,importPath);
+            seenFileNames.add(importPath.toString());
+          }
+        }
+      }
+    }
+  }
+}

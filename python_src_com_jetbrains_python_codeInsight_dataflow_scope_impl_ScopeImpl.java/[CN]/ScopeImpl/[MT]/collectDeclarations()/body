@@ -1,0 +1,68 @@
+{
+  final Map<String,PsiNamedElement> namedElements=new HashMap<String,PsiNamedElement>();
+  final List<PyImportedNameDefiner> importedNameDefiners=new ArrayList<PyImportedNameDefiner>();
+  final List<Scope> nestedScopes=new ArrayList<Scope>();
+  final Set<String> globals=new HashSet<String>();
+  final Set<String> nonlocals=new HashSet<String>();
+  final Set<String> augAssignments=new HashSet<String>();
+  myFlowOwner.acceptChildren(new PyRecursiveElementVisitor(){
+    @Override public void visitPyTargetExpression(    PyTargetExpression node){
+      final PsiElement parent=node.getParent();
+      if (node.getQualifier() == null && !(parent instanceof PyImportElement)) {
+        super.visitPyTargetExpression(node);
+      }
+    }
+    @Override public void visitPyReferenceExpression(    PyReferenceExpression node){
+      if (PyAugAssignmentStatementNavigator.getStatementByTarget(node) != null) {
+        augAssignments.add(node.getName());
+      }
+      super.visitPyReferenceExpression(node);
+    }
+    @Override public void visitPyGlobalStatement(    PyGlobalStatement node){
+      for (      PyTargetExpression expression : node.getGlobals()) {
+        final String name=expression.getReferencedName();
+        globals.add(name);
+        namedElements.put(name,expression);
+      }
+      super.visitPyGlobalStatement(node);
+    }
+    @Override public void visitPyNonlocalStatement(    PyNonlocalStatement node){
+      for (      PyTargetExpression expression : node.getVariables()) {
+        nonlocals.add(expression.getReferencedName());
+      }
+      super.visitPyNonlocalStatement(node);
+    }
+    @Override public void visitPyFunction(    PyFunction node){
+      for (      PyParameter parameter : node.getParameterList().getParameters()) {
+        final PyExpression defaultValue=parameter.getDefaultValue();
+        if (defaultValue != null) {
+          defaultValue.accept(this);
+        }
+      }
+      super.visitPyFunction(node);
+    }
+    @Override public void visitPyElement(    PyElement node){
+      if (node instanceof PsiNamedElement && !(node instanceof PyKeywordArgument)) {
+        namedElements.put(node.getName(),(PsiNamedElement)node);
+      }
+      if (node instanceof PyImportedNameDefiner) {
+        importedNameDefiners.add((PyImportedNameDefiner)node);
+      }
+      if (node instanceof ScopeOwner) {
+        final Scope scope=ControlFlowCache.getScope((ScopeOwner)node);
+        nestedScopes.add(scope);
+      }
+ else {
+        super.visitPyElement(node);
+      }
+    }
+  }
+);
+  Collections.reverse(importedNameDefiners);
+  myNamedElements=namedElements;
+  myImportedNameDefiners=importedNameDefiners;
+  myNestedScopes=nestedScopes;
+  myGlobals=globals;
+  myNonlocals=nonlocals;
+  myAugAssignments=augAssignments;
+}

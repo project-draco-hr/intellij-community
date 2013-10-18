@@ -1,0 +1,88 @@
+{
+  boolean recastFirstIdentifier=false;
+  boolean recastQualifier=false;
+  do {
+    boolean firstIdentifierIsTarget=isTargetExpression && !recastFirstIdentifier;
+    PsiBuilder.Marker expr=myBuilder.mark();
+    if (!parsePrimaryExpression(firstIdentifierIsTarget)) {
+      expr.drop();
+      return false;
+    }
+    while (true) {
+      final IElementType tokenType=myBuilder.getTokenType();
+      if (tokenType == PyTokenTypes.DOT) {
+        if (firstIdentifierIsTarget) {
+          recastFirstIdentifier=true;
+          expr.rollbackTo();
+          break;
+        }
+        myBuilder.advanceLexer();
+        checkMatches(PyTokenTypes.IDENTIFIER,message("PARSE.expected.name"));
+        if (isTargetExpression && !recastQualifier && !atAnyOfTokens(PyTokenTypes.DOT,PyTokenTypes.LPAR,PyTokenTypes.LBRACKET)) {
+          expr.done(PyElementTypes.TARGET_EXPRESSION);
+        }
+ else {
+          expr.done(getReferenceType());
+        }
+        expr=expr.precede();
+      }
+ else       if (tokenType == PyTokenTypes.LPAR) {
+        parseArgumentList();
+        expr.done(PyElementTypes.CALL_EXPRESSION);
+        expr=expr.precede();
+      }
+ else       if (tokenType == PyTokenTypes.LBRACKET) {
+        myBuilder.advanceLexer();
+        PsiBuilder.Marker sliceOrTupleStart=myBuilder.mark();
+        PsiBuilder.Marker sliceItemStart=myBuilder.mark();
+        if (atToken(PyTokenTypes.COLON)) {
+          sliceOrTupleStart.drop();
+          PsiBuilder.Marker sliceMarker=myBuilder.mark();
+          sliceMarker.done(PyElementTypes.EMPTY_EXPRESSION);
+          parseSliceEnd(expr,sliceItemStart);
+        }
+ else {
+          boolean hadExpression=parseSingleExpression(false);
+          if (atToken(PyTokenTypes.COLON)) {
+            sliceOrTupleStart.drop();
+            parseSliceEnd(expr,sliceItemStart);
+          }
+ else           if (atToken(PyTokenTypes.COMMA)) {
+            sliceItemStart.done(PyElementTypes.SLICE_ITEM);
+            if (!parseSliceListTail(expr,sliceOrTupleStart)) {
+              sliceOrTupleStart.rollbackTo();
+              if (!parseTupleExpression(false,false,false)) {
+                myBuilder.error("tuple expression expected");
+              }
+              checkMatches(PyTokenTypes.RBRACKET,message("PARSE.expected.rbracket"));
+              expr.done(PyElementTypes.SUBSCRIPTION_EXPRESSION);
+            }
+          }
+ else {
+            if (!hadExpression) {
+              myBuilder.error("expression expected");
+            }
+            sliceOrTupleStart.drop();
+            sliceItemStart.drop();
+            checkMatches(PyTokenTypes.RBRACKET,message("PARSE.expected.rbracket"));
+            expr.done(PyElementTypes.SUBSCRIPTION_EXPRESSION);
+          }
+        }
+        if (isTargetExpression && !recastQualifier) {
+          recastFirstIdentifier=true;
+          recastQualifier=true;
+          expr.rollbackTo();
+          break;
+        }
+        expr=expr.precede();
+      }
+ else {
+        expr.drop();
+        break;
+      }
+      recastFirstIdentifier=false;
+    }
+  }
+ while (recastFirstIdentifier);
+  return true;
+}

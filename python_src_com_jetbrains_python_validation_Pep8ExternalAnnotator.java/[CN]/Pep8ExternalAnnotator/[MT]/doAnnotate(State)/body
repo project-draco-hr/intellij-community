@@ -1,0 +1,28 @@
+{
+  if (collectedInfo == null)   return null;
+  final String pep8Path=PythonHelpersLocator.getHelperPath("pep8.py");
+  ArrayList<String> options=new ArrayList<String>();
+  Collections.addAll(options,collectedInfo.interpreterPath,pep8Path);
+  if (collectedInfo.ignoredErrors.size() > 0) {
+    options.add("--ignore=" + StringUtil.join(collectedInfo.ignoredErrors,","));
+  }
+  options.add("--max-line-length=" + collectedInfo.margin);
+  options.add("-");
+  ProcessOutput output=PySdkUtil.getProcessOutput(new File(collectedInfo.interpreterPath).getParent(),ArrayUtil.toStringArray(options),new String[]{"PYTHONUNBUFFERED=1"},10000,collectedInfo.fileText.getBytes(),false);
+  Results results=new Results(collectedInfo.level);
+  if (output.isTimeout()) {
+    LOG.info("Timeout running pep8.py");
+  }
+ else   if (output.getStderrLines().isEmpty()) {
+    for (    String line : output.getStdoutLines()) {
+      final Problem problem=parseProblem(line);
+      if (problem != null) {
+        results.problems.add(problem);
+      }
+    }
+  }
+ else   if (((ApplicationInfoImpl)ApplicationInfo.getInstance()).isEAP()) {
+    LOG.info("Error running pep8.py: " + output.getStderr());
+  }
+  return results;
+}

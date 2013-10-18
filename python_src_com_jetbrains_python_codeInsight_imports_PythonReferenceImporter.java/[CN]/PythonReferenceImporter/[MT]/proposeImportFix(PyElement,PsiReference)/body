@@ -1,0 +1,27 @@
+{
+  final String text=reference.getElement().getText();
+  final String refText=reference.getRangeInElement().substring(text);
+  final Module module=ModuleUtil.findModuleForPsiElement(node);
+  if (module != null && PythonSdkType.findPythonSdk(module) == null) {
+    return null;
+  }
+  ScopeOwner scopeOwner=PsiTreeUtil.getParentOfType(node,ScopeOwner.class);
+  if (scopeOwner != null && ControlFlowCache.getScope(scopeOwner).containsDeclaration(refText)) {
+    return null;
+  }
+  AutoImportQuickFix fix=new AutoImportQuickFix(node,reference,!PyCodeInsightSettings.getInstance().PREFER_FROM_IMPORT);
+  Set<String> seenFileNames=new HashSet<String>();
+  PsiFile existingImportFile=addCandidatesFromExistingImports(node,refText,fix,seenFileNames);
+  if (fix.getCandidatesCount() == 0 || fix.hasProjectImports() || Registry.is("python.import.always.ask")) {
+    ProgressManager.checkCanceled();
+    addSymbolImportCandidates(node,refText,fix,seenFileNames,existingImportFile);
+  }
+  for (  PyImportCandidateProvider provider : Extensions.getExtensions(PyImportCandidateProvider.EP_NAME)) {
+    provider.addImportCandidates(reference,refText,fix);
+  }
+  if (fix.getCandidatesCount() > 0) {
+    fix.sortCandidates();
+    return fix;
+  }
+  return null;
+}

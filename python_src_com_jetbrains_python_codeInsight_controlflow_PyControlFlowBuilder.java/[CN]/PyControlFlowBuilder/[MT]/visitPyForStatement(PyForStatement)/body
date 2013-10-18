@@ -1,0 +1,48 @@
+{
+  myBuilder.startNode(node);
+  final PyForPart forPart=node.getForPart();
+  final PyExpression source=forPart.getSource();
+  if (source != null) {
+    source.accept(this);
+  }
+  final Instruction head=myBuilder.prevInstruction;
+  final PyElsePart elsePart=node.getElsePart();
+  if (elsePart == null) {
+    myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
+  }
+  final PyStatementList list=forPart.getStatementList();
+  if (list != null) {
+    final Instruction body;
+    final PyExpression target=forPart.getTarget();
+    if (target != null) {
+      body=myBuilder.startNode(target);
+      target.accept(this);
+    }
+ else {
+      body=myBuilder.startNode(list);
+    }
+    list.accept(this);
+    if (myBuilder.prevInstruction != null) {
+      myBuilder.addEdge(myBuilder.prevInstruction,body);
+      myBuilder.addPendingEdge(list,myBuilder.prevInstruction);
+    }
+    myBuilder.processPending(new ControlFlowBuilder.PendingProcessor(){
+      public void process(      final PsiElement pendingScope,      final Instruction instruction){
+        if (pendingScope != null && PsiTreeUtil.isAncestor(list,pendingScope,false)) {
+          myBuilder.addEdge(instruction,body);
+          myBuilder.addPendingEdge(list,instruction);
+        }
+ else {
+          myBuilder.addPendingEdge(pendingScope,instruction);
+        }
+      }
+    }
+);
+  }
+  myBuilder.prevInstruction=head;
+  if (elsePart != null) {
+    elsePart.accept(this);
+    myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
+  }
+  myBuilder.flowAbrupted();
+}
