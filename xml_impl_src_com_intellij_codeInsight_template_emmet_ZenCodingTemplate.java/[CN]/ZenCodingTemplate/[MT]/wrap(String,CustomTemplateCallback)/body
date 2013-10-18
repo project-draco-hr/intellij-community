@@ -1,21 +1,39 @@
 {
-  InputValidatorEx validator=new InputValidatorEx(){
-    public String getErrorText(    String inputString){
-      if (!checkTemplateKey(inputString,callback)) {
-        return XmlBundle.message("zen.coding.incorrect.abbreviation.error");
-      }
-      return null;
-    }
-    public boolean checkInput(    String inputString){
-      return getErrorText(inputString) == null;
-    }
-    public boolean canClose(    String inputString){
-      return checkInput(inputString);
+  final TextFieldWithStoredHistory field=new TextFieldWithStoredHistory(EMMET_RECENT_WRAP_ABBREVIATIONS_KEY);
+  field.setHistorySize(10);
+  final JBPopupFactory popupFactory=JBPopupFactory.getInstance();
+  final Balloon balloon=popupFactory.createDialogBalloonBuilder(field,XmlBundle.message("zen.coding.title")).setCloseButtonEnabled(false).setAnimationCycle(0).setHideOnClickOutside(true).setHideOnKeyOutside(true).createBalloon();
+  field.addDocumentListener(new DocumentAdapter(){
+    @Override protected void textChanged(    DocumentEvent e){
+      validateTemplateKey(field,balloon,field.getText(),callback);
     }
   }
-;
-  final String abbreviation=Messages.showInputDialog(callback.getProject(),XmlBundle.message("zen.coding.enter.abbreviation.dialog.label"),XmlBundle.message("zen.coding.title"),Messages.getQuestionIcon(),"",validator);
-  if (abbreviation != null) {
-    doWrap(selection,abbreviation,callback);
-  }
+);
+  field.addKeyboardListener(new KeyAdapter(){
+    @Override public void keyPressed(    KeyEvent e){
+      if (!field.isPopupVisible()) {
+switch (e.getKeyCode()) {
+case KeyEvent.VK_ENTER:
+          final String abbreviation=field.getText();
+        if (validateTemplateKey(field,balloon,abbreviation,callback)) {
+          doWrap(selection,abbreviation,callback);
+          field.addCurrentTextToHistory();
+          balloon.hide(true);
+        }
+      break;
+case KeyEvent.VK_ESCAPE:
+    balloon.hide(false);
+  break;
+}
+}
+}
+}
+);
+balloon.addListener(new JBPopupListener.Adapter(){
+@Override public void beforeShown(LightweightWindowEvent event){
+field.requestFocus();
+}
+}
+);
+balloon.show(popupFactory.guessBestPopupLocation(callback.getEditor()),Balloon.Position.below);
 }
