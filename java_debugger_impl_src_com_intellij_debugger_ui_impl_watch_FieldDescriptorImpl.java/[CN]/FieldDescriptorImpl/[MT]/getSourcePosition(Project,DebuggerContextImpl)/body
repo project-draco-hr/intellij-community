@@ -21,13 +21,29 @@
     return SourcePosition.createFromOffset(psiVariable.getContainingFile(),psiVariable.getTextOffset());
   }
  else {
-    PsiClass aClass=facade.findClass(type.name().replace('$','.'),GlobalSearchScope.allScope(myProject));
-    if (aClass == null)     return null;
-    aClass=(PsiClass)aClass.getNavigationElement();
-    PsiField[] fields=aClass.getFields();
-    for (    PsiField field : fields) {
-      if (fieldName.equals(field.getName())) {
-        return SourcePosition.createFromOffset(field.getContainingFile(),field.getTextOffset());
+    PsiClass aClass=facade.findClass(type.name().replace('$','.'),context.getDebuggerSession().getSearchScope());
+    if (aClass == null) {
+      try {
+        final List<Location> locations=type.allLineLocations();
+        if (!locations.isEmpty()) {
+          final Location lastLocation=locations.get(locations.size() - 1);
+          final SourcePosition position=context.getDebugProcess().getPositionManager().getSourcePosition(lastLocation);
+          if (position != null) {
+            aClass=JVMNameUtil.getClassAt(position);
+          }
+        }
+      }
+ catch (      AbsentInformationException ignored) {
+      }
+catch (      ClassNotPreparedException ignored) {
+      }
+    }
+    if (aClass != null) {
+      aClass=(PsiClass)aClass.getNavigationElement();
+      for (      PsiField field : aClass.getFields()) {
+        if (fieldName.equals(field.getName())) {
+          return SourcePosition.createFromOffset(field.getContainingFile(),field.getTextOffset());
+        }
       }
     }
     return null;
