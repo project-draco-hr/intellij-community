@@ -1,0 +1,33 @@
+{
+  if (!StringUtil.isEmpty(dependency.getVersion().getStringValue()))   return;
+  Project project=context.getProject();
+  if (!isInsideManagedDependency(dependency)) {
+    MavenDomProjectModel model=DomUtil.<MavenDomProjectModel>getFileElement(dependency).getRootElement();
+    MavenDomDependency managedDependency=findManagedDependency(model,project,groupId,artifactId);
+    if (managedDependency != null) {
+      if (dependency.getClassifier().getXmlTag() == null && dependency.getType().getXmlTag() == null) {
+        String classifier=managedDependency.getClassifier().getRawText();
+        if (StringUtil.isNotEmpty(classifier)) {
+          dependency.getClassifier().setStringValue(classifier);
+        }
+        String type=managedDependency.getType().getRawText();
+        if (StringUtil.isNotEmpty(type)) {
+          dependency.getType().setStringValue(type);
+        }
+      }
+      return;
+    }
+  }
+  MavenProjectIndicesManager manager=MavenProjectIndicesManager.getInstance(project);
+  Set<String> versions=manager.getVersions(groupId,artifactId);
+  if (versions.size() == 1) {
+    dependency.getVersion().setStringValue(ContainerUtil.getFirstItem(versions));
+    return;
+  }
+  dependency.getVersion().setStringValue("");
+  int versionPosition=dependency.getVersion().getXmlTag().getValue().getTextRange().getStartOffset();
+  context.getEditor().getCaretModel().moveToOffset(versionPosition);
+  if (versions.size() > 0) {
+    invokeCompletion(context,CompletionType.BASIC);
+  }
+}

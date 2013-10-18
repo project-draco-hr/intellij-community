@@ -1,0 +1,45 @@
+{
+  final PsiCodeBlock body=constructor.getBody();
+  if (body == null)   return Collections.emptySet();
+  final PsiField[] fields=containingClass.getFields();
+  return CachedValuesManager.getCachedValue(constructor,new CachedValueProvider<Set<PsiField>>(){
+    @Nullable @Override public Result<Set<PsiField>> compute(){
+      final Map<PsiField,Boolean> map=ContainerUtil.newHashMap();
+      final StandardDataFlowRunner dfaRunner=new StandardDataFlowRunner(body){
+        boolean shouldCheck;
+        @Override protected void prepareAnalysis(        @NotNull PsiElement psiBlock,        Iterable<DfaMemoryState> initialStates){
+          super.prepareAnalysis(psiBlock,initialStates);
+          shouldCheck=psiBlock == body;
+        }
+        @Override protected DfaInstructionState[] acceptInstruction(        InstructionVisitor visitor,        DfaInstructionState instructionState){
+          if (shouldCheck) {
+            Instruction instruction=instructionState.getInstruction();
+            if (instruction instanceof ReturnInstruction && !((ReturnInstruction)instruction).isViaException()) {
+              for (              PsiField field : fields) {
+                if (!instructionState.getMemoryState().isNotNull(getFactory().getVarFactory().createVariableValue(field,false))) {
+                  map.put(field,false);
+                }
+ else                 if (!map.containsKey(field)) {
+                  map.put(field,true);
+                }
+              }
+            }
+          }
+          return super.acceptInstruction(visitor,instructionState);
+        }
+      }
+;
+      final RunnerResult rc=dfaRunner.analyzeMethod(body,new StandardInstructionVisitor());
+      Set<PsiField> notNullFields=ContainerUtil.newHashSet();
+      if (rc == RunnerResult.OK) {
+        for (        PsiField field : map.keySet()) {
+          if (map.get(field)) {
+            notNullFields.add(field);
+          }
+        }
+      }
+      return Result.create(notNullFields,constructor,PsiModificationTracker.JAVA_STRUCTURE_MODIFICATION_COUNT);
+    }
+  }
+);
+}
