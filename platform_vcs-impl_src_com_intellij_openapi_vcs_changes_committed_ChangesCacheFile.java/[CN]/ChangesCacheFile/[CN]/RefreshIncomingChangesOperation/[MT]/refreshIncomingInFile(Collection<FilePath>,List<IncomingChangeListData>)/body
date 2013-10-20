@@ -2,12 +2,35 @@
   boolean hadChanges=!list.isEmpty();
   for (  IncomingChangeListData data : list) {
     debug("Checking incoming changelist " + data.changeList.getNumber());
+    Collection<Change> changes=data.changeList.getChanges();
+    Map<Change,VirtualFile> revisionDependentFiles=ContainerUtil.newHashMap();
+    Map<Change,ProcessingResult> results=ContainerUtil.newIdentityHashMap();
+    for (    Change change : changes) {
+      if (data.accountedChanges.contains(change))       continue;
+      final ProcessingResult result=processIncomingChange(change,data,incomingFiles);
+      results.put(change,result);
+      if (result.revisionDependentProcessing != null && !myCurrentRevisions.containsKey(result.file)) {
+        revisionDependentFiles.put(change,result.file);
+      }
+    }
+    if (!revisionDependentFiles.isEmpty()) {
+      Map<VirtualFile,VcsRevisionNumber> newRevisions=myDiffProvider instanceof DiffProviderEx ? ((DiffProviderEx)myDiffProvider).getCurrentRevisions(revisionDependentFiles.values()) : DiffProviderEx.getCurrentRevisions(revisionDependentFiles.values(),myDiffProvider);
+      for (      VirtualFile file : revisionDependentFiles.values()) {
+        myCurrentRevisions.put(file,newRevisions.get(file));
+      }
+    }
+    for (    Change change : changes) {
+      Function<VcsRevisionNumber,ProcessingResult> revisionHandler=results.get(change).revisionDependentProcessing;
+      if (revisionHandler != null) {
+        results.put(change,revisionHandler.fun(myCurrentRevisions.get(revisionDependentFiles.get(change))));
+      }
+    }
     boolean updated=false;
     boolean anyChangeFound=false;
-    for (    Change change : data.changeList.getChanges()) {
+    for (    Change change : changes) {
       if (data.accountedChanges.contains(change))       continue;
       final ContentRevision revision=(change.getAfterRevision() == null) ? change.getBeforeRevision() : change.getAfterRevision();
-      final ProcessingResult result=processIncomingChange(change,data,incomingFiles);
+      ProcessingResult result=results.get(change);
       new IncomingChangeState(change,revision.getRevisionNumber().asString(),result.state).logSelf();
       if (result.changeFound) {
         updated=true;
