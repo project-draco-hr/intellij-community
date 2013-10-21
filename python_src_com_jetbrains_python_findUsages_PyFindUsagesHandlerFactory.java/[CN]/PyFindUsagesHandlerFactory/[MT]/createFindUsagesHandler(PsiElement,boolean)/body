@@ -1,0 +1,37 @@
+{
+  if (element instanceof PyImportedModule) {
+    final PsiElement resolved=((PyImportedModule)element).resolve();
+    if (resolved != null) {
+      element=resolved;
+    }
+  }
+  if (element instanceof PsiFileSystemItem) {
+    return new PyModuleFindUsagesHandler((PsiFileSystemItem)element);
+  }
+  if (element instanceof PyFunction) {
+    if (!forHighlightUsages) {
+      final Collection<PsiElement> superMethods=PySuperMethodsSearch.search((PyFunction)element,true).findAll();
+      if (superMethods.size() > 0) {
+        final PsiElement next=superMethods.iterator().next();
+        if (next instanceof PyFunction && !isInObject((PyFunction)next)) {
+          int rc=Messages.showYesNoCancelDialog(element.getProject(),"Method " + ((PyFunction)element).getName() + " overrides method of class "+ ((PyFunction)next).getContainingClass().getName()+ ".\nDo you want to find usages of the base method?","Find Usages",Messages.getQuestionIcon());
+          if (rc == 0) {
+            List<PsiElement> allMethods=new ArrayList<PsiElement>();
+            allMethods.add(element);
+            allMethods.addAll(superMethods);
+            return new PyFunctionFindUsagesHandler(element,allMethods);
+          }
+          if (rc == 1) {
+            return new PyFunctionFindUsagesHandler(element);
+          }
+          return FindUsagesHandler.NULL_HANDLER;
+        }
+      }
+    }
+    return new PyFunctionFindUsagesHandler(element);
+  }
+  if (element instanceof PyClass) {
+    return new PyClassFindUsagesHandler((PyClass)element);
+  }
+  return null;
+}

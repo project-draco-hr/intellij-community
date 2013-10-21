@@ -1,0 +1,33 @@
+{
+  ResolveResult[] results=super.multiResolve(incompleteCode);
+  if (results.length == 0) {
+    PsiFile file=myElement.getContainingFile();
+    final InjectedLanguageManager languageManager=InjectedLanguageManager.getInstance(myElement.getProject());
+    final PsiLanguageInjectionHost host=languageManager.getInjectionHost(myElement);
+    if (host != null)     file=host.getContainingFile();
+    final String referencedName=myElement.getReferencedName();
+    if (referencedName == null)     return ResolveResult.EMPTY_ARRAY;
+    if (host != null) {
+      final List<Pair<PsiElement,TextRange>> files=languageManager.getInjectedPsiFiles(host);
+      if (files != null) {
+        for (        Pair<PsiElement,TextRange> pair : files) {
+          ResolveProcessor processor=new ResolveProcessor(referencedName);
+          PyResolveUtil.scopeCrawlUp(processor,(ScopeOwner)pair.getFirst(),referencedName,pair.getFirst());
+          final List<RatedResolveResult> resultList=getResultsFromProcessor(referencedName,processor,pair.getFirst(),pair.getFirst());
+          if (resultList.size() > 0) {
+            List<RatedResolveResult> ret=RatedResolveResult.sorted(resultList);
+            return ret.toArray(new RatedResolveResult[ret.size()]);
+          }
+        }
+      }
+    }
+    ResolveProcessor processor=new ResolveProcessor(referencedName);
+    if (file instanceof ScopeOwner)     PyResolveUtil.scopeCrawlUp(processor,(ScopeOwner)file,referencedName,file);
+    final List<RatedResolveResult> resultList=getResultsFromProcessor(referencedName,processor,file,file);
+    if (resultList.size() > 0) {
+      List<RatedResolveResult> ret=RatedResolveResult.sorted(resultList);
+      return ret.toArray(new RatedResolveResult[ret.size()]);
+    }
+  }
+  return results;
+}

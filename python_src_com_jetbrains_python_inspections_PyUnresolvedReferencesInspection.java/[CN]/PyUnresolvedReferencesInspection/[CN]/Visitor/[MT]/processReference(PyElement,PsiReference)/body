@@ -1,0 +1,58 @@
+{
+  if (reference == null || reference.isSoft())   return;
+  HighlightSeverity severity=HighlightSeverity.ERROR;
+  if (reference instanceof PsiReferenceEx) {
+    severity=((PsiReferenceEx)reference).getUnresolvedHighlightSeverity(myTypeEvalContext);
+    if (severity == null)     return;
+  }
+  PyExceptPart guard=getImportErrorGuard(node);
+  if (guard != null) {
+    processReferenceInImportGuard(node,guard);
+    return;
+  }
+  if (node instanceof PyQualifiedExpression) {
+    final PyQualifiedExpression qExpr=(PyQualifiedExpression)node;
+    final PyExpression qualifier=qExpr.getQualifier();
+    final String name=node.getName();
+    if (qualifier != null && name != null && isGuardedByHasattr(qualifier,name)) {
+      return;
+    }
+  }
+  PsiElement target=null;
+  boolean unresolved;
+  if (reference instanceof PsiPolyVariantReference) {
+    final PsiPolyVariantReference poly=(PsiPolyVariantReference)reference;
+    final ResolveResult[] resolveResults=poly.multiResolve(false);
+    unresolved=(resolveResults.length == 0);
+    for (    ResolveResult resolveResult : resolveResults) {
+      if (target == null && resolveResult.isValidResult()) {
+        target=resolveResult.getElement();
+      }
+      if (resolveResult instanceof ImportedResolveResult) {
+        myUsedImports.addAll(((ImportedResolveResult)resolveResult).getNameDefiners());
+      }
+    }
+  }
+ else {
+    target=reference.resolve();
+    unresolved=(target == null);
+  }
+  if (unresolved) {
+    boolean ignoreUnresolved=false;
+    for (    PyInspectionExtension extension : Extensions.getExtensions(PyInspectionExtension.EP_NAME)) {
+      if (extension.ignoreUnresolvedReference(node,reference)) {
+        ignoreUnresolved=true;
+        break;
+      }
+    }
+    if (!ignoreUnresolved) {
+      registerUnresolvedReferenceProblem(node,reference,severity);
+    }
+    if (node.getParent() instanceof PyImportElement) {
+      myAllImports.remove(node.getParent());
+    }
+  }
+ else   if (reference instanceof PyImportReference && target == reference.getElement().getContainingFile() && !isContainingFileImportAllowed(node,(PsiFile)target)) {
+    registerProblem(node,"Import resolves to its containing file");
+  }
+}

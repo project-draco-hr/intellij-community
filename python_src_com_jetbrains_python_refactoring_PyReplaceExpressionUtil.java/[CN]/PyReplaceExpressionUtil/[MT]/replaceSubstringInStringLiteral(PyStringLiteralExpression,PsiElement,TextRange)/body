@@ -1,0 +1,52 @@
+{
+  final String fullText=oldExpression.getText();
+  final Pair<String,String> detectedQuotes=PythonStringUtil.getQuotes(fullText);
+  final Pair<String,String> quotes=detectedQuotes != null ? detectedQuotes : Pair.create("'","'");
+  final String prefix=fullText.substring(0,textRange.getStartOffset());
+  final String suffix=fullText.substring(textRange.getEndOffset(),oldExpression.getTextLength());
+  final PyExpression formatValue=PyStringFormatParser.getFormatValueExpression(oldExpression);
+  final PyArgumentList newStyleFormatValue=PyStringFormatParser.getNewStyleFormatValueExpression(oldExpression);
+  final String newText=newExpression.getText();
+  final List<PyStringFormatParser.SubstitutionChunk> substitutions;
+  if (newStyleFormatValue != null) {
+    substitutions=filterSubstitutions(parseNewStyleFormat(fullText));
+  }
+ else {
+    substitutions=filterSubstitutions(parsePercentFormat(fullText));
+  }
+  final boolean hasSubstitutions=substitutions.size() > 0;
+  if (formatValue != null && !containsStringFormatting(substitutions,textRange)) {
+    if (formatValue instanceof PyTupleExpression) {
+      return replaceSubstringWithTupleFormatting(oldExpression,newExpression,textRange,prefix,suffix,(PyTupleExpression)formatValue,substitutions);
+    }
+ else     if (formatValue instanceof PyDictLiteralExpression) {
+      return replaceSubstringWithDictFormatting(oldExpression,quotes,prefix,suffix,formatValue,newText);
+    }
+ else {
+      final TypeEvalContext context=TypeEvalContext.userInitiated(oldExpression.getContainingFile());
+      final PyType valueType=context.getType(formatValue);
+      final PyBuiltinCache builtinCache=PyBuiltinCache.getInstance(oldExpression);
+      final PyType tupleType=builtinCache.getTupleType();
+      final PyType mappingType=PyTypeParser.getTypeByName(null,"collections.Mapping");
+      if (!PyTypeChecker.match(tupleType,valueType,context) || (mappingType != null && !PyTypeChecker.match(mappingType,valueType,context))) {
+        return replaceSubstringWithSingleValueFormatting(oldExpression,textRange,prefix,suffix,formatValue,newText,substitutions);
+      }
+    }
+  }
+  if (newStyleFormatValue != null && hasSubstitutions && !containsStringFormatting(substitutions,textRange)) {
+    final PyExpression[] arguments=newStyleFormatValue.getArguments();
+    boolean hasStarArguments=false;
+    for (    PyExpression argument : arguments) {
+      if (argument instanceof PyStarArgument) {
+        hasStarArguments=true;
+      }
+    }
+    if (!hasStarArguments) {
+      return replaceSubstringWithNewStyleFormatting(oldExpression,textRange,prefix,suffix,newStyleFormatValue,newText,substitutions);
+    }
+  }
+  if (isConcatFormatting(oldExpression) || hasSubstitutions) {
+    return replaceSubstringWithConcatFormatting(oldExpression,quotes,prefix,suffix,newText,hasSubstitutions);
+  }
+  return replaceSubstringWithoutFormatting(oldExpression,prefix,suffix,newText);
+}

@@ -1,0 +1,44 @@
+{
+  int statementListsBelow=0;
+  if (newChildIndex > 0) {
+    if (_node.getPsi() instanceof PyFile || _node.getElementType() == PyTokenTypes.COLON) {
+      return ChildAttributes.DELEGATE_TO_PREV_CHILD;
+    }
+    PyBlock insertAfterBlock=_subBlocks.get(newChildIndex - 1);
+    ASTNode prevNode=insertAfterBlock.getNode();
+    PsiElement prevElt=prevNode.getPsi();
+    if (prevElt instanceof PyStatementList) {
+      if (dedentAfterLastStatement((PyStatementList)prevElt)) {
+        return new ChildAttributes(Indent.getNoneIndent(),getChildAlignment());
+      }
+      return ChildAttributes.DELEGATE_TO_PREV_CHILD;
+    }
+ else     if (prevElt instanceof PyStatementPart) {
+      return ChildAttributes.DELEGATE_TO_PREV_CHILD;
+    }
+    ASTNode lastChild=insertAfterBlock.getNode();
+    while (lastChild != null) {
+      IElementType last_type=lastChild.getElementType();
+      if (last_type == PyElementTypes.STATEMENT_LIST && hasLineBreaksBefore(lastChild,1)) {
+        if (dedentAfterLastStatement((PyStatementList)lastChild.getPsi())) {
+          break;
+        }
+        statementListsBelow++;
+      }
+ else       if (statementListsBelow > 0 && lastChild.getPsi() instanceof PsiErrorElement) {
+        statementListsBelow++;
+      }
+      if (_node.getElementType() == PyElementTypes.STATEMENT_LIST && lastChild.getPsi() instanceof PsiErrorElement) {
+        return ChildAttributes.DELEGATE_TO_PREV_CHILD;
+      }
+      lastChild=getLastNonSpaceChild(lastChild,true);
+    }
+  }
+  if (statementListsBelow > 0) {
+    @SuppressWarnings("ConstantConditions") int indent=myContext.getSettings().getIndentOptions().INDENT_SIZE;
+    return new ChildAttributes(Indent.getSpaceIndent(indent * statementListsBelow),null);
+  }
+  Indent childIndent=getChildIndent(newChildIndex);
+  Alignment childAlignment=getChildAlignment();
+  return new ChildAttributes(childIndent,childAlignment);
+}

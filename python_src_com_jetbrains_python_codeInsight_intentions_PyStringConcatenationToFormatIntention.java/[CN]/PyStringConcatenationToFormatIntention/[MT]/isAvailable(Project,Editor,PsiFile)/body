@@ -1,0 +1,37 @@
+{
+  if (!(file instanceof PyFile)) {
+    return false;
+  }
+  PsiElement element=PsiTreeUtil.getParentOfType(file.findElementAt(editor.getCaretModel().getOffset()),PyBinaryExpression.class,false);
+  if (element == null) {
+    return false;
+  }
+  while (element.getParent() instanceof PyBinaryExpression) {
+    element=element.getParent();
+  }
+  final Collection<PyElementType> operators=getOperators((PyBinaryExpression)element);
+  for (  PyElementType operator : operators) {
+    if (operator != PyTokenTypes.PLUS) {
+      return false;
+    }
+  }
+  final Collection<PyExpression> expressions=getSimpleExpressions((PyBinaryExpression)element);
+  if (expressions.size() == 0) {
+    return false;
+  }
+  final PyBuiltinCache cache=PyBuiltinCache.getInstance(element);
+  for (  PyExpression expression : expressions) {
+    if (expression == null) {
+      return false;
+    }
+    if (expression instanceof PyStringLiteralExpression)     continue;
+    final PyType type=TypeEvalContext.codeAnalysis(file).getType(expression);
+    final boolean isStringReference=PyTypeChecker.match(cache.getStringType(LanguageLevel.forElement(expression)),type,TypeEvalContext.codeAnalysis(file)) && type != null;
+    if (!isStringReference) {
+      return false;
+    }
+  }
+  if (LanguageLevel.forElement(element).isAtLeast(LanguageLevel.PYTHON27))   setText(PyBundle.message("INTN.replace.plus.with.str.format"));
+ else   setText(PyBundle.message("INTN.replace.plus.with.format.operator"));
+  return true;
+}

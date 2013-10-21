@@ -1,0 +1,50 @@
+{
+  if (!(file instanceof PyFile))   return CANNOT_JOIN;
+  int i=start;
+  CharSequence text=document.getCharsSequence();
+  if (i >= 0 && text.charAt(i) == '\n')   i-=1;
+  if (i >= 0 && text.charAt(i) == '\\')   i-=1;
+  while (i >= 0 && text.charAt(i) == ' ' || text.charAt(i) == '\t')   i-=1;
+  if (i < 0)   return CANNOT_JOIN;
+  PsiElement left_element=file.findElementAt(i);
+  PsiElement right_element=file.findElementAt(end);
+  if (left_element != null && right_element != null) {
+    PyExpression left_expr=PsiTreeUtil.getParentOfType(left_element,PyExpression.class);
+    if (left_expr instanceof PsiFile)     left_expr=null;
+    PyExpression right_expr=PsiTreeUtil.getParentOfType(right_element,PyExpression.class);
+    if (right_expr instanceof PsiFile)     right_expr=null;
+    Joiner[] joiners={new OpenBracketJoiner(),new CloseBracketJoiner(),new StringLiteralJoiner(),new StmtJoiner(),new BinaryExprJoiner(),new ListLikeExprJoiner(),new CommentJoiner()};
+    Request request=new Request(document,left_element,left_expr,right_element,right_expr);
+    for (    Joiner joiner : joiners) {
+      Result res=joiner.join(request);
+      if (res != null) {
+        final int cut_start=i + 1 - res.getCutFromLeft();
+        document.deleteString(cut_start,end + res.getCutIntoRight());
+        document.insertString(cut_start,res.getInsert());
+        return cut_start + res.getCursorOffset();
+      }
+    }
+    final PyExpression leftExpression=request.leftExpr();
+    final PyExpression rightExpression=request.rightExpr();
+    if (request.leftElem() == request.rightElem()) {
+      IElementType type=request.leftElem().getNode().getElementType();
+      if (PyTokenTypes.SINGLE_QUOTED_STRING == type || PyTokenTypes.SINGLE_QUOTED_UNICODE == type) {
+        if (leftExpression == null)         return CANNOT_JOIN;
+        if (removeBackSlash(document,leftExpression,false)) {
+          return leftExpression.getTextOffset();
+        }
+      }
+    }
+    PsiElement expression=null;
+    if (leftExpression != null && rightExpression != null) {
+      if (PsiTreeUtil.isAncestor(leftExpression,rightExpression,false))       expression=leftExpression;
+ else       if (PsiTreeUtil.isAncestor(rightExpression,leftExpression,false))       expression=rightExpression;
+      if (expression != null && !(expression instanceof PyStringLiteralExpression)) {
+        if (removeBackSlash(document,expression,true)) {
+          return expression.getTextOffset();
+        }
+      }
+    }
+  }
+  return CANNOT_JOIN;
+}

@@ -1,0 +1,33 @@
+{
+  final Document document=file.getViewProvider().getDocument();
+  if (document == null)   return null;
+  final int offset=down ? elementToMove.getTextRange().getEndOffset() : elementToMove.getTextRange().getStartOffset();
+  int lineNumber=down ? document.getLineNumber(offset) + 1 : document.getLineNumber(offset) - 1;
+  if (moveOutsideFile(elementToMove,document,lineNumber))   return null;
+  int lineEndOffset=document.getLineEndOffset(lineNumber);
+  final int startOffset=document.getLineStartOffset(lineNumber);
+  lineEndOffset=startOffset != lineEndOffset ? lineEndOffset - 1 : lineEndOffset;
+  final PyStatementList statementList=getStatementList(elementToMove);
+  final PsiElement destination=getDestinationElement(elementToMove,document,lineEndOffset,down);
+  final int start=destination != null ? destination.getTextRange().getStartOffset() : lineNumber;
+  final int end=destination != null ? destination.getTextRange().getEndOffset() : lineNumber;
+  final int startLine=document.getLineNumber(start);
+  final int endLine=document.getLineNumber(end);
+  if (elementToMove instanceof PsiComment && destination instanceof PsiComment) {
+    return new LineRange(lineNumber,lineNumber + 1);
+  }
+  if (elementToMove instanceof PyClass || elementToMove instanceof PyFunction) {
+    PyElement scope=statementList == null ? (PyElement)elementToMove.getContainingFile() : statementList;
+    if (destination != null)     return new ScopeRange(scope,destination,!down,true);
+  }
+  final String lineText=document.getText(TextRange.create(startOffset,lineEndOffset));
+  final boolean isEmptyLine=StringUtil.isEmptyOrSpaces(lineText);
+  if (isEmptyLine && moveToEmptyLine(elementToMove,down))   return new LineRange(lineNumber,lineNumber + 1);
+  LineRange scopeRange=moveOut(elementToMove,editor,down);
+  if (scopeRange != null)   return scopeRange;
+  scopeRange=moveInto(elementToMove,file,editor,down,lineEndOffset);
+  if (scopeRange != null)   return scopeRange;
+  final PyElement scope=statementList == null ? (PyElement)elementToMove.getContainingFile() : statementList;
+  if ((elementToMove instanceof PyClass) || (elementToMove instanceof PyFunction))   return new ScopeRange(scope,null,!down,true);
+  return new LineRange(startLine,endLine + 1);
+}

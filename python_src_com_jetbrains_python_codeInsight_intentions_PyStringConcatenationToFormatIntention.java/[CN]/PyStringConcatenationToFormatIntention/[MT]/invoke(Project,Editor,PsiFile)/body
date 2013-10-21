@@ -1,0 +1,57 @@
+{
+  PsiElement element=PsiTreeUtil.getTopmostParentOfType(file.findElementAt(editor.getCaretModel().getOffset()),PyBinaryExpression.class);
+  if (element == null)   return;
+  final LanguageLevel languageLevel=LanguageLevel.forElement(element);
+  final boolean useFormatMethod=languageLevel.isAtLeast(LanguageLevel.PYTHON27);
+  NotNullFunction<String,String> escaper=StringUtil.escaper(false,"\"\'\\");
+  StringBuilder stringLiteral=new StringBuilder();
+  List<String> parameters=new ArrayList<String>();
+  Pair<String,String> quotes=new Pair<String,String>("\"","\"");
+  boolean quotesDetected=false;
+  final TypeEvalContext context=TypeEvalContext.userInitiated(file);
+  int paramCount=0;
+  boolean isUnicode=false;
+  final PyClassTypeImpl unicodeType=PyBuiltinCache.getInstance(element).getObjectType("unicode");
+  for (  PyExpression expression : getSimpleExpressions((PyBinaryExpression)element)) {
+    if (expression instanceof PyStringLiteralExpression) {
+      final PyType type=context.getType(expression);
+      if (PyTypeChecker.match(unicodeType,type,context)) {
+        isUnicode=true;
+      }
+      if (!quotesDetected) {
+        quotes=PythonStringUtil.getQuotes(expression.getText());
+        quotesDetected=true;
+      }
+      String value=((PyStringLiteralExpression)expression).getStringValue();
+      if (!useFormatMethod) {
+        value=value.replace("%","%%");
+      }
+      stringLiteral.append(escaper.fun(value));
+    }
+ else {
+      addParamToString(stringLiteral,paramCount,useFormatMethod);
+      parameters.add(expression.getText());
+      ++paramCount;
+    }
+  }
+  if (quotes == null)   quotes=new Pair<String,String>("\"","\"");
+  stringLiteral.insert(0,quotes.getFirst());
+  if (isUnicode && !quotes.getFirst().toLowerCase().contains("u"))   stringLiteral.insert(0,"u");
+  stringLiteral.append(quotes.getSecond());
+  PyElementGenerator elementGenerator=PyElementGenerator.getInstance(project);
+  if (!parameters.isEmpty()) {
+    if (useFormatMethod) {
+      stringLiteral.append(".format(").append(StringUtil.join(parameters,",")).append(")");
+    }
+ else {
+      final String paramString=parameters.size() > 1 ? "(" + StringUtil.join(parameters,",") + ")" : StringUtil.join(parameters,",");
+      stringLiteral.append(" % ").append(paramString);
+    }
+    final PyExpression expression=elementGenerator.createFromText(LanguageLevel.getDefault(),PyExpressionStatement.class,stringLiteral.toString()).getExpression();
+    element.replace(expression);
+  }
+ else {
+    PyStringLiteralExpression stringLiteralExpression=elementGenerator.createStringLiteralAlreadyEscaped(stringLiteral.toString());
+    element.replace(stringLiteralExpression);
+  }
+}

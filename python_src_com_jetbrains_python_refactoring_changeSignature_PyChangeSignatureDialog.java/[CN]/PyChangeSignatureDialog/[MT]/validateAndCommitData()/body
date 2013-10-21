@@ -1,0 +1,79 @@
+{
+  final String functionName=myNameField.getText().trim();
+  if (!functionName.equals(myMethod.getName())) {
+    final boolean defined=IntroduceValidator.isDefinedInScope(functionName,myMethod.getMethod());
+    if (defined) {
+      return PyBundle.message("refactoring.change.signature.dialog.validation.name.defined");
+    }
+    if (!isNameValid(functionName,myProject)) {
+      return PyBundle.message("refactoring.change.signature.dialog.validation.function.name");
+    }
+  }
+  final List<PyParameterTableModelItem> parameters=myParametersTableModel.getItems();
+  Set<String> parameterNames=new HashSet<String>();
+  boolean hadPositionalContainer=false;
+  boolean hadKeywordContainer=false;
+  boolean hadDefaultValue=false;
+  boolean hadSingleStar=false;
+  boolean hadParamsAfterSingleStar=false;
+  LanguageLevel languageLevel=LanguageLevel.forElement(myMethod.getMethod());
+  int parametersLength=parameters.size();
+  for (int index=0; index != parametersLength; ++index) {
+    PyParameterTableModelItem info=parameters.get(index);
+    final PyParameterInfo parameter=info.parameter;
+    final String name=parameter.getName();
+    if (parameterNames.contains(name)) {
+      return PyBundle.message("ANN.duplicate.param.name");
+    }
+    parameterNames.add(name);
+    if (name.equals("*")) {
+      hadSingleStar=true;
+      if (index == parametersLength - 1) {
+        return PyBundle.message("ANN.named.arguments.after.star");
+      }
+    }
+ else     if (name.startsWith("*") && !name.startsWith("**")) {
+      if (hadKeywordContainer) {
+        return PyBundle.message("ANN.starred.param.after.kwparam");
+      }
+      if (hadSingleStar) {
+        return PyBundle.message("refactoring.change.signature.dialog.validation.multiple.star");
+      }
+      hadPositionalContainer=true;
+    }
+ else     if (name.startsWith("**")) {
+      hadKeywordContainer=true;
+      if (hadSingleStar && !hadParamsAfterSingleStar) {
+        return PyBundle.message("ANN.named.arguments.after.star");
+      }
+    }
+ else {
+      if (!isNameValid(name,myProject)) {
+        return PyBundle.message("refactoring.change.signature.dialog.validation.parameter.name");
+      }
+      if (hadSingleStar) {
+        hadParamsAfterSingleStar=true;
+      }
+      if (hadPositionalContainer && !languageLevel.isPy3K()) {
+        return PyBundle.message("ANN.regular.param.after.vararg");
+      }
+ else       if (hadKeywordContainer) {
+        return PyBundle.message("ANN.regular.param.after.keyword");
+      }
+      final String defaultValue=info.getDefaultValue();
+      if (defaultValue != null && !StringUtil.isEmptyOrSpaces(defaultValue) && parameter.getDefaultInSignature()) {
+        hadDefaultValue=true;
+      }
+ else {
+        if (hadDefaultValue && !hadSingleStar && (!languageLevel.isPy3K() || !hadPositionalContainer)) {
+          return PyBundle.message("ANN.non.default.param.after.default");
+        }
+      }
+    }
+    if (parameter.getOldIndex() < 0 && !parameter.getName().startsWith("*")) {
+      if (StringUtil.isEmpty(info.defaultValueCodeFragment.getText()))       return PyBundle.message("refactoring.change.signature.dialog.validation.default.missing");
+      if (StringUtil.isEmptyOrSpaces(parameter.getName()))       return PyBundle.message("refactoring.change.signature.dialog.validation.parameter.missing");
+    }
+  }
+  return null;
+}

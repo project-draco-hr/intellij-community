@@ -1,0 +1,36 @@
+{
+  final PsiElement parameterList=baseMethod.getParameterList();
+  final PyParameterInfo[] parameters=changeInfo.getNewParameters();
+  StringBuilder builder=new StringBuilder("def foo(");
+  final PyStringLiteralExpression docstring=baseMethod.getDocStringExpression();
+  final PyParameter[] oldParameters=baseMethod.getParameterList().getParameters();
+  for (int i=0; i != parameters.length; ++i) {
+    PyParameterInfo info=parameters[i];
+    final int oldIndex=info.getOldIndex();
+    if (i != 0 && oldIndex < oldParameters.length) {
+      builder.append(", ");
+    }
+    if (docstring != null && oldIndex < 0) {
+      final String replacement=new PyDocstringGenerator(baseMethod).withParam("param",info.getName()).docStringAsText();
+      PyExpression str=PyElementGenerator.getInstance(baseMethod.getProject()).createDocstring(replacement).getExpression();
+      docstring.replace(str);
+    }
+    if (oldIndex < oldParameters.length)     builder.append(info.getName());
+    if (oldIndex >= 0 && oldIndex < oldParameters.length) {
+      final PyParameter parameter=oldParameters[oldIndex];
+      if (parameter instanceof PyNamedParameter) {
+        final PyAnnotation annotation=((PyNamedParameter)parameter).getAnnotation();
+        if (annotation != null) {
+          builder.append(annotation.getText());
+        }
+      }
+    }
+    final String defaultValue=info.getDefaultValue();
+    if (defaultValue != null && info.getDefaultInSignature() && !StringUtil.isEmpty(defaultValue)) {
+      builder.append(" = ").append(defaultValue);
+    }
+  }
+  builder.append("): pass");
+  final PyParameterList parameterList1=PyElementGenerator.getInstance(baseMethod.getProject()).createFromText(LanguageLevel.forElement(baseMethod),PyFunction.class,builder.toString()).getParameterList();
+  parameterList.replace(parameterList1);
+}

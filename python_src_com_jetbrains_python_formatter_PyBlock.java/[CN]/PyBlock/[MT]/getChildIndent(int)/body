@@ -1,0 +1,73 @@
+{
+  ASTNode afterNode=getAfterNode(newChildIndex);
+  ASTNode lastChild=getLastNonSpaceChild(_node,false);
+  if (lastChild != null && lastChild.getElementType() == PyElementTypes.STATEMENT_LIST && _subBlocks.size() >= newChildIndex) {
+    if (afterNode == null) {
+      return Indent.getNoneIndent();
+    }
+    if (afterNode.getElementType() == PyElementTypes.STATEMENT_LIST || afterNode.getElementType() == PyTokenTypes.COLON) {
+      return Indent.getNormalIndent();
+    }
+    ASTNode lastFirstChild=lastChild.getFirstChildNode();
+    if (lastFirstChild != null && lastFirstChild == lastChild.getLastChildNode() && lastFirstChild.getPsi() instanceof PsiErrorElement) {
+      return Indent.getNormalIndent();
+    }
+  }
+ else   if (lastChild != null && PyElementTypes.LIST_LIKE_EXPRESSIONS.contains(lastChild.getElementType())) {
+    ASTNode lastLastChild=lastChild.getLastChildNode();
+    if (lastLastChild != null && lastLastChild.getPsi() instanceof PsiErrorElement) {
+      PsiElement expr=lastChild.getPsi();
+      PsiElement exprItem=expr.getFirstChild();
+      boolean found=false;
+      while (exprItem != null) {
+        if (exprItem instanceof PyElement) {
+          found=true;
+          break;
+        }
+        if (exprItem instanceof PsiComment) {
+          found=true;
+          break;
+        }
+        exprItem=exprItem.getNextSibling();
+      }
+      if (found) {
+        PsiDocumentManager docMgr=PsiDocumentManager.getInstance(exprItem.getProject());
+        Document doc=docMgr.getDocument(exprItem.getContainingFile());
+        if (doc != null) {
+          int line_num=doc.getLineNumber(exprItem.getTextOffset());
+          int item_col=exprItem.getTextOffset() - doc.getLineStartOffset(line_num);
+          PsiElement here_elt=getNode().getPsi();
+          line_num=doc.getLineNumber(here_elt.getTextOffset());
+          int node_col=here_elt.getTextOffset() - doc.getLineStartOffset(line_num);
+          int padding=item_col - node_col;
+          if (padding > 0) {
+            return Indent.getSpaceIndent(padding);
+          }
+        }
+      }
+      return Indent.getContinuationIndent();
+    }
+  }
+  if (afterNode != null && afterNode.getElementType() == PyElementTypes.KEY_VALUE_EXPRESSION) {
+    PyKeyValueExpression keyValue=(PyKeyValueExpression)afterNode.getPsi();
+    if (keyValue != null && keyValue.getValue() == null) {
+      return Indent.getContinuationIndent();
+    }
+  }
+  if (_node.getElementType().equals(PyElementTypes.PARAMETER_LIST)) {
+    return Indent.getContinuationIndent();
+  }
+  if (ourListElementTypes.contains(_node.getElementType()) || _node.getPsi() instanceof PyStatementPart) {
+    return Indent.getNormalIndent();
+  }
+  if (afterNode != null) {
+    ASTNode wsAfter=afterNode.getTreeNext();
+    while (wsAfter != null && wsAfter.getElementType() == TokenType.WHITE_SPACE) {
+      if (wsAfter.getText().indexOf('\\') >= 0) {
+        return Indent.getNormalIndent();
+      }
+      wsAfter=wsAfter.getTreeNext();
+    }
+  }
+  return Indent.getNoneIndent();
+}

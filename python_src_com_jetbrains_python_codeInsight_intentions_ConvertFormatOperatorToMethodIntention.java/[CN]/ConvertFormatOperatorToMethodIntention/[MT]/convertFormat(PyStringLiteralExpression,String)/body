@@ -1,0 +1,95 @@
+{
+  List<StringBuilder> constants=new ArrayList<StringBuilder>();
+  boolean usesNamedFormat=false;
+  final List<ASTNode> stringNodes=stringLiteralExpression.getStringNodes();
+  sure(stringNodes);
+  sure(stringNodes.size() > 0);
+  for (  ASTNode stringNode : stringNodes) {
+    CharSequence text=stringNode.getChars();
+    int openPos=0;
+    boolean hasPrefix=false;
+    final int prefixLength=PyStringLiteralExpressionImpl.getPrefixLength(String.valueOf(text));
+    if (prefixLength != 0)     hasPrefix=true;
+    openPos+=prefixLength;
+    char quote=text.charAt(openPos);
+    sure("\"'".indexOf(quote) >= 0);
+    if (text.length() - openPos >= 6) {
+      if (text.charAt(openPos + 1) == quote && text.charAt(openPos + 2) == quote) {
+        openPos+=2;
+      }
+    }
+    int index=openPos + 1;
+    StringBuilder out=new StringBuilder(text.subSequence(0,openPos + 1));
+    if (!hasPrefix)     out.insert(0,prefix);
+    int position_count=0;
+    Matcher scanner=FORMAT_PATTERN.matcher(text);
+    while (scanner.find(index)) {
+      appendDoublingBraces(text.subSequence(index,scanner.start()),out);
+      final String f_key=scanner.group(1);
+      final String f_modifier=scanner.group(2);
+      final String f_width=scanner.group(3);
+      String f_conversion=scanner.group(4);
+      if ("%%".equals(scanner.group(0))) {
+        out.append("%");
+      }
+ else {
+        sure(f_conversion);
+        sure(!"%".equals(f_conversion));
+        out.append("{");
+        if (f_key != null) {
+          out.append(f_key);
+          usesNamedFormat=true;
+        }
+ else {
+          out.append(position_count);
+          position_count+=1;
+        }
+        if ("r".equals(f_conversion))         out.append("!r");
+        out.append(":");
+        if (f_modifier != null) {
+          if (has(f_modifier,'-'))           out.append("<");
+ else           if ("s".equals(f_conversion) && !StringUtil.isEmptyOrSpaces(f_width)) {
+            out.append(">");
+          }
+          if (has(f_modifier,'+'))           out.append("+");
+ else           if (has(f_modifier,' '))           out.append(" ");
+          if (has(f_modifier,'#'))           out.append("#");
+          if (has(f_modifier,'0'))           out.append("0");
+        }
+        if (f_width != null) {
+          out.append(f_width);
+        }
+        if ("i".equals(f_conversion) || "u".equals(f_conversion))         out.append("d");
+ else         if ("r".equals(f_conversion))         out.append("s");
+ else         out.append(f_conversion);
+        out.append("}");
+      }
+      index=scanner.end();
+    }
+    appendDoublingBraces(text.subSequence(index,text.length()),out);
+    constants.add(out);
+  }
+  TextRange full_range=stringLiteralExpression.getTextRange();
+  int full_start=full_range.getStartOffset();
+  CharSequence full_text=stringLiteralExpression.getNode().getChars();
+  TextRange prev_range=stringNodes.get(0).getTextRange();
+  int fragment_no=1;
+  while (fragment_no < stringNodes.size()) {
+    TextRange next_range=stringNodes.get(fragment_no).getTextRange();
+    int left=prev_range.getEndOffset() - full_start;
+    int right=next_range.getStartOffset() - full_start;
+    if (left < right) {
+      constants.get(fragment_no - 1).append(full_text.subSequence(left,right));
+    }
+    fragment_no+=1;
+    prev_range=next_range;
+  }
+  final int left=prev_range.getEndOffset() - full_start;
+  final int right=full_range.getEndOffset() - full_start;
+  if (left < right) {
+    constants.get(constants.size() - 1).append(full_text.subSequence(left,right));
+  }
+  StringBuilder result=new StringBuilder();
+  for (  StringBuilder one : constants)   result.append(one);
+  return new Pair<StringBuilder,Boolean>(result,usesNamedFormat);
+}

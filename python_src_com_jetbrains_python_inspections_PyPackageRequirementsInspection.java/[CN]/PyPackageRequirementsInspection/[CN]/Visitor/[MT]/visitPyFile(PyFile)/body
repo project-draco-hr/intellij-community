@@ -1,0 +1,26 @@
+{
+  final Module module=ModuleUtilCore.findModuleForPsiElement(node);
+  if (module != null) {
+    if (isRunningPackagingTasks(module)) {
+      return;
+    }
+    final Sdk sdk=PythonSdkType.findPythonSdk(module);
+    if (sdk != null) {
+      final List<PyRequirement> unsatisfied=findUnsatisfiedRequirements(module,sdk,myIgnoredPackages);
+      if (unsatisfied != null && !unsatisfied.isEmpty()) {
+        final boolean plural=unsatisfied.size() > 1;
+        String msg=String.format("Package requirement%s %s %s not satisfied",plural ? "s" : "",requirementsToString(unsatisfied),plural ? "are" : "is");
+        final Set<String> unsatisfiedNames=new HashSet<String>();
+        for (        PyRequirement req : unsatisfied) {
+          unsatisfiedNames.add(req.getName());
+        }
+        final List<LocalQuickFix> quickFixes=new ArrayList<LocalQuickFix>();
+        if (PyPackageManager.getInstance(sdk).hasPip()) {
+          quickFixes.add(new PyInstallRequirementsFix(null,module,sdk,unsatisfied));
+        }
+        quickFixes.add(new IgnoreRequirementFix(unsatisfiedNames));
+        registerProblem(node,msg,ProblemHighlightType.GENERIC_ERROR_OR_WARNING,null,quickFixes.toArray(new LocalQuickFix[quickFixes.size()]));
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  final PsiElement element=PyUtil.findNonWhitespaceAtOffset(file,editor.getCaretModel().getOffset());
+  PyFunction problemFunction=PsiTreeUtil.getParentOfType(element,PyFunction.class);
+  if (problemFunction == null)   return;
+  final PyClass containingClass=problemFunction.getContainingClass();
+  if (containingClass == null)   return;
+  final List<UsageInfo> usages=PyRefactoringUtil.findUsages(problemFunction,false);
+  final PyDecoratorList problemDecoratorList=problemFunction.getDecoratorList();
+  List<String> decoTexts=new ArrayList<String>();
+  decoTexts.add("@property");
+  if (problemDecoratorList != null) {
+    final PyDecorator[] decorators=problemDecoratorList.getDecorators();
+    for (    PyDecorator deco : decorators) {
+      decoTexts.add(deco.getText());
+    }
+  }
+  PyElementGenerator generator=PyElementGenerator.getInstance(project);
+  final PyDecoratorList decoratorList=generator.createDecoratorList(decoTexts.toArray(new String[decoTexts.size()]));
+  if (problemDecoratorList != null) {
+    problemDecoratorList.replace(decoratorList);
+  }
+ else {
+    problemFunction.addBefore(decoratorList,problemFunction.getFirstChild());
+  }
+  for (  UsageInfo usage : usages) {
+    final PsiElement usageElement=usage.getElement();
+    if (usageElement instanceof PyReferenceExpression) {
+      final PsiElement parent=usageElement.getParent();
+      if (parent instanceof PyCallExpression) {
+        final PyArgumentList argumentList=((PyCallExpression)parent).getArgumentList();
+        if (argumentList != null)         argumentList.delete();
+      }
+    }
+  }
+}

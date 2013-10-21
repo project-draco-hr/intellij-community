@@ -1,0 +1,56 @@
+{
+  final Object object=item.getObject();
+  if (!myPlainNamesOnly) {
+    if (!mySuppressParentheses && object instanceof PyFunction && ((PyFunction)object).getProperty() == null && !PyUtil.hasCustomDecorators((PyFunction)object) && !isSingleArgDecoratorCall(myContext,(PyFunction)object)) {
+      item=item.withInsertHandler(PyFunctionInsertHandler.INSTANCE);
+      final TypeEvalContext context=TypeEvalContext.userInitiated(myContext != null ? myContext.getContainingFile() : null);
+      final List<PyParameter> parameters=PyUtil.getParameters((PyFunction)object,context);
+      final String params=StringUtil.join(parameters,new Function<PyParameter,String>(){
+        @Override public String fun(        PyParameter pyParameter){
+          return pyParameter.getName();
+        }
+      }
+,", ");
+      item=item.withTailText("(" + params + ")");
+    }
+ else     if (object instanceof PyClass) {
+      item=item.withInsertHandler(PyClassInsertHandler.INSTANCE);
+    }
+  }
+  String source=null;
+  if (object instanceof PsiElement) {
+    final PsiElement element=(PsiElement)object;
+    PyClass cls=null;
+    if (element instanceof PyFunction) {
+      cls=((PyFunction)element).getContainingClass();
+    }
+ else     if (element instanceof PyTargetExpression) {
+      final PyTargetExpression expr=(PyTargetExpression)element;
+      if (expr.isQualified() || ScopeUtil.getScopeOwner(expr) instanceof PyClass) {
+        cls=expr.getContainingClass();
+      }
+    }
+ else     if (element instanceof PyClass) {
+      final ScopeOwner owner=ScopeUtil.getScopeOwner(element);
+      if (owner instanceof PyClass) {
+        cls=(PyClass)owner;
+      }
+    }
+    if (cls != null) {
+      source=cls.getName();
+    }
+ else     if (myContext == null || !PyUtil.inSameFile(myContext,element)) {
+      QualifiedName path=QualifiedNameFinder.findCanonicalImportPath(element,null);
+      if (path != null) {
+        if (element instanceof PyFile) {
+          path=path.removeLastComponent();
+        }
+        source=path.toString();
+      }
+    }
+  }
+  if (source != null) {
+    item=item.withTypeText(source);
+  }
+  return item;
+}

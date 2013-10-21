@@ -1,0 +1,39 @@
+{
+  if (qtype instanceof PyNoneType || PyTypeChecker.isUnknown(qtype)) {
+    return true;
+  }
+  if (qtype instanceof PyImportedModuleType) {
+    PyImportedModule module=((PyImportedModuleType)qtype).getImportedModule();
+    if (module.resolve() == null) {
+      return true;
+    }
+  }
+  if (qtype instanceof PyClassTypeImpl) {
+    PyClass cls=((PyClassType)qtype).getPyClass();
+    if (overridesGetAttr(cls,myTypeEvalContext)) {
+      return true;
+    }
+    if (cls.findProperty(name) != null) {
+      return true;
+    }
+    if (PyUtil.hasUnresolvedAncestors(cls,myTypeEvalContext)) {
+      return true;
+    }
+    if (isDecoratedAsDynamic(cls,true)) {
+      return true;
+    }
+    if (hasUnresolvedDynamicMember((PyClassType)qtype,reference,name))     return true;
+  }
+  if (qtype instanceof PyFunctionType) {
+    final Callable callable=((PyFunctionType)qtype).getCallable();
+    if (callable instanceof PyFunction && ((PyFunction)callable).getDecoratorList() != null) {
+      return true;
+    }
+  }
+  for (  PyInspectionExtension extension : Extensions.getExtensions(PyInspectionExtension.EP_NAME)) {
+    if (extension.ignoreUnresolvedMember(qtype,name)) {
+      return true;
+    }
+  }
+  return false;
+}

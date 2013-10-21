@@ -1,0 +1,32 @@
+{
+  final List<PsiElement> elementsRange=PyPsiUtils.collectElements(match.getStartElement(),match.getEndElement());
+  final Map<String,String> changedParameters=match.getChangedParameters();
+  PsiElement callElement=element;
+  final PyElementGenerator generator=PyElementGenerator.getInstance(callElement.getProject());
+  if (element instanceof PyAssignmentStatement) {
+    final PyExpression value=((PyAssignmentStatement)element).getAssignedValue();
+    if (value != null)     callElement=value;
+    final PyExpression[] targets=((PyAssignmentStatement)element).getTargets();
+    if (targets.length == 1) {
+      final String output=match.getChangedOutput();
+      final PyExpression text=generator.createFromText(LanguageLevel.forElement(callElement),PyAssignmentStatement.class,output + " = 1").getTargets()[0];
+      targets[0].replace(text);
+    }
+  }
+  if (element instanceof PyExpressionStatement) {
+    callElement=((PyExpressionStatement)element).getExpression();
+  }
+  if (callElement instanceof PyCallExpression) {
+    final Set<String> keys=changedParameters.keySet();
+    final PyArgumentList argumentList=((PyCallExpression)callElement).getArgumentList();
+    if (argumentList != null) {
+      for (      PyExpression arg : argumentList.getArguments()) {
+        final String argText=arg.getText();
+        if (argText != null && keys.contains(argText)) {
+          arg.replace(generator.createExpressionFromText(LanguageLevel.forElement(callElement),changedParameters.get(argText)));
+        }
+      }
+    }
+  }
+  return replaceElements(elementsRange,element);
+}

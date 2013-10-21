@@ -1,0 +1,96 @@
+{
+  for (  PyInspectionExtension extension : Extensions.getExtensions(PyInspectionExtension.EP_NAME)) {
+    if (extension.ignoreMethodParameters(node)) {
+      return;
+    }
+  }
+  PsiElement zope_interface=findZopeInterface(node);
+  final PyClass cls=node.getContainingClass();
+  if (zope_interface instanceof PyClass) {
+    if (cls != null && cls.isSubclass((PyClass)zope_interface))     return;
+  }
+  PyUtil.MethodFlags flags=PyUtil.MethodFlags.of(node);
+  if (flags != null) {
+    PyParameterList plist=node.getParameterList();
+    PyParameter[] params=plist.getParameters();
+    final String methodName=node.getName();
+    final String CLS="cls";
+    final String MCS="mcs";
+    if (params.length == 0) {
+      if (flags.isStaticMethod())       return;
+      ASTNode name_node=node.getNameNode();
+      if (name_node != null) {
+        PsiElement open_paren=plist.getFirstChild();
+        PsiElement close_paren=plist.getLastChild();
+        if (open_paren != null && close_paren != null && "(".equals(open_paren.getText()) && ")".equals(close_paren.getText())) {
+          String paramName;
+          if (flags.isMetaclassMethod()) {
+            if (flags.isClassMethod()) {
+              paramName=MCS;
+            }
+ else {
+              paramName=CLS;
+            }
+          }
+ else           if (flags.isClassMethod()) {
+            paramName=CLS;
+          }
+ else {
+            paramName=PyNames.CANONICAL_SELF;
+          }
+          registerProblem(plist,PyBundle.message("INSP.must.have.first.parameter",paramName),ProblemHighlightType.GENERIC_ERROR,null,new AddSelfQuickFix(paramName));
+        }
+      }
+    }
+ else {
+      PyNamedParameter first_param=params[0].getAsNamed();
+      if (first_param != null) {
+        String pname=first_param.getName();
+        if (pname == null) {
+          return;
+        }
+        @NonNls String[] mangled={"eslf","sself","elf","felf","slef","seelf","slf","sslf","sefl","sellf","sef","seef"};
+        if (PyUtil.among(pname,mangled)) {
+          registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.probably.mistyped.self"),new RenameParameterQuickFix(PyNames.CANONICAL_SELF));
+          return;
+        }
+        if (flags.isMetaclassMethod()) {
+          if (flags.isStaticMethod() && !PyNames.NEW.equals(methodName)) {
+            return;
+          }
+          String expectedName;
+          String alternativeName=null;
+          if (PyNames.NEW.equals(methodName) || flags.isClassMethod()) {
+            expectedName=MCS;
+          }
+ else           if (flags.isSpecialMetaclassMethod()) {
+            expectedName=CLS;
+          }
+ else {
+            expectedName=PyNames.CANONICAL_SELF;
+            alternativeName=CLS;
+          }
+          if (!expectedName.equals(pname) && (alternativeName == null || !alternativeName.equals(pname))) {
+            registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.usually.named.$0",expectedName),new RenameParameterQuickFix(expectedName));
+          }
+        }
+ else         if (flags.isClassMethod() || PyNames.NEW.equals(methodName)) {
+          if (!CLS.equals(pname)) {
+            registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.usually.named.$0",CLS),new RenameParameterQuickFix(CLS));
+          }
+        }
+ else         if (!flags.isStaticMethod() && !first_param.isPositionalContainer() && !PyNames.CANONICAL_SELF.equals(pname)) {
+          if (flags.isMetaclassMethod() && CLS.equals(pname)) {
+            return;
+          }
+          registerProblem(PyUtil.sure(params[0].getNode()).getPsi(),PyBundle.message("INSP.usually.named.self"),new RenameParameterQuickFix(PyNames.CANONICAL_SELF));
+        }
+      }
+ else {
+        if (!flags.isStaticMethod()) {
+          registerProblem(plist,PyBundle.message("INSP.first.param.must.not.be.tuple"));
+        }
+      }
+    }
+  }
+}

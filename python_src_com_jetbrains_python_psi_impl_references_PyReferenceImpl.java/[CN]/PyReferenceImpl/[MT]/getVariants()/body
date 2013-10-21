@@ -1,0 +1,36 @@
+{
+  final List<LookupElement> ret=Lists.newArrayList();
+  final PsiElement originalElement=CompletionUtil.getOriginalElement(myElement);
+  final PyQualifiedExpression element=originalElement instanceof PyQualifiedExpression ? (PyQualifiedExpression)originalElement : myElement;
+  final PsiElement realContext=PyPsiUtils.getRealContext(element);
+  final int underscores=PyUtil.getInitialUnderscores(element.getName());
+  final CompletionVariantsProcessor processor=new CompletionVariantsProcessor(element);
+  final ScopeOwner owner=realContext instanceof ScopeOwner ? (ScopeOwner)realContext : ScopeUtil.getScopeOwner(realContext);
+  if (owner != null) {
+    PyResolveUtil.scopeCrawlUp(processor,owner,null,null);
+  }
+  KeywordArgumentCompletionUtil.collectFunctionArgNames(element,ret);
+  final PyFile builtinsFile=PyBuiltinCache.getInstance(element).getBuiltinsFile();
+  if (builtinsFile != null) {
+    PyResolveUtil.scopeCrawlUp(processor,builtinsFile,null,null);
+  }
+  if (underscores >= 2) {
+    PsiFile f=realContext.getContainingFile();
+    if (f instanceof PyFile) {
+      for (      String name : PyModuleType.getPossibleInstanceMembers()) {
+        ret.add(LookupElementBuilder.create(name).withIcon(PlatformIcons.FIELD_ICON));
+      }
+    }
+  }
+  for (  LookupElement e : processor.getResultList()) {
+    final Object o=e.getObject();
+    if (o instanceof PsiElement) {
+      final PsiElement original=CompletionUtil.getOriginalElement((PsiElement)o);
+      if (original == null) {
+        continue;
+      }
+    }
+    ret.add(e);
+  }
+  return ret.toArray();
+}

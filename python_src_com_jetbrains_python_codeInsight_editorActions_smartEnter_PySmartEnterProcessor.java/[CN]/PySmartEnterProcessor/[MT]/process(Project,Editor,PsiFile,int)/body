@@ -1,0 +1,37 @@
+{
+  if (attempt > MAX_ATTEMPTS) {
+    throw new TooManyAttemptsException();
+  }
+  try {
+    commit(editor);
+    if (myFirstErrorOffset != Integer.MAX_VALUE) {
+      editor.getCaretModel().moveToOffset(myFirstErrorOffset);
+    }
+    PsiElement statementAtCaret=getStatementAtCaret(editor,psiFile);
+    if (statementAtCaret == null) {
+      if (!new PyCommentBreakerEnterProcessor().doEnter(editor,psiFile,false)) {
+        SmartEnterUtil.plainEnter(editor);
+      }
+      return;
+    }
+    List<PsiElement> queue=new ArrayList<PsiElement>();
+    collectAllElements(statementAtCaret,queue,true);
+    queue.add(statementAtCaret);
+    for (    PsiElement element : queue) {
+      for (      PyFixer fixer : ourFixers) {
+        fixer.apply(editor,this,element);
+        if (LookupManager.getInstance(project).getActiveLookup() != null) {
+          return;
+        }
+        if (isUncommited(project) || !element.isValid()) {
+          process(project,editor,psiFile,attempt + 1);
+          return;
+        }
+      }
+    }
+    doEnter(statementAtCaret,editor);
+  }
+ catch (  IncorrectOperationException e) {
+    LOG.error(e);
+  }
+}
