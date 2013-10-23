@@ -1,2 +1,45 @@
 {
+  if (!myContext.isValid()) {
+    return Collections.emptyList();
+  }
+  final PsiFile footholdFile=myContext.getFootholdFile();
+  if (myRelativeLevel >= 0 && footholdFile != null && !PyUserSkeletonsUtil.isUnderUserSkeletonsDirectory(footholdFile)) {
+    PsiDirectory dir=footholdFile.getContainingDirectory();
+    if (myRelativeLevel > 0) {
+      dir=ResolveImportUtil.stepBackFrom(footholdFile,myRelativeLevel);
+    }
+    PsiElement module=resolveModuleAt(dir);
+    if (module != null) {
+      addRoot(module,true);
+    }
+  }
+  final PythonPathCache cache=findMyCache();
+  final boolean mayCache=cache != null && !myWithoutRoots && !myWithoutForeign;
+  if (mayCache) {
+    final List<PsiElement> cachedResults=cache.get(myQualifiedName);
+    if (cachedResults != null) {
+      mySourceResults.addAll(cachedResults);
+      return Lists.newArrayList(mySourceResults);
+    }
+  }
+  if (!myWithoutRoots) {
+    addResultsFromRoots();
+  }
+  mySourceResults.addAll(myLibResults);
+  myLibResults.clear();
+  if (!myWithoutForeign) {
+    for (    PyImportResolver resolver : Extensions.getExtensions(PyImportResolver.EP_NAME)) {
+      PsiElement foreign=resolver.resolveImportReference(myQualifiedName,myContext);
+      if (foreign != null) {
+        myForeignResults.add(foreign);
+      }
+    }
+    mySourceResults.addAll(myForeignResults);
+    myForeignResults.clear();
+  }
+  final ArrayList<PsiElement> results=Lists.newArrayList(mySourceResults);
+  if (mayCache) {
+    cache.put(myQualifiedName,results);
+  }
+  return results;
 }
