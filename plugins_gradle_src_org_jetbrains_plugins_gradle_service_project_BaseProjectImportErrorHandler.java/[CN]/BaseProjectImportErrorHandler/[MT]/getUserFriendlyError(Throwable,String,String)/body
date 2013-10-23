@@ -1,0 +1,69 @@
+{
+  if (error instanceof ExternalSystemException) {
+    return (ExternalSystemException)error;
+  }
+  LOG.info(String.format("Failed to import Gradle project at '%1$s'",projectPath),error);
+  Pair<Throwable,String> rootCauseAndLocation=getRootCauseAndLocation(error);
+  Throwable rootCause=rootCauseAndLocation.getFirst();
+  String location=rootCauseAndLocation.getSecond();
+  if (location == null && !Strings.isNullOrEmpty(buildFilePath)) {
+    location=String.format("Build file: '%1$s'",buildFilePath);
+  }
+  if (rootCause instanceof UnsupportedVersionException) {
+    String msg="You are using unsupported version of Gradle.";
+    msg+=('\n' + FIX_GRADLE_VERSION);
+    return createUserFriendlyError(msg,null);
+  }
+  final String rootCauseText=rootCause.toString();
+  if (StringUtil.startsWith(rootCauseText,"org.gradle.api.internal.MissingMethodException")) {
+    String method=parseMissingMethod(rootCauseText);
+    String msg="Build script error, unsupported Gradle DSL method found: '" + method + "'!";
+    msg+=(EMPTY_LINE + "Possible causes could be:  ");
+    msg+=('\n' + "  - you are using Gradle version where the method is absent ");
+    msg+=('\n' + "  - you didn't apply Gradle plugin which provides the method");
+    msg+=('\n' + "  - or there is a mistake in a build script");
+    return createUserFriendlyError(msg,location);
+  }
+  if (rootCause instanceof OutOfMemoryError) {
+    String originalMessage=rootCause.getMessage();
+    String msg="Out of memory";
+    if (originalMessage != null && !originalMessage.isEmpty()) {
+      msg=msg + ": " + originalMessage;
+    }
+    if (msg.endsWith("Java heap space")) {
+      msg+=". Configure Gradle memory settings using '-Xmx' JVM option (e.g. '-Xmx2048m'.)";
+    }
+ else     if (!msg.endsWith(".")) {
+      msg+=".";
+    }
+    msg+=EMPTY_LINE + OPEN_GRADLE_SETTINGS;
+    return createUserFriendlyError(msg,null);
+  }
+  if (rootCause instanceof ClassNotFoundException) {
+    String msg=String.format("Unable to load class '%1$s'.",rootCause.getMessage()) + EMPTY_LINE + UNEXPECTED_ERROR_FILE_BUG;
+    return createUserFriendlyError(msg,null);
+  }
+  if (rootCause instanceof UnknownHostException) {
+    String msg=String.format("Unknown host '%1$s'.",rootCause.getMessage()) + EMPTY_LINE + "Please ensure the host name is correct. "+ SET_UP_HTTP_PROXY;
+    return createUserFriendlyError(msg,null);
+  }
+  if (rootCause instanceof ConnectException) {
+    String msg=rootCause.getMessage();
+    if (msg != null && msg.contains("timed out")) {
+      msg+=msg.endsWith(".") ? " " : ". ";
+      msg+=SET_UP_HTTP_PROXY;
+      return createUserFriendlyError(msg,null);
+    }
+  }
+  if (rootCause instanceof RuntimeException) {
+    String msg=rootCause.getMessage();
+    if (msg != null && UNSUPPORTED_GRADLE_VERSION_ERROR_PATTERN.matcher(msg).matches()) {
+      if (!msg.endsWith(".")) {
+        msg+=".";
+      }
+      msg+=EMPTY_LINE + OPEN_GRADLE_SETTINGS;
+      return createUserFriendlyError(msg,null);
+    }
+  }
+  return createUserFriendlyError(rootCause.getMessage(),location);
+}
