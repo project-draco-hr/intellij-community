@@ -1,0 +1,99 @@
+{
+  myBuilder.startNode(node);
+  final PyIfPart ifPart=node.getIfPart();
+  PyExpression condition=ifPart.getCondition();
+  PyTypeAssertionEvaluator assertionEvaluator=new PyTypeAssertionEvaluator();
+  if (condition != null) {
+    condition.accept(this);
+    condition.accept(assertionEvaluator);
+  }
+  PyElement lastCondition=condition;
+  Instruction lastBranchingPoint=getPrevInstruction(condition);
+  myBuilder.prevInstruction=lastBranchingPoint;
+  final PyStatementList thenStatements=ifPart.getStatementList();
+  if (thenStatements != null) {
+    myBuilder.startConditionalNode(thenStatements,condition,true);
+    InstructionBuilder.addAssertInstructions(myBuilder,assertionEvaluator);
+    thenStatements.accept(this);
+    myBuilder.processPending(new ControlFlowBuilder.PendingProcessor(){
+      public void process(      final PsiElement pendingScope,      final Instruction instruction){
+        if (pendingScope != null && PsiTreeUtil.isAncestor(thenStatements,pendingScope,false)) {
+          myBuilder.addPendingEdge(node,instruction);
+        }
+ else {
+          myBuilder.addPendingEdge(pendingScope,instruction);
+        }
+      }
+    }
+);
+    myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
+  }
+  for (  final PyIfPart part : node.getElifParts()) {
+    myBuilder.prevInstruction=lastBranchingPoint;
+    myBuilder.startConditionalNode(part,lastCondition,false);
+    condition=part.getCondition();
+    assertionEvaluator=new PyTypeAssertionEvaluator();
+    if (condition != null) {
+      lastCondition=condition;
+      lastBranchingPoint=getPrevInstruction(lastCondition);
+      condition.accept(this);
+      condition.accept(assertionEvaluator);
+    }
+    myBuilder.prevInstruction=getPrevInstruction(lastCondition);
+    myBuilder.startConditionalNode(part,lastCondition,true);
+    final PyStatementList statementList=part.getStatementList();
+    if (statementList != null) {
+      InstructionBuilder.addAssertInstructions(myBuilder,assertionEvaluator);
+      statementList.accept(this);
+    }
+    myBuilder.processPending(new ControlFlowBuilder.PendingProcessor(){
+      public void process(      final PsiElement pendingScope,      final Instruction instruction){
+        if (pendingScope != null && PsiTreeUtil.isAncestor(part,pendingScope,false)) {
+          myBuilder.addPendingEdge(node,instruction);
+        }
+ else {
+          myBuilder.addPendingEdge(pendingScope,instruction);
+        }
+      }
+    }
+);
+    myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
+  }
+  boolean noPendingInScopeEdges=false;
+  if (!assertionEvaluator.getDefinitions().isEmpty()) {
+    final Ref<Boolean> pendingInScopeEdges=Ref.create(false);
+    myBuilder.processPending(new ControlFlowBuilder.PendingProcessor(){
+      @Override public void process(      PsiElement pendingScope,      Instruction instruction){
+        if (pendingScope != null && PsiTreeUtil.isAncestor(node,pendingScope,false)) {
+          pendingInScopeEdges.set(true);
+        }
+        myBuilder.addPendingEdge(pendingScope,instruction);
+      }
+    }
+);
+    noPendingInScopeEdges=!pendingInScopeEdges.get();
+  }
+  final PyTypeAssertionEvaluator negativeAssertionEvaluator=new PyTypeAssertionEvaluator(false);
+  final PyExpression ifCondition=ifPart.getCondition();
+  if (ifCondition != null) {
+    ifCondition.accept(negativeAssertionEvaluator);
+  }
+  final PyElsePart elseBranch=node.getElsePart();
+  if (elseBranch != null) {
+    myBuilder.prevInstruction=lastBranchingPoint;
+    myBuilder.startConditionalNode(elseBranch,lastCondition,false);
+    InstructionBuilder.addAssertInstructions(myBuilder,negativeAssertionEvaluator);
+    elseBranch.accept(this);
+    myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
+  }
+ else {
+    if (noPendingInScopeEdges) {
+      myBuilder.prevInstruction=lastBranchingPoint;
+      InstructionBuilder.addAssertInstructions(myBuilder,negativeAssertionEvaluator);
+      myBuilder.addPendingEdge(node,myBuilder.prevInstruction);
+    }
+ else {
+      myBuilder.addPendingEdge(node,lastBranchingPoint);
+    }
+  }
+}

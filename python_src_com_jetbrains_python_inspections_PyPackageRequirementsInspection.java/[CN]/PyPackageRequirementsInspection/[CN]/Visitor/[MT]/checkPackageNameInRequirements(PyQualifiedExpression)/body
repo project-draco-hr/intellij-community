@@ -1,0 +1,61 @@
+{
+  for (  PyInspectionExtension extension : Extensions.getExtensions(PyInspectionExtension.EP_NAME)) {
+    if (extension.ignorePackageNameInRequirements(importedExpression)) {
+      return;
+    }
+  }
+  final List<PyExpression> expressions=PyResolveUtil.unwindQualifiers(importedExpression);
+  if (!expressions.isEmpty()) {
+    final PyExpression packageReferenceExpression=expressions.get(0);
+    final String packageName=packageReferenceExpression.getName();
+    if (packageName != null && !myIgnoredPackages.contains(packageName)) {
+      if (!ApplicationManager.getApplication().isUnitTestMode() && !PyPIPackageUtil.INSTANCE.isInPyPI(packageName)) {
+        return;
+      }
+      final Collection<String> stdlibPackages=PyStdlibUtil.getPackages();
+      if (stdlibPackages != null) {
+        if (stdlibPackages.contains(packageName)) {
+          return;
+        }
+      }
+      if (PyPackageManagerImpl.PACKAGE_SETUPTOOLS.equals(packageName)) {
+        return;
+      }
+      final Module module=ModuleUtilCore.findModuleForPsiElement(packageReferenceExpression);
+      if (module != null) {
+        Collection<PyRequirement> requirements=PyPackageManagerImpl.getRequirements(module);
+        if (requirements != null) {
+          final Sdk sdk=PythonSdkType.findPythonSdk(module);
+          if (sdk != null) {
+            requirements=getTransitiveRequirements(sdk,requirements,new HashSet<PyPackage>());
+          }
+          if (requirements == null)           return;
+          for (          PyRequirement req : requirements) {
+            if (packageName.equalsIgnoreCase(req.getName())) {
+              return;
+            }
+          }
+          final PsiReference reference=packageReferenceExpression.getReference();
+          if (reference != null) {
+            final PsiElement element=reference.resolve();
+            if (element != null) {
+              final PsiFile file=element.getContainingFile();
+              if (file != null) {
+                final VirtualFile virtualFile=file.getVirtualFile();
+                if (ModuleUtilCore.moduleContainsFile(module,virtualFile,false)) {
+                  return;
+                }
+              }
+            }
+          }
+          final List<LocalQuickFix> quickFixes=new ArrayList<LocalQuickFix>();
+          if (sdk != null && PyPackageManager.getInstance(sdk).hasPip()) {
+            quickFixes.add(new AddToRequirementsFix(module,packageName,LanguageLevel.forElement(importedExpression)));
+          }
+          quickFixes.add(new IgnoreRequirementFix(Collections.singleton(packageName)));
+          registerProblem(packageReferenceExpression,String.format("Package '%s' is not listed in project requirements",packageName),ProblemHighlightType.WEAK_WARNING,null,quickFixes.toArray(new LocalQuickFix[quickFixes.size()]));
+        }
+      }
+    }
+  }
+}

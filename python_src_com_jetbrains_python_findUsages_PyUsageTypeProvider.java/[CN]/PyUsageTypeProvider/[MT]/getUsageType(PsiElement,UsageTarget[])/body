@@ -1,0 +1,42 @@
+{
+  if (element instanceof PyElement) {
+    if (PsiTreeUtil.getParentOfType(element,PyImportStatementBase.class) != null) {
+      return IN_IMPORT;
+    }
+    if (element instanceof PyQualifiedExpression) {
+      final PyExpression qualifier=((PyQualifiedExpression)element).getQualifier();
+      if (qualifier != null) {
+        final TypeEvalContext context=TypeEvalContext.userInitiated(element.getContainingFile());
+        final PyType type=context.getType(qualifier);
+        if (type == null) {
+          final PyCallExpression call=PsiTreeUtil.getParentOfType(element,PyCallExpression.class);
+          if (call != null && element == call.getCallee()) {
+            return checkMatchingSignatureGroup(call,targets,context);
+          }
+          return UNTYPED;
+        }
+      }
+    }
+    if (element instanceof PyReferenceExpression) {
+      final PyCallExpression call=PsiTreeUtil.getParentOfType(element,PyCallExpression.class);
+      if (call != null && call.isCalleeText(PyNames.ISINSTANCE)) {
+        final PyExpression[] args=call.getArguments();
+        if (args.length == 2) {
+          PyExpression typeExpression=args[1];
+          if (element == typeExpression) {
+            return USAGE_IN_ISINSTANCE;
+          }
+          typeExpression=PyPsiUtils.flattenParens(typeExpression);
+          if (typeExpression instanceof PySequenceExpression && element.getParent() == typeExpression) {
+            return USAGE_IN_ISINSTANCE;
+          }
+        }
+      }
+      final PyClass pyClass=PsiTreeUtil.getParentOfType(element,PyClass.class);
+      if (pyClass != null && PsiTreeUtil.isAncestor(pyClass.getSuperClassExpressionList(),element,true)) {
+        return USAGE_IN_SUPERCLASS;
+      }
+    }
+  }
+  return null;
+}

@@ -1,0 +1,37 @@
+{
+  if (context == null) {
+    return Collections.emptyList();
+  }
+  final List<PsiElement> occurrences=new ArrayList<PsiElement>();
+  final PyElementVisitor visitor=new PyElementVisitor(){
+    public void visitElement(    @NotNull final PsiElement element){
+      if (element instanceof PyParameter) {
+        return;
+      }
+      if (PsiEquivalenceUtil.areElementsEquivalent(element,pattern)) {
+        occurrences.add(element);
+        return;
+      }
+      if (element instanceof PyStringLiteralExpression) {
+        final Pair<PsiElement,TextRange> selection=pattern.getUserData(PyReplaceExpressionUtil.SELECTION_BREAKS_AST_NODE);
+        if (selection != null) {
+          final String substring=selection.getSecond().substring(pattern.getText());
+          final PyStringLiteralExpression expr=(PyStringLiteralExpression)element;
+          final String text=element.getText();
+          if (text != null && expr.getStringNodes().size() == 1) {
+            final int start=text.indexOf(substring);
+            if (start >= 0) {
+              element.putUserData(PyReplaceExpressionUtil.SELECTION_BREAKS_AST_NODE,Pair.create(element,TextRange.from(start,substring.length())));
+              occurrences.add(element);
+              return;
+            }
+          }
+        }
+      }
+      element.acceptChildren(this);
+    }
+  }
+;
+  context.acceptChildren(visitor);
+  return occurrences;
+}

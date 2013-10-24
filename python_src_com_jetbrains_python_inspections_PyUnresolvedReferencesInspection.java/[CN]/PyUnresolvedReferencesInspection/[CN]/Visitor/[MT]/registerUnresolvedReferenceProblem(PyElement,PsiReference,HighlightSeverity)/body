@@ -1,0 +1,171 @@
+{
+  if (reference instanceof DocStringTypeReference) {
+    return;
+  }
+  String description=null;
+  final String text=reference.getElement().getText();
+  TextRange rangeInElement=reference.getRangeInElement();
+  String ref_text=text;
+  if (rangeInElement.getStartOffset() > 0 && rangeInElement.getEndOffset() > 0) {
+    ref_text=rangeInElement.substring(text);
+  }
+  final PsiElement element=reference.getElement();
+  final List<LocalQuickFix> actions=new ArrayList<LocalQuickFix>(2);
+  final String refname=(element instanceof PyQualifiedExpression) ? ((PyQualifiedExpression)element).getReferencedName() : ref_text;
+  if (refname == null || refname.length() <= 0) {
+    return;
+  }
+  final QualifiedName canonicalQName=getCanonicalName(reference,myTypeEvalContext);
+  final String canonicalName=canonicalQName != null ? canonicalQName.toString() : null;
+  if (canonicalName != null) {
+    for (    String ignored : myIgnoredIdentifiers) {
+      if (ignored.endsWith(END_WILDCARD)) {
+        final String prefix=ignored.substring(0,ignored.length() - END_WILDCARD.length());
+        if (canonicalName.startsWith(prefix)) {
+          return;
+        }
+      }
+ else       if (canonicalName.equals(ignored)) {
+        return;
+      }
+    }
+  }
+  if (myIgnoredIdentifiers.contains(refname)) {
+    return;
+  }
+  if (element instanceof PyReferenceExpression) {
+    PyReferenceExpression refex=(PyReferenceExpression)element;
+    if (PyNames.COMPARISON_OPERATORS.contains(refname)) {
+      return;
+    }
+    if (refex.getQualifier() != null) {
+      final PyClassTypeImpl object_type=(PyClassTypeImpl)PyBuiltinCache.getInstance(node).getObjectType();
+      if ((object_type != null) && object_type.getPossibleInstanceMembers().contains(refname))       return;
+    }
+ else {
+      if (PyUnreachableCodeInspection.hasAnyInterruptedControlFlowPaths(refex)) {
+        return;
+      }
+      if (LanguageLevel.forElement(node).isOlderThan(LanguageLevel.PYTHON26)) {
+        if ("with".equals(refname)) {
+          actions.add(new UnresolvedRefAddFutureImportQuickFix());
+        }
+      }
+      if (ref_text.equals("true") || ref_text.equals("false")) {
+        actions.add(new UnresolvedRefTrueFalseQuickFix(element));
+      }
+      addAddSelfFix(node,refex,actions);
+      PyCallExpression callExpression=PsiTreeUtil.getParentOfType(element,PyCallExpression.class);
+      if (callExpression != null) {
+        actions.add(new UnresolvedRefCreateFunctionQuickFix(callExpression,refex));
+      }
+      PyFunction parentFunction=PsiTreeUtil.getParentOfType(element,PyFunction.class);
+      PyDecorator decorator=PsiTreeUtil.getParentOfType(element,PyDecorator.class);
+      PyImportStatement importStatement=PsiTreeUtil.getParentOfType(element,PyImportStatement.class);
+      if (parentFunction != null && decorator == null && importStatement == null) {
+        actions.add(new UnresolvedReferenceAddParameterQuickFix(refname));
+      }
+      actions.add(new PyRenameUnresolvedRefQuickFix());
+    }
+    if (PyModuleType.getPossibleInstanceMembers().contains(refname))     return;
+    if ((PsiTreeUtil.getParentOfType(PsiTreeUtil.getParentOfType(node,PyImportElement.class),PyTryExceptStatement.class,PyIfStatement.class) != null)) {
+      severity=HighlightSeverity.WEAK_WARNING;
+      description=PyBundle.message("INSP.module.$0.not.found",ref_text);
+    }
+  }
+  if (reference instanceof PsiReferenceEx && description == null) {
+    description=((PsiReferenceEx)reference).getUnresolvedDescription();
+  }
+  if (description == null) {
+    boolean marked_qualified=false;
+    if (element instanceof PyQualifiedExpression) {
+      if ("__qualname__".equals(ref_text) && LanguageLevel.forElement(element).isAtLeast(LanguageLevel.PYTHON33)) {
+        return;
+      }
+      final PyQualifiedExpression qexpr=(PyQualifiedExpression)element;
+      if (PyNames.COMPARISON_OPERATORS.contains(qexpr.getReferencedName()) || refname == null) {
+        return;
+      }
+      final PyExpression qualifier=qexpr.getQualifier();
+      if (qualifier != null) {
+        PyType qtype=myTypeEvalContext.getType(qualifier);
+        if (qtype != null) {
+          if (ignoreUnresolvedMemberForType(qtype,reference,refname)) {
+            return;
+          }
+          addCreateMemberFromUsageFixes(qtype,reference,ref_text,actions);
+          if (qtype instanceof PyClassTypeImpl) {
+            if (reference instanceof PyOperatorReference) {
+              description=PyBundle.message("INSP.unresolved.operator.ref",qtype.getName(),refname,((PyOperatorReference)reference).getReadableOperatorName());
+            }
+ else {
+              description=PyBundle.message("INSP.unresolved.ref.$0.for.class.$1",ref_text,qtype.getName());
+            }
+            marked_qualified=true;
+          }
+ else {
+            description=PyBundle.message("INSP.cannot.find.$0.in.$1",ref_text,qtype.getName());
+            marked_qualified=true;
+          }
+        }
+      }
+    }
+    if (!marked_qualified) {
+      description=PyBundle.message("INSP.unresolved.ref.$0",ref_text);
+      if (PythonReferenceImporter.isImportable(element)) {
+        addAutoImportFix(node,reference,actions);
+      }
+      addCreateClassFix(ref_text,element,actions);
+    }
+  }
+  ProblemHighlightType hl_type;
+  if (severity == HighlightSeverity.WARNING) {
+    hl_type=ProblemHighlightType.GENERIC_ERROR_OR_WARNING;
+  }
+ else   if (severity == HighlightSeverity.ERROR) {
+    hl_type=ProblemHighlightType.GENERIC_ERROR;
+  }
+ else {
+    hl_type=ProblemHighlightType.LIKE_UNKNOWN_SYMBOL;
+  }
+  if (GenerateBinaryStubsFix.isApplicable(reference)) {
+    actions.add(new GenerateBinaryStubsFix(reference));
+  }
+  if (canonicalQName != null) {
+    actions.add(new AddIgnoredIdentifierQuickFix(canonicalQName,false));
+    if (canonicalQName.getComponentCount() > 1) {
+      actions.add(new AddIgnoredIdentifierQuickFix(canonicalQName.removeLastComponent(),true));
+    }
+  }
+  addPluginQuickFixes(reference,actions);
+  final PsiElement point;
+  final TextRange range;
+  if (reference instanceof PyOperatorReference) {
+    point=node;
+    range=rangeInElement;
+  }
+ else {
+    final PsiElement lastChild=node.getLastChild();
+    point=lastChild != null ? lastChild : node;
+    range=rangeInElement.shiftRight(-point.getStartOffsetInParent());
+  }
+  if (reference instanceof PyImportReference && refname != null) {
+    final QualifiedName qname=QualifiedName.fromDottedString(refname);
+    final List<String> components=qname.getComponents();
+    if (!components.isEmpty()) {
+      final String packageName=components.get(0);
+      final Module module=ModuleUtilCore.findModuleForPsiElement(node);
+      final Sdk sdk=PythonSdkType.findPythonSdk(module);
+      if (module != null && sdk != null) {
+        if (PyPIPackageUtil.INSTANCE.isInPyPI(packageName)) {
+          final List<PyRequirement> requirements=Collections.singletonList(new PyRequirement(packageName));
+          final String name="Install package " + packageName;
+          if (PyPackageManager.getInstance(sdk).hasPip()) {
+            actions.add(new PyPackageRequirementsInspection.PyInstallRequirementsFix(name,module,sdk,requirements));
+          }
+        }
+      }
+    }
+  }
+  registerProblem(point,description,hl_type,null,range,actions.toArray(new LocalQuickFix[actions.size()]));
+}

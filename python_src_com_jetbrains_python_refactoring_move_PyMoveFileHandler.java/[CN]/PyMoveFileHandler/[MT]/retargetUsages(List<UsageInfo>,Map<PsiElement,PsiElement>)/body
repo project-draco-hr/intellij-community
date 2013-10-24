@@ -1,0 +1,42 @@
+{
+  final Set<PsiFile> updatedFiles=new HashSet<PsiFile>();
+  for (  UsageInfo usage : usages) {
+    final PsiElement element=usage.getElement();
+    if (element != null) {
+      final PsiNamedElement newElement=element.getCopyableUserData(REFERENCED_ELEMENT);
+      element.putCopyableUserData(REFERENCED_ELEMENT,null);
+      if (newElement != null) {
+        final PsiFile file=element.getContainingFile();
+        final PyImportStatementBase importStmt=PsiTreeUtil.getParentOfType(element,PyImportStatementBase.class);
+        if (importStmt != null) {
+          updatedFiles.add(file);
+          PyClassRefactoringUtil.updateImportOfElement(importStmt,newElement);
+          if (importStmt instanceof PyFromImportStatement && PsiTreeUtil.getParentOfType(element,PyImportElement.class) != null) {
+            continue;
+          }
+          final QualifiedName newElementName=QualifiedNameFinder.findCanonicalImportPath(newElement,element);
+          replaceWithQualifiedExpression(element,newElementName);
+        }
+ else         if (element instanceof PyReferenceExpression) {
+          updatedFiles.add(file);
+          if (((PyReferenceExpression)element).getQualifier() != null) {
+            final QualifiedName newQualifiedName=QualifiedNameFinder.findCanonicalImportPath(newElement,element);
+            replaceWithQualifiedExpression(element,newQualifiedName);
+          }
+ else {
+            final QualifiedName newName=QualifiedName.fromComponents(PyClassRefactoringUtil.getOriginalName(newElement));
+            replaceWithQualifiedExpression(element,newName);
+            PyClassRefactoringUtil.insertImport(element,newElement,null);
+          }
+        }
+      }
+    }
+  }
+  if (!updatedFiles.isEmpty()) {
+    final PyImportOptimizer optimizer=new PyImportOptimizer();
+    for (    PsiFile file : updatedFiles) {
+      final boolean injectedFragment=InjectedLanguageManager.getInstance(file.getProject()).isInjectedFragment(file);
+      if (!injectedFragment)       optimizer.processFile(file).run();
+    }
+  }
+}

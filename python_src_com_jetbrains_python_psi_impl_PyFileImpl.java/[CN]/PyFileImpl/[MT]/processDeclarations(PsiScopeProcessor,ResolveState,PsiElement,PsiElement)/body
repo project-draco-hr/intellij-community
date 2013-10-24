@@ -1,0 +1,56 @@
+{
+  final List<String> dunderAll=getDunderAll();
+  final List<String> remainingDunderAll=dunderAll == null ? null : new ArrayList<String>(dunderAll);
+  PsiScopeProcessor wrapper=new PsiScopeProcessor(){
+    @Override public boolean execute(    @NotNull PsiElement element,    ResolveState state){
+      if (!processor.execute(element,state))       return false;
+      if (remainingDunderAll != null && element instanceof PyElement) {
+        remainingDunderAll.remove(((PyElement)element).getName());
+      }
+      return true;
+    }
+    @Override public <T>T getHint(    @NotNull Key<T> hintKey){
+      return processor.getHint(hintKey);
+    }
+    @Override public void handleEvent(    Event event,    @Nullable Object associated){
+      processor.handleEvent(event,associated);
+    }
+  }
+;
+  Set<PyFile> pyFiles=resolveState.get(PROCESSED_FILES);
+  if (pyFiles == null) {
+    pyFiles=new HashSet<PyFile>();
+    resolveState=resolveState.put(PROCESSED_FILES,pyFiles);
+  }
+  if (pyFiles.contains(this))   return true;
+  pyFiles.add(this);
+  for (  PyClass c : getTopLevelClasses()) {
+    if (c == lastParent)     continue;
+    if (!wrapper.execute(c,resolveState))     return false;
+  }
+  for (  PyFunction f : getTopLevelFunctions()) {
+    if (f == lastParent)     continue;
+    if (!wrapper.execute(f,resolveState))     return false;
+  }
+  for (  PyTargetExpression e : getTopLevelAttributes()) {
+    if (e == lastParent)     continue;
+    if (!wrapper.execute(e,resolveState))     return false;
+  }
+  for (  PyImportElement e : getImportTargets()) {
+    if (e == lastParent)     continue;
+    if (!wrapper.execute(e,resolveState))     return false;
+  }
+  for (  PyFromImportStatement e : getFromImports()) {
+    if (e == lastParent)     continue;
+    if (!e.processDeclarations(wrapper,resolveState,null,this))     return false;
+  }
+  if (remainingDunderAll != null) {
+    for (    String s : remainingDunderAll) {
+      if (!PyNames.isIdentifier(s)) {
+        continue;
+      }
+      if (!processor.execute(new LightNamedElement(myManager,PythonLanguage.getInstance(),s),resolveState))       return false;
+    }
+  }
+  return true;
+}

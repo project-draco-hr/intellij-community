@@ -1,0 +1,27 @@
+{
+  AccessToken accessToken=ApplicationManager.getApplication().acquireReadActionLock();
+  try {
+    final String superClassName=superClass.getName();
+    if (superClassName == null || IGNORED_BASES.contains(superClassName))     return true;
+    if (processed.contains(superClass))     return true;
+    processed.add(superClass);
+    Project project=superClass.getProject();
+    final Collection<PyClass> candidates=StubIndex.getInstance().get(PySuperClassIndex.KEY,superClassName,project,ProjectScope.getAllScope(project));
+    for (    PyClass candidate : candidates) {
+      final PyClass[] classes=candidate.getSuperClasses();
+      for (      PyClass superClassCandidate : classes) {
+        if (superClassCandidate.isEquivalentTo(superClass)) {
+          if (!consumer.process(candidate)) {
+            return false;
+          }
+          if (checkDeep && !processDirectInheritors(candidate,consumer,checkDeep,processed))           return false;
+          break;
+        }
+      }
+    }
+  }
+  finally {
+    accessToken.finish();
+  }
+  return true;
+}

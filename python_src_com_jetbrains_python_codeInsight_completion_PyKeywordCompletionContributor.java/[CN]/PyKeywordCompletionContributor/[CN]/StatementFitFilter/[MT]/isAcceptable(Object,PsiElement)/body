@@ -1,0 +1,34 @@
+{
+  if (element instanceof PsiElement) {
+    final ASTNode ctxNode=context.getNode();
+    if (ctxNode != null && PyTokenTypes.STRING_NODES.contains(ctxNode.getElementType()))     return false;
+    PsiElement p=(PsiElement)element;
+    int firstOffset=p.getTextRange().getStartOffset();
+    while (true) {
+      if (p == null)       return false;
+      if (p.getTextRange().getStartOffset() != firstOffset)       return false;
+      if (p instanceof PyStatement)       break;
+      p=p.getParent();
+    }
+    PsiElement container=p.getParent();
+    if (!(container instanceof PyElement))     return true;
+    if (container instanceof PyStatementList || container instanceof PsiFile) {
+      PsiElement prev=p.getPrevSibling();
+      while (prev instanceof PsiWhiteSpace)       prev=prev.getPrevSibling();
+      if (prev == null)       return true;
+      if (prev instanceof PyStatement || prev instanceof PsiComment) {
+        if (prev.getLastChild() instanceof PsiErrorElement) {
+          PsiDocumentManager docMgr=PsiDocumentManager.getInstance(p.getProject());
+          Document doc=docMgr.getDocument(p.getContainingFile().getOriginalFile());
+          if (doc != null) {
+            if (doc.getLineNumber(prev.getTextRange().getEndOffset()) == doc.getLineNumber(firstOffset)) {
+              return false;
+            }
+          }
+        }
+        return true;
+      }
+    }
+  }
+  return false;
+}

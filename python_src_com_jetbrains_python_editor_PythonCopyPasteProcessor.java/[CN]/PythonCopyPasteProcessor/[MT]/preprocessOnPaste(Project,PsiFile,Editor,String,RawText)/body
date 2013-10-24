@@ -1,0 +1,53 @@
+{
+  if (!CodeInsightSettings.getInstance().INDENT_TO_CARET_ON_PASTE || file.getLanguage() != PythonLanguage.getInstance()) {
+    return text;
+  }
+  final CodeStyleSettings codeStyleSettings=CodeStyleSettingsManager.getSettings(project);
+  final boolean useTabs=codeStyleSettings.useTabCharacter(PythonFileType.INSTANCE);
+  final int indentSize=codeStyleSettings.getIndentSize(PythonFileType.INSTANCE);
+  CharFilter NOT_INDENT_FILTER=new CharFilter(){
+    public boolean accept(    char ch){
+      return useTabs ? ch != '\t' : ch != ' ';
+    }
+  }
+;
+  final String indentChar=useTabs ? "\t" : " ";
+  final CaretModel caretModel=editor.getCaretModel();
+  final SelectionModel selectionModel=editor.getSelectionModel();
+  final Document document=editor.getDocument();
+  final int caretOffset=selectionModel.getSelectionStart() != selectionModel.getSelectionEnd() ? selectionModel.getSelectionStart() : caretModel.getOffset();
+  final int lineNumber=document.getLineNumber(caretOffset);
+  final int lineStartOffset=getLineStartSafeOffset(document,lineNumber);
+  final int lineEndOffset=document.getLineEndOffset(lineNumber);
+  final PsiElement element=file.findElementAt(caretOffset);
+  if (PsiTreeUtil.getParentOfType(element,PyStringLiteralExpression.class) != null)   return text;
+  text=addLeadingSpaces(text,NOT_INDENT_FILTER,indentSize,indentChar);
+  int firstLineIndent=StringUtil.findFirst(text,NOT_INDENT_FILTER);
+  final String indentText=getIndentText(file,document,caretOffset,lineNumber,firstLineIndent);
+  int toRemove=calculateIndentToRemove(text,NOT_INDENT_FILTER);
+  final String toString=document.getText(TextRange.create(lineStartOffset,lineEndOffset));
+  if (StringUtil.isEmptyOrSpaces(indentText) && isApplicable(file,text,caretOffset)) {
+    caretModel.moveToOffset(lineStartOffset);
+    if (StringUtil.isEmptyOrSpaces(toString)) {
+      ApplicationManager.getApplication().runWriteAction(new Runnable(){
+        @Override public void run(){
+          document.deleteString(lineStartOffset,lineEndOffset);
+        }
+      }
+);
+    }
+    editor.getSelectionModel().setSelection(lineStartOffset,selectionModel.getSelectionEnd());
+  }
+  final List<String> strings=StringUtil.split(text,"\n",false);
+  String newText="";
+  if (StringUtil.isEmptyOrSpaces(indentText)) {
+    for (    String s : strings) {
+      newText+=indentText + StringUtil.trimStart(s,StringUtil.repeat(indentChar,toRemove));
+    }
+  }
+ else {
+    newText=text;
+  }
+  if (addLinebreak(text,toString,useTabs) && selectionModel.getSelectionStart() == selectionModel.getSelectionEnd())   newText+="\n";
+  return newText;
+}

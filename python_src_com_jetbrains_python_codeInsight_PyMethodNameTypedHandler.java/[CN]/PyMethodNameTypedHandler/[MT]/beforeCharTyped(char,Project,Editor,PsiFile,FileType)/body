@@ -1,0 +1,49 @@
+{
+  if (!(fileType instanceof PythonFileType))   return Result.CONTINUE;
+  if (character == '(') {
+    if (!PyCodeInsightSettings.getInstance().INSERT_SELF_FOR_METHODS) {
+      return Result.CONTINUE;
+    }
+    final Document document=editor.getDocument();
+    final PsiDocumentManager documentManager=PsiDocumentManager.getInstance(project);
+    final int offset=editor.getCaretModel().getOffset();
+    PsiElement token=file.findElementAt(offset - 1);
+    if (token == null)     return Result.CONTINUE;
+    final ASTNode token_node=token.getNode();
+    if (token_node != null && token_node.getElementType() == PyTokenTypes.IDENTIFIER) {
+      PsiElement maybe_def=PyUtil.getFirstNonCommentBefore(token.getPrevSibling());
+      if (maybe_def != null) {
+        ASTNode def_node=maybe_def.getNode();
+        if (def_node != null && def_node.getElementType() == PyTokenTypes.DEF_KEYWORD) {
+          PsiElement maybe_func=token.getParent();
+          if (maybe_func instanceof PyFunction) {
+            PyFunction func=(PyFunction)maybe_func;
+            PyUtil.MethodFlags flags=PyUtil.MethodFlags.of(func);
+            if (flags != null) {
+              String pname=flags.isClassMethod() || flags.isMetaclassMethod() ? "cls" : "self";
+              final boolean is_new=PyNames.NEW.equals(func.getName());
+              if (flags.isMetaclassMethod() && is_new) {
+                pname="typ";
+              }
+ else               if (flags.isClassMethod() || is_new) {
+                pname="cls";
+              }
+ else               if (flags.isStaticMethod())               pname="";
+              documentManager.commitDocument(document);
+              int caretOffset=editor.getCaretModel().getOffset();
+              String textToType="(" + pname + ")";
+              CharSequence chars=editor.getDocument().getCharsSequence();
+              if (caretOffset == chars.length() || chars.charAt(caretOffset) != ':') {
+                textToType+=':';
+              }
+              EditorModificationUtil.typeInStringAtCaretHonorBlockSelection(editor,textToType,true);
+              editor.getCaretModel().moveToOffset(offset + 1 + pname.length());
+              return Result.STOP;
+            }
+          }
+        }
+      }
+    }
+  }
+  return Result.CONTINUE;
+}

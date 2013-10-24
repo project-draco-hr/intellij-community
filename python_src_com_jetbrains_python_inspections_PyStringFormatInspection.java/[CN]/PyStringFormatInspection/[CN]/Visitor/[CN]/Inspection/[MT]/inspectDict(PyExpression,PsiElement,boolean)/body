@@ -1,0 +1,59 @@
+{
+  PsiElement pyElement;
+  Map<PyExpression,PyExpression> additionalExpressions;
+  if (addSubscriptions) {
+    additionalExpressions=addSubscriptions(rightExpression.getContainingFile(),rightExpression.getText());
+    pyElement=((PyReferenceExpression)rightExpression).followAssignmentsChain(PyResolveContext.noImplicits().withTypeEvalContext(myTypeEvalContext)).getElement();
+  }
+ else {
+    additionalExpressions=new HashMap<PyExpression,PyExpression>();
+    pyElement=rightExpression;
+  }
+  final PyKeyValueExpression[] expressions=((PyDictLiteralExpression)pyElement).getElements();
+  if (myUsedMappingKeys.isEmpty()) {
+    if (myExpectedArguments > 0) {
+      if (myExpectedArguments == (expressions.length + additionalExpressions.size())) {
+        registerProblem(rightExpression,PyBundle.message("INSP.format.requires.no.mapping"));
+      }
+ else {
+        return 1;
+      }
+    }
+ else {
+      return 0;
+    }
+  }
+  for (  PyKeyValueExpression expression : expressions) {
+    final PyExpression key=expression.getKey();
+    if (key instanceof PyStringLiteralExpression) {
+      final String name=((PyStringLiteralExpression)key).getStringValue();
+      if (myUsedMappingKeys.get(name) != null) {
+        myUsedMappingKeys.put(name,true);
+        final PyExpression value=expression.getValue();
+        if (value != null) {
+          checkExpressionType(value,myFormatSpec.get(name),problemTarget);
+        }
+      }
+    }
+  }
+  for (  Map.Entry<PyExpression,PyExpression> expression : additionalExpressions.entrySet()) {
+    final PyExpression key=expression.getKey();
+    if (key instanceof PyStringLiteralExpression) {
+      final String name=((PyStringLiteralExpression)key).getStringValue();
+      if (myUsedMappingKeys.get(name) != null) {
+        myUsedMappingKeys.put(name,true);
+        final PyExpression value=expression.getValue();
+        if (value != null) {
+          checkExpressionType(value,myFormatSpec.get(name),problemTarget);
+        }
+      }
+    }
+  }
+  for (  String key : myUsedMappingKeys.keySet()) {
+    if (!myUsedMappingKeys.get(key).booleanValue()) {
+      registerProblem(problemTarget,PyBundle.message("INSP.key.$0.has.no.arg",key));
+      break;
+    }
+  }
+  return (expressions.length + additionalExpressions.size());
+}

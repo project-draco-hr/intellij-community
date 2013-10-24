@@ -1,15 +1,6 @@
 {
-  if (!myInitialized) {
-    myIndexes=Extensions.getExtensions(CompilerOutputBaseIndex.EXTENSION_POINT_NAME,myProject);
-    myIndexTypeQNameToIndex=new HashMap<String,CompilerOutputBaseIndex>();
-    boolean needReindex=false;
-    for (    final CompilerOutputBaseIndex index : myIndexes) {
-      if (index.init(myProject)) {
-        needReindex=true;
-      }
-      myIndexTypeQNameToIndex.put(index.getClass().getCanonicalName(),index);
-    }
-    initTimestampIndex(needReindex);
+  if (myInitialized.compareAndSet(false,true)) {
+    initTimestampIndex();
     try {
       myFileEnumerator=new PersistentEnumeratorDelegate<String>(IndexInfrastructure.getStorageFile(CompilerOutputIndexUtil.generateIndexId("compilerOutputIndexFileId.enum",myProject)),new EnumeratorStringDescriptor(),2048);
     }
@@ -18,9 +9,9 @@
     }
     CompilerManager.getInstance(myProject).addCompilationStatusListener(new CompilationStatusAdapter(){
       @Override public void fileGenerated(      final String outputRoot,      final String relativePath){
-        if (StringUtil.endsWith(relativePath,CompilerOutputFilesUtil.CLASS_FILES_SUFFIX) && myEnabled) {
+        if (StringUtil.endsWith(relativePath,CompilerOutputFilesUtil.CLASS_FILES_SUFFIX) && !myCurrentEnabledFeatures.isEmpty()) {
           try {
-            doIndexing(new File(outputRoot,relativePath),null);
+            doIndexing(new File(outputRoot,relativePath),myIndexTypeQNameToIndex.values(),false,null);
           }
  catch (          ProcessCanceledException e0) {
             throw e0;
@@ -32,9 +23,5 @@ catch (          RuntimeException e) {
       }
     }
 ,myProject);
-    if (needReindex) {
-      reindexAllProjectInBackground();
-    }
-    myInitialized=true;
   }
 }

@@ -1,0 +1,44 @@
+{
+switch (frame.getCommand()) {
+case AbstractCommand.CREATE_THREAD:
+{
+      final PyThreadInfo thread=parseThreadEvent(frame);
+      if (!thread.isPydevThread()) {
+        myThreads.put(thread.getId(),thread);
+      }
+      break;
+    }
+case AbstractCommand.SUSPEND_THREAD:
+{
+    final PyThreadInfo event=parseThreadEvent(frame);
+    final PyThreadInfo thread=myThreads.get(event.getId());
+    if (thread != null) {
+      thread.updateState(PyThreadInfo.State.SUSPENDED,event.getFrames());
+      thread.setStopReason(event.getStopReason());
+      thread.setMessage(event.getMessage());
+      myDebugProcess.threadSuspended(thread);
+    }
+    break;
+  }
+case AbstractCommand.RESUME_THREAD:
+{
+  final String id=ProtocolParser.getThreadId(frame.getPayload());
+  final PyThreadInfo thread=myThreads.get(id);
+  if (thread != null) {
+    thread.updateState(PyThreadInfo.State.RUNNING,null);
+    myDebugProcess.threadResumed(thread);
+  }
+  break;
+}
+case AbstractCommand.KILL_THREAD:
+{
+final String id=frame.getPayload();
+final PyThreadInfo thread=myThreads.get(id);
+if (thread != null) {
+  thread.updateState(PyThreadInfo.State.KILLED,null);
+  myThreads.remove(id);
+}
+break;
+}
+}
+}

@@ -1,0 +1,73 @@
+{
+  int relativeLevel=-1;
+  InsertHandler<LookupElement> insertHandler=null;
+  PyFromImportStatement from_import=PsiTreeUtil.getParentOfType(myElement,PyFromImportStatement.class);
+  if (from_import != null && myElement.getParent() != from_import) {
+    PyReferenceExpression src=from_import.getImportSource();
+    if (src != null) {
+      PsiElement mod_candidate=src.getReference().resolve();
+      if (mod_candidate instanceof PyExpression) {
+        addImportedNames(from_import.getImportElements());
+        PyExpression module=(PyExpression)mod_candidate;
+        PyType qualifierType=myContext.getType(module);
+        if (qualifierType != null) {
+          ProcessingContext ctx=new ProcessingContext();
+          ctx.put(PyType.CTX_NAMES,myNamesAlready);
+          Collections.addAll(myObjects,qualifierType.getCompletionVariants(myElement.getName(),myElement,ctx));
+        }
+        return myObjects.toArray();
+      }
+ else       if (mod_candidate instanceof PsiDirectory) {
+        fillFromDir((PsiDirectory)mod_candidate,ImportKeywordHandler.INSTANCE);
+        return myObjects.toArray();
+      }
+    }
+ else {
+      relativeLevel=from_import.getRelativeLevel();
+      if (relativeLevel > 0) {
+        PsiDirectory relative_dir=ResolveImportUtil.stepBackFrom(myCurrentFile,relativeLevel);
+        if (relative_dir != null) {
+          addImportedNames(from_import.getImportElements());
+          fillFromDir(relative_dir,null);
+        }
+      }
+    }
+  }
+ else {
+    ASTNode n=myElement.getNode().getTreePrev();
+    while (n != null && n.getElementType() == PyTokenTypes.DOT) {
+      relativeLevel+=1;
+      n=n.getTreePrev();
+    }
+    if (from_import != null) {
+      addImportedNames(from_import.getImportElements());
+      if (!alreadyHasImportKeyword()) {
+        insertHandler=ImportKeywordHandler.INSTANCE;
+      }
+    }
+ else {
+      myNamesAlready.add(PyNames.FUTURE_MODULE);
+      PyImportStatement import_stmt=PsiTreeUtil.getParentOfType(myElement,PyImportStatement.class);
+      if (import_stmt != null) {
+        addImportedNames(import_stmt.getImportElements());
+      }
+    }
+    if (myCurrentFile != null && (relativeLevel >= 0 || !ResolveImportUtil.isAbsoluteImportEnabledFor(myCurrentFile))) {
+      final PsiDirectory containingDirectory=myCurrentFile.getContainingDirectory();
+      if (containingDirectory != null) {
+        QualifiedName thisQName=QualifiedNameFinder.findShortestImportableQName(containingDirectory);
+        if (thisQName == null || thisQName.getComponentCount() == relativeLevel) {
+          fillFromDir(ResolveImportUtil.stepBackFrom(myCurrentFile,relativeLevel),insertHandler);
+        }
+ else         if (thisQName.getComponentCount() > relativeLevel) {
+          thisQName=thisQName.removeTail(relativeLevel);
+          fillFromQName(thisQName,insertHandler);
+        }
+      }
+    }
+  }
+  if (relativeLevel == -1) {
+    fillFromQName(QualifiedName.fromComponents(),insertHandler);
+  }
+  return ArrayUtil.toObjectArray(myObjects);
+}

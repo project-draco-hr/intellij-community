@@ -1,0 +1,48 @@
+{
+  if (hasGenerics(type,context)) {
+    if (type instanceof PyGenericType) {
+      return substitutions.get((PyGenericType)type);
+    }
+ else     if (type instanceof PyUnionType) {
+      final PyUnionType union=(PyUnionType)type;
+      final List<PyType> results=new ArrayList<PyType>();
+      for (      PyType t : union.getMembers()) {
+        final PyType subst=substitute(t,substitutions,context);
+        results.add(subst);
+      }
+      return PyUnionType.union(results);
+    }
+ else     if (type instanceof PyCollectionTypeImpl) {
+      final PyCollectionTypeImpl collection=(PyCollectionTypeImpl)type;
+      final PyType elem=collection.getElementType(context);
+      final PyType subst=substitute(elem,substitutions,context);
+      return new PyCollectionTypeImpl(collection.getPyClass(),collection.isDefinition(),subst);
+    }
+ else     if (type instanceof PyTupleType) {
+      final PyTupleType tuple=(PyTupleType)type;
+      final int n=tuple.getElementCount();
+      final List<PyType> results=new ArrayList<PyType>();
+      for (int i=0; i < n; i++) {
+        final PyType subst=substitute(tuple.getElementType(i),substitutions,context);
+        results.add(subst);
+      }
+      return new PyTupleType((PyTupleType)type,results.toArray(new PyType[results.size()]));
+    }
+ else     if (type instanceof PyCallableType) {
+      final PyCallableType callable=(PyCallableType)type;
+      List<PyCallableParameter> substParams=null;
+      final List<PyCallableParameter> parameters=callable.getParameters(context);
+      if (parameters != null) {
+        substParams=new ArrayList<PyCallableParameter>();
+        for (        PyCallableParameter parameter : parameters) {
+          final PyType substType=substitute(parameter.getType(context),substitutions,context);
+          final PyCallableParameter subst=parameter.getParameter() != null ? new PyCallableParameterImpl(parameter.getParameter()) : new PyCallableParameterImpl(parameter.getName(),substType);
+          substParams.add(subst);
+        }
+      }
+      final PyType substResult=substitute(callable.getCallType(context,null),substitutions,context);
+      return new PyCallableTypeImpl(substParams,substResult);
+    }
+  }
+  return type;
+}

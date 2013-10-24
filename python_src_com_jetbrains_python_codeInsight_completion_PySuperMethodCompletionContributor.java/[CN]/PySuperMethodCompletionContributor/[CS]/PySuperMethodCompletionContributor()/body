@@ -1,0 +1,32 @@
+{
+  extend(CompletionType.BASIC,psiElement().afterLeafSkipping(psiElement().whitespace(),psiElement().withElementType(PyTokenTypes.DEF_KEYWORD)),new CompletionProvider<CompletionParameters>(){
+    @Override protected void addCompletions(    @NotNull CompletionParameters parameters,    ProcessingContext context,    @NotNull CompletionResultSet result){
+      PsiElement position=parameters.getOriginalPosition();
+      PyClass containingClass=PsiTreeUtil.getParentOfType(position,PyClass.class);
+      if (containingClass == null && position instanceof PsiWhiteSpace) {
+        position=PsiTreeUtil.prevLeaf(position);
+        containingClass=PsiTreeUtil.getParentOfType(position,PyClass.class);
+      }
+      if (containingClass == null) {
+        return;
+      }
+      Set<String> seenNames=new HashSet<String>();
+      for (      PyFunction function : containingClass.getMethods()) {
+        seenNames.add(function.getName());
+      }
+      LanguageLevel languageLevel=LanguageLevel.forElement(parameters.getOriginalFile());
+      seenNames.addAll(PyNames.getBuiltinMethods(languageLevel).keySet());
+      for (      PyClass ancestor : containingClass.getAncestorClasses()) {
+        for (        PyFunction superMethod : ancestor.getMethods()) {
+          if (!seenNames.contains(superMethod.getName())) {
+            String text=superMethod.getName() + superMethod.getParameterList().getText();
+            LookupElementBuilder element=LookupElementBuilder.create(text);
+            result.addElement(TailTypeDecorator.withTail(element,TailType.CASE_COLON));
+            seenNames.add(superMethod.getName());
+          }
+        }
+      }
+    }
+  }
+);
+}

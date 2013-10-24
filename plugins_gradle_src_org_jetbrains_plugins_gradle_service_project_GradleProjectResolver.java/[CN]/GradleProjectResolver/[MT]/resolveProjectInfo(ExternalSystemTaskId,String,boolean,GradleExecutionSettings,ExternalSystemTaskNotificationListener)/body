@@ -1,31 +1,37 @@
 {
+  final GradleProjectResolverExtension projectResolverChain;
   if (settings != null) {
     myHelper.ensureInstalledWrapper(id,projectPath,settings,listener);
     List<ClassHolder<? extends GradleProjectResolverExtension>> extensionClasses=settings.getResolverExtensions();
-    if (myCachedExtensions == null || !myCachedExtensions.first.equals(extensionClasses)) {
-      List<GradleProjectResolverExtension> extensions=ContainerUtilRt.newArrayList();
-      for (      ClassHolder<? extends GradleProjectResolverExtension> holder : extensionClasses) {
-        try {
-          final GradleProjectResolverExtension extension=holder.getTargetClass().newInstance();
-          extensions.add(extension);
-        }
- catch (        Throwable e) {
-          throw new IllegalArgumentException(String.format("Can't instantiate project resolve extension for class '%s'",holder.getTargetClassName()),e);
-        }
+    Deque<GradleProjectResolverExtension> extensions=new ArrayDeque<GradleProjectResolverExtension>();
+    for (    ClassHolder<? extends GradleProjectResolverExtension> holder : extensionClasses) {
+      final GradleProjectResolverExtension extension;
+      try {
+        extension=holder.getTargetClass().newInstance();
       }
-      List<ClassHolder<? extends GradleProjectResolverExtension>> key=ContainerUtilRt.newArrayList(extensionClasses);
-      myCachedExtensions=Pair.create(key,extensions);
-    }
-    for (    GradleProjectResolverExtension extension : myCachedExtensions.second) {
-      DataNode<ProjectData> result=extension.resolveProjectInfo(id,projectPath,isPreviewMode,settings,listener);
-      if (result != null) {
-        return result;
+ catch (      Throwable e) {
+        throw new IllegalArgumentException(String.format("Can't instantiate project resolve extension for class '%s'",holder.getTargetClassName()),e);
       }
+      final GradleProjectResolverExtension previous=extensions.peekLast();
+      if (previous != null) {
+        previous.setNext(extension);
+      }
+      extensions.add(extension);
     }
+    projectResolverChain=extensions.peekFirst();
+  }
+ else {
+    projectResolverChain=new BaseGradleProjectResolverExtension();
   }
   return myHelper.execute(projectPath,settings,new Function<ProjectConnection,DataNode<ProjectData>>(){
     @Override public DataNode<ProjectData> fun(    ProjectConnection connection){
-      return doResolveProjectInfo(id,projectPath,settings,connection,listener,isPreviewMode);
+      try {
+        return doResolveProjectInfo(new ProjectResolverContext(id,projectPath,settings,connection,listener,isPreviewMode),projectResolverChain);
+      }
+ catch (      RuntimeException e) {
+        LOG.info("Gradle project resolve error",e);
+        throw projectResolverChain.getUserFriendlyError(e,projectPath,null);
+      }
     }
   }
 );

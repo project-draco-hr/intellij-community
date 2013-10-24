@@ -1,0 +1,39 @@
+{
+  String the_rest=null;
+  VirtualFile the_root=null;
+  PsiDirectory ret=null;
+  target=FileUtil.toSystemIndependentName(target);
+  for (  VirtualFile file : ProjectRootManager.getInstance(project).getContentRoots()) {
+    final String root_path=file.getPath();
+    if (target.startsWith(root_path)) {
+      the_rest=target.substring(root_path.length());
+      the_root=file;
+      break;
+    }
+  }
+  if (the_root == null) {
+    throw new IOException("Can't find '" + target + "' among roots");
+  }
+  if (the_rest != null) {
+    final LocalFileSystem lfs=LocalFileSystem.getInstance();
+    final PsiManager psi_mgr=PsiManager.getInstance(project);
+    String[] dirs=the_rest.split("/");
+    int i=0;
+    if ("".equals(dirs[0]))     i=1;
+    while (i < dirs.length) {
+      VirtualFile subdir=the_root.findChild(dirs[i]);
+      if (subdir != null) {
+        if (!subdir.isDirectory()) {
+          throw new IOException("Expected dir, but got non-dir: " + subdir.getPath());
+        }
+      }
+ else       subdir=the_root.createChildDirectory(lfs,dirs[i]);
+      VirtualFile init_vfile=subdir.findChild(PyNames.INIT_DOT_PY);
+      if (init_vfile == null)       init_vfile=subdir.createChildData(lfs,PyNames.INIT_DOT_PY);
+      the_root=subdir;
+      i+=1;
+    }
+    ret=psi_mgr.findDirectory(the_root);
+  }
+  return ret;
+}

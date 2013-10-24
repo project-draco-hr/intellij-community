@@ -1,0 +1,43 @@
+{
+  try {
+    PsiElement problem_elt=descriptor.getPsiElement().getParent();
+    sure(myPyFile);
+    sure(FileModificationService.getInstance().preparePsiElementForWrite(myPyFile));
+    PyFunctionBuilder builder=new PyFunctionBuilder(myIdentifier);
+    PsiElement problemParent=problem_elt.getParent();
+    if (problemParent instanceof PyCallExpression) {
+      PyArgumentList arglist=((PyCallExpression)problemParent).getArgumentList();
+      sure(arglist);
+      final PyExpression[] args=arglist.getArguments();
+      for (      PyExpression arg : args) {
+        if (arg instanceof PyKeywordArgument) {
+          builder.parameter(((PyKeywordArgument)arg).getKeyword());
+        }
+ else         if (arg instanceof PyReferenceExpression) {
+          PyReferenceExpression refex=(PyReferenceExpression)arg;
+          builder.parameter(refex.getReferencedName());
+        }
+ else {
+          builder.parameter("param");
+        }
+      }
+    }
+ else     if (problemParent != null) {
+      for (      PyInspectionExtension extension : Extensions.getExtensions(PyInspectionExtension.EP_NAME)) {
+        List<String> params=extension.getFunctionParametersFromUsage(problem_elt);
+        if (params != null) {
+          for (          String param : params) {
+            builder.parameter(param);
+          }
+          break;
+        }
+      }
+    }
+    PyFunction function=builder.buildFunction(project,LanguageLevel.forFile(myPyFile.getVirtualFile()));
+    function=(PyFunction)myPyFile.add(function);
+    showTemplateBuilder(function);
+  }
+ catch (  IncorrectOperationException ignored) {
+    PyUtil.showBalloon(project,PyBundle.message("QFIX.failed.to.add.function"),MessageType.ERROR);
+  }
+}

@@ -1,0 +1,40 @@
+{
+  PsiFileSystemItem srcfile=symbol instanceof PsiFileSystemItem ? (PsiFileSystemItem)symbol : symbol.getContainingFile();
+  if (srcfile == null) {
+    return null;
+  }
+  VirtualFile virtualFile=srcfile.getVirtualFile();
+  if (virtualFile == null) {
+    return null;
+  }
+  if (srcfile instanceof PsiFile && symbol instanceof PsiNamedElement && !(symbol instanceof PsiFileSystemItem)) {
+    PsiElement toplevel=symbol;
+    if (symbol instanceof PyFunction) {
+      final PyClass containingClass=((PyFunction)symbol).getContainingClass();
+      if (containingClass != null) {
+        toplevel=containingClass;
+      }
+    }
+    PsiDirectory dir=((PsiFile)srcfile).getContainingDirectory();
+    while (dir != null) {
+      PsiFile initPy=dir.findFile(PyNames.INIT_DOT_PY);
+      if (initPy == null) {
+        break;
+      }
+      if (initPy instanceof PyFile && toplevel.equals(((PyFile)initPy).getElementNamed(((PsiNamedElement)toplevel).getName()))) {
+        virtualFile=dir.getVirtualFile();
+      }
+      dir=dir.getParentDirectory();
+    }
+  }
+  final QualifiedName qname=findShortestImportableQName(foothold != null ? foothold : symbol,virtualFile);
+  if (qname != null) {
+    for (    PyCanonicalPathProvider provider : Extensions.getExtensions(PyCanonicalPathProvider.EP_NAME)) {
+      final QualifiedName restored=provider.getCanonicalPath(qname,foothold);
+      if (restored != null) {
+        return restored;
+      }
+    }
+  }
+  return qname;
+}

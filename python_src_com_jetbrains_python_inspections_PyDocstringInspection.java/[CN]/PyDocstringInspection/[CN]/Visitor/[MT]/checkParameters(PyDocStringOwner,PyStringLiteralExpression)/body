@@ -1,0 +1,42 @@
+{
+  final String text=node.getText();
+  if (text == null) {
+    return false;
+  }
+  StructuredDocString docString=DocStringUtil.parse(text);
+  if (docString == null) {
+    return false;
+  }
+  List<Substring> docstringParams=docString.getParameterSubstrings();
+  if (docstringParams == null) {
+    return false;
+  }
+  if (pyDocStringOwner instanceof PyFunction) {
+    PyDecoratorList decoratorList=((PyFunction)pyDocStringOwner).getDecoratorList();
+    boolean isClassMethod=false;
+    if (decoratorList != null) {
+      isClassMethod=decoratorList.findDecorator(PyNames.CLASSMETHOD) != null;
+    }
+    PyParameter[] realParams=((PyFunction)pyDocStringOwner).getParameterList().getParameters();
+    List<PyParameter> missingParams=getMissingParams(realParams,docstringParams,isClassMethod);
+    boolean registered=false;
+    if (!missingParams.isEmpty()) {
+      for (      PyParameter param : missingParams) {
+        registerProblem(param,"Missing parameter " + param.getName() + " in docstring",new DocstringQuickFix(param.getName(),null));
+      }
+      registered=true;
+    }
+    List<Substring> unexpectedParams=getUnexpectedParams(docstringParams,realParams,node);
+    if (!unexpectedParams.isEmpty()) {
+      for (      Substring param : unexpectedParams) {
+        ProblemsHolder holder=getHolder();
+        if (holder != null) {
+          holder.registerProblem(node,param.getTextRange(),"Unexpected parameter " + param + " in docstring",new DocstringQuickFix(null,param.getValue()));
+        }
+      }
+      registered=true;
+    }
+    return registered;
+  }
+  return false;
+}

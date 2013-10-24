@@ -1,0 +1,53 @@
+{
+  super(session);
+  session.setPauseActionSupported(true);
+  if (multiProcess) {
+    myDebugger=createMultiprocessDebugger(serverSocket);
+  }
+ else {
+    myDebugger=new RemoteDebugger(this,serverSocket,getConnectTimeout());
+  }
+  List<XBreakpointHandler> breakpointHandlers=new ArrayList<XBreakpointHandler>();
+  breakpointHandlers.add(new PyLineBreakpointHandler(this));
+  breakpointHandlers.add(new PyExceptionBreakpointHandler(this));
+  for (  PyBreakpointHandlerFactory factory : Extensions.getExtensions(PyBreakpointHandlerFactory.EP_NAME)) {
+    breakpointHandlers.add(factory.createBreakpointHandler(this));
+  }
+  myBreakpointHandlers=breakpointHandlers.toArray(new XBreakpointHandler[breakpointHandlers.size()]);
+  myEditorsProvider=new PyDebuggerEditorsProvider();
+  mySmartStepIntoHandler=new PySmartStepIntoHandler(this);
+  myProcessHandler=processHandler;
+  myExecutionConsole=executionConsole;
+  if (myProcessHandler != null) {
+    myProcessHandler.addProcessListener(this);
+  }
+  if (processHandler instanceof RemoteDebuggableProcessHandler) {
+    myPositionConverter=((RemoteDebuggableProcessHandler)processHandler).createPositionConverter(this);
+  }
+ else {
+    myPositionConverter=new PyLocalPositionConverter();
+  }
+  myDebugger.addCloseListener(new RemoteDebuggerCloseListener(){
+    @Override public void closed(){
+      handleStop();
+    }
+    @Override public void communicationError(){
+      detachDebuggedProcess();
+    }
+    @Override public void detached(){
+      detachDebuggedProcess();
+    }
+  }
+);
+  session.addSessionListener(new XDebugSessionAdapter(){
+    @Override public void beforeSessionResume(){
+      if (session.getCurrentStackFrame() instanceof PyStackFrame) {
+        myStackFrameBeforeResume=(PyStackFrame)session.getCurrentStackFrame();
+      }
+ else {
+        myStackFrameBeforeResume=null;
+      }
+    }
+  }
+);
+}

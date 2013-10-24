@@ -1,0 +1,47 @@
+{
+  PsiDirectory dir=null;
+  PsiElement ret=null;
+  PsiElement possible_ret=null;
+  final PyResolveContext resolveContext=PyResolveContext.defaultContext();
+  if (parent instanceof PyFileImpl) {
+    if (PyNames.INIT_DOT_PY.equals(((PyFile)parent).getName())) {
+      dir=((PyFile)parent).getContainingDirectory();
+      possible_ret=resolveInDirectory(referencedName,containingFile,dir,fileOnly,checkForPackage);
+    }
+    final PyModuleType moduleType=new PyModuleType((PyFile)parent);
+    final List<? extends RatedResolveResult> results=moduleType.resolveMember(referencedName,null,AccessDirection.READ,resolveContext);
+    final PsiElement moduleMember=results != null && !results.isEmpty() ? results.get(0).getElement() : null;
+    if (!fileOnly || PyUtil.instanceOf(moduleMember,PsiFile.class,PsiDirectory.class)) {
+      ret=moduleMember;
+    }
+    if (ret != null && !PyUtil.instanceOf(ret,PsiFile.class,PsiDirectory.class) && PsiTreeUtil.getStubOrPsiParentOfType(ret,PyExceptPart.class) == null) {
+      return ret;
+    }
+    if (possible_ret != null)     return possible_ret;
+  }
+ else   if (parent instanceof PsiDirectory) {
+    dir=(PsiDirectory)parent;
+  }
+ else   if (parent != null) {
+    PyType refType=PyReferenceExpressionImpl.getReferenceTypeFromProviders(parent,resolveContext.getTypeEvalContext(),null);
+    if (refType != null) {
+      final List<? extends RatedResolveResult> result=refType.resolveMember(referencedName,null,AccessDirection.READ,resolveContext);
+      if (result != null && !result.isEmpty()) {
+        return result.get(0).getElement();
+      }
+    }
+  }
+  if (dir != null) {
+    final PsiElement result=resolveInDirectory(referencedName,containingFile,dir,fileOnly,checkForPackage);
+    if (result != null) {
+      return result;
+    }
+    if (parent instanceof PsiFile) {
+      final List<PsiElement> items=resolveRelativeImportAsAbsolute((PsiFile)parent,QualifiedName.fromComponents(referencedName));
+      if (!items.isEmpty()) {
+        return items.get(0);
+      }
+    }
+  }
+  return ret;
+}
