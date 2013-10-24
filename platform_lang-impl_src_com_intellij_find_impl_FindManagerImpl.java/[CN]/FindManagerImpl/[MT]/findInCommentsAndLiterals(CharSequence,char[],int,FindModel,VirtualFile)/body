@@ -5,14 +5,14 @@
     lang=((LanguageFileType)ftype).getLanguage();
   }
   CommentsLiteralsSearchData data=model.getUserData(ourCommentsLiteralsSearchDataKey);
-  if (data == null || !Comparing.equal(data.lastFile,file) || !data.myModel.equals(model)) {
+  if (data == null || !Comparing.equal(data.lastFile,file) || !data.model.equals(model)) {
     SyntaxHighlighter highlighter=getHighlighter(file,lang);
     if (highlighter == null) {
       LOG.error("Syntax highlighter is null:" + file);
       return NOT_FOUND_RESULT;
     }
     TokenSet tokensOfInterest=TokenSet.EMPTY;
-    Set<Language> relevantLanguages=null;
+    Set<Language> relevantLanguages;
     if (lang != null) {
       final Language finalLang=lang;
       relevantLanguages=ApplicationManager.getApplication().runReadAction(new Computable<Set<Language>>(){
@@ -62,11 +62,26 @@
     }
     Matcher matcher=model.isRegularExpressions() ? compileRegExp(model,"") : null;
     StringSearcher searcher=matcher != null ? null : new StringSearcher(model.getStringToFind(),model.isCaseSensitive(),true);
-    data=new CommentsLiteralsSearchData(file,relevantLanguages,highlighter,tokensOfInterest,searcher,matcher,(FindModel)model.clone());
+    EditorHighlighter editorHighlighter=EditorHighlighterFactory.getInstance().createEditorHighlighter(myProject,file);
+    Lexer lexer;
+    if (editorHighlighter instanceof LayeredLexerEditorHighlighter) {
+      lexer=LexerEditorHighlighterLexer.getLexerBasedOnLexerHighlighter(text,file,myProject);
+    }
+ else {
+      lexer=highlighter.getHighlightingLexer();
+    }
+    data=new CommentsLiteralsSearchData(file,relevantLanguages,highlighter,lexer,tokensOfInterest,searcher,matcher,(FindModel)model.clone());
+    lexer.start(text,0,text.length(),0);
     model.putUserData(ourCommentsLiteralsSearchDataKey,data);
   }
+  int initialStartOffset=model.isForward() && data.startOffset < offset ? data.startOffset : 0;
   final Lexer lexer=data.highlightingLexer;
-  lexer.start(text,model.isForward() && data.startOffset < offset ? data.startOffset : 0,text.length(),0);
+  if (lexer instanceof LexerEditorHighlighterLexer) {
+    ((LexerEditorHighlighterLexer)lexer).resetPosition(initialStartOffset);
+  }
+ else {
+    lexer.start(text,initialStartOffset,text.length(),0);
+  }
   IElementType tokenType;
   TokenSet tokens=data.tokensOfInterest;
   int lastGoodOffset=0;
