@@ -1,2 +1,36 @@
 {
+  final RangeMarker rangeMarker=context.getDocument().createRangeMarker(context.getStartOffset(),context.getStartOffset());
+  getDelegate().handleInsert(context);
+  final PsiFile file=context.getFile();
+  ((PsiJavaFile)file).importClass(myPsiClass);
+  final PsiElement caretElement=file.findElementAt(context.getEditor().getCaretModel().getOffset());
+  if (caretElement == null) {
+    log.error("element on caret position MUST BE not null");
+    return;
+  }
+  final PsiStatement statement=(PsiStatement)caretElement.getPrevSibling();
+  final PsiCodeBlock codeBlock=PsiTreeUtil.getParentOfType(statement,PsiCodeBlock.class);
+  if (codeBlock == null) {
+    log.error("code block MUST BE not null");
+    return;
+  }
+  final Project project=context.getProject();
+  final Ref<PsiElement> insertedStatementRef=Ref.create();
+  final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
+  context.commitDocument();
+  new WriteCommandAction.Simple(project,file){
+    @Override protected void run() throws Throwable {
+      final PsiStatement statementFromText=elementFactory.createStatementFromText(String.format("%s %s = null;",myPsiClass.getName(),myNewVarName),null);
+      insertedStatementRef.set(codeBlock.addBefore(statementFromText,statement));
+    }
+  }
+.execute();
+  final PsiLiteralExpression nullKeyword=findNull(insertedStatementRef.get());
+  PsiDocumentManager.getInstance(context.getProject()).doPostponedOperationsAndUnblockDocument(context.getDocument());
+  context.getDocument().insertString(rangeMarker.getStartOffset(),myNewVarName + ".");
+  context.commitDocument();
+  final int offset=nullKeyword.getTextOffset();
+  final int endOffset=offset + nullKeyword.getTextLength();
+  context.getEditor().getSelectionModel().setSelection(offset,endOffset);
+  context.getEditor().getCaretModel().moveToOffset(offset);
 }

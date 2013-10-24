@@ -1,0 +1,49 @@
+{
+  final DownloadableFileService downloadService=DownloadableFileService.getInstance();
+  final Ref<DownloadableFileSetDescription> descriptionRef=new Ref<DownloadableFileSetDescription>();
+  ProgressManager.getInstance().runProcessWithProgressSynchronously(new Runnable(){
+    @Override public void run(){
+      URL versionsUrl=libraryDescription.getDescriptionUrl();
+      final DownloadableFileSetVersions<DownloadableFileSetDescription> versions=downloadService.createFileSetVersions(null,versionsUrl);
+      final Semaphore semaphore=new Semaphore();
+      semaphore.down();
+      versions.fetchVersions(new DownloadableFileSetVersions.FileSetVersionsCallback<DownloadableFileSetDescription>(){
+        @Override public void onSuccess(        @NotNull List<? extends DownloadableFileSetDescription> versions){
+          if (versions.isEmpty()) {
+            LOG.error("No versions fetched");
+          }
+ else {
+            descriptionRef.set(versions.get(0));
+          }
+          semaphore.up();
+        }
+        @Override public void onError(        @NotNull String errorMessage){
+          LOG.error(errorMessage);
+          semaphore.up();
+        }
+      }
+);
+      semaphore.waitFor();
+    }
+  }
+,"Fetching library description",false,project,component);
+  if (descriptionRef.isNull()) {
+    return;
+  }
+  DownloadableFileSetDescription description=descriptionRef.get();
+  FileDownloader downloader=downloadService.createDownloader(description,project,component);
+  downloader=downloader.toDirectory(getStoreDirectory(libraryDescription).getAbsolutePath());
+  VirtualFile[] virtualFiles=downloader.download();
+  if (virtualFiles == null || virtualFiles.length != description.getFiles().size()) {
+    return;
+  }
+  List<File> files=myFiles.get(libraryDescription.getId());
+  if (files == null) {
+    files=new ArrayList<File>();
+    myFiles.put(libraryDescription.getId(),files);
+  }
+  for (  VirtualFile file : virtualFiles) {
+    files.add(VfsUtilCore.virtualToIoFile(file));
+  }
+  myEventDispatcher.getMulticaster().downloaded();
+}
