@@ -5,7 +5,7 @@
     lang=((LanguageFileType)ftype).getLanguage();
   }
   CommentsLiteralsSearchData data=model.getUserData(ourCommentsLiteralsSearchDataKey);
-  if (data == null || !Comparing.equal(data.lastFile,file)) {
+  if (data == null || !Comparing.equal(data.lastFile,file) || !data.myModel.equals(model)) {
     SyntaxHighlighter highlighter=getHighlighter(file,lang);
     if (highlighter == null) {
       LOG.error("Syntax highlighter is null:" + file);
@@ -61,8 +61,8 @@
       }
     }
     Matcher matcher=model.isRegularExpressions() ? compileRegExp(model,"") : null;
-    StringSearcher searcher=matcher != null ? null : createStringSearcher(model);
-    data=new CommentsLiteralsSearchData(file,relevantLanguages,highlighter,tokensOfInterest,searcher,matcher);
+    StringSearcher searcher=matcher != null ? null : new StringSearcher(model.getStringToFind(),model.isCaseSensitive(),true);
+    data=new CommentsLiteralsSearchData(file,relevantLanguages,highlighter,tokensOfInterest,searcher,matcher,(FindModel)model.clone());
     model.putUserData(ourCommentsLiteralsSearchDataKey,data);
   }
   final Lexer lexer=data.highlightingLexer;
@@ -90,10 +90,10 @@
       while (true) {
         FindResultImpl findResult=null;
         if (data.searcher != null) {
-          int i=data.searcher.scan(text,textArray,start,end);
-          if (i != -1 && i >= start) {
-            final int matchEnd=i + model.getStringToFind().length();
-            if (start >= offset || !scanningForward)             findResult=new FindResultImpl(i,matchEnd);
+          int matchStart=data.searcher.scan(text,textArray,start,end);
+          if (matchStart != -1 && matchStart >= start) {
+            final int matchEnd=matchStart + model.getStringToFind().length();
+            if (matchStart >= offset || !scanningForward)             findResult=new FindResultImpl(matchStart,matchEnd);
  else {
               start=matchEnd;
               continue;
@@ -104,8 +104,9 @@
           data.matcher.reset(text.subSequence(start,end));
           if (data.matcher.find()) {
             final int matchEnd=start + data.matcher.end();
-            if (start >= offset || !scanningForward) {
-              findResult=new FindResultImpl(start + data.matcher.start(),matchEnd);
+            int matchStart=start + data.matcher.start();
+            if (matchStart >= offset || !scanningForward) {
+              findResult=new FindResultImpl(matchStart,matchEnd);
             }
  else {
               start=matchEnd;
