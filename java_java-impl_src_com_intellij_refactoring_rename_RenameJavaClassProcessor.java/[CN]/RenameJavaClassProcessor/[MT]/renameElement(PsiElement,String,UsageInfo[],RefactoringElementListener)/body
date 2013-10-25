@@ -8,7 +8,11 @@
         ((CollidingClassImportUsageInfo)usage).getImportStatement().delete();
       }
  else       if (usage instanceof MemberHidesOuterMemberUsageInfo) {
-        hidesOut.add((MemberHidesOuterMemberUsageInfo)usage);
+        final PsiElement usageElement=usage.getElement();
+        final PsiJavaCodeReferenceElement collidingRef=(PsiJavaCodeReferenceElement)usageElement;
+        if (collidingRef != null) {
+          hidesOut.add(new MemberHidesOuterMemberUsageInfo(usageElement,(PsiClass)collidingRef.resolve()));
+        }
       }
  else {
         postponedCollisions.add(usage);
@@ -33,6 +37,25 @@
   for (  UsageInfo postponedCollision : postponedCollisions) {
     ClassHidesImportedClassUsageInfo collision=(ClassHidesImportedClassUsageInfo)postponedCollision;
     collision.resolveCollision();
+  }
+  for (  MemberHidesOuterMemberUsageInfo usage : hidesOut) {
+    PsiJavaCodeReferenceElement collidingRef=(PsiJavaCodeReferenceElement)usage.getElement();
+    PsiMember member=(PsiMember)usage.getReferencedElement();
+    if (collidingRef != null && collidingRef.isValid() && member != null && member.isValid()) {
+      final PsiManager manager=member.getManager();
+      final PsiElementFactory factory=JavaPsiFacade.getElementFactory(member.getProject());
+      final String name=member.getName();
+      final PsiClass containingClass=member.getContainingClass();
+      if (name != null && containingClass != null) {
+        if (manager.areElementsEquivalent(factory.createReferenceFromText(name,collidingRef).resolve(),member))         continue;
+        final PsiJavaCodeReferenceElement ref=factory.createReferenceFromText("A." + name,collidingRef);
+        final PsiJavaCodeReferenceElement qualifier=(PsiJavaCodeReferenceElement)ref.getQualifier();
+        LOG.assertTrue(qualifier != null);
+        final PsiJavaCodeReferenceElement classReference=factory.createClassReferenceElement(containingClass);
+        qualifier.replace(classReference);
+        collidingRef.replace(ref);
+      }
+    }
   }
   if (listener != null) {
     listener.elementRenamed(aClass);
