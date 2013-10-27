@@ -1,19 +1,25 @@
 {
-  if (Patches.IBM_JDK_DISABLE_COLLECTION_BUG && myStoredEvaluationContext != null && !myStoredEvaluationContext.getSuspendContext().isResumed() && myValue instanceof ObjectReference && VirtualMachineProxyImpl.isCollected((ObjectReference)myValue)) {
-    final Semaphore semaphore=new Semaphore();
-    semaphore.down();
-    myStoredEvaluationContext.getDebugProcess().getManagerThread().invoke(new SuspendContextCommandImpl(myStoredEvaluationContext.getSuspendContext()){
-      public void contextAction() throws Exception {
-        try {
-          setContext(myStoredEvaluationContext);
-        }
+  if (Patches.IBM_JDK_DISABLE_COLLECTION_BUG) {
+    final EvaluationContextImpl evalContext=myStoredEvaluationContext;
+    if (evalContext != null && !evalContext.getSuspendContext().isResumed() && myValue instanceof ObjectReference && VirtualMachineProxyImpl.isCollected((ObjectReference)myValue)) {
+      final Semaphore semaphore=new Semaphore();
+      semaphore.down();
+      evalContext.getDebugProcess().getManagerThread().invoke(new SuspendContextCommandImpl(evalContext.getSuspendContext()){
+        public void contextAction() throws Exception {
+          try {
+            setContext(myStoredEvaluationContext);
+          }
   finally {
+            semaphore.up();
+          }
+        }
+        protected void commandCancelled(){
           semaphore.up();
         }
       }
-    }
 );
-    semaphore.waitFor();
+      semaphore.waitFor();
+    }
   }
   return myValue;
 }
