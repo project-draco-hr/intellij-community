@@ -1,0 +1,43 @@
+{
+  Git git=ServiceManager.getService(Git.class);
+  GitRepository gitRepository=GithubUtil.getGitRepository(project,file);
+  if (gitRepository == null) {
+    GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,"Can't find git repository");
+    return null;
+  }
+  gitRepository.update();
+  Pair<GitRemote,String> remote=GithubUtil.findGithubRemote(gitRepository);
+  if (remote == null) {
+    GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,"Can't find GitHub remote");
+    return null;
+  }
+  String remoteName=remote.getFirst().getName();
+  String remoteUrl=remote.getSecond();
+  GithubFullPath path=GithubUrlUtil.getUserAndRepositoryFromRemoteUrl(remoteUrl);
+  if (path == null) {
+    GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,"Can't process remote: " + remoteUrl);
+    return null;
+  }
+  GitLocalBranch currentBranch=gitRepository.getCurrentBranch();
+  if (currentBranch == null) {
+    GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,"No current branch");
+    return null;
+  }
+  GithubAuthData auth;
+  try {
+    auth=GithubUtil.computeValueInModal(project,"Access to GitHub",new ThrowableConvertor<ProgressIndicator,GithubAuthData,IOException>(){
+      @Override public GithubAuthData convert(      ProgressIndicator indicator) throws IOException {
+        return GithubUtil.getValidAuthDataFromConfig(project,indicator);
+      }
+    }
+);
+  }
+ catch (  GithubAuthenticationCanceledException e) {
+    return null;
+  }
+catch (  IOException e) {
+    GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,e);
+    return null;
+  }
+  return new GithubCreatePullRequestWorker(project,git,gitRepository,path,remoteName,remoteUrl,currentBranch.getName(),auth);
+}
