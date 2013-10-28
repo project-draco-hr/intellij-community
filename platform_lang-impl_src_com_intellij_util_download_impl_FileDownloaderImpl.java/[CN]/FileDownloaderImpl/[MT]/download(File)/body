@@ -1,0 +1,57 @@
+{
+  final List<Pair<File,DownloadableFileDescription>> downloadedFiles=new ArrayList<Pair<File,DownloadableFileDescription>>();
+  final List<Pair<File,DownloadableFileDescription>> existingFiles=new ArrayList<Pair<File,DownloadableFileDescription>>();
+  ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
+  if (indicator == null) {
+    indicator=new EmptyProgressIndicator();
+  }
+  try {
+    for (int i=0; i < myFileDescriptions.size(); i++) {
+      DownloadableFileDescription description=myFileDescriptions.get(i);
+      indicator.checkCanceled();
+      indicator.setText(IdeBundle.message("progress.downloading.0.of.1.file.text",i + 1,myFileDescriptions.size()));
+      final File existing=new File(targetDir,description.getDefaultFileName());
+      final String url=description.getDownloadUrl();
+      if (url.startsWith(LIB_SCHEMA)) {
+        indicator.setText2(IdeBundle.message("progress.locate.file.text",description.getPresentableFileName()));
+        final String path=FileUtil.toSystemDependentName(StringUtil.trimStart(url,LIB_SCHEMA));
+        final File file=PathManager.findFileInLibDirectory(path);
+        existingFiles.add(Pair.create(file,description));
+      }
+ else       if (url.startsWith(LocalFileSystem.PROTOCOL_PREFIX)) {
+        String path=FileUtil.toSystemDependentName(StringUtil.trimStart(url,LocalFileSystem.PROTOCOL_PREFIX));
+        File file=new File(path);
+        if (file.exists()) {
+          existingFiles.add(Pair.create(file,description));
+        }
+      }
+ else {
+        File downloaded;
+        try {
+          downloaded=downloadFile(description,existing,indicator);
+        }
+ catch (        IOException e) {
+          throw new IOException(IdeBundle.message("error.file.download.failed",description.getDownloadUrl(),e.getMessage()),e);
+        }
+        if (FileUtil.filesEqual(downloaded,existing)) {
+          existingFiles.add(Pair.create(existing,description));
+        }
+ else {
+          downloadedFiles.add(Pair.create(downloaded,description));
+        }
+      }
+    }
+    List<Pair<File,DownloadableFileDescription>> localFiles=new ArrayList<Pair<File,DownloadableFileDescription>>();
+    localFiles.addAll(moveToDir(downloadedFiles,targetDir));
+    localFiles.addAll(existingFiles);
+    return localFiles;
+  }
+ catch (  ProcessCanceledException e) {
+    deleteFiles(downloadedFiles);
+    throw e;
+  }
+catch (  IOException e) {
+    deleteFiles(downloadedFiles);
+    throw e;
+  }
+}
