@@ -1,0 +1,51 @@
+{
+  super(worker.getProject(),true);
+  myWorker=worker;
+  myProjectSettings=GithubProjectSettings.getInstance(myWorker.getProject());
+  myGithubCreatePullRequestPanel=new GithubCreatePullRequestPanel();
+  myGithubCreatePullRequestPanel.getShowDiffButton().addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      myWorker.showDiffDialog(myGithubCreatePullRequestPanel.getBranch());
+    }
+  }
+);
+  myGithubCreatePullRequestPanel.getSelectForkButton().addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      showTargetDialog();
+    }
+  }
+);
+  myGithubCreatePullRequestPanel.getBranchComboBox().addItemListener(new ItemListener(){
+    @Override public void itemStateChanged(    ItemEvent e){
+      if (e.getStateChange() == ItemEvent.SELECTED) {
+        if (myWorker.canShowDiff()) {
+          myGithubCreatePullRequestPanel.setBusy(true);
+          myWorker.getDiffDescriptionInPooledThread(getTargetBranch(),new Consumer<GithubCreatePullRequestWorker.DiffDescription>(){
+            @Override public void consume(            final GithubCreatePullRequestWorker.DiffDescription info){
+              UIUtil.invokeLaterIfNeeded(new Runnable(){
+                @Override public void run(){
+                  if (info == null) {
+                    myGithubCreatePullRequestPanel.setBusy(false);
+                    return;
+                  }
+                  if (getTargetBranch().equals(info.getBranch())) {
+                    myGithubCreatePullRequestPanel.setBusy(false);
+                    if (myGithubCreatePullRequestPanel.isTitleDescriptionEmptyOrNotModified()) {
+                      myGithubCreatePullRequestPanel.setTitle(info.getTitle());
+                      myGithubCreatePullRequestPanel.setDescription(info.getDescription());
+                    }
+                  }
+                }
+              }
+);
+            }
+          }
+);
+        }
+      }
+    }
+  }
+);
+  setTitle("Create Pull Request - " + myWorker.getCurrentBranch());
+  init();
+}
