@@ -10,19 +10,18 @@
         int width=myEditor.getGutterComponentEx().getWidth();
         width+=Math.min(myEditor.getScrollingModel().getVisibleArea().width,myEditor.getContentComponent().getWidth());
         if (UISettings.getInstance().HIDE_TOOL_STRIPES)         width-=2;
-        return new Dimension(width - BalloonImpl.POINTER_WIDTH - LEFT_INDENT,myEditor.getLineHeight() * (myEndLine - myStartLine));
+        return new Dimension(width - BalloonImpl.POINTER_WIDTH - LEFT_INDENT,myEditor.getLineHeight() * (myEndVisualLine - myStartVisualLine));
       }
       @Override protected void paintComponent(      Graphics g){
-        if (myLine == -1)         return;
+        if (myVisualLine == -1)         return;
         Dimension size=getPreferredSize();
         EditorGutterComponentEx gutterComponentEx=myEditor.getGutterComponentEx();
         int gutterWidth=gutterComponentEx.getWidth();
-        if (myCacheLevel2 == null || myCacheStartLine > myStartLine || myCacheEndLine < myEndLine) {
-          int oldCacheLineCount=myCacheEndLine - myCacheStartLine;
-          myCacheStartLine=Math.max(0,myLine - myCachePreviewLines);
-          myCacheEndLine=Math.min(myEditor.getDocument().getLineCount() - 1,myLine + myCachePreviewLines + 1);
-          if (myCacheLevel2 == null || oldCacheLineCount != (myCacheEndLine - myCacheStartLine)) {
-            myCacheLevel2=UIUtil.createImage(size.width,myEditor.getLineHeight() * 2 * myCachePreviewLines + 1,BufferedImage.TYPE_INT_RGB);
+        if (myCacheLevel2 == null || myCacheStartLine > myStartVisualLine || myCacheEndLine < myEndVisualLine) {
+          myCacheStartLine=fitLineToEditor(myVisualLine - myCachePreviewLines);
+          myCacheEndLine=fitLineToEditor(myCacheStartLine + 2 * myCachePreviewLines + 1);
+          if (myCacheLevel2 == null) {
+            myCacheLevel2=UIUtil.createImage(size.width,myEditor.getLineHeight() * (2 * myCachePreviewLines + 1),BufferedImage.TYPE_INT_RGB);
           }
           Graphics2D cg=myCacheLevel2.createGraphics();
           final AffineTransform t=cg.getTransform();
@@ -31,13 +30,13 @@
           AffineTransform translateInstance=AffineTransform.getTranslateInstance(0,lineShift);
           translateInstance.preConcatenate(t);
           cg.setTransform(translateInstance);
-          cg.setClip(0,0,gutterWidth,myCacheLevel2.getHeight());
+          cg.setClip(0,-lineShift,gutterWidth,myCacheLevel2.getHeight());
           gutterComponentEx.paint(cg);
           translateInstance=AffineTransform.getTranslateInstance(gutterWidth,lineShift);
           translateInstance.preConcatenate(t);
           cg.setTransform(translateInstance);
           EditorComponentImpl contentComponent=myEditor.getContentComponent();
-          cg.setClip(0,0,contentComponent.getWidth(),myCacheLevel2.getHeight());
+          cg.setClip(0,-lineShift,contentComponent.getWidth(),myCacheLevel2.getHeight());
           contentComponent.paint(cg);
         }
         if (myCacheLevel1 == null) {
@@ -52,7 +51,7 @@
           GraphicsUtil.setupAAPainting(g2d);
           g2d.setColor(myEditor.getBackgroundColor());
           g2d.fillRect(0,0,getWidth(),getHeight());
-          AffineTransform translateInstance=AffineTransform.getTranslateInstance(-LEFT_INDENT + gutterWidth,myEditor.getLineHeight() * (myCacheStartLine - myStartLine));
+          AffineTransform translateInstance=AffineTransform.getTranslateInstance(-LEFT_INDENT + gutterWidth,myEditor.getLineHeight() * (myCacheStartLine - myStartVisualLine));
           translateInstance.preConcatenate(transform);
           g2d.setTransform(translateInstance);
           UIUtil.drawImage(g2d,myCacheLevel2,-gutterWidth,0,null);
@@ -131,7 +130,7 @@
   point=SwingUtilities.convertPoint(((EditorImpl)editor).getVerticalScrollBar(),point,myEditor.getComponent().getRootPane());
   myPointHolder.set(point);
   myHintHolder.set(hintInfo);
-  if (needDelay) {
+  if (needDelay && !myShowInstantly) {
     myDelayed=true;
     Alarm alarm=new Alarm();
     alarm.addRequest(new Runnable(){
