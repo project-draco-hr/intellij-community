@@ -1,0 +1,47 @@
+{
+  final LocalFileSystem localFileSystem=LocalFileSystem.getInstance();
+  final List<PsiFile> psiFileList=ContainerUtil.newArrayList();
+  final ModuleManager moduleManager=ModuleManager.getInstance(myProject);
+  for (  Module module : moduleManager.getModules()) {
+    final String externalSystemId=module.getOptionValue(ExternalSystemConstants.EXTERNAL_SYSTEM_ID_KEY);
+    final String modulePath=module.getOptionValue(ExternalSystemConstants.LINKED_PROJECT_PATH_KEY);
+    if (!GradleConstants.SYSTEM_ID.getId().equals(externalSystemId) || modulePath == null)     continue;
+    String buildScript=FileUtil.findFileInProvidedPath(modulePath,GradleConstants.DEFAULT_SCRIPT_NAME);
+    if (StringUtil.isEmpty(buildScript))     continue;
+    VirtualFile virtualFile=localFileSystem.refreshAndFindFileByPath(buildScript);
+    if (virtualFile == null)     continue;
+    final PsiFile psiFile=PsiManager.getInstance(myProject).findFile(virtualFile);
+    if (psiFile == null)     continue;
+    psiFileList.add(psiFile);
+  }
+  final PsiFile[] psiFiles=ArrayUtil.toObjectArray(psiFileList,PsiFile.class);
+  final Set<MavenRemoteRepository> mavenRemoteRepositories=new WriteCommandAction<Set<MavenRemoteRepository>>(myProject,psiFiles){
+    @Override protected void run(    Result<Set<MavenRemoteRepository>> result) throws Throwable {
+      Set<MavenRemoteRepository> myRemoteRepositories=ContainerUtil.newHashSet();
+      for (      PsiFile psiFile : psiFiles) {
+        List<GrClosableBlock> repositoriesBlocks=ContainerUtil.newArrayList();
+        repositoriesBlocks.addAll(findClosableBlocks(psiFile,"repositories"));
+        for (        GrClosableBlock closableBlock : findClosableBlocks(psiFile,"buildscript","subprojects","allprojects","project","configure")) {
+          repositoriesBlocks.addAll(findClosableBlocks(closableBlock,"repositories"));
+        }
+        for (        GrClosableBlock repositoriesBlock : repositoriesBlocks) {
+          myRemoteRepositories.addAll(findMavenRemoteRepositories(repositoriesBlock));
+        }
+      }
+      result.setResult(myRemoteRepositories);
+    }
+  }
+.execute().getResultObject();
+  if (mavenRemoteRepositories.isEmpty())   return;
+  MavenRepositoriesHolder.getInstance(myProject).update(mavenRemoteRepositories);
+  MavenProjectIndicesManager.getInstance(myProject).scheduleUpdateIndicesList(new Consumer<List<MavenIndex>>(){
+    @Override public void consume(    List<MavenIndex> indexes){
+      for (      MavenIndex mavenIndex : indexes) {
+        if (mavenIndex.getUpdateTimestamp() == -1 && MavenRepositoriesHolder.getInstance(myProject).contains(mavenIndex.getRepositoryId())) {
+          MavenProjectIndicesManager.getInstance(myProject).scheduleUpdate(Collections.singletonList(mavenIndex));
+        }
+      }
+    }
+  }
+);
+}
