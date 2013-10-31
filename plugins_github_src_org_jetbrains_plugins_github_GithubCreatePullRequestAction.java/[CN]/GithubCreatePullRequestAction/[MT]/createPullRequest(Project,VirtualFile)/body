@@ -1,83 +1,8 @@
 {
-  final Git git=ServiceManager.getService(Git.class);
-  final GitRepository repository=GithubUtil.getGitRepository(project,file);
-  if (repository == null) {
-    GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,"Can't find git repository");
+  GithubCreatePullRequestWorker worker=GithubCreatePullRequestWorker.createPullRequestWorker(project,file);
+  if (worker == null) {
     return;
   }
-  repository.update();
-  Pair<GitRemote,String> remote=GithubUtil.findGithubRemote(repository);
-  if (remote == null) {
-    GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,"Can't find GitHub remote");
-    return;
-  }
-  final String remoteUrl=remote.getSecond();
-  final String remoteName=remote.getFirst().getName();
-  GithubFullPath userAndRepo=GithubUrlUtil.getUserAndRepositoryFromRemoteUrl(remoteUrl);
-  if (userAndRepo == null) {
-    GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,"Can't process remote: " + remoteUrl);
-    return;
-  }
-  final GitLocalBranch currentBranch=repository.getCurrentBranch();
-  if (currentBranch == null) {
-    GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,"No current branch");
-    return;
-  }
-  String upstreamUrl=GithubUtil.findUpstreamRemote(repository);
-  GithubFullPath upstreamUserAndRepo=upstreamUrl == null || !GithubUrlUtil.isGithubUrl(upstreamUrl) ? null : GithubUrlUtil.getUserAndRepositoryFromRemoteUrl(upstreamUrl);
-  final Map<String,String> forks=new HashMap<String,String>();
-  final Set<RemoteBranch> branches=new HashSet<RemoteBranch>();
-  addAvailableBranchesFromGit(repository,forks,branches);
-  GithubInfo info=loadGithubInfoAndBranchesWithModal(project,userAndRepo,upstreamUserAndRepo,forks,branches);
-  if (info == null) {
-    return;
-  }
-  final GithubRepoDetailed repo=info.getRepo();
-  final GithubAuthData auth=info.getAuthData();
-  GithubRepo parent=repo.getParent();
-  String defaultBranch=parent == null || parent.getDefaultBranch() == null ? null : parent.getUserName() + ":" + parent.getDefaultBranch();
-  Collection<String> suggestions=ContainerUtil.map(branches,new Function<RemoteBranch,String>(){
-    @Override public String fun(    RemoteBranch remoteBranch){
-      return remoteBranch.getReference();
-    }
-  }
-);
-  Consumer<String> showDiff=new Consumer<String>(){
-    @Override public void consume(    String ref){
-      showDiffByRef(project,ref,repository,currentBranch.getName(),auth,forks,branches,repo.getSource());
-    }
-  }
-;
-  final GithubCreatePullRequestDialog dialog=new GithubCreatePullRequestDialog(project,suggestions,defaultBranch,showDiff);
+  GithubCreatePullRequestDialog dialog=new GithubCreatePullRequestDialog(worker);
   DialogManager.show(dialog);
-  if (!dialog.isOK()) {
-    return;
-  }
-  new Task.Backgroundable(project,"Creating pull request..."){
-    @Override public void run(    @NotNull ProgressIndicator indicator){
-      LOG.info("Pushing current branch");
-      indicator.setText("Pushing current branch...");
-      GitCommandResult result=git.push(repository,remoteName,remoteUrl,currentBranch.getName(),true);
-      if (!result.success()) {
-        GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,"Push failed:<br/>" + result.getErrorOutputAsHtmlString());
-        return;
-      }
-      String from=repo.getUserName() + ":" + currentBranch.getName();
-      String onto=dialog.getTargetBranch();
-      String targetUser=onto.substring(0,onto.indexOf(':'));
-      GithubFullPath targetRepo=findRepositoryByUser(project,targetUser,forks,auth,repo.getSource());
-      if (targetRepo == null) {
-        GithubNotifications.showError(project,CANNOT_CREATE_PULL_REQUEST,"Can't find repository for specified branch: " + onto);
-        return;
-      }
-      LOG.info("Creating pull request");
-      indicator.setText("Creating pull request...");
-      GithubPullRequest request=createPullRequest(project,auth,targetRepo,dialog.getRequestTitle(),dialog.getDescription(),from,onto);
-      if (request == null) {
-        return;
-      }
-      GithubNotifications.showInfoURL(project,"Successfully created pull request","Pull Request #" + request.getNumber(),request.getHtmlUrl());
-    }
-  }
-.queue();
 }

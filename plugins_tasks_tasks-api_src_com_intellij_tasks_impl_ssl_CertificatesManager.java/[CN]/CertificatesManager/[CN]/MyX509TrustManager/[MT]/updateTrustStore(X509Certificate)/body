@@ -1,0 +1,32 @@
+{
+  Application app=ApplicationManager.getApplication();
+  if (app.isUnitTestMode() || app.isHeadlessEnvironment()) {
+    myCustomManager.addCertificate(certificate);
+    return true;
+  }
+  final CountDownLatch proceeded=new CountDownLatch(1);
+  final AtomicBoolean accepted=new AtomicBoolean();
+  app.invokeLater(new Runnable(){
+    @Override public void run(){
+      try {
+        UntrustedCertificateWarningDialog dialog=new UntrustedCertificateWarningDialog(certificate,myCustomManager.myPath,myCustomManager.myPassword);
+        accepted.set(dialog.showAndGet());
+        if (accepted.get()) {
+          LOG.debug("Certificate was accepted");
+          myCustomManager.addCertificate(certificate);
+        }
+      }
+  finally {
+        proceeded.countDown();
+      }
+    }
+  }
+,ModalityState.any());
+  try {
+    proceeded.await();
+  }
+ catch (  InterruptedException e) {
+    LOG.error(e);
+  }
+  return accepted.get();
+}

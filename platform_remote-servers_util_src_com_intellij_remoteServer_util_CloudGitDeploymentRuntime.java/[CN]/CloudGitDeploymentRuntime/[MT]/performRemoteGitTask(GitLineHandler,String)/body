@@ -1,0 +1,31 @@
+{
+  final GitTask task=new GitTask(myProject,handler,title);
+  task.setProgressAnalyzer(new GitStandardProgressAnalyzer());
+  final Semaphore semaphore=new Semaphore();
+  semaphore.down();
+  final Ref<ServerRuntimeException> errorRef=new Ref<ServerRuntimeException>();
+  ApplicationManager.getApplication().invokeLater(new Runnable(){
+    @Override public void run(){
+      task.execute(false,false,new GitTaskResultHandlerAdapter(){
+        @Override protected void run(        GitTaskResult result){
+          super.run(result);
+          semaphore.up();
+        }
+        @Override protected void onFailure(){
+          for (          VcsException error : handler.errors()) {
+            myLoggingHandler.println(error.toString());
+            if (errorRef.isNull()) {
+              errorRef.set(new ServerRuntimeException(error));
+            }
+          }
+        }
+      }
+);
+    }
+  }
+);
+  semaphore.waitFor();
+  if (!errorRef.isNull()) {
+    throw errorRef.get();
+  }
+}

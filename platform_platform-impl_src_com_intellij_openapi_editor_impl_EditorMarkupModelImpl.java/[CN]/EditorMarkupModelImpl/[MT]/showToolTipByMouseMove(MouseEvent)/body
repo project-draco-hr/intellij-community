@@ -1,9 +1,10 @@
 {
+  if (myEditor.getVisibleLineCount() == 0)   return false;
   MouseEvent me=new MouseEvent(e.getComponent(),e.getID(),e.getWhen(),e.getModifiers(),0,e.getY() + 1,e.getClickCount(),e.isPopupTrigger());
-  final int line=getLineByEvent(e);
+  final int visualLine=getVisualLineByEvent(e);
   Rectangle area=myEditor.getScrollingModel().getVisibleArea();
-  int realY=myEditor.getLineHeight() * line;
-  boolean isVisible=area.contains(area.x,realY);
+  int visualY=myEditor.getLineHeight() * visualLine;
+  boolean isVisible=area.contains(area.x,visualY) && myWheelAccumulator == 0;
   TooltipRenderer bigRenderer;
   if (IJSwingUtilities.findParentByInterface(myEditor.getComponent(),EditorWindowHolder.class) == null || isVisible || !UISettings.getInstance().SHOW_EDITOR_TOOLTIP) {
     final Set<RangeHighlighter> highlighters=new THashSet<RangeHighlighter>();
@@ -21,22 +22,20 @@
     me=new MouseEvent(e.getComponent(),e.getID(),e.getWhen(),e.getModifiers(),me.getX(),y + 1,e.getClickCount(),e.isPopupTrigger());
     bigRenderer=myTooltipRendererProvider.calcTooltipRenderer(highlighters);
     if (bigRenderer != null) {
-      HintHint hint=new HintHint(me).setAwtTooltip(true).setPreferredPosition(Balloon.Position.atLeft).setShowImmediately(true).setAnimationEnabled(false);
-      showTooltip(me,bigRenderer,hint);
+      showTooltip(me,bigRenderer,createHint(me));
       return true;
     }
     return false;
   }
  else {
-    float rowRatio=(float)Math.min(myEditor.getDocument().getLineCount() - 1,Math.max(0,line + myRowAdjuster)) / (myEditor.getDocument().getLineCount() - 1);
+    float rowRatio=(float)visualLine / (myEditor.getVisibleLineCount() - 1);
     int y=myRowAdjuster != 0 ? (int)(rowRatio * myEditor.getVerticalScrollBar().getHeight()) : me.getY();
     me=new MouseEvent(me.getComponent(),me.getID(),me.getWhen(),me.getModifiers(),me.getX(),y,me.getClickCount(),me.isPopupTrigger());
     final List<RangeHighlighterEx> highlighters=new ArrayList<RangeHighlighterEx>();
-    collectRangeHighlighters(this,line,highlighters);
-    collectRangeHighlighters((MarkupModelEx)DocumentMarkupModel.forDocument(myEditor.getDocument(),getEditor().getProject(),true),line,highlighters);
-    myEditorFragmentRenderer.update(line,highlighters);
-    HintHint hint=new HintHint(me).setAwtTooltip(true).setPreferredPosition(Balloon.Position.atLeft).setShowImmediately(true).setAnimationEnabled(false);
-    myEditorFragmentRenderer.show(myEditor,me.getPoint(),true,ERROR_STRIPE_TOOLTIP_GROUP,hint);
+    collectRangeHighlighters(this,visualLine,highlighters);
+    collectRangeHighlighters((MarkupModelEx)DocumentMarkupModel.forDocument(myEditor.getDocument(),getEditor().getProject(),true),visualLine,highlighters);
+    myEditorFragmentRenderer.update(visualLine,highlighters,me.isAltDown());
+    myEditorFragmentRenderer.show(myEditor,me.getPoint(),true,ERROR_STRIPE_TOOLTIP_GROUP,createHint(me));
     return true;
   }
 }

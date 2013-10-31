@@ -1,0 +1,46 @@
+{
+  if (!CodeInsightUtilBase.prepareEditorForWrite(editor))   return;
+  final List<MavenId> ids;
+  if (ApplicationManager.getApplication().isUnitTestMode()) {
+    ids=AddGradleDslDependencyAction.TEST_THREAD_LOCAL.get();
+  }
+ else {
+    ids=MavenArtifactSearchDialog.searchForArtifact(project,ContainerUtil.<MavenDomDependency>emptyList());
+  }
+  if (ids.isEmpty())   return;
+  new WriteCommandAction.Simple(project,GradleBundle.message("gradle.codeInsight.action.add_maven_dependency.text"),file){
+    @Override protected void run(){
+      GroovyPsiElementFactory factory=GroovyPsiElementFactory.getInstance(project);
+      List<GrMethodCall> closableBlocks=PsiTreeUtil.getChildrenOfTypeAsList(file,GrMethodCall.class);
+      GrCall dependenciesBlock=ContainerUtil.find(closableBlocks,new Condition<GrMethodCall>(){
+        @Override public boolean value(        GrMethodCall call){
+          GrExpression expression=call.getInvokedExpression();
+          return expression != null && "dependencies".equals(expression.getText());
+        }
+      }
+);
+      if (dependenciesBlock == null) {
+        StringBuilder buf=new StringBuilder();
+        for (        MavenId mavenId : ids) {
+          buf.append(String.format("compile '%s'\n",getMavenArtifactKey(mavenId)));
+        }
+        dependenciesBlock=(GrCall)factory.createStatementFromText("dependencies{\n" + buf + "}");
+        file.add(dependenciesBlock);
+      }
+ else {
+        GrClosableBlock closableBlock=ArrayUtil.getFirstElement(dependenciesBlock.getClosureArguments());
+        if (closableBlock != null) {
+          for (          MavenId mavenId : ids) {
+            closableBlock.addStatementBefore(factory.createStatementFromText(String.format("compile '%s'\n",getMavenArtifactKey(mavenId))),null);
+          }
+        }
+      }
+      PsiDocumentManager documentManager=PsiDocumentManager.getInstance(project);
+      Document document=documentManager.getDocument(file);
+      if (document != null) {
+        documentManager.commitDocument(document);
+      }
+    }
+  }
+.execute();
+}

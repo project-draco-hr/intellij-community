@@ -1,0 +1,58 @@
+{
+  try {
+    GithubInfo info=GithubUtil.computeValueInModal(myProject,"Access to GitHub",new ThrowableConvertor<ProgressIndicator,GithubInfo,IOException>(){
+      @Override public GithubInfo convert(      ProgressIndicator indicator) throws IOException {
+        GitRemote targetRemote=GithubUtil.findGithubRemote(myGitRepository,forkPath);
+        String targetRemoteName=targetRemote == null ? null : targetRemote.getName();
+        if (targetRemoteName == null) {
+          final AtomicReference<Integer> responseRef=new AtomicReference<Integer>();
+          ApplicationManager.getApplication().invokeAndWait(new Runnable(){
+            @Override public void run(){
+              responseRef.set(GithubNotifications.showYesNoDialog(myProject,"Can't Find Remote","Configure remote for '" + forkPath.getUser() + "'?"));
+            }
+          }
+,indicator.getModalityState());
+          if (responseRef.get() == Messages.YES) {
+            targetRemoteName=configureRemote(myProject,myGitRepository,forkPath);
+          }
+        }
+        List<String> branches=ContainerUtil.map(GithubApiUtil.getRepoBranches(myAuth,forkPath.getUser(),forkPath.getRepository()),new Function<GithubBranch,String>(){
+          @Override public String fun(          GithubBranch githubBranch){
+            return githubBranch.getName();
+          }
+        }
+);
+        if (targetRemoteName != null) {
+          GitFetchResult result=new GitFetcher(myProject,indicator,false).fetch(myGitRepository.getRoot(),targetRemoteName,null);
+          if (!result.isSuccess()) {
+            GitFetcher.displayFetchResult(myProject,result,null,result.getErrors());
+            targetRemoteName=null;
+          }
+        }
+        return new GithubInfo(branches,targetRemoteName);
+      }
+    }
+);
+    myForkPath=forkPath;
+    myTargetRemote=info.getTargetRemote();
+    myDiffInfos.clear();
+    if (canShowDiff()) {
+      for (      final String branch : info.getBranches()) {
+        myDiffInfos.put(branch,new FutureTask<DiffInfo>(new Callable<DiffInfo>(){
+          @Override public DiffInfo call() throws Exception {
+            return loadDiffInfo(myProject,myGitRepository,myCurrentBranch,myTargetRemote + "/" + branch);
+          }
+        }
+));
+      }
+    }
+    return new GithubTargetInfo(info.getBranches());
+  }
+ catch (  GithubAuthenticationCanceledException e) {
+    return null;
+  }
+catch (  IOException e) {
+    GithubNotifications.showErrorDialog(myProject,CANNOT_CREATE_PULL_REQUEST,e);
+    return null;
+  }
+}
