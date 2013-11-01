@@ -1,44 +1,42 @@
 {
   if (positionElement instanceof PsiIdentifier) {
     final PsiReferenceExpression referenceExpression=PsiTreeUtil.getParentOfType(positionElement,PsiReferenceExpression.class);
-    if (referenceExpression != null) {
-      final PsiExpression qualifier=referenceExpression.getQualifierExpression();
-      if (qualifier != null) {
-        doOtherWork(referenceExpression,qualifier);
-        return true;
-      }
-      if (referenceExpression.getFirstChild() instanceof PsiReferenceParameterList) {
-        final PsiExpressionStatement statement=PsiTreeUtil.getParentOfType(referenceExpression,PsiExpressionStatement.class);
-        if (statement != null) {
-          final PsiExpressionStatement prevStatement=PsiTreeUtil.getPrevSiblingOfType(statement,PsiExpressionStatement.class);
-          if (prevStatement != null) {
-            final PsiElement lastErrorChild=prevStatement.getLastChild();
-            if (lastErrorChild instanceof PsiErrorElement) {
-              PsiExpression expression=prevStatement.getExpression();
-              if (prevStatement.getFirstChild() == expression && lastErrorChild.getPrevSibling() == expression) {
-                PsiLiteralExpression brokenLiteral=null;
-                do {
-                  if (expression instanceof PsiLiteralExpression) {
-                    final PsiJavaToken token=PsiTreeUtil.getChildOfType(expression,PsiJavaToken.class);
-                    if (token != null && token.getTokenType() == JavaTokenType.DOUBLE_LITERAL && token.getText().endsWith(".")) {
-                      brokenLiteral=(PsiLiteralExpression)expression;
-                      break;
-                    }
-                  }
-                  final PsiElement last=expression.getLastChild();
-                  if (last instanceof PsiExpression)                   expression=(PsiExpression)last;
- else                   expression=PsiTreeUtil.getPrevSiblingOfType(last,PsiExpression.class);
-                }
- while (expression != null);
-                if (brokenLiteral != null) {
-                  return true;
-                }
+    if (referenceExpression == null)     return false;
+    final PsiExpression qualifier=referenceExpression.getQualifierExpression();
+    if (qualifier != null) {
+      doOtherWork(referenceExpression,qualifier);
+      return true;
+    }
+    if (referenceExpression.getFirstChild() instanceof PsiReferenceParameterList && referenceExpression.getLastChild() == referenceExpression) {
+      final PsiExpressionStatement statement=PsiTreeUtil.getParentOfType(referenceExpression,PsiExpressionStatement.class);
+      if (statement == null)       return false;
+      final PsiStatement prevStatement=PsiTreeUtil.getPrevSiblingOfType(statement,PsiStatement.class);
+      if (!(prevStatement instanceof PsiExpressionStatement))       return false;
+      final PsiElement lastErrorChild=prevStatement.getLastChild();
+      if (lastErrorChild instanceof PsiErrorElement) {
+        PsiExpression expression=((PsiExpressionStatement)prevStatement).getExpression();
+        if (prevStatement.getFirstChild() == expression && lastErrorChild.getPrevSibling() == expression) {
+          PsiLiteralExpression brokenLiteral=null;
+          do {
+            if (expression instanceof PsiLiteralExpression) {
+              final PsiJavaToken token=PsiTreeUtil.getChildOfType(expression,PsiJavaToken.class);
+              if (token != null && token.getTokenType() == JavaTokenType.DOUBLE_LITERAL && token.getText().endsWith(".")) {
+                brokenLiteral=(PsiLiteralExpression)expression;
+                break;
               }
             }
+            final PsiElement last=expression.getLastChild();
+            if (last instanceof PsiExpression)             expression=(PsiExpression)last;
+ else             expression=PsiTreeUtil.getPrevSiblingOfType(last,PsiExpression.class);
+          }
+ while (expression != null);
+          if (brokenLiteral != null) {
+            doOtherWork(referenceExpression,brokenLiteral);
+            return true;
           }
         }
       }
     }
   }
-  return true;
+  return false;
 }
