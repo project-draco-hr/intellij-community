@@ -1,0 +1,42 @@
+{
+  return ContainerUtil.map(chains,new Function<MethodsChain,MethodsChain>(){
+    @Override public MethodsChain fun(    final MethodsChain chain){
+      final Iterator<PsiMethod[]> chainIterator=chain.iterator();
+      if (!chainIterator.hasNext()) {
+        LOG.error("empty chain");
+        return chain;
+      }
+      final PsiMethod[] first=chainIterator.next();
+      while (chainIterator.hasNext()) {
+        final PsiMethod psiMethod=chainIterator.next()[0];
+        if (psiMethod.hasModifierProperty(PsiModifier.STATIC)) {
+          continue;
+        }
+        final PsiClass current=psiMethod.getContainingClass();
+        if (current == null) {
+          LOG.error("containing class must be not null");
+          return chain;
+        }
+        final PsiMethod[] currentMethods=current.findMethodsByName(first[0].getName(),true);
+        if (currentMethods.length != 0) {
+          for (          final PsiMethod f : first) {
+            final PsiMethod[] fSupers=f.findDeepestSuperMethods();
+            final PsiMethod fSuper=fSupers.length == 0 ? first[0] : fSupers[0];
+            for (            final PsiMethod currentMethod : currentMethods) {
+              if (psiManager.areElementsEquivalent(currentMethod,fSuper)) {
+                return createChainFromFirstElement(chain,currentMethod.getContainingClass());
+              }
+              for (              final PsiMethod method : currentMethod.findDeepestSuperMethods()) {
+                if (psiManager.areElementsEquivalent(method,fSuper)) {
+                  return createChainFromFirstElement(chain,method.getContainingClass());
+                }
+              }
+            }
+          }
+        }
+      }
+      return chain;
+    }
+  }
+);
+}

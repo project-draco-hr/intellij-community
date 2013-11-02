@@ -1,18 +1,33 @@
 {
-  final List<StepTarget> targets=findSmartStepTargets(position);
+  final List<SmartStepTarget> targets=findSmartStepTargets(position);
   if (!targets.isEmpty()) {
+    final SmartStepTarget firstTarget=targets.get(0);
     if (targets.size() == 1) {
-      session.stepInto(true,createMethodFilter(targets.get(0)));
+      session.stepInto(true,createMethodFilter(firstTarget));
     }
  else {
-      final PsiMethodListPopupStep popupStep=new PsiMethodListPopupStep(targets,new PsiMethodListPopupStep.OnChooseRunnable(){
-        public void execute(        StepTarget chosenTarget){
+      final Editor editor=fileEditor.getEditor();
+      final PsiMethodListPopupStep popupStep=new PsiMethodListPopupStep(editor,targets,new PsiMethodListPopupStep.OnChooseRunnable(){
+        public void execute(        SmartStepTarget chosenTarget){
           session.stepInto(true,createMethodFilter(chosenTarget));
         }
       }
 );
       final ListPopup popup=JBPopupFactory.getInstance().createListPopup(popupStep);
-      final RelativePoint point=DebuggerUIUtil.calcPopupLocation(fileEditor.getEditor(),position.getLine());
+      popup.addListSelectionListener(new ListSelectionListener(){
+        public void valueChanged(        ListSelectionEvent e){
+          popupStep.getScopeHighlighter().dropHighlight();
+          if (!e.getValueIsAdjusting()) {
+            final SmartStepTarget selectedTarget=(SmartStepTarget)((JBList)e.getSource()).getSelectedValue();
+            if (selectedTarget != null) {
+              highlightTarget(popupStep,selectedTarget);
+            }
+          }
+        }
+      }
+);
+      highlightTarget(popupStep,firstTarget);
+      final RelativePoint point=DebuggerUIUtil.calcPopupLocation(editor,position.getLine());
       popup.show(point);
     }
     return true;

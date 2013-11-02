@@ -1,0 +1,70 @@
+{
+  try {
+    final CompoundPositionManager positionManager=debugProcess.getPositionManager();
+    final SourcePosition startPosition=getSourcePosition();
+    List<Location> locations=positionManager.locationsOfLine(classType,startPosition);
+    if (locations.isEmpty() && myFilter instanceof LambdaMethodFilter) {
+      final int lastLine=((LambdaMethodFilter)myFilter).getLastStatementLine();
+      if (lastLine >= 0) {
+        int nextLine=startPosition.getLine() + 1;
+        while (nextLine <= lastLine && locations.isEmpty()) {
+          locations=positionManager.locationsOfLine(classType,SourcePosition.createFromLine(startPosition.getFile(),nextLine++));
+        }
+      }
+    }
+    if (!locations.isEmpty()) {
+      final Set<Method> methods=new HashSet<Method>();
+      for (      Location loc : locations) {
+        if (acceptLocation(debugProcess,classType,loc)) {
+          methods.add(loc.method());
+        }
+      }
+      Location location=null;
+      final int methodsFound=methods.size();
+      if (methodsFound == 1) {
+        location=methods.iterator().next().location();
+      }
+ else {
+        if (myFilter instanceof LambdaMethodFilter) {
+          final LambdaMethodFilter lambdaFilter=(LambdaMethodFilter)myFilter;
+          if (lambdaFilter.getLambdaOrdinal() < methodsFound) {
+            final Method[] candidates=methods.toArray(new Method[methodsFound]);
+            Arrays.sort(candidates,new Comparator<Method>(){
+              public int compare(              Method m1,              Method m2){
+                return getMethodOrdinal(m1) - getMethodOrdinal(m2);
+              }
+            }
+);
+            location=candidates[lambdaFilter.getLambdaOrdinal()].location();
+          }
+        }
+ else {
+          if (methodsFound > 0) {
+            location=methods.iterator().next().location();
+          }
+        }
+      }
+      if (location != null) {
+        final RequestManagerImpl requestsManager=debugProcess.getRequestsManager();
+        final BreakpointRequest request=requestsManager.createBreakpointRequest(this,location);
+        requestsManager.enableRequest(request);
+      }
+    }
+  }
+ catch (  ClassNotPreparedException ex) {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("ClassNotPreparedException: " + ex.getMessage());
+    }
+  }
+catch (  ObjectCollectedException ex) {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("ObjectCollectedException: " + ex.getMessage());
+    }
+  }
+catch (  InternalException ex) {
+    LOG.info(ex);
+  }
+catch (  Exception ex) {
+    LOG.info(ex);
+  }
+}

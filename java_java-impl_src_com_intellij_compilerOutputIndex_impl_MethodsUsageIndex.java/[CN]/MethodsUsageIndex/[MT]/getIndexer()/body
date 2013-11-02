@@ -2,21 +2,26 @@
   return new DataIndexer<String,Multiset<MethodIncompleteSignature>,ClassNode>(){
     @NotNull @Override public Map<String,Multiset<MethodIncompleteSignature>> map(    final ClassNode inputData){
       final Map<String,Multiset<MethodIncompleteSignature>> map=new HashMap<String,Multiset<MethodIncompleteSignature>>();
-      for (      final ClassFileData.MethodData data : new ClassFileData(inputData).getMethodDatas()) {
-        for (        final ClassFileData.MethodInsnSignature ms : data.getMethodInsnSignatures()) {
-          final String ownerClassName=AsmUtil.getQualifiedClassName(ms.getOwner());
-          final String returnType=AsmUtil.getReturnType(ms.getDesc());
-          if (MethodIncompleteSignature.CONSTRUCTOR_METHOD_NAME.equals(ms.getName())) {
-            addToIndex(map,ownerClassName,MethodIncompleteSignature.constructor(ownerClassName));
+      final MethodVisitor methodVisitor=new MethodVisitor(Opcodes.ASM4){
+        @Override public void visitMethodInsn(        final int opcode,        final String owner,        final String name,        final String desc){
+          final Type returnType=Type.getReturnType(desc);
+          if (MethodIncompleteSignature.CONSTRUCTOR_METHOD_NAME.equals(name) || AsmUtil.isPrimitiveOrArray(returnType.getDescriptor())) {
+            return;
           }
- else {
-            final boolean isStatic=ms.getOpcode() == Opcodes.INVOKESTATIC;
-            if (!ownerClassName.equals(returnType) || isStatic) {
-              addToIndex(map,returnType,new MethodIncompleteSignature(ownerClassName,returnType,ms.getName(),isStatic));
-            }
+          final String returnClassName=returnType.getInternalName();
+          final boolean isStatic=opcode == Opcodes.INVOKESTATIC;
+          if (!owner.equals(returnClassName) || isStatic) {
+            addToIndex(map,returnClassName,new MethodIncompleteSignature(owner,returnClassName,name,isStatic));
           }
         }
       }
+;
+      inputData.accept(new ClassVisitor(Opcodes.ASM4){
+        @Override public MethodVisitor visitMethod(        final int access,        final String name,        final String desc,        final String signature,        final String[] exceptions){
+          return methodVisitor;
+        }
+      }
+);
       return map;
     }
   }
