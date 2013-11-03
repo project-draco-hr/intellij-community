@@ -52,26 +52,38 @@
  catch (  Throwable e) {
     processException(e);
   }
-  UIUtil.invokeAndWaitIfNeeded(new Runnable(){
+  final Semaphore waitSemaphore=new Semaphore();
+  waitSemaphore.down();
+  SwingUtilities.invokeLater(new Runnable(){
     public void run(){
-      if (project.isDisposed()) {
-        return;
+      try {
+        if (!project.isDisposed()) {
+          final BreakpointManager breakpointManager=(DebuggerManagerEx.getInstanceEx(project)).getBreakpointManager();
+          breakpointManager.reloadBreakpoints();
+          debugProcess.getRequestsManager().clearWarnings();
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("requests updated");
+            LOG.debug("time stamp set");
+          }
+          myDebuggerSession.refresh(false);
+        }
       }
-      final BreakpointManager breakpointManager=(DebuggerManagerEx.getInstanceEx(project)).getBreakpointManager();
-      breakpointManager.reloadBreakpoints();
-      debugProcess.getRequestsManager().clearWarnings();
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("requests updated");
-        LOG.debug("time stamp set");
+ catch (      Throwable e) {
+        LOG.error(e);
       }
-      myDebuggerSession.refresh(false);
+ finally {
+        waitSemaphore.up();
+      }
     }
   }
 );
-  try {
-    breakpointManager.enableBreakpoints(debugProcess);
-  }
- catch (  Exception e) {
-    processException(e);
+  waitSemaphore.waitFor();
+  if (!project.isDisposed()) {
+    try {
+      breakpointManager.enableBreakpoints(debugProcess);
+    }
+ catch (    Exception e) {
+      processException(e);
+    }
   }
 }

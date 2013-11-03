@@ -1,22 +1,27 @@
 {
-  for (int attempts=0; attempts < 2; attempts++) {
-    try {
-      myFileTimestampsIndex=new PersistentHashMap<String,Long>(IndexInfrastructure.getStorageFile(getFileTimestampsIndexId()),new EnumeratorStringDescriptor(),new DataExternalizer<Long>(){
-        @Override public void save(        final DataOutput out,        final Long value) throws IOException {
-          out.writeLong(value);
+  final File storageFile=IndexInfrastructure.getStorageFile(getFileTimestampsIndexId());
+  try {
+    myFileTimestampsIndex=IOUtil.openCleanOrResetBroken(new ThrowableComputable<PersistentHashMap<String,Long>,IOException>(){
+      @Override public PersistentHashMap<String,Long> compute() throws IOException {
+        return new PersistentHashMap<String,Long>(storageFile,new EnumeratorStringDescriptor(),new DataExternalizer<Long>(){
+          @Override public void save(          final DataOutput out,          final Long value) throws IOException {
+            out.writeLong(value);
+          }
+          @Override public Long read(          final DataInput in) throws IOException {
+            return in.readLong();
+          }
         }
-        @Override public Long read(        final DataInput in) throws IOException {
-          return in.readLong();
-        }
-      }
 );
+      }
     }
- catch (    IOException e) {
-      FileUtil.delete(IndexInfrastructure.getIndexRootDir(getFileTimestampsIndexId()));
+,new Runnable(){
+      public void run(){
+        FileUtil.delete(IndexInfrastructure.getIndexRootDir(getFileTimestampsIndexId()));
+      }
     }
-    if (myFileTimestampsIndex != null) {
-      return;
-    }
+);
   }
-  throw new RuntimeException("Timestamps index not initialized");
+ catch (  IOException ex) {
+    throw new RuntimeException("Timestamps index not initialized",ex);
+  }
 }
