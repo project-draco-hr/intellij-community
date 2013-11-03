@@ -1,15 +1,17 @@
 {
   if (myInitialized.compareAndSet(false,true)) {
     initTimestampIndex();
-    File storageFile=IndexInfrastructure.getStorageFile(CompilerOutputIndexUtil.generateIndexId("compilerOutputIndexFileId.enum",myProject));
-    for (int i=0; i < 2; i++) {
-      try {
-        myFileEnumerator=new PersistentEnumeratorDelegate<String>(storageFile,new EnumeratorStringDescriptor(),2048);
+    final File storageFile=IndexInfrastructure.getStorageFile(CompilerOutputIndexUtil.generateIndexId("compilerOutputIndexFileId.enum",myProject));
+    try {
+      myFileEnumerator=IOUtil.openCleanOrResetBroken(new ThrowableComputable<PersistentEnumeratorDelegate<String>,IOException>(){
+        @Override public PersistentEnumeratorDelegate<String> compute() throws IOException {
+          return new PersistentEnumeratorDelegate<String>(storageFile,new EnumeratorStringDescriptor(),2048);
+        }
       }
- catch (      IOException e) {
-        if (i == 1)         throw new RuntimeException(e);
-        IOUtil.deleteAllFilesStartingWith(storageFile);
-      }
+,storageFile);
+    }
+ catch (    IOException e) {
+      throw new RuntimeException(e);
     }
     CompilerManager.getInstance(myProject).addCompilationStatusListener(new CompilationStatusAdapter(){
       @Override public void fileGenerated(      final String outputRoot,      final String relativePath){
