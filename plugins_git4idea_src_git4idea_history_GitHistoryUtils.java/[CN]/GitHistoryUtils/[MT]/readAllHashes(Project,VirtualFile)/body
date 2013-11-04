@@ -1,22 +1,60 @@
 {
-  GitSimpleHandler h=new GitSimpleHandler(project,root,GitCommand.LOG);
-  GitLogParser parser=new GitLogParser(project,GitLogParser.NameStatus.NONE,HASH,PARENTS,AUTHOR_TIME);
+  final int COMMIT_BUFFER=1000;
+  GitLineHandler h=new GitLineHandler(project,root,GitCommand.LOG);
+  final GitLogParser parser=new GitLogParser(project,GitLogParser.NameStatus.NONE,HASH,PARENTS,AUTHOR_TIME);
   h.setStdoutSuppressed(true);
   h.addParameters(parser.getPretty(),"--encoding=UTF-8");
   h.addParameters("HEAD","--branches","--remotes","--tags");
   h.addParameters("--full-history","--sparse");
   h.addParameters("--date-order");
   h.endOptions();
-  String output=h.run();
-  List<GitLogRecord> records=parser.parse(output);
-  return ContainerUtil.map(records,new Function<GitLogRecord,TimedVcsCommit>(){
-    @Override public TimedVcsCommit fun(    GitLogRecord record){
-      List<Hash> parents=new SmartList<Hash>();
-      for (      String parent : record.getParentsHashes()) {
-        parents.add(HashImpl.build(parent));
+  final List<TimedVcsCommit> commits=ContainerUtil.newArrayList();
+  final StringBuilder record=new StringBuilder();
+  final AtomicInteger records=new AtomicInteger();
+  final Ref<VcsException> ex=new Ref<VcsException>();
+  h.addLineListener(new GitLineHandlerListener(){
+    @Override public void onLineAvailable(    String line,    Key outputType){
+      try {
+        int recordEnd=line.indexOf(GitLogParser.RECORD_END);
+        String afterParseRemainder;
+        if (recordEnd == line.length() - 1) {
+          record.append(line);
+          afterParseRemainder="";
+        }
+ else         if (recordEnd == -1) {
+          record.append(line);
+          afterParseRemainder=null;
+        }
+ else {
+          record.append(line.substring(0,recordEnd + 1));
+          afterParseRemainder=line.substring(recordEnd + 1);
+        }
+        if (afterParseRemainder != null && records.incrementAndGet() > COMMIT_BUFFER) {
+          commits.addAll(parseCommit(parser,record));
+          record.setLength(0);
+          record.append(afterParseRemainder);
+        }
       }
-      return ServiceManager.getService(VcsLogObjectsFactory.class).createTimedCommit(HashImpl.build(record.getHash()),parents,record.getAuthorTimeStamp());
+ catch (      Exception e) {
+        ex.set(new VcsException(e));
+      }
+    }
+    @Override public void processTerminated(    int exitCode){
+      try {
+        commits.addAll(parseCommit(parser,record));
+      }
+ catch (      Exception e) {
+        ex.set(new VcsException(e));
+      }
+    }
+    @Override public void startFailed(    Throwable exception){
+      ex.set(new VcsException(exception));
     }
   }
 );
+  h.runInCurrentThread(null);
+  if (!ex.isNull()) {
+    throw ex.get();
+  }
+  return commits;
 }
