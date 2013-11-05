@@ -29,12 +29,12 @@
       result.add(currentVertex.getUnderlying().getSecond());
       continue;
     }
-    final SortedSet<UsageIndexValue> bigrams=searchService.getBigram(currentVertexUnderlying.getFirst());
+    final SortedSet<UsageIndexValue> nextMethods=searchService.getMethods(currentVertexUnderlying.getFirst().getOwner());
     final MaxSizeTreeSet<WeightAware<MethodIncompleteSignature>> currentSignatures=new MaxSizeTreeSet<WeightAware<MethodIncompleteSignature>>(maxResultSize);
-    for (    final UsageIndexValue indexValue : bigrams) {
+    for (    final UsageIndexValue indexValue : nextMethods) {
       final MethodIncompleteSignature vertex=indexValue.getMethodIncompleteSignature();
       final int occurrences=indexValue.getOccurrences();
-      if (!vertex.getOwner().equals(targetQName)) {
+      if (vertex.isStatic() || !vertex.getOwner().equals(targetQName)) {
         final int vertexDistance=Math.min(currentVertexDistance,occurrences);
         final MethodsChain knownVertexMethodsChain=knownDistance.get(vertex);
         if ((knownVertexMethodsChain == null || knownVertexMethodsChain.getChainWeight() < vertexDistance)) {
@@ -50,6 +50,9 @@
             }
           }
         }
+ else {
+          break;
+        }
       }
     }
     boolean updated=false;
@@ -58,7 +61,7 @@
       for (      final WeightAware<MethodIncompleteSignature> sign : currentSignatures) {
         final PsiMethod[] resolved=resolver.get(sign.getUnderlying());
         if (!isBreak) {
-          if (sign.getWeight() * maxResultSize > currentVertex.getWeight()) {
+          if (sign.getWeight() * NEXT_METHOD_IN_CHAIN_RATIO > currentVertex.getWeight()) {
             final boolean stopChain=sign.getUnderlying().isStatic() || toSet.contains(sign.getUnderlying().getOwner());
             if (stopChain) {
               updated=true;
@@ -74,7 +77,8 @@
           }
         }
         final MethodsChain methodsChain=currentVertexUnderlying.second.addEdge(resolved,sign.getUnderlying().getOwner(),sign.getWeight());
-        if (ParametersMatcher.matchParameters(methodsChain,context).noUnmatchedAndHasMatched()) {
+        final ParametersMatcher.MatchResult parametersMatchResult=ParametersMatcher.matchParameters(methodsChain,context);
+        if (parametersMatchResult.noUnmatchedAndHasMatched() && parametersMatchResult.hasTarget()) {
           updated=true;
           q.addFirst(new WeightAware<Pair<MethodIncompleteSignature,MethodsChain>>(new Pair<MethodIncompleteSignature,MethodsChain>(sign.getUnderlying(),methodsChain),sign.getWeight()));
         }
