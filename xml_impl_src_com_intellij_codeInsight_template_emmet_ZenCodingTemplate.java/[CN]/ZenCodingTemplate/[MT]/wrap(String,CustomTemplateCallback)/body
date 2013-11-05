@@ -1,8 +1,10 @@
 {
   final TextFieldWithStoredHistory field=new TextFieldWithStoredHistory(EMMET_RECENT_WRAP_ABBREVIATIONS_KEY);
+  final Dimension fieldPreferredSize=field.getPreferredSize();
+  field.setPreferredSize(new Dimension(Math.max(160,fieldPreferredSize.width),fieldPreferredSize.height));
   field.setHistorySize(10);
   final JBPopupFactory popupFactory=JBPopupFactory.getInstance();
-  final Balloon balloon=popupFactory.createDialogBalloonBuilder(field,XmlBundle.message("emmet.title")).setCloseButtonEnabled(false).setAnimationCycle(0).setHideOnClickOutside(true).setHideOnKeyOutside(true).createBalloon();
+  final BalloonImpl balloon=(BalloonImpl)popupFactory.createDialogBalloonBuilder(field,XmlBundle.message("emmet.title")).setCloseButtonEnabled(false).setBlockClicksThroughBalloon(true).setAnimationCycle(0).setHideOnKeyOutside(true).createBalloon();
   field.addDocumentListener(new DocumentAdapter(){
     @Override protected void textChanged(    DocumentEvent e){
       validateTemplateKey(field,balloon,field.getText(),callback);
@@ -17,6 +19,7 @@ case KeyEvent.VK_ENTER:
           final String abbreviation=field.getText();
         if (validateTemplateKey(field,balloon,abbreviation,callback)) {
           doWrap(selection,abbreviation,callback);
+          PropertiesComponent.getInstance().setValue(EMMET_LAST_WRAP_ABBREVIATIONS_KEY,abbreviation);
           field.addCurrentTextToHistory();
           balloon.hide(true);
         }
@@ -29,11 +32,31 @@ case KeyEvent.VK_ESCAPE:
 }
 }
 );
+IdeEventQueue.getInstance().addDispatcher(new IdeEventQueue.EventDispatcher(){
+@Override public boolean dispatch(AWTEvent e){
+if (e instanceof MouseEvent) {
+if (e.getID() == MouseEvent.MOUSE_PRESSED) {
+if (!balloon.isInsideBalloon((MouseEvent)e) && !PopupUtil.isComboPopupKeyEvent((ComponentEvent)e,field)) {
+  balloon.hide();
+}
+}
+}
+return false;
+}
+}
+,balloon);
 balloon.addListener(new JBPopupListener.Adapter(){
 @Override public void beforeShown(LightweightWindowEvent event){
-field.requestFocus();
+field.setText(PropertiesComponent.getInstance().getValue(EMMET_LAST_WRAP_ABBREVIATIONS_KEY,""));
 }
 }
 );
 balloon.show(popupFactory.guessBestPopupLocation(callback.getEditor()),Balloon.Position.below);
+final IdeFocusManager focusManager=IdeFocusManager.getInstance(callback.getProject());
+focusManager.doWhenFocusSettlesDown(new Runnable(){
+@Override public void run(){
+focusManager.requestFocus(field,true);
+}
+}
+);
 }
