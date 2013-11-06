@@ -3,11 +3,17 @@
   final Integer exitCode=executor.getExitCodeReference();
   if (exitCode == null || exitCode != 0) {
     logNullExitCode(executor,exitCode);
+    if (executor.isManuallyDestroyed()) {
+      cleanup(executor,command.getWorkingDirectory());
+      String destroyReason=executor.getDestroyReason();
+      if (!StringUtil.isEmpty(destroyReason)) {
+        throw new SvnBindException(destroyReason);
+      }
+    }
     if (executor.getErrorOutput().length() > 0) {
       final String errText=executor.getErrorOutput().trim();
-      final AuthCallbackCase callback=createCallback(errText,command.getRepositoryUrl());
+      final AuthCallbackCase callback=executor instanceof TerminalExecutor ? null : createCallback(errText,command.getRepositoryUrl());
       if (callback != null) {
-        cleanup(executor,command.getWorkingDirectory());
         if (callback.getCredentials(errText)) {
           if (myAuthCallback.getSpecialConfigDir() != null) {
             command.setConfigDir(myAuthCallback.getSpecialConfigDir());
@@ -25,6 +31,8 @@
     }
  else {
       if (exitCode != null) {
+        LOG.info("Command - " + executor.getCommandText());
+        LOG.info("Command output - " + executor.getOutput());
         throw new SvnBindException("Svn process exited with error code: " + exitCode);
       }
     }
