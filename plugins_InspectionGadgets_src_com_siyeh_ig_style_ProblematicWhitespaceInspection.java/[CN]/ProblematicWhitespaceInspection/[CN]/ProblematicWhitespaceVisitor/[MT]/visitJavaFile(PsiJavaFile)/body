@@ -1,0 +1,57 @@
+{
+  super.visitJavaFile(file);
+  final CodeStyleSettings settings=CodeStyleSettingsManager.getSettings(file.getProject());
+  final CommonCodeStyleSettings.IndentOptions indentOptions=settings.getIndentOptions(JavaFileType.INSTANCE);
+  final boolean useTabs=indentOptions.USE_TAB_CHARACTER;
+  final boolean smartTabs=indentOptions.SMART_TABS;
+  final Document document=PsiDocumentManager.getInstance(file.getProject()).getDocument(file);
+  if (document == null) {
+    return;
+  }
+  final int lineCount=document.getLineCount();
+  int previousLineIndent=0;
+  for (int i=0; i < lineCount; i++) {
+    final int startOffset=document.getLineStartOffset(i);
+    final int endOffset=document.getLineEndOffset(i);
+    final String line=document.getText(new TextRange(startOffset,endOffset));
+    boolean spaceSeen=false;
+    for (int j=0, length=line.length(); j < length; j++) {
+      final char c=line.charAt(j);
+      if (c == '\t') {
+        if (useTabs) {
+          if (smartTabs && spaceSeen) {
+            registerError(file,file.getName(),Boolean.valueOf(isOnTheFly()),Boolean.TRUE);
+            return;
+          }
+        }
+ else {
+          registerError(file,file.getName(),Boolean.valueOf(isOnTheFly()),Boolean.FALSE);
+          return;
+        }
+      }
+ else       if (c == ' ') {
+        if (useTabs) {
+          if (!smartTabs) {
+            registerError(file,file.getName(),Boolean.valueOf(isOnTheFly()),Boolean.TRUE);
+            return;
+          }
+ else {
+            final int currentIndent=Math.max(0,j);
+            if (currentIndent != previousLineIndent) {
+              registerError(file,file.getName(),Boolean.valueOf(isOnTheFly()),Boolean.TRUE);
+              return;
+            }
+            previousLineIndent=currentIndent;
+          }
+        }
+        spaceSeen=true;
+      }
+ else {
+        if (!spaceSeen) {
+          previousLineIndent=Math.max(0,j);
+        }
+        break;
+      }
+    }
+  }
+}

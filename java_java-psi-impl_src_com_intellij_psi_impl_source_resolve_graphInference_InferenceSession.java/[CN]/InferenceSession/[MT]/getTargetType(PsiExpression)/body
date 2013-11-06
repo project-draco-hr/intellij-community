@@ -1,0 +1,34 @@
+{
+  final PsiElement parent=PsiUtil.skipParenthesizedExprUp(context.getParent());
+  if (parent instanceof PsiExpressionList) {
+    final PsiElement gParent=parent.getParent();
+    if (gParent instanceof PsiCallExpression) {
+      final PsiExpressionList argumentList=((PsiCallExpression)gParent).getArgumentList();
+      if (argumentList != null) {
+        final Pair<PsiMethod,PsiSubstitutor> pair=MethodCandidateInfo.getCurrentMethod(argumentList);
+        final JavaResolveResult resolveResult=pair == null ? ((PsiCallExpression)gParent).resolveMethodGenerics() : null;
+        final PsiElement parentMethod=pair != null ? pair.first : resolveResult.getElement();
+        if (parentMethod instanceof PsiMethod) {
+          final PsiParameter[] parameters=((PsiMethod)parentMethod).getParameterList().getParameters();
+          PsiElement arg=context;
+          while (arg.getParent() instanceof PsiParenthesizedExpression) {
+            arg=arg.getParent();
+          }
+          final PsiExpression[] args=argumentList.getExpressions();
+          return getParameterType(parameters,args,ArrayUtilRt.find(args,arg),pair != null ? pair.second : resolveResult.getSubstitutor());
+        }
+      }
+    }
+  }
+ else   if (parent instanceof PsiConditionalExpression) {
+    PsiType targetType=PsiTypesUtil.getExpectedTypeByParent((PsiExpression)parent);
+    if (targetType == null) {
+      targetType=getTargetType((PsiExpression)parent);
+    }
+    return targetType;
+  }
+ else   if (parent instanceof PsiLambdaExpression) {
+    return LambdaUtil.getFunctionalInterfaceReturnType(((PsiLambdaExpression)parent).getFunctionalInterfaceType());
+  }
+  return null;
+}
