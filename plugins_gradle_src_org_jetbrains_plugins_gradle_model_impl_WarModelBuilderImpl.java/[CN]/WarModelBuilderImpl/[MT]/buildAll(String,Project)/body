@@ -1,0 +1,42 @@
+{
+  final WarPlugin warPlugin=project.getPlugins().findPlugin(WarPlugin.class);
+  if (warPlugin == null)   return null;
+  final String webAppDirName=!project.hasProperty(WEB_APP_DIR_NAME_PROPERTY) ? "src/main/webapp" : String.valueOf(project.property(WEB_APP_DIR_NAME_PROPERTY));
+  final File webAppDir=!project.hasProperty(WEB_APP_DIR_PROPERTY) ? null : (File)project.property(WEB_APP_DIR_PROPERTY);
+  WarModelImpl warModel=new WarModelImpl(webAppDirName,webAppDir);
+  for (  Task task : project.getTasks()) {
+    if (task instanceof War) {
+      final War warTask=(War)task;
+      warModel.setWebXml(warTask.getWebXml());
+      final Map<String,Set<String>> webRoots=new HashMap<String,Set<String>>();
+      warTask.getRootSpec().walk(new Action<CopySpecInternal>(){
+        @Override public void execute(        CopySpecInternal internal){
+          final String relativePath=internal.getDestPath().getPathString();
+          internal.getSource().visit(new FileVisitor(){
+            @Override public void visitDir(            FileVisitDetails dirDetails){
+              try {
+                addPath(webRoots,relativePath,dirDetails.getFile().getPath());
+              }
+ catch (              Exception ignore) {
+              }
+            }
+            @Override public void visitFile(            FileVisitDetails fileDetails){
+              try {
+                if (warTask.getWebXml() == null || !fileDetails.getFile().getCanonicalPath().equals(warTask.getWebXml().getCanonicalPath())) {
+                  addPath(webRoots,relativePath,fileDetails.getFile().getParent());
+                }
+              }
+ catch (              Exception ignore) {
+              }
+            }
+          }
+);
+        }
+      }
+);
+      warModel.setWebRoots(webRoots);
+      break;
+    }
+  }
+  return warModel;
+}
