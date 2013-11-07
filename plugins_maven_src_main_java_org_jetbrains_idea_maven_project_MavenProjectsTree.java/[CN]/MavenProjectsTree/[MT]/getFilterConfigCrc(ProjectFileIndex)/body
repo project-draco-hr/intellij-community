@@ -2,7 +2,7 @@
   ApplicationManager.getApplication().assertReadAccessAllowed();
   readLock();
   try {
-    CRC32 crc=new CRC32();
+    final CRC32 crc=new CRC32();
     Set<String> profiles=myExplicitProfiles;
     if (profiles != null) {
       updateCrc(crc,profiles.hashCode());
@@ -28,7 +28,7 @@
       updateCrc(crc,mavenProject.getDirectory());
       updateCrc(crc,MavenFilteredPropertyPsiReferenceProvider.getDelimitersPattern(mavenProject).pattern());
       updateCrc(crc,mavenProject.getModelMap().hashCode());
-      updateCrc(crc,mavenProject.getResources().hashCode() + 1);
+      updateCrc(crc,mavenProject.getResources().hashCode());
       updateCrc(crc,mavenProject.getTestResources().hashCode());
       updateCrc(crc,getFilterExclusions(mavenProject).hashCode());
       updateCrc(crc,mavenProject.getProperties().hashCode());
@@ -36,9 +36,32 @@
         File file=new File(each);
         updateCrc(crc,file.lastModified());
       }
-      Element pluginConfiguration=mavenProject.getPluginConfiguration("org.apache.maven.plugins","maven-resources-plugin");
-      updateCrc(crc,MavenJDOMUtil.findChildValueByPath(pluginConfiguration,"escapeString"));
-      updateCrc(crc,MavenJDOMUtil.findChildValueByPath(pluginConfiguration,"escapeWindowsPaths"));
+      XMLOutputter outputter=new XMLOutputter(Format.getCompactFormat());
+      Writer crcWriter=new Writer(){
+        @Override public void write(        char[] cbuf,        int off,        int len) throws IOException {
+          for (int i=off, end=off + len; i < end; i++) {
+            crc.update(cbuf[i]);
+          }
+        }
+        @Override public void flush() throws IOException {
+        }
+        @Override public void close() throws IOException {
+        }
+      }
+;
+      try {
+        Element resourcePluginCfg=mavenProject.getPluginConfiguration("org.apache.maven.plugins","maven-resources-plugin");
+        if (resourcePluginCfg != null) {
+          outputter.output(resourcePluginCfg,crcWriter);
+        }
+        Element warPluginCfg=mavenProject.getPluginConfiguration("org.apache.maven.plugins","maven-war-plugin");
+        if (warPluginCfg != null) {
+          outputter.output(warPluginCfg,crcWriter);
+        }
+      }
+ catch (      IOException e) {
+        LOG.error(e);
+      }
     }
     return (int)crc.getValue();
   }
