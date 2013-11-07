@@ -1,14 +1,15 @@
 {
-  if (positionElement instanceof PsiIdentifier) {
-    final PsiReferenceExpression referenceExpression=PsiTreeUtil.getParentOfType(positionElement,PsiReferenceExpression.class);
-    if (referenceExpression == null)     return null;
-    final PsiExpression qualifier=referenceExpression.getQualifierExpression();
+  if (!(positionElement instanceof PsiIdentifier))   return null;
+  final PsiElement parent=positionElement.getParent();
+  if (parent instanceof PsiReferenceExpression) {
+    final PsiReferenceExpression reference=(PsiReferenceExpression)parent;
+    final PsiExpression qualifier=reference.getQualifierExpression();
     if (qualifier != null) {
-      return new PostfixTemplateAcceptanceContext(referenceExpression,qualifier,forceMode){
+      return new PostfixTemplateAcceptanceContext(reference,qualifier,forceMode){
         @Override @NotNull public PrefixExpressionContext fixUpExpression(        final @NotNull PrefixExpressionContext context){
           final PsiElement parent=context.expression.getParent();
-          if (parent instanceof PsiReferenceExpression && parent == this.referenceExpression) {
-            final PsiExpression newExpression=(PsiExpression)this.referenceExpression.replace(context.expression);
+          if (parent instanceof PsiReferenceExpression && parent == this.postfixReference) {
+            final PsiExpression newExpression=(PsiExpression)this.postfixReference.replace(context.expression);
             return new PrefixExpressionContext(this,newExpression);
           }
           return context;
@@ -16,46 +17,52 @@
       }
 ;
     }
-    if (referenceExpression.getFirstChild() instanceof PsiReferenceParameterList && referenceExpression.getLastChild() == positionElement) {
-      final PsiExpressionStatement statement=PsiTreeUtil.getParentOfType(referenceExpression,PsiExpressionStatement.class);
-      if (statement == null)       return null;
+    if (reference.getFirstChild() instanceof PsiReferenceParameterList && reference.getLastChild() == positionElement) {
+      final PsiElement statement=reference.getParent();
+      if (!(statement instanceof PsiExpressionStatement))       return null;
       final PsiStatement prevStatement=PsiTreeUtil.getPrevSiblingOfType(statement,PsiStatement.class);
       if (!(prevStatement instanceof PsiExpressionStatement))       return null;
       final PsiElement lastErrorChild=prevStatement.getLastChild();
       if (lastErrorChild instanceof PsiErrorElement) {
         PsiExpression expression=((PsiExpressionStatement)prevStatement).getExpression();
         if (prevStatement.getFirstChild() == expression && lastErrorChild.getPrevSibling() == expression) {
-          PsiLiteralExpression brokenLiteral=null;
-          do {
-            if (expression instanceof PsiLiteralExpression) {
-              final PsiJavaToken token=PsiTreeUtil.getChildOfType(expression,PsiJavaToken.class);
-              if (token != null && token.getTokenType() == JavaTokenType.DOUBLE_LITERAL && token.getText().endsWith(".")) {
-                brokenLiteral=(PsiLiteralExpression)expression;
-                break;
-              }
-            }
-            final PsiElement last=expression.getLastChild();
-            if (last instanceof PsiExpression)             expression=(PsiExpression)last;
- else             expression=PsiTreeUtil.getPrevSiblingOfType(last,PsiExpression.class);
-          }
- while (expression != null);
+          final PsiLiteralExpression brokenLiteral=findBrokenLiteral(expression);
           if (brokenLiteral != null) {
-            final PsiLiteralExpression literal=brokenLiteral;
-            return new PostfixTemplateAcceptanceContext(referenceExpression,literal,forceMode){
+            return new PostfixTemplateAcceptanceContext(reference,brokenLiteral,forceMode){
               @Override @NotNull public PrefixExpressionContext fixUpExpression(              @NotNull final PrefixExpressionContext context){
                 statement.delete();
                 final Project project=context.expression.getProject();
                 final PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
-                final String literalText=literal.getText();
+                final String literalText=brokenLiteral.getText();
                 final String fixedText=literalText.substring(0,literalText.length() - 1);
                 final PsiLiteralExpression fixedLiteral=(PsiLiteralExpression)factory.createExpressionFromText(fixedText,null);
-                literal.replace(fixedLiteral);
+                brokenLiteral.replace(fixedLiteral);
                 return context;
               }
             }
 ;
           }
         }
+      }
+    }
+  }
+ else   if (parent instanceof PsiJavaCodeReferenceElement) {
+    final PsiElement qualifier=((PsiJavaCodeReferenceElement)parent).getQualifier();
+    if (qualifier instanceof PsiJavaCodeReferenceElement) {
+    }
+ else     return null;
+    final PsiElement referenceParent=parent.getParent();
+    if (referenceParent instanceof PsiTypeElement) {
+      final PsiElement expression=referenceParent.getParent();
+      if (expression instanceof PsiInstanceOfExpression) {
+        final PsiExpression instanceOfExpression=(PsiInstanceOfExpression)expression;
+        return new PostfixTemplateAcceptanceContext(parent,instanceOfExpression,forceMode){
+          @NotNull @Override public PrefixExpressionContext fixUpExpression(          @NotNull final PrefixExpressionContext context){
+            parent.replace(qualifier);
+            return context;
+          }
+        }
+;
       }
     }
   }
