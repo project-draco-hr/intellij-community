@@ -1,21 +1,46 @@
 {
-  for (  PrefixExpressionContext expressionContext : context.expressions)   if (expressionContext.canBeStatement) {
+  PrefixExpressionContext forcedTarget=null;
+  PsiClass invokedOnType=null;
+  for (  PrefixExpressionContext expressionContext : context.expressions) {
     PsiExpression expression=expressionContext.expression;
-    PsiClass invokedOnType=null;
-    if (expression instanceof PsiReferenceExpression) {
-      PsiElement target=((PsiReferenceExpression)expression).resolve();
-      if (target instanceof PsiClass) {
-        invokedOnType=(PsiClass)target;
+    PsiElement referenced=expressionContext.referencedElement;
+    if (referenced != null) {
+      if (referenced instanceof PsiClass) {
+        invokedOnType=(PsiClass)referenced;
+        if (invokedOnType.isEnum())         break;
       }
  else {
-        if (target instanceof PsiVariable)         continue;
+        if (referenced instanceof PsiPackage)         continue;
+        if (referenced instanceof PsiLocalVariable || referenced instanceof PsiParameter) {
+          if (forcedTarget == null)           forcedTarget=expressionContext;
+ else           break;
+          continue;
+        }
       }
     }
     PsiType expressionType=expression.getType();
     if (expressionType == null && invokedOnType == null) {
       if (context.expressions.size() == 1)       break;
     }
-    consumer.add(new IntroduceVarLookupElement(expressionContext,invokedOnType));
-    break;
+    if (expressionType != null && expressionType.equals(PsiType.VOID))     continue;
+    if (expressionContext.canBeStatement) {
+      consumer.add(new IntroduceVarStatementLookupElement(expressionContext,invokedOnType));
+      break;
+    }
+ else {
+      if (forcedTarget == null)       forcedTarget=expressionContext;
+ else       break;
+    }
+  }
+  if (forcedTarget != null && context.isForceMode) {
+    if (forcedTarget.referencedElement instanceof PsiClass) {
+      invokedOnType=(PsiClass)forcedTarget.referencedElement;
+    }
+    if (forcedTarget.canBeStatement) {
+      consumer.add(new IntroduceVarStatementLookupElement(forcedTarget,invokedOnType));
+    }
+ else {
+      consumer.add(new IntroduceVarExpressionLookupElement(forcedTarget,invokedOnType));
+    }
   }
 }
