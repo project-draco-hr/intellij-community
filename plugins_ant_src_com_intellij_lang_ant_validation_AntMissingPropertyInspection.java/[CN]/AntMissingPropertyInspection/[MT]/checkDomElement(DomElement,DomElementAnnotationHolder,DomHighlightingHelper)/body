@@ -1,0 +1,32 @@
+{
+  if (element instanceof GenericDomValue) {
+    final XmlElement xmlElement=DomUtil.getValueElement(((GenericDomValue)element));
+    if (xmlElement != null) {
+      Collection<PropertiesFile> propertyFiles=null;
+      for (      final PsiReference ref : xmlElement.getReferences()) {
+        if (!(ref instanceof AntDomPropertyReference)) {
+          continue;
+        }
+        final AntDomPropertyReference antDomRef=(AntDomPropertyReference)ref;
+        if (antDomRef.shouldBeSkippedByAnnotator()) {
+          continue;
+        }
+        if (antDomRef.resolve() == null) {
+          final List<LocalQuickFix> quickFixList=new ArrayList<LocalQuickFix>();
+          final String canonicalText=antDomRef.getCanonicalText();
+          quickFixList.add(new AntCreatePropertyFix(canonicalText,null));
+          final PsiFile containingFile=xmlElement.getContainingFile();
+          if (containingFile != null) {
+            if (propertyFiles == null) {
+              propertyFiles=getPropertyFiles(AntSupport.getAntDomProject(containingFile),xmlElement);
+            }
+            for (            PropertiesFile propertyFile : propertyFiles) {
+              quickFixList.add(new AntCreatePropertyFix(canonicalText,propertyFile));
+            }
+          }
+          holder.createProblem(element,ProblemHighlightType.LIKE_UNKNOWN_SYMBOL,canonicalText,ref.getRangeInElement(),quickFixList.toArray((new LocalQuickFix[quickFixList.size()])));
+        }
+      }
+    }
+  }
+}
