@@ -1,6 +1,24 @@
 {
-  String result;
-  Object data=SvnConfiguration.RUNTIME_AUTH_CACHE.getData(ISVNAuthenticationManager.SSH,realm);
-  result=data != null && data instanceof String ? (String)data : requestSshCredentialsFromUser(realm,mode,key);
-  return result;
+  return requestCredentials(realm,ISVNAuthenticationManager.SSH,new Getter<Pair<String,Boolean>>(){
+    @Override public Pair<String,Boolean> get(){
+      final Ref<String> answer=new Ref<String>();
+      final Ref<Boolean> save=new Ref<Boolean>();
+      Runnable command=new Runnable(){
+        public void run(){
+          SimpleCredentialsDialog dialog=new SimpleCredentialsDialog(myVcs.getProject());
+          dialog.setup(mode,realm,key,true);
+          dialog.setTitle(SvnBundle.message("dialog.title.authentication.required"));
+          dialog.show();
+          if (dialog.isOK()) {
+            answer.set(dialog.getPassword());
+            save.set(dialog.isSaveAllowed());
+          }
+        }
+      }
+;
+      WaitForProgressToShow.runOrInvokeAndWaitAboveProgress(command);
+      return new Pair<String,Boolean>(answer.get(),!save.isNull() && save.get());
+    }
+  }
+);
 }
