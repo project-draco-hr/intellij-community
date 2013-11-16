@@ -5,36 +5,9 @@ synchronized (myDummyIdentifierLock) {
   }
   CompletionType completionType=parameters.getCompletionType();
   if (completionType != CompletionType.BASIC)   return;
-  LinkedHashSet<CompletionResult> completionResults=result.runRemainingContributors(parameters,true);
+  LinkedHashSet<CompletionResult> completionResults=result.withPrefixMatcher(PrefixMatcher.ALWAYS_TRUE).runRemainingContributors(parameters,true);
   boolean isForceMode=!parameters.isAutoPopup() && !behaveAsAutoPopupForTests;
   PostfixExecutionContext executionContext=new PostfixExecutionContext(isForceMode,dummyIdentifier);
-  if (!completionResults.isEmpty()) {
-    PostfixItemsCompletionProvider.addCompletions(parameters,result,executionContext);
-  }
-  LinkedHashSet<LookupElement> chainQualifiers=new LinkedHashSet<LookupElement>();
-  for (  CompletionResult completionResult : completionResults) {
-    LookupElement lookupElement=completionResult.getLookupElement();
-    if (lookupElement instanceof JavaChainLookupElement) {
-      JavaChainLookupElement chainLookupElement=(JavaChainLookupElement)lookupElement;
-      LookupElement qualifier=chainLookupElement.getQualifier();
-      if (chainQualifiers.add(qualifier)) {
-        PsiType exprType=null;
-        TypedLookupItem typedLookupItem=qualifier.as(TypedLookupItem.CLASS_CONDITION_KEY);
-        if (typedLookupItem != null)         exprType=typedLookupItem.getType();
-        List<LookupElement> elements=PostfixItemsCompletionProvider.addCompletions2(parameters,executionContext,exprType);
-        for (        LookupElement postfixElement : elements) {
-          JavaChainLookupElement chainedPostfix=new JavaChainLookupElement(qualifier,postfixElement){
-            @Override public PsiType getType(){
-              return null;
-            }
-          }
-;
-          PrefixMatcher prefixMatcher=completionResult.getPrefixMatcher();
-          if (!prefixMatcher.prefixMatches(chainedPostfix))           continue;
-          CompletionResult postfixResult=completionResult.withLookupElement(chainedPostfix);
-          result.passResult(postfixResult);
-        }
-      }
-    }
-  }
+  PostfixItemsCompletionProvider.addCompletions(parameters,result,executionContext);
+  suggestChainedCalls(parameters,result,parameters.getPosition());
 }
