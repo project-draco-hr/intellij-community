@@ -1,0 +1,42 @@
+{
+  TIntIntHashMap initialBackSlashes=countBackSlashes(text,startOffset,endOffset);
+  if (initialBackSlashes.isEmpty()) {
+    if (nodeAfter != null && whiteSpaceText.length() > 0 && whiteSpaceText.charAt(0) == '\n' && PythonEnterHandler.needInsertBackslash(nodeAfter,false)) {
+      return addBackslashPrefix(whiteSpaceText,codeStyleSettings);
+    }
+    return whiteSpaceText;
+  }
+  final TIntIntHashMap newBackSlashes=countBackSlashes(whiteSpaceText,0,whiteSpaceText.length());
+  final AtomicBoolean continueProcessing=new AtomicBoolean();
+  initialBackSlashes.forEachKey(new TIntProcedure(){
+    @Override public boolean execute(    int key){
+      if (!newBackSlashes.containsKey(key)) {
+        continueProcessing.set(true);
+        return false;
+      }
+      return true;
+    }
+  }
+);
+  if (!continueProcessing.get()) {
+    return whiteSpaceText;
+  }
+  PyCodeStyleSettings settings=codeStyleSettings.getCustomSettings(PyCodeStyleSettings.class);
+  StringBuilder result=new StringBuilder();
+  int line=0;
+  for (int i=0; i < whiteSpaceText.length(); i++) {
+    char c=whiteSpaceText.charAt(i);
+    if (c != '\n') {
+      result.append(c);
+      continue;
+    }
+    if (!newBackSlashes.contains(line++)) {
+      if ((i == 0 || (i > 0 && whiteSpaceText.charAt(i - 1) != ' ')) && settings.SPACE_BEFORE_BACKSLASH) {
+        result.append(' ');
+      }
+      result.append('\\');
+    }
+    result.append(c);
+  }
+  return result;
+}
