@@ -2,36 +2,29 @@
   Map<String,List<VirtualFile>> cacheMap=includeLibrarySources ? myDirectoriesByPackageNameCacheWithLibSrc : myDirectoriesByPackageNameCache;
   final List<VirtualFile> cachedResult=cacheMap.get(packageName);
   if (cachedResult != null) {
-    return new CollectionQuery<VirtualFile>(cachedResult);
+    return cachedResult;
   }
   final ArrayList<VirtualFile> result=ContainerUtil.newArrayList();
-  for (  Map.Entry<String,HashSet<VirtualFile>> entry : myPackagePrefixRoots.entrySet()) {
-    if (!packageName.startsWith(entry.getKey())) {
-      continue;
-    }
-    if (packageName.equals(entry.getKey())) {
-      for (      VirtualFile file : entry.getValue()) {
-        if (isValidPackageDirectory(includeLibrarySources,file)) {
-          result.add(file);
-        }
-      }
-      continue;
-    }
-    final String nestedPackageName=entry.getKey().isEmpty() ? packageName : packageName.substring(entry.getKey().length());
-    final List<String> nestedPackages=StringUtil.split(nestedPackageName,".");
-    for (    final VirtualFile root : entry.getValue()) {
-      VirtualFile file=root;
-      for (      String name : nestedPackages) {
-        file=file.findChild(name);
-        if (file == null) {
-          break;
-        }
-      }
+  Set<VirtualFile> packagePrefixRoots=myPackagePrefixRoots.get(packageName);
+  if (packagePrefixRoots != null) {
+    for (    VirtualFile file : packagePrefixRoots) {
       if (isValidPackageDirectory(includeLibrarySources,file)) {
         result.add(file);
       }
     }
   }
-  cacheMap.put(packageName,result);
-  return new CollectionQuery<VirtualFile>(result);
+  if (StringUtil.isNotEmpty(packageName) && !packageName.startsWith(".")) {
+    String parentPackage=StringUtil.getPackageName(packageName);
+    String shortName=StringUtil.getShortName(packageName);
+    for (    VirtualFile parentDir : getDirectoriesByPackageName(parentPackage,includeLibrarySources)) {
+      VirtualFile child=parentDir.findChild(shortName);
+      if (isValidPackageDirectory(includeLibrarySources,child) && child.isDirectory()) {
+        result.add(child);
+      }
+    }
+  }
+  if (!result.isEmpty()) {
+    cacheMap.put(packageName,result);
+  }
+  return result;
 }

@@ -4,7 +4,7 @@
 {
       registerCustomShortcutSet(CommonShortcuts.INSERT,myTree);
     }
-    public void actionPerformed(    AnActionEvent event){
+    @Override public void actionPerformed(    AnActionEvent event){
       final String name=askForProfileName("Create Copyright Profile","");
       if (name == null)       return;
       final CopyrightProfile copyrightProfile=new CopyrightProfile(name);
@@ -15,9 +15,9 @@
   result.add(new MyDeleteAction());
   result.add(new AnAction("Copy","Copy",PlatformIcons.COPY_ICON){
 {
-      registerCustomShortcutSet(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_D,KeyEvent.CTRL_MASK)),myTree);
+      registerCustomShortcutSet(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_D,InputEvent.CTRL_MASK)),myTree);
     }
-    public void actionPerformed(    AnActionEvent event){
+    @Override public void actionPerformed(    AnActionEvent event){
       final String profileName=askForProfileName("Copy Copyright Profile","");
       if (profileName == null)       return;
       final CopyrightProfile clone=new CopyrightProfile();
@@ -25,14 +25,14 @@
       clone.setName(profileName);
       addProfileNode(clone);
     }
-    public void update(    AnActionEvent event){
+    @Override public void update(    AnActionEvent event){
       super.update(event);
       event.getPresentation().setEnabled(getSelectedObject() != null);
     }
   }
 );
   result.add(new AnAction("Import","Import",PlatformIcons.IMPORT_ICON){
-    public void actionPerformed(    AnActionEvent event){
+    @Override public void actionPerformed(    AnActionEvent event){
       final OpenProjectFileChooserDescriptor descriptor=new OpenProjectFileChooserDescriptor(true){
         @Override public boolean isFileVisible(        VirtualFile file,        boolean showHiddenFiles){
           return super.isFileVisible(file,showHiddenFiles) || canContainCopyright(file);
@@ -46,34 +46,37 @@
       }
 ;
       descriptor.setTitle("Choose file containing copyright notice");
-      final VirtualFile file=FileChooser.chooseFile(descriptor,myProject,null);
-      if (file == null)       return;
-      final List<CopyrightProfile> copyrightProfiles=ExternalOptionHelper.loadOptions(VfsUtil.virtualToIoFile(file));
-      if (copyrightProfiles == null)       return;
-      if (!copyrightProfiles.isEmpty()) {
-        if (copyrightProfiles.size() == 1) {
-          importProfile(copyrightProfiles.get(0));
-        }
+      FileChooser.chooseFile(descriptor,myProject,null,new Consumer<VirtualFile>(){
+        @Override public void consume(        VirtualFile file){
+          final List<CopyrightProfile> copyrightProfiles=ExternalOptionHelper.loadOptions(VfsUtilCore.virtualToIoFile(file));
+          if (copyrightProfiles == null)           return;
+          if (!copyrightProfiles.isEmpty()) {
+            if (copyrightProfiles.size() == 1) {
+              importProfile(copyrightProfiles.get(0));
+            }
  else {
-          JBPopupFactory.getInstance().createListPopup(new BaseListPopupStep<CopyrightProfile>("Choose profile to import",copyrightProfiles){
-            @Override public PopupStep onChosen(            final CopyrightProfile selectedValue,            boolean finalChoice){
-              return doFinalStep(new Runnable(){
-                public void run(){
-                  importProfile(selectedValue);
+              JBPopupFactory.getInstance().createListPopup(new BaseListPopupStep<CopyrightProfile>("Choose profile to import",copyrightProfiles){
+                @Override public PopupStep onChosen(                final CopyrightProfile selectedValue,                boolean finalChoice){
+                  return doFinalStep(new Runnable(){
+                    @Override public void run(){
+                      importProfile(selectedValue);
+                    }
+                  }
+);
+                }
+                @NotNull @Override public String getTextFor(                CopyrightProfile value){
+                  return value.getName();
                 }
               }
-);
-            }
-            @NotNull @Override public String getTextFor(            CopyrightProfile value){
-              return value.getName();
+).showUnderneathOf(myNorthPanel);
             }
           }
-).showUnderneathOf(myNorthPanel);
+ else {
+            Messages.showWarningDialog(myProject,"The selected file does not contain any copyright settings.","Import Failure");
+          }
         }
       }
- else {
-        Messages.showWarningDialog(myProject,"The selected file does not contain any copyright settings.","Import Failure");
-      }
+);
     }
     private void importProfile(    CopyrightProfile copyrightProfile){
       final String profileName=askForProfileName("Import copyright profile",copyrightProfile.getName());

@@ -1,14 +1,20 @@
 {
-  final PsiClass targetClass=(PsiClass)context.getScope();
+  PsiElement scope=myContext.getScope();
+  final PsiClass targetClass=scope instanceof GroovyFileBase ? ((GroovyFileBase)scope).getScriptClass() : (PsiClass)scope;
   if (targetClass == null)   return null;
-  final GrVariableDeclaration declaration=insertField(targetClass,createField());
+  final GrVariableDeclaration declaration=insertField(targetClass);
   final GrVariable field=declaration.getVariables()[0];
-switch (settings.initializeIn()) {
+  if (mySettings.removeLocalVar()) {
+    myLocalVariable=GrIntroduceHandlerBase.resolveLocalVar(myContext);
+  }
+  myInitializer=(GrExpression)getInitializer().copy();
+  List<PsiElement> replaced=processOccurrences(targetClass,field);
+switch (mySettings.initializeIn()) {
 case CUR_METHOD:
-    initializeInMethod(field);
+    initializeInMethod(field,replaced);
   break;
 case FIELD_DECLARATION:
-field.setInitializerGroovy(getInitializer());
+field.setInitializerGroovy(myInitializer);
 break;
 case CONSTRUCTOR:
 initializeInConstructor(field);
@@ -18,9 +24,8 @@ initializeInSetup(field);
 break;
 }
 JavaCodeStyleManager.getInstance(declaration.getProject()).shortenClassReferences(declaration);
-if (settings.removeLocalVar()) {
-GrIntroduceHandlerBase.deleteLocalVar(context);
+if (mySettings.removeLocalVar()) {
+GrIntroduceHandlerBase.deleteLocalVar(myLocalVariable);
 }
-processOccurrences(targetClass,field);
 return field;
 }
