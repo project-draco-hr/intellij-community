@@ -1,7 +1,48 @@
 {
-  extend(CompletionType.BASIC,IN_BASIC_DEPENDENCY_NOTATION,new CompletionProvider<CompletionParameters>(){
+  extend(CompletionType.BASIC,IN_MAP_DEPENDENCY_NOTATION,new CompletionProvider<CompletionParameters>(){
     @Override protected void addCompletions(    @NotNull CompletionParameters params,    ProcessingContext context,    @NotNull final CompletionResultSet result){
       result.stopHere();
+      final PsiElement parent=params.getPosition().getParent().getParent();
+      if (!(parent instanceof GrNamedArgument) || !(parent.getParent() instanceof GrNamedArgumentsOwner)) {
+        return;
+      }
+      final GrNamedArgument namedArgument=(GrNamedArgument)parent;
+      if (GROUP_LABEL.equals(namedArgument.getLabelName())) {
+        MavenProjectIndicesManager m=MavenProjectIndicesManager.getInstance(namedArgument.getProject());
+        for (        String groupId : m.getGroupIds()) {
+          LookupElement builder=LookupElementBuilder.create(groupId).withIcon(AllIcons.Nodes.PpLib);
+          result.addElement(builder);
+        }
+      }
+ else       if (NAME_LABEL.equals(namedArgument.getLabelName())) {
+        String groupId=findNamedArgumentValue((GrNamedArgumentsOwner)namedArgument.getParent(),GROUP_LABEL);
+        if (groupId == null)         return;
+        MavenProjectIndicesManager m=MavenProjectIndicesManager.getInstance(namedArgument.getProject());
+        for (        String artifactId : m.getArtifactIds(groupId)) {
+          LookupElement builder=LookupElementBuilder.create(artifactId).withIcon(AllIcons.Nodes.PpLib);
+          result.addElement(builder);
+        }
+      }
+ else       if (VERSION_LABEL.equals(namedArgument.getLabelName())) {
+        GrNamedArgumentsOwner namedArgumentsOwner=(GrNamedArgumentsOwner)namedArgument.getParent();
+        String groupId=findNamedArgumentValue(namedArgumentsOwner,GROUP_LABEL);
+        if (groupId == null)         return;
+        String artifactId=findNamedArgumentValue(namedArgumentsOwner,NAME_LABEL);
+        if (artifactId == null)         return;
+        MavenProjectIndicesManager m=MavenProjectIndicesManager.getInstance(namedArgument.getProject());
+        for (        String version : m.getVersions(groupId,artifactId)) {
+          LookupElement builder=LookupElementBuilder.create(version).withIcon(AllIcons.Nodes.PpLib);
+          result.addElement(builder);
+        }
+      }
+    }
+  }
+);
+  extend(CompletionType.BASIC,IN_METHOD_DEPENDENCY_NOTATION,new CompletionProvider<CompletionParameters>(){
+    @Override protected void addCompletions(    @NotNull CompletionParameters params,    ProcessingContext context,    @NotNull final CompletionResultSet result){
+      result.stopHere();
+      final PsiElement parent=params.getPosition().getParent();
+      if (!(parent instanceof GrLiteral) || !(parent.getParent() instanceof GrArgumentList))       return;
       String searchText=CompletionUtil.findReferenceOrAlphanumericPrefix(params);
       MavenArtifactSearcher searcher=new MavenArtifactSearcher();
       List<MavenArtifactSearchResult> searchResults=searcher.search(params.getPosition().getProject(),searchText,100);
@@ -12,43 +53,6 @@
           MavenId.append(buf,artifactInfo.getArtifactId());
           MavenId.append(buf,artifactInfo.getVersion());
           LookupElement builder=LookupElementBuilder.create(buf.toString()).withIcon(AllIcons.Nodes.PpLib);
-          result.addElement(builder);
-        }
-      }
-    }
-  }
-);
-  extend(CompletionType.BASIC,IN_MAP_DEPENDENCY_NOTATION,new CompletionProvider<CompletionParameters>(){
-    @Override protected void addCompletions(    @NotNull CompletionParameters params,    ProcessingContext context,    @NotNull final CompletionResultSet result){
-      result.stopHere();
-      final PsiElement parent=params.getPosition().getParent().getParent();
-      if (!(parent instanceof GrNamedArgument) || !(parent.getParent() instanceof GrCommandArgumentList))       return;
-      final GrNamedArgument namedArgument=(GrNamedArgument)parent;
-      if (GROUP_LABEL.equals(namedArgument.getLabelName())) {
-        MavenProjectIndicesManager m=MavenProjectIndicesManager.getInstance(namedArgument.getProject());
-        for (        String groupId : m.getGroupIds()) {
-          LookupElement builder=LookupElementBuilder.create(groupId).withIcon(AllIcons.Nodes.PpLib);
-          result.addElement(builder);
-        }
-      }
- else       if (NAME_LABEL.equals(namedArgument.getLabelName())) {
-        String groupId=findNamedArgumentValue((GrCommandArgumentList)namedArgument.getParent(),GROUP_LABEL);
-        if (groupId == null)         return;
-        MavenProjectIndicesManager m=MavenProjectIndicesManager.getInstance(namedArgument.getProject());
-        for (        String artifactId : m.getArtifactIds(groupId)) {
-          LookupElement builder=LookupElementBuilder.create(artifactId).withIcon(AllIcons.Nodes.PpLib);
-          result.addElement(builder);
-        }
-      }
- else       if (VERSION_LABEL.equals(namedArgument.getLabelName())) {
-        GrCommandArgumentList argumentList=(GrCommandArgumentList)namedArgument.getParent();
-        String groupId=findNamedArgumentValue(argumentList,GROUP_LABEL);
-        if (groupId == null)         return;
-        String artifactId=findNamedArgumentValue(argumentList,NAME_LABEL);
-        if (artifactId == null)         return;
-        MavenProjectIndicesManager m=MavenProjectIndicesManager.getInstance(namedArgument.getProject());
-        for (        String version : m.getVersions(groupId,artifactId)) {
-          LookupElement builder=LookupElementBuilder.create(version).withIcon(AllIcons.Nodes.PpLib);
           result.addElement(builder);
         }
       }
