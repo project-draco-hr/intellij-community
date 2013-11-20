@@ -2,21 +2,10 @@
   if ((limit <= 0 && limit != -1) || hgFile == null || hgFile.getRepo() == null) {
     return Collections.emptyList();
   }
-  String template;
-  boolean shouldParseOldTemplate=false;
-  if (!includeFiles) {
-    template=HgChangesetUtil.makeTemplate(SHORT_TEMPLATE_ITEMS);
-  }
- else {
-    if (!myBuiltInSupported) {
-      template=HgChangesetUtil.makeTemplate(LONG_TEMPLATE_FOR_OLD_VERSIONS);
-      shouldParseOldTemplate=true;
-    }
- else {
-      template=HgChangesetUtil.makeTemplate(LONG_TEMPLATE_ITEMS);
-    }
-  }
-  int expectedItemCount=includeFiles ? LONG_TEMPLATE_ITEMS.length : SHORT_TEMPLATE_ITEMS.length;
+  String[] templates=constructTemplateArgument(includeFiles,myVersion);
+  String template=HgChangesetUtil.makeTemplate(templates);
+  int expectedItemCount=templates.length;
+  boolean shouldParseOldTemplate=!myVersion.isBuiltInFunctionSupported();
   FilePath originalFileName=HgUtil.getOriginalFileName(hgFile.toFilePath(),ChangeListManager.getInstance(myProject));
   HgFile originalHgFile=new HgFile(hgFile.getRepo(),originalFileName);
   HgCommandResult result=execute(hgFile.getRepo(),template,limit,originalHgFile,argsForCmd);
@@ -45,21 +34,7 @@
       String revisionString=attributes[REVISION_INDEX];
       String changeset=attributes[CHANGESET_INDEX];
       String parentsString=attributes[PARENTS_INDEX];
-      List<HgRevisionNumber> parents=new ArrayList<HgRevisionNumber>(2);
-      if (StringUtil.isEmpty(parentsString)) {
-        Long revision=Long.valueOf(revisionString);
-        HgRevisionNumber parentRevision=HgRevisionNumber.getLocalInstance(String.valueOf(revision - 1));
-        parents.add(parentRevision);
-      }
- else {
-        String[] parentStrings=parentsString.trim().split(" ");
-        for (        String parentString : parentStrings) {
-          String[] parentParts=parentString.split(":");
-          if (Integer.valueOf(parentParts[0]) >= 0) {
-            parents.add(HgRevisionNumber.getInstance(parentParts[0],parentParts[1]));
-          }
-        }
-      }
+      List<HgRevisionNumber> parents=parseParentRevisions(parentsString,revisionString);
       Date revisionDate=DATE_FORMAT.parse(attributes[DATE_INDEX]);
       String author=attributes[AUTHOR_INDEX];
       String branchName=attributes[BRANCH_INDEX];

@@ -1,2 +1,70 @@
 {
+  return new GroovyScriptRunner(){
+    @Override public boolean shouldRefreshAfterFinish(){
+      return true;
+    }
+    @Override public boolean isValidModule(    @NotNull Module module){
+      GradleInstallationManager libraryManager=ServiceManager.getService(GradleInstallationManager.class);
+      return libraryManager.isGradleSdk(OrderEnumerator.orderEntries(module).getAllLibrariesAndSdkClassesRoots());
+    }
+    @Override public boolean ensureRunnerConfigured(    @Nullable Module module,    RunProfile profile,    Executor executor,    final Project project) throws ExecutionException {
+      if (project != null && profile instanceof GroovyScriptRunConfiguration) {
+        GroovyScriptRunConfiguration configuration=(GroovyScriptRunConfiguration)profile;
+        String parameters=configuration.getScriptParameters();
+        if (parameters != null) {
+        }
+      }
+      final GradleInstallationManager libraryManager=ServiceManager.getService(GradleInstallationManager.class);
+      return true;
+    }
+    @Override public void configureCommandLine(    JavaParameters params,    @Nullable Module module,    boolean tests,    VirtualFile script,    GroovyScriptRunConfiguration configuration) throws CantRunException {
+      final Project project=configuration.getProject();
+      String scriptParameters=configuration.getScriptParameters();
+      final GradleInstallationManager libraryManager=ServiceManager.getService(GradleInstallationManager.class);
+      if (module == null) {
+        throw new CantRunException("Target module is undefined");
+      }
+      String rootProjectPath=module.getOptionValue(ExternalSystemConstants.ROOT_PROJECT_PATH_KEY);
+      if (StringUtil.isEmpty(rootProjectPath)) {
+        throw new CantRunException(String.format("Module '%s' is not backed by gradle",module.getName()));
+      }
+      final VirtualFile gradleHome=libraryManager.getGradleHome(module,project,rootProjectPath);
+      if (gradleHome == null) {
+        throw new CantRunException("Gradle home can not be found");
+      }
+      params.setMainClass(findMainClass(gradleHome,script,project));
+      final File[] groovyJars=GroovyConfigUtils.getGroovyAllJars(gradleHome.getPath() + "/lib/");
+      if (groovyJars.length > 0) {
+        params.getClassPath().add(groovyJars[0].getAbsolutePath());
+      }
+ else {
+        final VirtualFile groovyJar=findGroovyJar(module);
+        if (groovyJar != null) {
+          params.getClassPath().add(groovyJar);
+        }
+      }
+      final String userDefinedClasspath=System.getProperty("gradle.launcher.classpath");
+      if (StringUtil.isNotEmpty(userDefinedClasspath)) {
+        params.getClassPath().add(userDefinedClasspath);
+      }
+ else {
+        final Collection<VirtualFile> roots=libraryManager.getClassRoots(project);
+        if (roots != null) {
+          params.getClassPath().addVirtualFiles(roots);
+        }
+      }
+      params.getVMParametersList().addParametersString(configuration.getVMParameters());
+      params.getVMParametersList().add("-Dgradle.home=" + FileUtil.toSystemDependentName(gradleHome.getPath()));
+      setToolsJar(params);
+      final String scriptPath=configuration.getScriptPath();
+      if (scriptPath == null) {
+        throw new CantRunException("Target script is undefined");
+      }
+      params.getProgramParametersList().add("--build-file");
+      params.getProgramParametersList().add(FileUtil.toSystemDependentName(scriptPath));
+      params.getProgramParametersList().addParametersString(configuration.getProgramParameters());
+      params.getProgramParametersList().addParametersString(scriptParameters);
+    }
+  }
+;
 }
