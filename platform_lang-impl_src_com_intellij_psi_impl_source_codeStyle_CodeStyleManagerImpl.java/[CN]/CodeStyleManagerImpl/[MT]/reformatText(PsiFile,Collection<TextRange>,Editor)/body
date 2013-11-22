@@ -15,30 +15,9 @@
   if (editor == null) {
     editor=PsiUtilBase.findEditor(file);
   }
-  int visualColumnToRestore=-1;
-  String caretIndentToRestore=null;
-  RangeMarker beforeCaretRangeMarker=null;
+  CaretPositionKeeper caretKeeper=null;
   if (editor != null) {
-    Document document=editor.getDocument();
-    int caretOffset=editor.getCaretModel().getOffset();
-    caretOffset=Math.max(Math.min(caretOffset,document.getTextLength() - 1),0);
-    CharSequence text=document.getCharsSequence();
-    int caretLine=document.getLineNumber(caretOffset);
-    int lineStartOffset=document.getLineStartOffset(caretLine);
-    int lineEndOffset=document.getLineEndOffset(caretLine);
-    boolean fixCaretPosition=true;
-    for (int i=lineStartOffset; i < lineEndOffset; i++) {
-      char c=text.charAt(i);
-      if (c != ' ' && c != '\t' && c != '\n') {
-        fixCaretPosition=false;
-        break;
-      }
-    }
-    if (fixCaretPosition) {
-      visualColumnToRestore=editor.getCaretModel().getVisualPosition().column;
-      caretIndentToRestore=document.getText(TextRange.create(lineStartOffset,caretOffset));
-      beforeCaretRangeMarker=document.createRangeMarker(0,lineStartOffset);
-    }
+    caretKeeper=new CaretPositionKeeper(editor);
   }
   final SmartPointerManager smartPointerManager=SmartPointerManager.getInstance(getProject());
   List<RangeFormatInfo> infos=new ArrayList<RangeFormatInfo>();
@@ -69,31 +48,7 @@
     if (info.startPointer != null)     smartPointerManager.removePointer(info.startPointer);
     if (info.endPointer != null)     smartPointerManager.removePointer(info.endPointer);
   }
-  if (editor == null) {
-    return;
-  }
-  boolean virtualSpaceEnabled=editor.getSettings().isVirtualSpace();
-  if (virtualSpaceEnabled) {
-    if (visualColumnToRestore < 0) {
-      editor.getScrollingModel().scrollToCaret(ScrollType.RELATIVE);
-      return;
-    }
-    CaretModel caretModel=editor.getCaretModel();
-    VisualPosition position=caretModel.getVisualPosition();
-    if (visualColumnToRestore != position.column) {
-      caretModel.moveToVisualPosition(new VisualPosition(position.line,visualColumnToRestore));
-    }
-  }
- else {
-    if (beforeCaretRangeMarker == null || !beforeCaretRangeMarker.isValid() || caretIndentToRestore == null) {
-      return;
-    }
-    int offset=beforeCaretRangeMarker.getEndOffset();
-    beforeCaretRangeMarker.dispose();
-    if (editor.getCaretModel().getVisualPosition().column == visualColumnToRestore) {
-      return;
-    }
-    Document document=editor.getDocument();
-    document.replaceString(document.getLineStartOffset(document.getLineNumber(offset)),offset,caretIndentToRestore);
+  if (caretKeeper != null) {
+    caretKeeper.restoreCaretPosition();
   }
 }
