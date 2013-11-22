@@ -1,0 +1,42 @@
+{
+  final Set<String> availableIds=new HashSet<String>();
+  for (  IdeaPluginDescriptor plugin : allPlugins) {
+    availableIds.add(plugin.getPluginId().getIdString());
+  }
+  final String pluginRepositoryUrl=FEATURE_IMPLEMENTATIONS_URL + "featureType=" + FileTypeFactory.FILE_TYPE_FACTORY_EP.getName();
+  try {
+    HttpURLConnection connection=HttpConfigurable.getInstance().openHttpConnection(pluginRepositoryUrl);
+    connection.connect();
+    final InputStreamReader streamReader=new InputStreamReader(connection.getInputStream());
+    try {
+      final JsonReader jsonReader=new JsonReader(streamReader);
+      jsonReader.setLenient(true);
+      final JsonElement jsonRootElement=new JsonParser().parse(jsonReader);
+      final Map<String,Set<Plugin>> result=new HashMap<String,Set<Plugin>>();
+      for (      JsonElement jsonElement : jsonRootElement.getAsJsonArray()) {
+        final JsonObject jsonObject=jsonElement.getAsJsonObject();
+        final String pluginId=StringUtil.unquoteString(jsonObject.get("pluginId").toString());
+        final JsonElement bundledExt=jsonObject.get("bundled");
+        boolean isBundled=Boolean.parseBoolean(bundledExt.toString());
+        if (!availableIds.contains(pluginId) && !isBundled)         continue;
+        final JsonElement ext=jsonObject.get("implementationName");
+        final String extension=StringUtil.unquoteString(ext.toString());
+        Set<Plugin> pluginIds=result.get(extension);
+        if (pluginIds == null) {
+          pluginIds=new HashSet<Plugin>();
+          result.put(extension,pluginIds);
+        }
+        pluginIds.add(new Plugin(PluginId.getId(pluginId),isBundled));
+      }
+      saveExtensions(result);
+      return result;
+    }
+  finally {
+      streamReader.close();
+    }
+  }
+ catch (  Throwable e) {
+    LOG.info(e);
+    return null;
+  }
+}
