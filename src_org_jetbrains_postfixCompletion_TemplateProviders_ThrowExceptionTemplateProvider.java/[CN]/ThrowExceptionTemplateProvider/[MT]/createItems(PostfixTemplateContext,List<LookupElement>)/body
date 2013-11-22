@@ -1,0 +1,29 @@
+{
+  PrefixExpressionContext expression=context.outerExpression();
+  if (!expression.canBeStatement)   return;
+  CtorAccessibility accessibility=CtorAccessibility.NotAccessible;
+  PsiType expressionType=expression.expressionType;
+  boolean requiresRefinement=false;
+  PsiClass throwableClass=null;
+  if (expressionType instanceof PsiClassType) {
+    throwableClass=((PsiClassType)expressionType).resolve();
+  }
+ else {
+    PsiElement referencedElement=expression.referencedElement;
+    if (referencedElement instanceof PsiClass)     throwableClass=(PsiClass)referencedElement;
+  }
+  if (!context.executionContext.isForceMode) {
+    if (throwableClass == null)     return;
+    if (expressionType == null) {
+      accessibility=CommonUtils.isTypeCanBeInstantiatedWithNew(throwableClass,expression.expression);
+      if (accessibility == CtorAccessibility.NotAccessible)       return;
+      String fqnName=throwableClass.getQualifiedName();
+      if (fqnName == null)       return;
+      expressionType=JavaPsiFacade.getElementFactory(expression.expression.getProject()).createTypeByFQClassName(fqnName,throwableClass.getResolveScope());
+    }
+    if (!InheritanceUtil.isInheritor(expressionType,CommonClassNames.JAVA_LANG_THROWABLE))     return;
+    requiresRefinement=CommonUtils.isTypeRequiresRefinement(throwableClass);
+  }
+  PsiClass psiClass=(expression.referencedElement == throwableClass) ? throwableClass : null;
+  consumer.add(new ThrowStatementLookupElement(expression,psiClass,accessibility,requiresRefinement));
+}
