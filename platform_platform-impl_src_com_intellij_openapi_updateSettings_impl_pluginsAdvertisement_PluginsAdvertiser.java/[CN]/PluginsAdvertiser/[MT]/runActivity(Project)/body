@@ -11,61 +11,72 @@
       ProgressManager.getInstance().run(new Task.Backgroundable(project,"Search for non-bundled plugins in plugin repository..."){
         private final Set<PluginDownloader> myPlugins=new HashSet<PluginDownloader>();
         private List<IdeaPluginDescriptor> myAllPlugins;
+        private Map<Plugin,IdeaPluginDescriptor> myDisabledPlugins=new HashMap<Plugin,IdeaPluginDescriptor>();
+        private boolean myBundledPlugins=false;
         @Override public void run(        @NotNull ProgressIndicator indicator){
-          if (extensions == null) {
-            loadSupportedExtensions();
-          }
-          int idx=0;
-          final Set<PluginId> ids=new HashSet<PluginId>();
-          for (          UnknownFeature feature : unknownFeatures) {
-            indicator.setText("Searching for plugin supporting \'" + feature.getImplementationName() + "\'");
-            final List<PluginId> pluginId=retrieve(feature);
-            if (pluginId != null) {
-              ids.addAll(pluginId);
-            }
-            indicator.setFraction(((double)idx++) / unknownFeatures.size());
-          }
           try {
+            myAllPlugins=RepositoryHelper.loadPluginsFromRepository(indicator);
+            if (extensions == null) {
+              loadSupportedExtensions(myAllPlugins);
+              EditorNotifications.getInstance(project).updateAllNotifications();
+            }
+            int idx=0;
+            final Map<String,Plugin> ids=new HashMap<String,Plugin>();
+            for (            UnknownFeature feature : unknownFeatures) {
+              indicator.setText("Searching for plugin supporting \'" + feature.getImplementationName() + "\'");
+              final List<Plugin> pluginId=retrieve(feature);
+              if (pluginId != null) {
+                for (                Plugin plugin : pluginId) {
+                  ids.put(plugin.myPluginId,plugin);
+                }
+              }
+              indicator.setFraction(((double)idx++) / unknownFeatures.size());
+            }
             final List<String> disabledPlugins=PluginManagerCore.getDisabledPlugins();
-            for (            PluginId id : ids) {
-              final IdeaPluginDescriptor plugin=PluginManager.getPlugin(id);
-              if (plugin != null) {
-                myPlugins.add(PluginDownloader.createDownloader(plugin));
+            for (            String id : ids.keySet()) {
+              Plugin plugin=ids.get(id);
+              if (disabledPlugins.contains(id)) {
+                final IdeaPluginDescriptor pluginDescriptor=PluginManager.getPlugin(PluginId.getId(id));
+                if (pluginDescriptor != null) {
+                  myDisabledPlugins.put(plugin,pluginDescriptor);
+                }
+              }
+ else {
+                if (plugin.myBundled) {
+                  myBundledPlugins=true;
+                }
               }
             }
-            myAllPlugins=RepositoryHelper.loadPluginsFromRepository(indicator);
             for (            IdeaPluginDescriptor loadedPlugin : myAllPlugins) {
               final PluginId pluginId=loadedPlugin.getPluginId();
-              if (ids.contains(pluginId) && !disabledPlugins.contains(pluginId.getIdString())) {
+              if (ids.containsKey(pluginId.getIdString()) && !disabledPlugins.contains(pluginId.getIdString())) {
                 myPlugins.add(PluginDownloader.createDownloader(loadedPlugin));
               }
             }
           }
- catch (          Exception ignore) {
+ catch (          Exception e) {
+            LOG.info(e);
           }
         }
         @Override public void onSuccess(){
-          if (!myPlugins.isEmpty()) {
-            final String displayId="Plugins Suggestion";
-            new NotificationGroup(displayId,NotificationDisplayType.STICKY_BALLOON,true).createNotification(displayId,"Features covered by non-bundled plugins are detected.<br>" + "<a href=\"configure\">Configure plugins...</a><br>" + "<a href=\"ignore\">Ignore All</a>",NotificationType.INFORMATION,new NotificationListener(){
-              @Override public void hyperlinkUpdate(              @NotNull Notification notification,              @NotNull HyperlinkEvent event){
-                if (event.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
-                  final String description=event.getDescription();
-                  if ("ignore".equals(description)) {
-                    for (                    UnknownFeature feature : unknownFeatures) {
-                      collectorSuggester.ignoreFeature(feature);
-                    }
-                    notification.expire();
-                  }
- else                   if ("configure".equals(description)) {
-                    LOG.assertTrue(myAllPlugins != null);
-                    notification.expire();
-                    new PluginsAdvertiserDialog(myProject,myPlugins.toArray(new PluginDownloader[myPlugins.size()]),myAllPlugins).show();
-                  }
-                }
-              }
+          String message=null;
+          if (!myPlugins.isEmpty() || !myDisabledPlugins.isEmpty()) {
+            message="Features covered by non-bundled plugins are detected.<br>";
+            if (!myDisabledPlugins.isEmpty()) {
+              message+="<a href=\"enable\">Enable plugins...</a><br>";
             }
-).notify(project);
+ else {
+              message+="<a href=\"configure\">Configure plugins...</a><br>";
+            }
+            message+="<a href=\"ignore\">Ignore All</a>";
+          }
+ else           if (myBundledPlugins && !PropertiesComponent.getInstance().isTrueValue(IGNORE_ULTIMATE_EDITION)) {
+            message="Features covered by IntelliJ IDEA Ultimate Edition are detected.<br>" + "<a href=\"open\">" + CHECK_ULTIMATE_EDITION_TITLE + "</a><br>"+ "<a href=\"ignoreUltimate\">"+ ULTIMATE_EDITION_SUGGESTION+ "</a>";
+          }
+          if (message != null) {
+            final String displayId="Plugins Suggestion";
+            final ConfigurePluginsListener notificationListener=new ConfigurePluginsListener(unknownFeatures,project,myAllPlugins,myPlugins,myDisabledPlugins);
+            new NotificationGroup(displayId,NotificationDisplayType.STICKY_BALLOON,true).createNotification(displayId,message,NotificationType.INFORMATION,notificationListener).notify(project);
           }
         }
       }
