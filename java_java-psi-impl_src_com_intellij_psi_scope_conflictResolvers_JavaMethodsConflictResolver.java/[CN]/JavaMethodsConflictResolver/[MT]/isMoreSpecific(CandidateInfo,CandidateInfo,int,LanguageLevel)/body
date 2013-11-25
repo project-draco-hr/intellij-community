@@ -56,10 +56,8 @@
     final PsiSubstitutor siteSubstitutor2=((MethodCandidateInfo)info2).getSiteSubstitutor();
     final PsiType[] types2AtSite=typesAtSite(types2,siteSubstitutor2);
     final PsiType[] types1AtSite=typesAtSite(types1,siteSubstitutor1);
-    final PsiSubstitutor methodSubstitutor1=calculateMethodSubstitutor(typeParameters1,method1,siteSubstitutor1,types1,types2AtSite,languageLevel);
-    final PsiSubstitutor methodSubstitutor2=calculateMethodSubstitutor(typeParameters2,method2,siteSubstitutor2,types2,types1AtSite,languageLevel);
-    final boolean applicable12=isApplicableTo(types2AtSite,method1,typeParameters1,languageLevel,methodSubstitutor1,varargsPosition);
-    final boolean applicable21=isApplicableTo(types1AtSite,method2,typeParameters2,languageLevel,methodSubstitutor2,varargsPosition);
+    final boolean applicable12=isApplicableTo(types2AtSite,method1,typeParameters1,languageLevel,varargsPosition,types1,siteSubstitutor1);
+    final boolean applicable21=isApplicableTo(types1AtSite,method2,typeParameters2,languageLevel,varargsPosition,types2,siteSubstitutor2);
     if (applicable12 || applicable21) {
       if (applicable12 && !applicable21)       return Specifics.SECOND;
       if (applicable21 && !applicable12)       return Specifics.FIRST;
@@ -70,6 +68,46 @@
       }
       if (abstract2 && !abstract1) {
         return Specifics.FIRST;
+      }
+    }
+    if (languageLevel.isAtLeast(LanguageLevel.JDK_1_8)) {
+      boolean toCompareFunctional=false;
+      for (int i=0; i < myActualParameterTypes.length; i++) {
+        if (types1.length > 0 && LambdaHighlightingUtil.checkInterfaceFunctional(types1[Math.min(i,types1.length - 1)]) == null && types2.length > 0 && LambdaHighlightingUtil.checkInterfaceFunctional(types2[Math.min(i,types2.length - 1)]) == null) {
+          types1AtSite[Math.min(i,types1.length - 1)]=PsiType.NULL;
+          types2AtSite[Math.min(i,types2.length - 1)]=PsiType.NULL;
+          toCompareFunctional=true;
+        }
+      }
+      if (toCompareFunctional) {
+        final boolean applicable12ignoreFunctionalType=isApplicableTo(types2AtSite,method1,typeParameters1,languageLevel,varargsPosition,types1,siteSubstitutor1);
+        final boolean applicable21ignoreFunctionalType=isApplicableTo(types1AtSite,method2,typeParameters2,languageLevel,varargsPosition,types2,siteSubstitutor2);
+        if (applicable12ignoreFunctionalType || applicable21ignoreFunctionalType) {
+          Specifics specifics=null;
+          for (int i=0; i < myActualParameterTypes.length; i++) {
+            if (types1.length > 0 && types1AtSite[Math.min(i,types1.length - 1)] == PsiType.NULL && types2.length > 0 && types2AtSite[Math.min(i,types2.length - 1)] == PsiType.NULL) {
+              Specifics specific=compareFunctionalTypes(info1,info2,myActualParameterTypes[i],i,languageLevel);
+              if (specific == Specifics.NEITHER) {
+                specifics=Specifics.NEITHER;
+                break;
+              }
+              if (specifics == null) {
+                specifics=specific;
+              }
+ else               if (specifics != specific) {
+                specifics=Specifics.NEITHER;
+                break;
+              }
+            }
+          }
+          if (applicable12ignoreFunctionalType && !applicable21ignoreFunctionalType) {
+            return specifics == Specifics.SECOND ? Specifics.SECOND : Specifics.NEITHER;
+          }
+          if (applicable21ignoreFunctionalType && !applicable12ignoreFunctionalType) {
+            return specifics == Specifics.FIRST ? Specifics.FIRST : Specifics.NEITHER;
+          }
+          return specifics;
+        }
       }
     }
   }
