@@ -1,9 +1,51 @@
 {
   if (element instanceof JsonStringLiteral) {
     String text=element.getText();
+    int offset=element.getTextOffset();
     int length=text.length();
     if (length <= 1 || text.charAt(length - 1) != '\"' || quoteEscaped(text,length - 1)) {
-      holder.createErrorAnnotation(element.getTextRange(),"Missing closing quote");
+      holder.createErrorAnnotation(element.getTextRange(),MISSING_CLOSING_QUOTE);
     }
-  }
+    int pos=1;
+    while (pos < length) {
+      if (text.charAt(pos) == '\\') {
+        if (pos >= length - 1) {
+          TextRange range=new TextRange(offset + pos,offset + pos + 1);
+          holder.createErrorAnnotation(range,ILLEGAL_ESCAPE_SEQUENCE);
+          break;
+        }
+        char next=text.charAt(pos + 1);
+switch (next) {
+case '"':
+case '\\':
+case '/':
+case 'b':
+case 'f':
+case 'n':
+case 'r':
+case 't':
+          pos+=2;
+        break;
+case 'u':
+      int i=pos + 2;
+    for (; i < pos + 6; i++) {
+      if (i == length || !StringUtil.isHexDigit(text.charAt(i))) {
+        TextRange range=new TextRange(offset + pos,offset + i);
+        holder.createErrorAnnotation(range,ILLEGAL_UNICODE_ESCAPE_SEQUENCE);
+        break;
+      }
+    }
+  pos=i;
+break;
+default :
+TextRange range=new TextRange(offset + pos,offset + pos + 2);
+holder.createErrorAnnotation(range,ILLEGAL_ESCAPE_SEQUENCE);
+pos+=2;
+}
+}
+ else {
+pos++;
+}
+}
+}
 }
