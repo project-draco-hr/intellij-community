@@ -10,7 +10,20 @@
   }
 ,", "));
   buf.append(">");
-  final String qualifiedName=containingClass.getQualifiedName();
+  final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(containingClass.getProject());
+  String qualifiedName=containingClass.getQualifiedName();
+  PsiElement qualifier=reference != null ? reference.getQualifier() : null;
+  if (qualifier instanceof PsiJavaCodeReferenceElement) {
+    final JavaResolveResult resolveResult=((PsiJavaCodeReferenceElement)qualifier).advancedResolve(false);
+    final PsiElement element=resolveResult.getElement();
+    if (element instanceof PsiClass) {
+      final String outerClassSubstitutedQName=elementFactory.createType((PsiClass)element,resolveResult.getSubstitutor()).getInternalCanonicalText();
+      qualifiedName=outerClassSubstitutedQName + "." + containingClass.getName();
+    }
+  }
+ else   if (reference != null && qualifier == null && containingClass.getContainingClass() != null) {
+    qualifiedName=null;
+  }
   buf.append(qualifiedName != null ? qualifiedName : containingClass.getName());
   final PsiTypeParameter[] parameters=containingClass.getTypeParameters();
   buf.append("<");
@@ -38,5 +51,10 @@
 ,",")).append(")");
   }
   buf.append("{}");
-  return JavaPsiFacade.getElementFactory(containingClass.getProject()).createMethodFromText(buf.toString(),constructor != null ? constructor : containingClass);
+  try {
+    return elementFactory.createMethodFromText(buf.toString(),constructor != null ? constructor : containingClass);
+  }
+ catch (  IncorrectOperationException e) {
+    return null;
+  }
 }
