@@ -2,15 +2,10 @@
   GlobalSearchScope scope=parameters.getSearchScope();
   IdFilter filter=parameters.getIdFilter();
   PsiShortNamesCache cache=PsiShortNamesCache.getInstance(scope.getProject());
-  boolean dummy=cache.processFieldsWithName(name,new Processor<PsiField>(){
+  final Set<PsiMethod> collectedMethods=new THashSet<PsiMethod>();
+  boolean success=cache.processFieldsWithName(name,new Processor<PsiField>(){
     @Override public boolean process(    PsiField field){
       if (isOpenable(field))       return processor.process(field);
-      return true;
-    }
-  }
-,scope,filter) && cache.processMethodsWithName(name,new Processor<PsiMethod>(){
-    @Override public boolean process(    PsiMethod method){
-      if (!method.isConstructor() && isOpenable(method) && !hasSuperMethod(method))       return processor.process(method);
       return true;
     }
   }
@@ -20,5 +15,22 @@
       return true;
     }
   }
+,scope,filter) && cache.processMethodsWithName(name,new Processor<PsiMethod>(){
+    @Override public boolean process(    PsiMethod method){
+      if (!method.isConstructor() && isOpenable(method)) {
+        collectedMethods.add(method);
+      }
+      return true;
+    }
+  }
 ,scope,filter);
+  if (success) {
+    Iterator<PsiMethod> iterator=collectedMethods.iterator();
+    while (iterator.hasNext()) {
+      PsiMethod method=iterator.next();
+      if (!hasSuperMethod(method) && !processor.process(method))       return;
+      ProgressManager.checkCanceled();
+      iterator.remove();
+    }
+  }
 }
