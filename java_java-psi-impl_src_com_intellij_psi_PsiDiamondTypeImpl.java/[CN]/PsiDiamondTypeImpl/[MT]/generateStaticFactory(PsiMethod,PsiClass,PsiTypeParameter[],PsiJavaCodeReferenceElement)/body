@@ -1,0 +1,60 @@
+{
+  final StringBuilder buf=new StringBuilder();
+  buf.append("public static ");
+  buf.append("<");
+  buf.append(StringUtil.join(params,new Function<PsiTypeParameter,String>(){
+    @Override public String fun(    PsiTypeParameter psiTypeParameter){
+      final String extendsList=psiTypeParameter.getLanguage().isKindOf(JavaLanguage.INSTANCE) ? psiTypeParameter.getExtendsList().getText() : null;
+      return psiTypeParameter.getName() + (StringUtil.isEmpty(extendsList) ? "" : " " + extendsList);
+    }
+  }
+,", "));
+  buf.append(">");
+  final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(containingClass.getProject());
+  String qualifiedName=containingClass.getQualifiedName();
+  PsiElement qualifier=reference != null ? reference.getQualifier() : null;
+  if (qualifier instanceof PsiJavaCodeReferenceElement) {
+    final JavaResolveResult resolveResult=((PsiJavaCodeReferenceElement)qualifier).advancedResolve(false);
+    final PsiElement element=resolveResult.getElement();
+    if (element instanceof PsiClass) {
+      final String outerClassSubstitutedQName=elementFactory.createType((PsiClass)element,resolveResult.getSubstitutor()).getInternalCanonicalText();
+      qualifiedName=outerClassSubstitutedQName + "." + containingClass.getName();
+    }
+  }
+ else   if (reference != null && qualifier == null && containingClass.getContainingClass() != null) {
+    qualifiedName=null;
+  }
+  buf.append(qualifiedName != null ? qualifiedName : containingClass.getName());
+  final PsiTypeParameter[] parameters=containingClass.getTypeParameters();
+  buf.append("<");
+  buf.append(StringUtil.join(parameters,new Function<PsiTypeParameter,String>(){
+    @Override public String fun(    PsiTypeParameter psiTypeParameter){
+      return psiTypeParameter.getName();
+    }
+  }
+,", "));
+  buf.append("> ");
+  String staticFactoryName="staticFactory";
+  final JavaCodeStyleManager styleManager=JavaCodeStyleManager.getInstance(containingClass.getProject());
+  staticFactoryName=styleManager.suggestUniqueVariableName(staticFactoryName,containingClass,false);
+  buf.append(staticFactoryName);
+  if (constructor == null) {
+    buf.append("()");
+  }
+ else {
+    buf.append("(").append(StringUtil.join(constructor.getParameterList().getParameters(),new Function<PsiParameter,String>(){
+      int myIdx=0;
+      @Override public String fun(      PsiParameter psiParameter){
+        return psiParameter.getType().getCanonicalText() + " p" + myIdx++;
+      }
+    }
+,",")).append(")");
+  }
+  buf.append("{}");
+  try {
+    return elementFactory.createMethodFromText(buf.toString(),constructor != null ? constructor : containingClass);
+  }
+ catch (  IncorrectOperationException e) {
+    return null;
+  }
+}
