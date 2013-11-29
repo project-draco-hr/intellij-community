@@ -1,10 +1,8 @@
 {
-  final PsiReferenceExpression methodExpression=methodCallExpression.getMethodExpression();
-  final PsiElement target=methodExpression.resolve();
-  if (!(target instanceof PsiMethod)) {
+  final PsiMethod method=methodCallExpression.resolveMethod();
+  if (method == null) {
     return false;
   }
-  final PsiMethod method=(PsiMethod)target;
   final PsiReferenceList throwsList=method.getThrowsList();
   final PsiClassType[] classTypes=throwsList.getReferencedTypes();
   final Collection<PsiClassType> thrownTypes=new HashSet<PsiClassType>(Arrays.asList(classTypes));
@@ -14,7 +12,14 @@
     final PsiType expectedType=ExpectedTypeUtils.findExpectedType(methodCallExpression,false);
     for (    PsiMethod superMethod : superMethods) {
       final PsiType returnType=superMethod.getReturnType();
-      if (expectedType != null && returnType != null && !expectedType.isAssignableFrom(returnType)) {
+      if (expectedType instanceof PsiClassType) {
+        if (!(returnType instanceof PsiClassType)) {
+          continue;
+        }
+        final PsiClassType expectedClassType=(PsiClassType)expectedType;
+        expectedClassType.rawType().isAssignableFrom(returnType);
+      }
+ else       if (expectedType != null && returnType != null && !expectedType.isAssignableFrom(returnType)) {
         continue;
       }
       if (throwsIncompatibleException(superMethod,thrownTypes)) {
@@ -24,8 +29,10 @@
         continue;
       }
       final PsiClass containingClass=superMethod.getContainingClass();
-      checkClass(containingClass,weakestTypeClasses);
-      checked=true;
+      if (checkClass(containingClass,weakestTypeClasses)) {
+        checked=true;
+        break;
+      }
     }
   }
   if (!checked) {

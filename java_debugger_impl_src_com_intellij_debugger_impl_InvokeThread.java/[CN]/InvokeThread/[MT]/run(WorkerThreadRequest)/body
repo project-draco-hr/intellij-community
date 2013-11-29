@@ -1,43 +1,48 @@
 {
-  while (true) {
-    try {
-      if (threadRequest.isInterrupted()) {
+  try {
+    while (true) {
+      try {
+        if (threadRequest.isStopRequested()) {
+          break;
+        }
+        final WorkerThreadRequest currentRequest=getCurrentRequest();
+        if (currentRequest != threadRequest) {
+          LOG.error("Expected " + threadRequest + " instead of "+ currentRequest);
+          if (currentRequest != null && !currentRequest.isDone()) {
+            continue;
+          }
+        }
+        processEvent(myEvents.get());
+      }
+ catch (      VMDisconnectedException e) {
         break;
       }
-      final WorkerThreadRequest currentRequest=getCurrentRequest();
-      if (currentRequest != threadRequest) {
-        LOG.error("Expected " + threadRequest + " instead of "+ currentRequest);
-        if (currentRequest != null && !currentRequest.isDone()) {
-          continue;
-        }
+catch (      EventQueueClosedException e) {
+        break;
       }
-      processEvent(myEvents.get());
+catch (      RuntimeException e) {
+        if (e.getCause() instanceof InterruptedException) {
+          break;
+        }
+        LOG.error(e);
+      }
+catch (      Throwable e) {
+        LOG.error(e);
+      }
     }
- catch (    VMDisconnectedException e) {
-      break;
-    }
-catch (    EventQueueClosedException e) {
-      final List<E> unprocessed=myEvents.clearQueue();
-      for (      E event : unprocessed) {
+  }
+  finally {
+    if (threadRequest == getCurrentRequest()) {
+      for (      E event : myEvents.clearQueue()) {
         try {
           processEvent(event);
         }
  catch (        Throwable ignored) {
         }
       }
-      break;
     }
-catch (    RuntimeException e) {
-      if (e.getCause() instanceof InterruptedException) {
-        break;
-      }
-      LOG.error(e);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Request " + this.toString() + " exited");
     }
-catch (    Throwable e) {
-      LOG.error(e);
-    }
-  }
-  if (LOG.isDebugEnabled()) {
-    LOG.debug("Request " + this.toString() + " exited");
   }
 }
