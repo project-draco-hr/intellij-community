@@ -1,0 +1,48 @@
+{
+  PrefixExpressionContext forcedTarget=null;
+  PsiClass invokedOnType=null;
+  for (  PrefixExpressionContext expressionContext : context.expressions()) {
+    PsiElement expression=expressionContext.expression;
+    if (expression instanceof PsiThisExpression || expression instanceof PsiSuperExpression) {
+      forcedTarget=expressionContext;
+      continue;
+    }
+    PsiElement referenced=expressionContext.referencedElement;
+    if (referenced != null) {
+      if (referenced instanceof PsiClass) {
+        invokedOnType=(PsiClass)referenced;
+        CtorAccessibility accessibility=CommonUtils.isTypeCanBeInstantiatedWithNew(invokedOnType,expression);
+        if (accessibility == CtorAccessibility.NotAccessible)         break;
+      }
+ else {
+        if (referenced instanceof PsiLocalVariable || referenced instanceof PsiParameter || referenced instanceof LightElement) {
+          forcedTarget=expressionContext;
+          continue;
+        }
+      }
+    }
+    PsiType expressionType=expressionContext.expressionType;
+    if (expressionType == null && invokedOnType == null) {
+      if (context.expressions().size() == 1)       break;
+    }
+    if (expressionType != null && expressionType.equals(PsiType.VOID))     continue;
+    if (expressionContext.canBeStatement) {
+      return new IntroduceVarStatementLookupElement(expressionContext,invokedOnType);
+    }
+ else {
+      forcedTarget=expressionContext;
+    }
+  }
+  if (forcedTarget != null && context.executionContext.isForceMode) {
+    if (forcedTarget.referencedElement instanceof PsiClass) {
+      invokedOnType=(PsiClass)forcedTarget.referencedElement;
+    }
+    if (forcedTarget.canBeStatement) {
+      return new IntroduceVarStatementLookupElement(forcedTarget,invokedOnType);
+    }
+ else {
+      return new IntroduceVarExpressionLookupElement(forcedTarget,invokedOnType);
+    }
+  }
+  return null;
+}
