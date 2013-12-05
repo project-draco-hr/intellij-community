@@ -1,18 +1,32 @@
 {
   ApplicationManager.getApplication().runWriteAction(new Runnable(){
     @Override public void run(){
-      VirtualFile openedFile=FileDocumentManager.getInstance().getFile(event.getEditor().getDocument());
-      if (openedFile != null) {
-        PsiFile parentScope=PsiManager.getInstance(event.getEditor().getProject()).findFile(openedFile);
-        final TemplateBuilder builder=TemplateBuilderFactory.getInstance().createTemplateBuilder(parentScope);
-        final PsiElement[] childrenNodes=parentScope.getChildren();
-        PsiElement replacedEl=childrenNodes[0].getChildren()[0];
-        int offset=replacedEl.getTextOffset();
-        builder.replaceElement(replacedEl,replacedEl.getText());
-        Template template=((TemplateBuilderImpl)builder).buildInlineTemplate();
-        TemplateManager.getInstance(event.getEditor().getProject()).startTemplate(event.getEditor(),template);
-        System.out.println(replacedEl.getTextOffset());
-        event.getEditor().getCaretModel().moveToOffset(offset);
+      try {
+        VirtualFile vfOpenedFile=FileDocumentManager.getInstance().getFile(event.getEditor().getDocument());
+        if (vfOpenedFile != null) {
+          String fileName=vfOpenedFile.getNameWithoutExtension() + ".meta";
+          InputStream metaIS=StudyEditorFactoryListener.class.getResourceAsStream(fileName);
+          BufferedReader metaReader=new BufferedReader(new InputStreamReader(metaIS));
+          int replaceNum=Integer.parseInt(metaReader.readLine());
+          for (int i=0; i < replaceNum; i++) {
+            int startOffset=Integer.parseInt(metaReader.readLine());
+            String textToWrite=metaReader.readLine();
+            String answer=metaReader.readLine();
+            PsiFile psiOpenFile=PsiManager.getInstance(event.getEditor().getProject()).findFile(vfOpenedFile);
+            Project project=event.getEditor().getProject();
+            event.getEditor().getDocument().createRangeMarker(startOffset,startOffset + textToWrite.length());
+            TemplateBuilder builder=TemplateBuilderFactory.getInstance().createTemplateBuilder(psiOpenFile);
+            int endOffset=startOffset + textToWrite.length();
+            TextRange range=new TextRange(startOffset,endOffset);
+            builder.replaceRange(range,textToWrite);
+            Template template=((TemplateBuilderImpl)builder).buildInlineTemplate();
+            TemplateManager.getInstance(project).startTemplate(event.getEditor(),template);
+            event.getEditor().getCaretModel().moveToOffset(startOffset);
+          }
+        }
+      }
+ catch (      IOException e) {
+        System.out.println("Something wrong with meta file");
       }
     }
   }
