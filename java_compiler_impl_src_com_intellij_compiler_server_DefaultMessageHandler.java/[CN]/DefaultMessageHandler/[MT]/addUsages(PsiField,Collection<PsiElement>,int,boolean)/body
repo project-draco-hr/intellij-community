@@ -1,0 +1,37 @@
+{
+  final Queue<PsiField> fieldsToProcess=new ArrayDeque<PsiField>();
+  fieldsToProcess.add(psiField);
+  for (PsiField field=fieldsToProcess.poll(); field != null; field=fieldsToProcess.poll()) {
+    final int count=myConstantSearchesCount;
+    if (count > MAX_CONSTANT_SEARCHES) {
+      throw new ProcessCanceledException();
+    }
+    final PsiField fieldToCheck=field;
+    final boolean success=ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
+      public Boolean compute(){
+        if (!fieldToCheck.isValid()) {
+          return Boolean.FALSE;
+        }
+        final Collection<PsiReferenceExpression> references=doFindReferences(fieldToCheck,fieldAccessFlags,ignoreAccessScope);
+        myConstantSearchesCount++;
+        for (        final PsiReferenceExpression ref : references) {
+          PsiElement e=ref.getElement();
+          usages.add(e);
+          PsiField ownerField=getOwnerField(e);
+          if (ownerField != null && ownerField.hasModifierProperty(PsiModifier.FINAL)) {
+            final PsiExpression initializer=ownerField.getInitializer();
+            if (initializer != null && PsiUtil.isConstantExpression(initializer)) {
+              fieldsToProcess.add(ownerField);
+            }
+          }
+        }
+        return Boolean.TRUE;
+      }
+    }
+);
+    if (!success) {
+      return false;
+    }
+  }
+  return true;
+}
