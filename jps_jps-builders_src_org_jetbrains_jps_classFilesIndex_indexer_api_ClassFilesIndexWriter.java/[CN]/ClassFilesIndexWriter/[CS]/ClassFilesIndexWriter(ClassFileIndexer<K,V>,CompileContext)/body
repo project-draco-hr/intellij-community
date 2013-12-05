@@ -1,0 +1,26 @@
+{
+  myIndexer=indexer;
+  final File storageDir=getIndexRoot(compileContext);
+  final Set<String> containingFileNames=listFiles(storageDir);
+  if (!containingFileNames.contains("version") || !containingFileNames.contains("state")) {
+    throw new IllegalStateException("version or state file for index " + indexer.getIndexCanonicalName() + " not found in "+ storageDir.getAbsolutePath());
+  }
+  ClassFilesIndexStorage<K,V> index=null;
+  IOException exception=null;
+  for (int attempt=0; attempt < 2; attempt++) {
+    try {
+      index=new ClassFilesIndexStorage<K,V>(storageDir,myIndexer.getKeyDescriptor(),myIndexer.getDataExternalizer());
+      break;
+    }
+ catch (    final IOException e) {
+      exception=e;
+      PersistentHashMap.deleteFilesStartingWith(ClassFilesIndexStorage.getIndexFile(storageDir));
+    }
+  }
+  if (index == null) {
+    throw new RuntimeException(exception);
+  }
+  myIndex=index;
+  myEmpty=IndexState.EXIST != IndexState.load(storageDir) || exception != null;
+  IndexState.CORRUPTED.save(storageDir);
+}

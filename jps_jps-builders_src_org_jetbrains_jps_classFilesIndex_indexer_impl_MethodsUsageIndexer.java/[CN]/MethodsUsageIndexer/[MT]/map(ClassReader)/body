@@ -1,0 +1,24 @@
+{
+  final Map<String,TObjectIntHashMap<MethodIncompleteSignature>> map=new HashMap<String,TObjectIntHashMap<MethodIncompleteSignature>>();
+  final MethodVisitor methodVisitor=new MethodVisitor(Opcodes.ASM4){
+    @Override public void visitMethodInsn(    final int opcode,    final String owner,    final String name,    final String desc){
+      final Type returnType=Type.getReturnType(desc);
+      if (MethodIncompleteSignature.CONSTRUCTOR_METHOD_NAME.equals(name) || AsmUtil.isPrimitiveOrArray(returnType.getDescriptor())) {
+        return;
+      }
+      final boolean isStatic=opcode == Opcodes.INVOKESTATIC;
+      final String returnClassName=returnType.getInternalName();
+      if (!owner.equals(returnClassName) || isStatic) {
+        addToIndex(map,returnClassName,new MethodIncompleteSignature(owner,returnClassName,name,isStatic));
+      }
+    }
+  }
+;
+  inputData.accept(new ClassVisitor(Opcodes.ASM4){
+    @Override public MethodVisitor visitMethod(    final int access,    final String name,    final String desc,    final String signature,    final String[] exceptions){
+      return methodVisitor;
+    }
+  }
+,ClassReader.EXPAND_FRAMES);
+  return map;
+}

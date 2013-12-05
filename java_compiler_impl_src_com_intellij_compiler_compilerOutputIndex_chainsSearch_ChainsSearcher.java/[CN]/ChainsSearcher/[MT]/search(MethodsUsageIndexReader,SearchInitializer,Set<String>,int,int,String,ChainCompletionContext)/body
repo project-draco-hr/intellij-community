@@ -1,0 +1,97 @@
+{
+  final Set<String> allExcludedNames=MethodChainsSearchUtil.unionToHashSet(context.getExcludedQNames(),targetQName);
+  final SearchInitializer.InitResult initResult=initializer.init(Collections.<String>emptySet());
+  final Map<MethodIncompleteSignature,MethodsChain> knownDistance=initResult.getChains();
+  final List<WeightAware<MethodIncompleteSignature>> allInitialVertexes=initResult.getVertexes();
+  final LinkedList<WeightAware<Pair<MethodIncompleteSignature,MethodsChain>>> q=new LinkedList<WeightAware<Pair<MethodIncompleteSignature,MethodsChain>>>(ContainerUtil.map(allInitialVertexes,new Function<WeightAware<MethodIncompleteSignature>,WeightAware<Pair<MethodIncompleteSignature,MethodsChain>>>(){
+    @Override public WeightAware<Pair<MethodIncompleteSignature,MethodsChain>> fun(    final WeightAware<MethodIncompleteSignature> methodIncompleteSignatureWeightAware){
+      final MethodIncompleteSignature underlying=methodIncompleteSignatureWeightAware.getUnderlying();
+      return new WeightAware<Pair<MethodIncompleteSignature,MethodsChain>>(new Pair<MethodIncompleteSignature,MethodsChain>(underlying,new MethodsChain(context.resolveNotDeprecated(underlying),methodIncompleteSignatureWeightAware.getWeight(),underlying.getOwner())),methodIncompleteSignatureWeightAware.getWeight());
+    }
+  }
+));
+  int maxWeight=0;
+  for (  final MethodsChain methodsChain : knownDistance.values()) {
+    if (methodsChain.getChainWeight() > maxWeight) {
+      maxWeight=methodsChain.getChainWeight();
+    }
+  }
+  final ResultHolder result=new ResultHolder(context.getPsiManager());
+  while (!q.isEmpty()) {
+    ProgressManager.checkCanceled();
+    final WeightAware<Pair<MethodIncompleteSignature,MethodsChain>> currentVertex=q.poll();
+    final int currentVertexDistance=currentVertex.getWeight();
+    final Pair<MethodIncompleteSignature,MethodsChain> currentVertexUnderlying=currentVertex.getUnderlying();
+    final MethodsChain currentVertexMethodsChain=knownDistance.get(currentVertexUnderlying.getFirst());
+    if (currentVertexDistance != currentVertexMethodsChain.getChainWeight()) {
+      continue;
+    }
+    if (currentVertex.getUnderlying().getFirst().isStatic() || toSet.contains(currentVertex.getUnderlying().getFirst().getOwner())) {
+      result.add(currentVertex.getUnderlying().getSecond());
+      continue;
+    }
+    final SortedSet<UsageIndexValue> nextMethods=indexReader.getMethods(currentVertexUnderlying.getFirst().getOwner());
+    final MaxSizeTreeSet<WeightAware<MethodIncompleteSignature>> currentSignatures=new MaxSizeTreeSet<WeightAware<MethodIncompleteSignature>>(maxResultSize);
+    for (    final UsageIndexValue indexValue : nextMethods) {
+      final MethodIncompleteSignature vertex=indexValue.getMethodIncompleteSignature();
+      final int occurrences=indexValue.getOccurrences();
+      if (vertex.isStatic() || !vertex.getOwner().equals(targetQName)) {
+        final int vertexDistance=Math.min(currentVertexDistance,occurrences);
+        final MethodsChain knownVertexMethodsChain=knownDistance.get(vertex);
+        if ((knownVertexMethodsChain == null || knownVertexMethodsChain.getChainWeight() < vertexDistance)) {
+          if (currentSignatures.isEmpty() || currentSignatures.last().getWeight() < vertexDistance) {
+            if (currentVertexMethodsChain.size() < pathMaximalLength - 1) {
+              final MethodIncompleteSignature methodInvocation=indexValue.getMethodIncompleteSignature();
+              final PsiMethod[] psiMethods=context.resolveNotDeprecated(methodInvocation);
+              if (psiMethods.length != 0 && MethodChainsSearchUtil.checkParametersForTypesQNames(psiMethods,allExcludedNames)) {
+                final MethodsChain newBestMethodsChain=currentVertexMethodsChain.addEdge(psiMethods,indexValue.getMethodIncompleteSignature().getOwner(),vertexDistance);
+                currentSignatures.add(new WeightAware<MethodIncompleteSignature>(indexValue.getMethodIncompleteSignature(),vertexDistance));
+                knownDistance.put(vertex,newBestMethodsChain);
+              }
+            }
+          }
+        }
+ else {
+          break;
+        }
+      }
+    }
+    boolean updated=false;
+    if (!currentSignatures.isEmpty()) {
+      boolean isBreak=false;
+      for (      final WeightAware<MethodIncompleteSignature> sign : currentSignatures) {
+        final PsiMethod[] resolved=context.resolveNotDeprecated(sign.getUnderlying());
+        if (!isBreak) {
+          if (sign.getWeight() * NEXT_METHOD_IN_CHAIN_RATIO > currentVertex.getWeight()) {
+            final boolean stopChain=sign.getUnderlying().isStatic() || toSet.contains(sign.getUnderlying().getOwner());
+            if (stopChain) {
+              updated=true;
+              result.add(currentVertex.getUnderlying().getSecond().addEdge(resolved,sign.getUnderlying().getOwner(),sign.getWeight()));
+              continue;
+            }
+ else {
+              updated=true;
+              final MethodsChain methodsChain=currentVertexUnderlying.second.addEdge(resolved,sign.getUnderlying().getOwner(),sign.getWeight());
+              q.add(new WeightAware<Pair<MethodIncompleteSignature,MethodsChain>>(new Pair<MethodIncompleteSignature,MethodsChain>(sign.getUnderlying(),methodsChain),sign.getWeight()));
+              continue;
+            }
+          }
+        }
+        final MethodsChain methodsChain=currentVertexUnderlying.second.addEdge(resolved,sign.getUnderlying().getOwner(),sign.getWeight());
+        final ParametersMatcher.MatchResult parametersMatchResult=ParametersMatcher.matchParameters(methodsChain,context);
+        if (parametersMatchResult.noUnmatchedAndHasMatched() && parametersMatchResult.hasTarget()) {
+          updated=true;
+          q.addFirst(new WeightAware<Pair<MethodIncompleteSignature,MethodsChain>>(new Pair<MethodIncompleteSignature,MethodsChain>(sign.getUnderlying(),methodsChain),sign.getWeight()));
+        }
+        isBreak=true;
+      }
+    }
+    if (!updated && (currentVertex.getUnderlying().getFirst().isStatic() || !targetQName.equals(currentVertex.getUnderlying().getFirst().getOwner()))) {
+      result.add(currentVertex.getUnderlying().getSecond());
+    }
+    if (result.size() > maxResultSize) {
+      return result.getResult();
+    }
+  }
+  return result.getResult();
+}
