@@ -1,20 +1,26 @@
 {
   DebuggerManagerThreadImpl.assertIsManagerThread();
-  try {
-    List<LocalVariable> list=getStackFrame().visibleVariables();
-    List<LocalVariableProxyImpl> locals=new ArrayList<LocalVariableProxyImpl>();
-    for (Iterator<LocalVariable> iterator=list.iterator(); iterator.hasNext(); ) {
-      LocalVariable localVariable=iterator.next();
-      LOG.assertTrue(localVariable != null);
-      locals.add(new LocalVariableProxyImpl(this,localVariable));
+  InvalidStackFrameException error=null;
+  for (int attempt=0; attempt < 2; attempt++) {
+    try {
+      final List<LocalVariable> list=getStackFrame().visibleVariables();
+      final List<LocalVariableProxyImpl> locals=new ArrayList<LocalVariableProxyImpl>(list.size());
+      for (      LocalVariable localVariable : list) {
+        LOG.assertTrue(localVariable != null);
+        locals.add(new LocalVariableProxyImpl(this,localVariable));
+      }
+      return locals;
     }
-    return locals;
+ catch (    InvalidStackFrameException e) {
+      error=e;
+      clearCaches();
+    }
+catch (    AbsentInformationException e) {
+      throw EvaluateExceptionUtil.createEvaluateException(e);
+    }
   }
- catch (  InvalidStackFrameException e) {
-    clearCaches();
-    return visibleVariables();
+  if (error != null) {
+    throw new EvaluateException(error.getMessage(),error);
   }
-catch (  AbsentInformationException e) {
-    throw EvaluateExceptionUtil.createEvaluateException(e);
-  }
+  return Collections.emptyList();
 }

@@ -12,15 +12,20 @@
       LOG.debug("Constant search task: cannot search in dumb mode");
     }
  else {
-      ApplicationManager.getApplication().runReadAction(new Runnable(){
-        @Override public void run(){
-          try {
-            String qualifiedName=ownerClassName.replace('$','.');
-            final PsiClass[] classes=JavaPsiFacade.getInstance(myProject).findClasses(qualifiedName,GlobalSearchScope.allScope(myProject));
-            if (isRemoved) {
+      final String qualifiedName=ownerClassName.replace('$','.');
+      final PsiClass[] classes=ApplicationManager.getApplication().runReadAction(new Computable<PsiClass[]>(){
+        public PsiClass[] compute(){
+          return JavaPsiFacade.getInstance(myProject).findClasses(qualifiedName,GlobalSearchScope.allScope(myProject));
+        }
+      }
+);
+      try {
+        if (isRemoved) {
+          ApplicationManager.getApplication().runReadAction(new Runnable(){
+            public void run(){
               if (classes.length > 0) {
                 for (                PsiClass aClass : classes) {
-                  final boolean success=performRemovedConstantSearch(aClass,fieldName,accessFlags,affectedPaths);
+                  final boolean success=aClass.isValid() && performRemovedConstantSearch(aClass,fieldName,accessFlags,affectedPaths);
                   if (!success) {
                     isSuccess.set(Boolean.FALSE);
                     break;
@@ -31,45 +36,51 @@
                 isSuccess.set(performRemovedConstantSearch(null,fieldName,accessFlags,affectedPaths));
               }
             }
+          }
+);
+        }
  else {
-              if (classes.length > 0) {
-                boolean foundAtLeastOne=false;
+          if (classes.length > 0) {
+            final Collection<PsiField> changedFields=ApplicationManager.getApplication().runReadAction(new Computable<Collection<PsiField>>(){
+              public Collection<PsiField> compute(){
+                final List<PsiField> fields=new SmartList<PsiField>();
                 for (                PsiClass aClass : classes) {
-                  PsiField changedField=null;
-                  for (                  PsiField psiField : aClass.getFields()) {
-                    if (fieldName.equals(psiField.getName())) {
-                      changedField=psiField;
-                      break;
-                    }
+                  if (!aClass.isValid()) {
+                    return Collections.emptyList();
                   }
-                  if (changedField == null) {
-                    continue;
-                  }
-                  foundAtLeastOne=true;
-                  final boolean success=performChangedConstantSearch(aClass,changedField,accessFlags,accessChanged,affectedPaths);
-                  if (!success) {
-                    isSuccess.set(Boolean.FALSE);
-                    break;
+                  final PsiField changedField=aClass.findFieldByName(fieldName,false);
+                  if (changedField != null) {
+                    fields.add(changedField);
                   }
                 }
-                if (!foundAtLeastOne) {
-                  isSuccess.set(Boolean.FALSE);
-                  LOG.debug("Constant search task: field " + fieldName + " not found in classes "+ qualifiedName);
-                }
+                return fields;
               }
+            }
+);
+            if (changedFields.isEmpty()) {
+              isSuccess.set(Boolean.FALSE);
+              LOG.debug("Constant search task: field " + fieldName + " not found in classes "+ qualifiedName);
+            }
  else {
-                isSuccess.set(Boolean.FALSE);
-                LOG.debug("Constant search task: class " + qualifiedName + " not found");
+              for (              final PsiField changedField : changedFields) {
+                final boolean success=performChangedConstantSearch(changedField,accessFlags,accessChanged,affectedPaths);
+                if (!success) {
+                  isSuccess.set(Boolean.FALSE);
+                  break;
+                }
               }
             }
           }
- catch (          Throwable e) {
+ else {
             isSuccess.set(Boolean.FALSE);
-            LOG.debug("Constant search task: failed with message " + e.getMessage());
+            LOG.debug("Constant search task: class " + qualifiedName + " not found");
           }
         }
       }
-);
+ catch (      Throwable e) {
+        isSuccess.set(Boolean.FALSE);
+        LOG.debug("Constant search task: failed with message " + e.getMessage());
+      }
     }
   }
   finally {

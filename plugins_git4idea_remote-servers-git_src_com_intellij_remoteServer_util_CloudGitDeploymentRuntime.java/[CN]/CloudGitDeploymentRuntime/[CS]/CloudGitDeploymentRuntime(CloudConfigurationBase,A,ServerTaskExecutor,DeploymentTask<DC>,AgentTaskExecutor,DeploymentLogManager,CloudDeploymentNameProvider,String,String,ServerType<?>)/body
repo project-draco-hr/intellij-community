@@ -1,0 +1,35 @@
+{
+  myConfiguration=serverConfiguration;
+  myTasksExecutor=taskExecutor;
+  myLogManager=logManager;
+  myRemoteName=remoteName;
+  myCloudName=cloudName;
+  DC deploymentConfiguration=task.getConfiguration();
+  List<CloudGitDeploymentSourceHandlerProvider> handlerProviders=CloudGitDeploymentConfiguratorBase.getDeploymentSourceHandlerProviders(serverType);
+  DeploymentSource deploymentSource=task.getSource();
+  for (  CloudGitDeploymentSourceHandlerProvider handlerProvider : handlerProviders) {
+    DeploymentSourceHandler sourceHandler=handlerProvider.createHandler(this,deploymentSource,deploymentConfiguration);
+    if (sourceHandler != null) {
+      mySourceHandler=sourceHandler;
+      break;
+    }
+  }
+  if (mySourceHandler == null) {
+    throw new ServerRuntimeException("Unknown deployment source");
+  }
+  myContentRootFile=mySourceHandler.getRepositoryRootFile();
+  VirtualFile contentRoot=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(myContentRootFile);
+  LOG.assertTrue(contentRoot != null,"Repository root is not found");
+  myContentRoot=contentRoot;
+  myProject=task.getProject();
+  myGitRepositoryManager=GitUtil.getRepositoryManager(myProject);
+  myGit=ServiceManager.getService(Git.class);
+  if (myGit == null) {
+    throw new ServerRuntimeException("Can't initialize GIT");
+  }
+  myAgentTaskExecutor=agentTaskExecutor;
+  myLoggingHandler=logManager == null ? new CloudSilentLoggingHandlerImpl() : new CloudLoggingHandlerImpl(logManager);
+  myPresentableName=deploymentSource.getPresentableName();
+  myApplicationName=deploymentConfiguration.isDefaultDeploymentName() ? deploymentNameProvider.getDeploymentName(deploymentSource) : deploymentConfiguration.getDeploymentName();
+  myDeployment=agent.createDeployment(getApplicationName(),myLoggingHandler);
+}

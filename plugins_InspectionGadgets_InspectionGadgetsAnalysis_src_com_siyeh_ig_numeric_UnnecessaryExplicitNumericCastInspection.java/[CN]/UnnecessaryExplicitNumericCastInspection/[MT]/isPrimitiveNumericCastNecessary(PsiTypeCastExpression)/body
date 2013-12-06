@@ -8,6 +8,9 @@
     return true;
   }
   final PsiType operandType=operand.getType();
+  if (operandType == null) {
+    return true;
+  }
   PsiElement parent=expression.getParent();
   while (parent instanceof PsiParenthesizedExpression) {
     parent=parent.getParent();
@@ -16,17 +19,21 @@
     final PsiPolyadicExpression polyadicExpression=(PsiPolyadicExpression)parent;
     final IElementType tokenType=polyadicExpression.getOperationTokenType();
     if (binaryPromotionOperators.contains(tokenType)) {
+      if (TypeUtils.isNarrowingConversion(operandType,castType)) {
+        return true;
+      }
       if (PsiType.INT.equals(castType)) {
         return PsiType.LONG.equals(operandType) || PsiType.FLOAT.equals(operandType) || PsiType.DOUBLE.equals(operandType);
       }
       if (PsiType.LONG.equals(castType) || PsiType.FLOAT.equals(castType) || PsiType.DOUBLE.equals(castType)) {
         final PsiExpression[] operands=polyadicExpression.getOperands();
         for (        PsiExpression operand1 : operands) {
-          if (!PsiTreeUtil.isAncestor(operand1,expression,false)) {
-            final PsiType type=operand1.getType();
-            if (castType.equals(type)) {
-              return false;
-            }
+          if (PsiTreeUtil.isAncestor(operand1,expression,false)) {
+            continue;
+          }
+          final PsiType type=operand1.getType();
+          if (castType.equals(type)) {
+            return false;
           }
         }
       }
@@ -90,9 +97,12 @@
     final Project project=expression.getProject();
     final JavaPsiFacade javaPsiFacade=JavaPsiFacade.getInstance(project);
     final PsiElementFactory factory=javaPsiFacade.getElementFactory();
-    final PsiCallExpression newMethodCall=(PsiCallExpression)factory.createExpressionFromText(newMethodCallText.toString(),expression);
-    if (targetMethod != newMethodCall.resolveMethod()) {
-      return true;
+    final PsiExpression expressionFromText=factory.createExpressionFromText(newMethodCallText.toString(),expression);
+    if (expressionFromText instanceof PsiCallExpression) {
+      final PsiCallExpression newMethodCall=(PsiCallExpression)expressionFromText;
+      if (targetMethod != newMethodCall.resolveMethod()) {
+        return true;
+      }
     }
   }
   final PsiType expectedType=ExpectedTypeUtils.findExpectedType(expression,false);

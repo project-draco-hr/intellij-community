@@ -21,27 +21,27 @@
   }
   for (  final ClassRepr c : addedClasses) {
     debug("Class name: ",c.name);
-    myDelta.addChangedClass(c.name);
+    myDelta.addAddedClass(c);
     for (    final int sup : c.getSupers()) {
       myDelta.registerAddedSuperClass(c.name,sup);
     }
-    if (!myEasyMode) {
-      final TIntHashSet depClasses=myClassToClassDependency.get(c.name);
-      if (depClasses != null) {
-        depClasses.forEach(new TIntProcedure(){
-          @Override public boolean execute(          int depClass){
-            final File fName=myClassToSourceFile.get(depClass);
-            if (fName != null) {
-              if (myFilter == null || myFilter.accept(fName)) {
-                debug("Adding dependent file ",fName);
-                myAffectedFiles.add(fName);
-              }
-            }
-            return true;
-          }
-        }
-);
+    if (!myEasyMode && !c.isAnonymous() && !c.isLocal()) {
+      final TIntHashSet toAffect=new TIntHashSet();
+      toAffect.add(c.name);
+      final TIntHashSet classes=myShortClassNameIndex.get(myContext.get(c.getShortName()));
+      if (classes != null) {
+        toAffect.addAll(classes.toArray());
       }
+      toAffect.forEach(new TIntProcedure(){
+        public boolean execute(        int qName){
+          final TIntHashSet depClasses=myClassToClassDependency.get(qName);
+          if (depClasses != null) {
+            affectCorrespondingSourceFiles(depClasses);
+          }
+          return true;
+        }
+      }
+);
     }
   }
   debug("End of added classes processing.");

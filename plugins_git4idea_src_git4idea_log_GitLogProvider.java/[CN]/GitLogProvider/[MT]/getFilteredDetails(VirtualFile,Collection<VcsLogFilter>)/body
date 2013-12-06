@@ -2,13 +2,11 @@
   List<String> filterParameters=ContainerUtil.newArrayList();
   List<VcsLogBranchFilter> branchFilters=ContainerUtil.findAll(filters,VcsLogBranchFilter.class);
   if (!branchFilters.isEmpty()) {
-    String branchFilter=joinFilters(branchFilters,new Function<VcsLogBranchFilter,String>(){
-      @Override public String fun(      VcsLogBranchFilter filter){
-        return filter.getBranchName();
-      }
+    if (branchFilters.size() > 1) {
+      LOG.warn("More than one branch filter was passed. Using only the first one.");
     }
-);
-    filterParameters.add(prepareParameter("branches",branchFilter));
+    VcsLogBranchFilter branchFilter=branchFilters.get(0);
+    filterParameters.add(branchFilter.getBranchName());
   }
  else {
     filterParameters.add("--all");
@@ -23,6 +21,16 @@
 );
     filterParameters.add(prepareParameter("author",authorFilter));
   }
+  List<VcsLogDateFilter> dateFilters=ContainerUtil.findAll(filters,VcsLogDateFilter.class);
+  if (!dateFilters.isEmpty()) {
+    VcsLogDateFilter filter=dateFilters.iterator().next();
+    if (filter.getAfter() != null) {
+      filterParameters.add("--after=" + filter.getAfter().toString());
+    }
+    if (filter.getBefore() != null) {
+      filterParameters.add("--before=" + filter.getBefore().toString());
+    }
+  }
   List<VcsLogTextFilter> textFilters=ContainerUtil.findAll(filters,VcsLogTextFilter.class);
   if (textFilters.size() > 1) {
     LOG.warn("Expected only one text filter: " + textFilters);
@@ -32,5 +40,14 @@
     filterParameters.add(prepareParameter("grep",textFilter));
   }
   filterParameters.add("--regexp-ignore-case");
+  List<VcsLogStructureFilter> structureFilters=ContainerUtil.findAll(filters,VcsLogStructureFilter.class);
+  if (!structureFilters.isEmpty()) {
+    filterParameters.add("--");
+    for (    VcsLogStructureFilter filter : structureFilters) {
+      for (      VirtualFile file : filter.getFiles(root)) {
+        filterParameters.add(file.getPath());
+      }
+    }
+  }
   return GitHistoryUtils.getAllDetails(myProject,root,filterParameters);
 }

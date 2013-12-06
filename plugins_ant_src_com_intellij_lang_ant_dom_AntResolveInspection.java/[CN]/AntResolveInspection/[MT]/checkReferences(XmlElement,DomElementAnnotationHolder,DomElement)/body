@@ -3,6 +3,7 @@
     return;
   }
   Set<PsiReference> processed=null;
+  Collection<PropertiesFile> propertyFiles=null;
   for (  final PsiReference ref : xmlElement.getReferences()) {
     if (!(ref instanceof AntDomReference)) {
       continue;
@@ -15,7 +16,25 @@
       continue;
     }
     if (!isResolvable(ref)) {
-      holder.createProblem(domElement,ProblemHighlightType.LIKE_UNKNOWN_SYMBOL,antDomRef.getUnresolvedMessagePattern(),ref.getRangeInElement(),new AntChangeContextLocalFix());
+      final List<LocalQuickFix> quickFixList=new SmartList<LocalQuickFix>();
+      quickFixList.add(new AntChangeContextLocalFix());
+      if (ref instanceof AntDomPropertyReference) {
+        final String canonicalText=ref.getCanonicalText();
+        quickFixList.add(new AntCreatePropertyFix(canonicalText,null));
+        final PsiFile containingFile=xmlElement.getContainingFile();
+        if (containingFile != null) {
+          if (propertyFiles == null) {
+            propertyFiles=getPropertyFiles(AntSupport.getAntDomProject(containingFile),xmlElement);
+          }
+          for (          PropertiesFile propertyFile : propertyFiles) {
+            quickFixList.add(new AntCreatePropertyFix(canonicalText,propertyFile));
+          }
+        }
+      }
+ else       if (ref instanceof AntDomTargetReference) {
+        quickFixList.add(new AntCreateTargetFix(ref.getCanonicalText()));
+      }
+      holder.createProblem(domElement,ProblemHighlightType.LIKE_UNKNOWN_SYMBOL,antDomRef.getUnresolvedMessagePattern(),ref.getRangeInElement(),quickFixList.toArray((new LocalQuickFix[quickFixList.size()])));
       if (ref instanceof AntDomFileReference) {
         if (processed == null) {
           processed=new HashSet<PsiReference>();

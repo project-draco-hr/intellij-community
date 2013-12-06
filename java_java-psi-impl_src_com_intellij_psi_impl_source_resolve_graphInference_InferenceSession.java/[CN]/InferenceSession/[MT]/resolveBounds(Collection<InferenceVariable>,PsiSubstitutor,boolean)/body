@@ -2,33 +2,38 @@
   final List<List<InferenceVariable>> independentVars=InferenceVariablesOrder.resolveOrder(inferenceVariables,this);
   for (  List<InferenceVariable> variables : independentVars) {
     for (    InferenceVariable inferenceVariable : variables) {
-      if (inferenceVariable.isCaptured() || inferenceVariable.getInstantiation() != PsiType.NULL)       continue;
+      if (inferenceVariable.getInstantiation() != PsiType.NULL)       continue;
       final PsiTypeParameter typeParameter=inferenceVariable.getParameter();
       try {
         final List<PsiType> eqBounds=inferenceVariable.getBounds(InferenceBound.EQ);
         final List<PsiType> lowerBounds=inferenceVariable.getBounds(InferenceBound.LOWER);
         final List<PsiType> upperBounds=inferenceVariable.getBounds(InferenceBound.UPPER);
-        if (upperBounds.contains(null)) {
+        if (myErased && eqBounds.contains(null) || upperBounds.contains(null)) {
           inferenceVariable.setInstantiation(null);
           continue;
         }
         PsiType bound=null;
-        for (        PsiType eqBound : eqBounds) {
-          if (eqBound == null)           continue;
-          if (bound != null && !isProperType(eqBound))           continue;
-          bound=acceptBoundsWithRecursiveDependencies(typeParameter,eqBound,substitutor);
-        }
-        if (bound != null) {
-          if (bound instanceof PsiCapturedWildcardType && eqBounds.size() > 1) {
-            continue;
+        if (eqBounds.size() > 1) {
+          for (Iterator<PsiType> iterator=eqBounds.iterator(); iterator.hasNext(); ) {
+            PsiType eqBound=acceptBoundsWithRecursiveDependencies(inferenceVariable,iterator.next(),substitutor);
+            if (PsiUtil.resolveClassInType(eqBound) == typeParameter || !(bound instanceof PsiCapturedWildcardType) && Comparing.equal(bound,eqBound)) {
+              iterator.remove();
+            }
+ else             if (bound == null) {
+              bound=eqBound;
+            }
           }
+          if (eqBounds.size() > 1)           continue;
+        }
+        bound=eqBounds.isEmpty() ? null : acceptBoundsWithRecursiveDependencies(inferenceVariable,eqBounds.get(0),substitutor);
+        if (bound != null) {
           inferenceVariable.setInstantiation(bound);
         }
  else {
           PsiType lub=null;
           for (          PsiType lowerBound : lowerBounds) {
-            lowerBound=acceptBoundsWithRecursiveDependencies(typeParameter,lowerBound,substitutor);
-            if (isProperType(lowerBound,false)) {
+            lowerBound=acceptBoundsWithRecursiveDependencies(inferenceVariable,lowerBound,substitutor);
+            if (isProperType(lowerBound)) {
               if (lub == null) {
                 lub=lowerBound;
               }
@@ -40,25 +45,35 @@
           if (lub != null) {
             inferenceVariable.setInstantiation(lub instanceof PsiCapturedWildcardType ? ((PsiCapturedWildcardType)lub).getWildcard() : lub);
           }
- else           if (acceptObject || upperBounds.size() > 1 || !upperBounds.get(0).equalsToText(CommonClassNames.JAVA_LANG_OBJECT)) {
+ else {
+            boolean inferred=false;
             PsiType glb=null;
             if (isThrowable(upperBounds)) {
               glb=PsiType.getJavaLangRuntimeException(myManager,GlobalSearchScope.allScope(myManager.getProject()));
+              inferred=true;
             }
  else {
+              int boundCandidatesNumber=0;
               for (              PsiType upperBound : upperBounds) {
-                upperBound=acceptBoundsWithRecursiveDependencies(typeParameter,upperBound,substitutor);
-                if (isProperType(upperBound,false)) {
+                PsiType substitutedBound=acceptBoundsWithRecursiveDependencies(inferenceVariable,upperBound,substitutor);
+                if (isProperType(substitutedBound)) {
+                  boundCandidatesNumber++;
+                  if (!upperBound.equals(substitutedBound)) {
+                    inferred=true;
+                  }
                   if (glb == null) {
-                    glb=upperBound;
+                    glb=substitutedBound;
                   }
  else {
-                    glb=GenericsUtil.getGreatestLowerBound(glb,upperBound);
+                    glb=GenericsUtil.getGreatestLowerBound(glb,substitutedBound);
                   }
                 }
               }
+              if (!inferred) {
+                inferred=boundCandidatesNumber > typeParameter.getExtendsListTypes().length && (typeParameter.getExtendsListTypes().length > 0 || boundCandidatesNumber > 1);
+              }
             }
-            if (glb != null) {
+            if (glb != null && (acceptInitialUpperBound || inferred)) {
               inferenceVariable.setInstantiation(glb);
             }
           }

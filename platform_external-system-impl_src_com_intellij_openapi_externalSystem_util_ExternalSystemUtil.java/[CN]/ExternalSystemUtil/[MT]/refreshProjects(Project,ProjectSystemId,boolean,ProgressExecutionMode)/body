@@ -20,14 +20,15 @@
       for (      DataNode<ModuleData> node : moduleNodes) {
         myExternalModulePaths.add(node.getData().getLinkedExternalProjectPath());
       }
-      ExternalSystemApiUtil.executeProjectChangeAction(true,new Runnable(){
-        @Override public void run(){
+      ExternalSystemApiUtil.executeProjectChangeAction(true,new DisposeAwareProjectChange(project){
+        @Override public void execute(){
           ProjectRootManagerEx.getInstanceEx(project).mergeRootsChangesDuring(new Runnable(){
             @Override public void run(){
               projectDataManager.importData(externalProject.getKey(),Collections.singleton(externalProject),project,true);
             }
           }
 );
+          processOrphanProjectLibraries();
         }
       }
 );
@@ -60,6 +61,20 @@
       }
       if (!orphanIdeModules.isEmpty()) {
         ruleOrphanModules(orphanIdeModules,project,externalSystemId);
+      }
+    }
+    private void processOrphanProjectLibraries(){
+      PlatformFacade platformFacade=ServiceManager.getService(PlatformFacade.class);
+      List<Library> orphanIdeLibraries=ContainerUtilRt.newArrayList();
+      LibraryTable projectLibraryTable=platformFacade.getProjectLibraryTable(project);
+      for (      Library library : projectLibraryTable.getLibraries()) {
+        if (!ExternalSystemApiUtil.isExternalSystemLibrary(library,externalSystemId))         continue;
+        if (ProjectStructureHelper.isOrphanProjectLibrary(library,platformFacade.getModules(project))) {
+          orphanIdeLibraries.add(library);
+        }
+      }
+      for (      Library orphanIdeLibrary : orphanIdeLibraries) {
+        projectLibraryTable.removeLibrary(orphanIdeLibrary);
       }
     }
   }

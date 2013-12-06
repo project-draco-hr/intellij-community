@@ -24,7 +24,29 @@
     ProgressManager.getInstance().runProcessWithProgressSynchronously(prepareHelpersRunnable,"Prepare ...",false,myProject);
     ApplicationManager.getApplication().runWriteAction(new Runnable(){
       @Override public void run(){
-        performRefactoring(writableUsageInfos);
+        final String refactoringId=getRefactoringId();
+        if (refactoringId != null) {
+          myProject.getMessageBus().syncPublisher(RefactoringEventListener.REFACTORING_EVENT_TOPIC).refactoringStarted(refactoringId,getBeforeData());
+        }
+        try {
+          if (refactoringId != null) {
+            UndoableAction action=new BasicUndoableAction(){
+              @Override public void undo(){
+                myProject.getMessageBus().syncPublisher(RefactoringEventListener.REFACTORING_EVENT_TOPIC).undoRefactoring(refactoringId);
+              }
+              @Override public void redo(){
+              }
+            }
+;
+            UndoManager.getInstance(myProject).undoableActionPerformed(action);
+          }
+          performRefactoring(writableUsageInfos);
+        }
+  finally {
+          if (refactoringId != null) {
+            myProject.getMessageBus().syncPublisher(RefactoringEventListener.REFACTORING_EVENT_TOPIC).refactoringDone(refactoringId,getAfterData(writableUsageInfos));
+          }
+        }
       }
     }
 );
