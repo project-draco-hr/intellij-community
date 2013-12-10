@@ -35,33 +35,7 @@
     parameters.add("-nodeprecatedlist");
   }
   parameters.addParametersString(OTHER_OPTIONS);
-  final Set<Module> modules=new HashSet<Module>();
-  myGenerationOptions.accept(new PsiRecursiveElementWalkingVisitor(){
-    @Override public void visitFile(    PsiFile file){
-      final Module module=ModuleUtilCore.findModuleForPsiElement(file);
-      if (module != null) {
-        modules.add(module);
-      }
-    }
-  }
-);
-  final PathsList classPath;
-  final OrderEnumerator orderEnumerator=ProjectRootManager.getInstance(myProject).orderEntries(modules);
-  if (jdk.getSdkType() instanceof JavaSdk) {
-    classPath=orderEnumerator.withoutSdk().withoutModuleSourceEntries().getPathsList();
-  }
- else {
-    classPath=orderEnumerator.withoutModuleSourceEntries().getPathsList();
-  }
-  final String classPathString=classPath.getPathsString();
-  if (classPathString.length() > 0) {
-    parameters.add("-classpath");
-    parameters.add(classPathString);
-  }
-  if (OUTPUT_DIRECTORY != null) {
-    parameters.add("-d");
-    parameters.add(OUTPUT_DIRECTORY.replace('/',File.separatorChar));
-  }
+  final Set<Module> modules=new LinkedHashSet<Module>();
   try {
     final File sourcePathTempFile=FileUtil.createTempFile("javadoc","args.txt",true);
     parameters.add("@" + sourcePathTempFile.getCanonicalPath());
@@ -73,11 +47,11 @@
         public void run(){
           final int scopeType=myGenerationOptions.getScopeType();
           final boolean usePackageNotation=scopeType == AnalysisScope.MODULE || scopeType == AnalysisScope.MODULES || scopeType == AnalysisScope.PROJECT || scopeType == AnalysisScope.DIRECTORY;
-          myGenerationOptions.accept(new MyContentIterator(myProject,packages,sources,usePackageNotation));
+          myGenerationOptions.accept(new MyContentIterator(myProject,packages,sources,modules,usePackageNotation));
         }
       }
 ;
-      if (!ProgressManager.getInstance().runProcessWithProgressSynchronously(findRunnable,"Search for sources to generate javadoc in...",false,myProject)) {
+      if (!ProgressManager.getInstance().runProcessWithProgressSynchronously(findRunnable,"Search for sources to generate javadoc in...",true,myProject)) {
         return;
       }
       if (packages.size() + sources.size() == 0) {
@@ -117,5 +91,22 @@
   }
  catch (  IOException e) {
     LOGGER.error(e);
+  }
+  final PathsList classPath;
+  final OrderEnumerator orderEnumerator=ProjectRootManager.getInstance(myProject).orderEntries(modules);
+  if (jdk.getSdkType() instanceof JavaSdk) {
+    classPath=orderEnumerator.withoutSdk().withoutModuleSourceEntries().getPathsList();
+  }
+ else {
+    classPath=orderEnumerator.withoutModuleSourceEntries().getPathsList();
+  }
+  final String classPathString=classPath.getPathsString();
+  if (classPathString.length() > 0) {
+    parameters.add("-classpath");
+    parameters.add(classPathString);
+  }
+  if (OUTPUT_DIRECTORY != null) {
+    parameters.add("-d");
+    parameters.add(OUTPUT_DIRECTORY.replace('/',File.separatorChar));
   }
 }
