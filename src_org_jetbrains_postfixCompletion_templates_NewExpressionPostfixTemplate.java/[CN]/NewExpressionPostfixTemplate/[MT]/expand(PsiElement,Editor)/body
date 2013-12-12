@@ -1,3 +1,21 @@
 {
-  throw new UnsupportedOperationException("Implement me please");
+  PsiElement ref=PsiTreeUtil.getParentOfType(context,PsiJavaCodeReferenceElement.class);
+  if (ref instanceof PsiJavaReference) {
+    PsiElement element=((PsiJavaReference)ref).advancedResolve(true).getElement();
+    if (element instanceof PsiClass) {
+      PsiClass psiClass=(PsiClass)element;
+      CtorAccessibility accessibility=calcAccessibility(psiClass,context);
+      if (accessibility != CtorAccessibility.NOT_ACCESSIBLE) {
+        boolean typeRequiresRefinement=psiClass.isInterface() || psiClass.hasModifierProperty(PsiModifier.ABSTRACT);
+        String template="new " + ref.getText() + "()";
+        if (typeRequiresRefinement)         template+="{}";
+        PsiElementFactory factory=JavaPsiFacade.getInstance(context.getProject()).getElementFactory();
+        PsiNewExpression newExpression=(PsiNewExpression)factory.createExpressionFromText(template,context);
+        PsiElement replace=ref.getParent().replace(newExpression);
+        replace.getNode().addLeaf(JavaTokenType.SEMICOLON,";",null);
+        int offset=calculateOffset((PsiNewExpression)replace,accessibility,typeRequiresRefinement);
+        editor.getCaretModel().moveToOffset(offset);
+      }
+    }
+  }
 }
