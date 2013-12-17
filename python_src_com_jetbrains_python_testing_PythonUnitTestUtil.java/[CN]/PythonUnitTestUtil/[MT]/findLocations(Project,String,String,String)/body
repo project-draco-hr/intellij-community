@@ -1,0 +1,50 @@
+{
+  if (fileName.contains("%")) {
+    fileName=fileName.substring(0,fileName.lastIndexOf("%"));
+  }
+  final List<Location> locations=new ArrayList<Location>();
+  if (methodName == null && className == null) {
+    final VirtualFile virtualFile=LocalFileSystem.getInstance().findFileByPath(fileName);
+    if (virtualFile == null)     return locations;
+    final PsiFile psiFile=PsiManager.getInstance(project).findFile(virtualFile);
+    if (psiFile != null)     locations.add(new PsiLocation<PsiFile>(project,psiFile));
+  }
+  if (className != null) {
+    for (    PyClass cls : PyClassNameIndex.find(className,project,false)) {
+      ProgressManager.checkCanceled();
+      final PsiFile containingFile=cls.getContainingFile();
+      final VirtualFile virtualFile=containingFile.getVirtualFile();
+      final String clsFileName=virtualFile == null ? containingFile.getName() : virtualFile.getPath();
+      final String clsFileNameWithoutExt=FileUtil.getNameWithoutExtension(clsFileName);
+      if (!clsFileNameWithoutExt.endsWith(fileName)) {
+        continue;
+      }
+      if (methodName == null) {
+        locations.add(new PsiLocation<PyClass>(project,cls));
+      }
+ else {
+        final PyFunction method=cls.findMethodByName(methodName,true);
+        if (method == null) {
+          continue;
+        }
+        locations.add(new PsiLocation<PyFunction>(project,method));
+      }
+    }
+  }
+ else   if (methodName != null) {
+    for (    PyFunction function : PyFunctionNameIndex.find(methodName,project)) {
+      ProgressManager.checkCanceled();
+      if (function.getContainingClass() == null) {
+        final PsiFile containingFile=function.getContainingFile();
+        final VirtualFile virtualFile=containingFile.getVirtualFile();
+        final String clsFileName=virtualFile == null ? containingFile.getName() : virtualFile.getPath();
+        final String clsFileNameWithoutExt=FileUtil.getNameWithoutExtension(clsFileName);
+        if (!clsFileNameWithoutExt.endsWith(fileName)) {
+          continue;
+        }
+        locations.add(new PsiLocation<PyFunction>(project,function));
+      }
+    }
+  }
+  return locations;
+}
