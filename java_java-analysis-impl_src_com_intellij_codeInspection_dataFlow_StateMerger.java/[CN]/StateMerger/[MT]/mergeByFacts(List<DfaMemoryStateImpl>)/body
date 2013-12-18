@@ -1,0 +1,43 @@
+{
+  MultiMap<Fact,DfaMemoryStateImpl> statesByFact=MultiMap.create();
+  for (  DfaMemoryStateImpl state : states) {
+    ProgressManager.checkCanceled();
+    for (    Fact fact : getFacts(state)) {
+      statesByFact.putValue(fact,state);
+    }
+  }
+  for (  final Fact fact : statesByFact.keySet()) {
+    if (statesByFact.get(fact).size() == states.size() || fact.myPositive)     continue;
+    Collection<DfaMemoryStateImpl> statesWithNegations=statesByFact.get(fact.getPositiveCounterpart());
+    if (statesWithNegations.isEmpty())     continue;
+    ProgressManager.checkCanceled();
+    MultiMap<Set<Fact>,DfaMemoryStateImpl> statesByUnrelatedFacts=MultiMap.create();
+    for (    DfaMemoryStateImpl state : ContainerUtil.concat(statesByFact.get(fact),statesWithNegations)) {
+      statesByUnrelatedFacts.putValue(getUnrelatedFacts(fact,state),state);
+    }
+    Set<DfaMemoryStateImpl> removedStates=ContainerUtil.newIdentityTroveSet();
+    List<DfaMemoryStateImpl> result=ContainerUtil.newArrayList();
+    for (    Set<Fact> key : statesByUnrelatedFacts.keySet()) {
+      Collection<DfaMemoryStateImpl> group=statesByUnrelatedFacts.get(key);
+      if (group.size() > 1) {
+        DfaMemoryStateImpl copy=group.iterator().next().createCopy();
+        fact.removeFromState(copy);
+        if (fact.myType == FactType.equality) {
+          restoreOtherInequalities(fact,group,copy);
+        }
+        mergeUnknowns(copy,group);
+        removedStates.addAll(group);
+        result.add(copy);
+      }
+    }
+    if (!result.isEmpty()) {
+      for (      DfaMemoryStateImpl state : states) {
+        if (!removedStates.contains(state)) {
+          result.add(state);
+        }
+      }
+      return result;
+    }
+  }
+  return null;
+}

@@ -1,0 +1,51 @@
+{
+  LinkedHashSet<Fact> result=myFacts.get(state);
+  if (result != null) {
+    return result;
+  }
+  result=ContainerUtil.newLinkedHashSet();
+  for (  EqClass eqClass : state.getNonTrivialEqClasses()) {
+    DfaConstValue constant=eqClass.findConstant(true);
+    List<DfaVariableValue> vars=eqClass.getVariables();
+    for (    DfaVariableValue var : vars) {
+      if (constant != null) {
+        result.add(Fact.createEqualityFact(var,constant,true));
+      }
+      for (      DfaVariableValue eqVar : vars) {
+        if (var != eqVar) {
+          result.add(Fact.createEqualityFact(var,eqVar,true));
+        }
+      }
+    }
+  }
+  for (  UnorderedPair<EqClass> classPair : state.getDistinctClassPairs()) {
+    List<DfaVariableValue> vars1=classPair.first.getVariables();
+    List<DfaVariableValue> vars2=classPair.second.getVariables();
+    LinkedHashSet<DfaValue> firstSet=new LinkedHashSet<DfaValue>(vars1);
+    ContainerUtil.addIfNotNull(firstSet,classPair.first.findConstant(true));
+    LinkedHashSet<DfaValue> secondSet=new LinkedHashSet<DfaValue>(vars2);
+    ContainerUtil.addIfNotNull(secondSet,classPair.second.findConstant(true));
+    for (    DfaVariableValue var : vars1) {
+      for (      DfaValue value : secondSet) {
+        result.add(new Fact(FactType.equality,var,false,value));
+      }
+    }
+    for (    DfaVariableValue var : vars2) {
+      for (      DfaValue value : firstSet) {
+        result.add(new Fact(FactType.equality,var,false,value));
+      }
+    }
+  }
+  Map<DfaVariableValue,DfaVariableState> states=state.getVariableStates();
+  for (  DfaVariableValue var : states.keySet()) {
+    DfaVariableState variableState=states.get(var);
+    for (    DfaPsiType type : variableState.getInstanceofValues()) {
+      result.add(new Fact(FactType.instanceOf,var,true,type));
+    }
+    for (    DfaPsiType type : variableState.getNotInstanceofValues()) {
+      result.add(new Fact(FactType.instanceOf,var,false,type));
+    }
+  }
+  myFacts.put(state,result);
+  return result;
+}
