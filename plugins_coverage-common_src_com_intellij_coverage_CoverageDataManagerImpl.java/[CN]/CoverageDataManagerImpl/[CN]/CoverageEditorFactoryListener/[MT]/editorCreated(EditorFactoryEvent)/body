@@ -1,4 +1,9 @@
 {
+synchronized (myLock) {
+    if (myIsProjectClosing)     return;
+  }
+  final Editor editor=event.getEditor();
+  if (editor.getProject() != myProject)   return;
   final PsiFile psiFile=ApplicationManager.getApplication().runReadAction(new Computable<PsiFile>(){
     @Nullable @Override public PsiFile compute(){
       if (myProject.isDisposed())       return null;
@@ -17,13 +22,22 @@
     if (annotator == null) {
       annotator=new SrcFileAnnotator(psiFile,editor);
     }
-    if (myCurrentSuitesBundle != null) {
-      if (engine.acceptedByFilters(psiFile,myCurrentSuitesBundle)) {
-        annotator.showCoverageInformation(myCurrentSuitesBundle);
+    final SrcFileAnnotator finalAnnotator=annotator;
+synchronized (ANNOTATORS_LOCK) {
+      myAnnotators.put(editor,finalAnnotator);
+    }
+    final Runnable request=new Runnable(){
+      @Override public void run(){
+        if (myProject.isDisposed())         return;
+        if (myCurrentSuitesBundle != null) {
+          if (engine.acceptedByFilters(psiFile,myCurrentSuitesBundle)) {
+            finalAnnotator.showCoverageInformation(myCurrentSuitesBundle);
+          }
+        }
       }
     }
-synchronized (ANNOTATORS_LOCK) {
-      myAnnotators.put(editor,annotator);
-    }
+;
+    myCurrentEditors.put(editor,request);
+    myAlarm.addRequest(request,100);
   }
 }
