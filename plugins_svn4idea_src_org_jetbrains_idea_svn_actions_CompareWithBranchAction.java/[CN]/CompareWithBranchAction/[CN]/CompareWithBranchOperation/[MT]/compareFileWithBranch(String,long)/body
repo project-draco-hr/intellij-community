@@ -1,5 +1,5 @@
 {
-  final ByteArrayOutputStream baos=new ByteArrayOutputStream();
+  final Ref<byte[]> content=new Ref<byte[]>();
   final StringBuilder remoteTitleBuilder=new StringBuilder();
   final Ref<Boolean> success=new Ref<Boolean>();
   ProgressManager.getInstance().runProcessWithProgressSynchronously(new Runnable(){
@@ -16,12 +16,17 @@
           return;
         }
         remoteTitleBuilder.append(svnurl.toString());
-        SVNWCClient client=vcs.createWCClient();
-        client.doGetFileContents(svnurl,SVNRevision.UNDEFINED,SVNRevision.HEAD,true,baos);
+        content.set(SvnUtil.getFileContents(vcs,SvnTarget.fromURL(svnurl),SVNRevision.HEAD,SVNRevision.UNDEFINED));
         success.set(true);
       }
  catch (      SVNException ex) {
+        reportException(new SvnBindException(ex),baseUrl);
+      }
+catch (      SvnBindException ex) {
         reportException(ex,baseUrl);
+      }
+catch (      VcsException ex) {
+        reportGeneralException(ex,baseUrl);
       }
     }
   }
@@ -30,7 +35,7 @@
     return;
   }
   SimpleDiffRequest req=new SimpleDiffRequest(myProject,SvnBundle.message("compare.with.branch.diff.title"));
-  req.setContents(new SimpleContent(CharsetToolkit.bytesToString(baos.toByteArray(),myVirtualFile.getCharset())),new FileContent(myProject,myVirtualFile));
+  req.setContents(new SimpleContent(CharsetToolkit.bytesToString(content.get(),myVirtualFile.getCharset())),new FileContent(myProject,myVirtualFile));
   req.setContentTitles(remoteTitleBuilder.toString(),myVirtualFile.getPresentableUrl());
   DiffManager.getInstance().getDiffTool().show(req);
 }
