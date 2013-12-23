@@ -1,0 +1,33 @@
+{
+  PsiExpression expr=getTopmostExpression(context);
+  if (expr == null) {
+    PostfixTemplatesUtils.showErrorHint(context.getProject(),editor);
+    return;
+  }
+  Pair<String,String> bounds=calculateBounds(expr);
+  if (bounds == null) {
+    PostfixTemplatesUtils.showErrorHint(context.getProject(),editor);
+    return;
+  }
+  Project project=context.getProject();
+  Document document=editor.getDocument();
+  document.deleteString(expr.getTextRange().getStartOffset(),expr.getTextRange().getEndOffset());
+  TemplateManager manager=TemplateManager.getInstance(project);
+  Template template=manager.createTemplate("","");
+  template.setToReformat(true);
+  template.addTextSegment("for (" + suggestIndexType(expr) + " ");
+  MacroCallNode index=new MacroCallNode(new SuggestVariableNameMacro());
+  String indexVariable="index";
+  template.addVariable(indexVariable,index,index,true);
+  template.addTextSegment(" = " + bounds.first + "; ");
+  template.addVariableSegment(indexVariable);
+  template.addTextSegment(getComparativeSign(expr));
+  template.addTextSegment(bounds.second);
+  template.addTextSegment("; ");
+  template.addVariableSegment(indexVariable);
+  template.addTextSegment(getOperator());
+  template.addTextSegment(") {\n");
+  template.addEndVariable();
+  template.addTextSegment("\n}");
+  manager.startTemplate(editor,template);
+}
