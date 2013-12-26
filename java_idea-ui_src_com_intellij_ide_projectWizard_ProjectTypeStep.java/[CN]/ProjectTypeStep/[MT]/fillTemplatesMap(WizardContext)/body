@@ -1,0 +1,42 @@
+{
+  myTemplatesMap.putAllValues(CreateFromTemplateMode.getTemplatesMap(context,false));
+  for (  ProjectCategory category : ProjectCategory.EXTENSION_POINT_NAME.getExtensions()) {
+    myTemplatesMap.put(new TemplatesGroup(category),new ArrayList<ProjectTemplate>());
+  }
+  if (context.isCreatingNewProject()) {
+    MultiMap<String,ProjectTemplate> localTemplates=loadLocalTemplates();
+    for (    TemplatesGroup group : myTemplatesMap.keySet()) {
+      myTemplatesMap.putValues(group,localTemplates.get(group.getId()));
+    }
+  }
+  for (Iterator<Map.Entry<TemplatesGroup,Collection<ProjectTemplate>>> iterator=myTemplatesMap.entrySet().iterator(); iterator.hasNext(); ) {
+    Map.Entry<TemplatesGroup,Collection<ProjectTemplate>> entry=iterator.next();
+    if (entry.getValue().isEmpty()) {
+      iterator.remove();
+    }
+  }
+  List<TemplatesGroup> groups=new ArrayList<TemplatesGroup>(myTemplatesMap.keySet());
+  Collections.sort(groups);
+  Set<String> groupNames=ContainerUtil.map2Set(groups,new Function<TemplatesGroup,String>(){
+    @Override public String fun(    TemplatesGroup group){
+      return group.getName();
+    }
+  }
+);
+  MultiMap<String,TemplatesGroup> subGroups=new MultiMap<String,TemplatesGroup>();
+  for (ListIterator<TemplatesGroup> iterator=groups.listIterator(); iterator.hasNext(); ) {
+    TemplatesGroup group=iterator.next();
+    String parentGroup=group.getParentGroup();
+    if (parentGroup != null && groupNames.contains(parentGroup) && !group.getName().equals(parentGroup)) {
+      subGroups.putValue(parentGroup,group);
+      iterator.remove();
+    }
+  }
+  for (ListIterator<TemplatesGroup> iterator=groups.listIterator(); iterator.hasNext(); ) {
+    TemplatesGroup group=iterator.next();
+    for (    TemplatesGroup subGroup : subGroups.get(group.getName())) {
+      iterator.add(subGroup);
+    }
+  }
+  return groups;
+}
