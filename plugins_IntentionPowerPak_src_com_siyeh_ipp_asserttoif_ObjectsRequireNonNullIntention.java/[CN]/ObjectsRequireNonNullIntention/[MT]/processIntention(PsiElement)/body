@@ -1,0 +1,40 @@
+{
+  if (!(element instanceof PsiReferenceExpression)) {
+    return;
+  }
+  final PsiReferenceExpression referenceExpression=(PsiReferenceExpression)element;
+  final PsiElement target=referenceExpression.resolve();
+  if (!(target instanceof PsiVariable)) {
+    return;
+  }
+  final PsiVariable variable=(PsiVariable)target;
+  final List<String> notNulls=NullableNotNullManager.getInstance(element.getProject()).getNotNulls();
+  final PsiAnnotation annotation=AnnotationUtil.findAnnotation(variable,notNulls);
+  if (annotation != null) {
+    annotation.delete();
+  }
+ else {
+    final PsiStatement referenceStatement=PsiTreeUtil.getParentOfType(referenceExpression,PsiStatement.class);
+    final PsiElement parent=referenceStatement.getParent();
+    if (!(parent instanceof PsiCodeBlock)) {
+      return;
+    }
+    final PsiCodeBlock codeBlock=(PsiCodeBlock)parent;
+    final PsiStatement[] statements=codeBlock.getStatements();
+    PsiStatement statementToDelete=null;
+    for (    PsiStatement statement : statements) {
+      if (statement == referenceStatement) {
+        break;
+      }
+      if (NullCheckedAssignmentPredicate.isNotNullAssertion(statement,variable) || NullCheckedAssignmentPredicate.isIfStatementNullCheck(statement,variable)) {
+        statementToDelete=statement;
+        break;
+      }
+    }
+    if (statementToDelete == null) {
+      return;
+    }
+    statementToDelete.delete();
+  }
+  replaceExpressionAndShorten("java.util.Objects.requireNonNull(" + referenceExpression.getText() + ")",referenceExpression);
+}

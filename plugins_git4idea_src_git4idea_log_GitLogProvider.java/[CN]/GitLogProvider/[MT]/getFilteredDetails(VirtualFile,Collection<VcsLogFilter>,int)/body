@@ -1,0 +1,59 @@
+{
+  if (!isRepositoryReady(root)) {
+    return Collections.emptyList();
+  }
+  List<String> filterParameters=ContainerUtil.newArrayList();
+  List<VcsLogBranchFilter> branchFilters=ContainerUtil.findAll(filters,VcsLogBranchFilter.class);
+  if (!branchFilters.isEmpty()) {
+    if (branchFilters.size() > 1) {
+      LOG.warn("More than one branch filter was passed. Using only the first one.");
+    }
+    VcsLogBranchFilter branchFilter=branchFilters.get(0);
+    filterParameters.add(branchFilter.getBranchName());
+  }
+ else {
+    filterParameters.addAll(GitHistoryUtils.LOG_ALL);
+  }
+  List<VcsLogUserFilter> userFilters=ContainerUtil.findAll(filters,VcsLogUserFilter.class);
+  if (!userFilters.isEmpty()) {
+    String authorFilter=joinFilters(userFilters,new Function<VcsLogUserFilter,String>(){
+      @Override public String fun(      VcsLogUserFilter filter){
+        return filter.getUserName(root);
+      }
+    }
+);
+    filterParameters.add(prepareParameter("author",authorFilter));
+  }
+  List<VcsLogDateFilter> dateFilters=ContainerUtil.findAll(filters,VcsLogDateFilter.class);
+  if (!dateFilters.isEmpty()) {
+    VcsLogDateFilter filter=dateFilters.iterator().next();
+    if (filter.getAfter() != null) {
+      filterParameters.add("--after=" + filter.getAfter().toString());
+    }
+    if (filter.getBefore() != null) {
+      filterParameters.add("--before=" + filter.getBefore().toString());
+    }
+  }
+  List<VcsLogTextFilter> textFilters=ContainerUtil.findAll(filters,VcsLogTextFilter.class);
+  if (textFilters.size() > 1) {
+    LOG.warn("Expected only one text filter: " + textFilters);
+  }
+ else   if (!textFilters.isEmpty()) {
+    String textFilter=textFilters.iterator().next().getText();
+    filterParameters.add(prepareParameter("grep",textFilter));
+  }
+  filterParameters.add("--regexp-ignore-case");
+  if (maxCount > 0) {
+    filterParameters.add("--max-count=" + maxCount);
+  }
+  List<VcsLogStructureFilter> structureFilters=ContainerUtil.findAll(filters,VcsLogStructureFilter.class);
+  if (!structureFilters.isEmpty()) {
+    filterParameters.add("--");
+    for (    VcsLogStructureFilter filter : structureFilters) {
+      for (      VirtualFile file : filter.getFiles(root)) {
+        filterParameters.add(file.getPath());
+      }
+    }
+  }
+  return GitHistoryUtils.getAllDetails(myProject,root,filterParameters);
+}

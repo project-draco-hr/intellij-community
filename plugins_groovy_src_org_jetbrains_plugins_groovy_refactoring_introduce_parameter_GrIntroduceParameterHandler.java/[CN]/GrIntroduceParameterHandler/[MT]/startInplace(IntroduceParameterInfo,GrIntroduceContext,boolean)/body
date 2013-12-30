@@ -1,0 +1,46 @@
+{
+  final GrIntroduceParameterSettings settings=getSettingsForInplace(info,context,replaceAll);
+  if (settings == null)   return;
+  CommandProcessor.getInstance().executeCommand(info.getProject(),new Runnable(){
+    public void run(){
+      Document document=context.getEditor().getDocument();
+      List<RangeMarker> occurrences=ContainerUtil.newArrayList();
+      if (settings.replaceAllOccurrences()) {
+        for (        PsiElement element : context.getOccurrences()) {
+          occurrences.add(createRange(document,element));
+        }
+      }
+ else       if (context.getExpression() != null) {
+        occurrences.add(createRange(document,context.getExpression()));
+      }
+      GrExpressionWrapper expr=new GrExpressionWrapper(GroovyIntroduceParameterUtil.findExpr(settings));
+      SmartPsiElementPointer<GrParameter> pointer=ApplicationManager.getApplication().runWriteAction(new Computable<SmartPsiElementPointer<GrParameter>>(){
+        @Override public SmartPsiElementPointer<GrParameter> compute(){
+          Project project=context.getProject();
+          GrParametersOwner toReplaceIn=info.getToReplaceIn();
+          String name=GrInplaceParameterIntroducer.suggestNames(context,toReplaceIn).iterator().next();
+          PsiType type=getType(context.getExpression(),context.getVar(),context.getStringPart());
+          GrParameter parameter=GroovyIntroduceParameterMethodUsagesProcessor.addParameter(toReplaceIn,null,type != null ? type : PsiType.getJavaLangObject(PsiManager.getInstance(project),toReplaceIn.getResolveScope()),name,false,project);
+          GroovyPsiElementFactory factory=GroovyPsiElementFactory.getInstance(project);
+          if (settings.replaceAllOccurrences()) {
+            for (            PsiElement element : context.getOccurrences()) {
+              element.replace(factory.createReferenceExpressionFromText(name));
+            }
+          }
+ else {
+            context.getExpression().replace(factory.createReferenceExpressionFromText(name));
+          }
+          return SmartPointerManager.getInstance(project).createSmartPsiElementPointer(parameter);
+        }
+      }
+);
+      GrVariable parameter=pointer != null ? pointer.getElement() : null;
+      if (parameter != null) {
+        GrInplaceIntroducer introducer=getIntroducer(parameter,context,settings,occurrences,expr);
+        PsiDocumentManager.getInstance(info.getProject()).doPostponedOperationsAndUnblockDocument(context.getEditor().getDocument());
+        introducer.performInplaceRefactoring(introducer.suggestNames(context));
+      }
+    }
+  }
+,REFACTORING_NAME,REFACTORING_NAME);
+}
