@@ -10,29 +10,32 @@
   }
   if (requestor.CLASS_FILTERS_ENABLED && !(request instanceof BreakpointRequest)) {
     ClassFilter[] classFilters=requestor.getClassFilters();
-    for (    final ClassFilter filter : classFilters) {
-      if (!filter.isEnabled()) {
-        continue;
-      }
-      final JVMName jvmClassName=ApplicationManager.getApplication().runReadAction(new Computable<JVMName>(){
-        public JVMName compute(){
-          PsiClass psiClass=DebuggerUtils.findClass(filter.getPattern(),myDebugProcess.getProject(),myDebugProcess.getSearchScope());
-          if (psiClass == null) {
-            return null;
+    if (DebuggerUtilsEx.getEnabledNumber(classFilters) == 1) {
+      for (      final ClassFilter filter : classFilters) {
+        if (!filter.isEnabled()) {
+          continue;
+        }
+        final JVMName jvmClassName=ApplicationManager.getApplication().runReadAction(new Computable<JVMName>(){
+          public JVMName compute(){
+            PsiClass psiClass=DebuggerUtils.findClass(filter.getPattern(),myDebugProcess.getProject(),myDebugProcess.getSearchScope());
+            if (psiClass == null) {
+              return null;
+            }
+            return JVMNameUtil.getJVMQualifiedName(psiClass);
           }
-          return JVMNameUtil.getJVMQualifiedName(psiClass);
         }
-      }
 );
-      String pattern=filter.getPattern();
-      try {
-        if (jvmClassName != null) {
-          pattern=jvmClassName.getName(myDebugProcess);
+        String pattern=filter.getPattern();
+        try {
+          if (jvmClassName != null) {
+            pattern=jvmClassName.getName(myDebugProcess);
+          }
         }
+ catch (        EvaluateException ignored) {
+        }
+        addClassFilter(request,pattern);
+        break;
       }
- catch (      EvaluateException ignored) {
-      }
-      addClassFilter(request,pattern);
     }
     for (    ClassFilter filter : requestor.getClassExclusionFilters()) {
       if (filter.isEnabled()) {
