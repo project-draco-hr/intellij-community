@@ -1,26 +1,27 @@
 {
   final String pattern=options.getSearchPattern();
-  buf.setLength(0);
-  StringBuffer miscBuffer=null;
+  final StringBuilder buf=new StringBuilder();
+  StringBuilder miscBuffer=null;
   int anonymousTypedVarsCount=0;
   for (int index=0; index < pattern.length(); ++index) {
     char ch=pattern.charAt(index);
     if (ch == '\'') {
-      if (index + 1 < pattern.length() && pattern.charAt(index + 1) == '\'') {
+      final int length=pattern.length();
+      if (index + 1 < length && pattern.charAt(index + 1) == '\'') {
         index++;
       }
- else       if (index + 2 < pattern.length() && pattern.charAt(index + 2) == '\'') {
+ else       if (index + 2 < length && pattern.charAt(index + 2) == '\'') {
         buf.append(ch);
         buf.append(pattern.charAt(++index));
         ch=pattern.charAt(++index);
       }
- else       if (index + 3 < pattern.length() && pattern.charAt(index + 1) == '\\' && pattern.charAt(index + 3) == '\'') {
+ else       if (index + 3 < length && pattern.charAt(index + 1) == '\\' && pattern.charAt(index + 3) == '\'') {
         buf.append(ch);
         buf.append(pattern.charAt(++index));
         buf.append(pattern.charAt(++index));
         ch=pattern.charAt(++index);
       }
- else       if (index + 7 < pattern.length() && pattern.charAt(index + 1) == '\\' && pattern.charAt(index + 2) == 'u' && pattern.charAt(index + 7) == '\'') {
+ else       if (index + 7 < length && pattern.charAt(index + 1) == '\\' && pattern.charAt(index + 2) == 'u' && pattern.charAt(index + 7) == '\'') {
         buf.append(ch);
         buf.append(pattern.charAt(++index));
         buf.append(pattern.charAt(++index));
@@ -32,14 +33,14 @@
       }
  else {
         buf.append("$");
-        if (miscBuffer == null)         miscBuffer=new StringBuffer();
+        if (miscBuffer == null)         miscBuffer=new StringBuilder();
  else         miscBuffer.setLength(0);
-        for (++index; index < pattern.length() && Character.isJavaIdentifierPart(pattern.charAt(index)); ++index) {
-          ch=pattern.charAt(index);
+        for (++index; index < length && Character.isJavaIdentifierPart(ch=pattern.charAt(index)); ++index) {
           miscBuffer.append(ch);
           buf.append(ch);
         }
         boolean anonymous=false;
+        if (miscBuffer.length() == 0)         throw new MalformedPatternException(SSRBundle.message("error.expected.character"));
         if (miscBuffer.charAt(0) == '_') {
           anonymous=true;
           if (miscBuffer.length() == 1) {
@@ -64,7 +65,7 @@
           constraint.setName(typedVar);
           constraintCreated=true;
         }
-        if (index < pattern.length()) {
+        if (index < length) {
           char possibleQuantifier=pattern.charAt(index);
           if (possibleQuantifier == '+') {
             maxOccurs=Integer.MAX_VALUE;
@@ -82,26 +83,32 @@
  else           if (possibleQuantifier == '{') {
             ++index;
             minOccurs=0;
-            while ((ch=pattern.charAt(index)) >= '0' && ch <= '9') {
+            while (index < length && (ch=pattern.charAt(index)) >= '0' && ch <= '9') {
               minOccurs*=10;
               minOccurs+=(ch - '0');
+              if (minOccurs < 0)               throw new MalformedPatternException(SSRBundle.message("error.overflow"));
               ++index;
             }
             if (ch == ',') {
               ++index;
               maxOccurs=0;
-              while ((ch=pattern.charAt(index)) >= '0' && ch <= '9') {
+              while (index < length && (ch=pattern.charAt(index)) >= '0' && ch <= '9') {
                 maxOccurs*=10;
                 maxOccurs+=(ch - '0');
+                if (maxOccurs < 0)                 throw new MalformedPatternException(SSRBundle.message("error.overflow"));
                 ++index;
               }
             }
  else {
               maxOccurs=Integer.MAX_VALUE;
             }
+            if (ch != '}') {
+              if (maxOccurs == Integer.MAX_VALUE)               throw new MalformedPatternException(SSRBundle.message("error.expected.brace1"));
+ else               throw new MalformedPatternException(SSRBundle.message("error.expected.brace2"));
+            }
             ++index;
           }
-          if (index < pattern.length()) {
+          if (index < length) {
             ch=pattern.charAt(index);
             if (ch == '?') {
               greedy=false;
@@ -122,7 +129,7 @@
           }
           options.addVariableConstraint(constraint);
         }
-        if (index == pattern.length())         break;
+        if (index == length)         break;
         ch=pattern.charAt(index);
       }
     }
