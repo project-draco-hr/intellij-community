@@ -1,10 +1,13 @@
 {
+  if (basePath.isEmpty()) {
+    LOG.error("Invalid root, fs=" + fs);
+    return null;
+  }
   String rootUrl=normalizeRootUrl(basePath,fs);
-  boolean isFakeRoot=basePath.isEmpty();
   VirtualFileSystemEntry root;
   myRootsLock.readLock().lock();
   try {
-    root=isFakeRoot ? mySuperRoot : myRoots.get(rootUrl);
+    root=myRoots.get(rootUrl);
     if (root != null)     return root;
   }
   finally {
@@ -12,13 +15,10 @@
   }
   myRootsLock.writeLock().lock();
   try {
-    root=isFakeRoot ? mySuperRoot : myRoots.get(rootUrl);
+    root=myRoots.get(rootUrl);
     if (root != null)     return root;
     int rootId=FSRecords.findRootRecord(rootUrl);
-    if (isFakeRoot) {
-      root=new FakeRoot(fs,rootId);
-    }
- else     if (fs instanceof JarFileSystem) {
+    if (fs instanceof JarFileSystem) {
       String parentPath=basePath.substring(0,basePath.indexOf(JarFileSystem.JAR_SEPARATOR));
       VirtualFile parentLocalFile=LocalFileSystem.getInstance().findFileByPath(parentPath);
       if (parentLocalFile == null)       return null;
@@ -29,22 +29,17 @@
  else {
       root=new FsRoot(fs,rootId,basePath);
     }
-    if (isFakeRoot) {
-      mySuperRoot=root;
+    FileAttributes attributes=fs.getAttributes(root);
+    if (attributes == null || !attributes.isDirectory()) {
+      return null;
     }
- else {
-      FileAttributes attributes=fs.getAttributes(root);
-      if (attributes == null || !attributes.isDirectory()) {
-        return null;
-      }
-      final boolean newRoot=writeAttributesToRecord(rootId,0,root,fs,attributes);
-      if (!newRoot && attributes.lastModified != FSRecords.getTimestamp(rootId)) {
-        root.markDirtyRecursively();
-      }
-      myRoots.put(rootUrl,root);
-      myRootsById.put(rootId,root);
-      LOG.assertTrue(rootId == root.getId(),"root=" + root + " expected="+ rootId+ " actual="+ root.getId());
+    boolean newRoot=writeAttributesToRecord(rootId,0,root,fs,attributes);
+    if (!newRoot && attributes.lastModified != FSRecords.getTimestamp(rootId)) {
+      root.markDirtyRecursively();
     }
+    myRoots.put(rootUrl,root);
+    myRootsById.put(rootId,root);
+    LOG.assertTrue(rootId == root.getId(),"root=" + root + " expected="+ rootId+ " actual="+ root.getId());
     return root;
   }
   finally {
