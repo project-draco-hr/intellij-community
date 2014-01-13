@@ -7,17 +7,19 @@
     }
     Set<PsiElement> matchedElements=null;
     for (; patternNodes.hasNext(); patternNodes.advance()) {
+      int matchedOccurs=0;
       final PsiElement patternNode=patternNodes.current();
       final CompiledPattern pattern=context.getPattern();
       final MatchingHandler handler=pattern.getHandler(patternNode);
       final PsiElement startMatching=matchedNodes.current();
       do {
         final PsiElement element=handler.getPinnedNode(null);
-        final PsiElement matchedNode=element != null ? element : matchedNodes.current();
+        final PsiElement matchedNode=(element != null) ? element : matchedNodes.current();
         if (element == null)         matchedNodes.advance();
         if (!matchedNodes.hasNext())         matchedNodes.reset();
-        if (matchedElements == null || !matchedElements.contains(matchedNode)) {
+        if (matchedOccurs <= maxOccurs && (matchedElements == null || !matchedElements.contains(matchedNode))) {
           if (handler.match(patternNode,matchedNode,context)) {
+            ++matchedOccurs;
             if (matchedElements == null)             matchedElements=new HashSet<PsiElement>();
             matchedElements.add(matchedNode);
             if (handler.shouldAdvanceThePatternFor(patternNode,matchedNode)) {
@@ -30,7 +32,7 @@
           clearingVisitor.clearState(pattern,patternNode);
         }
         if (startMatching == matchedNodes.current()) {
-          final boolean result=validateSatisfactionOfHandlers(patternNodes,context);
+          final boolean result=validateSatisfactionOfHandlers(patternNodes,context) && matchedOccurs >= minOccurs && matchedOccurs <= maxOccurs;
           if (result && context.getMatchedElementsListener() != null) {
             context.getMatchedElementsListener().matchedElements(matchedElements);
           }
