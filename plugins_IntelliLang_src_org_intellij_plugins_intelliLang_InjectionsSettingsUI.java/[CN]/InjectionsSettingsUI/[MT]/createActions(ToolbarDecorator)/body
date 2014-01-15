@@ -24,18 +24,21 @@
     }
   }
 );
-  final DefaultActionGroup group=new DefaultActionGroup();
-  final AnAction addAction=new AnAction("Add","Add",IconUtil.getAddIcon()){
-    @Override public void update(    final AnActionEvent e){
-      e.getPresentation().setEnabled(!myAddActions.isEmpty());
-    }
-    @Override public void actionPerformed(    final AnActionEvent e){
-      performAdd(e);
+  decorator.disableUpDownActions();
+  decorator.setAddActionUpdater(new AnActionButtonUpdater(){
+    @Override public boolean isEnabled(    AnActionEvent e){
+      return !myAddActions.isEmpty();
     }
   }
-;
-  final AnAction removeAction=new AnAction("Remove","Remove",PlatformIcons.DELETE_ICON){
-    @Override public void update(    final AnActionEvent e){
+);
+  decorator.setAddAction(new AnActionButtonRunnable(){
+    @Override public void run(    AnActionButton button){
+      performAdd(button);
+    }
+  }
+);
+  decorator.setRemoveActionUpdater(new AnActionButtonUpdater(){
+    @Override public boolean isEnabled(    AnActionEvent e){
       boolean enabled=false;
       for (      InjInfo info : getSelectedInjections()) {
         if (!info.bundled) {
@@ -43,59 +46,55 @@
           break;
         }
       }
-      e.getPresentation().setEnabled(enabled);
+      return enabled;
     }
-    @Override public void actionPerformed(    final AnActionEvent e){
+  }
+);
+  decorator.setRemoveAction(new AnActionButtonRunnable(){
+    @Override public void run(    AnActionButton button){
       performRemove();
     }
   }
-;
-  final AnAction editAction=new AnAction("Edit","Edit",PlatformIcons.PROPERTIES_ICON){
-    @Override public void update(    final AnActionEvent e){
-      final AnAction action=getEditAction();
-      e.getPresentation().setEnabled(action != null);
-      if (action != null)       action.update(e);
-    }
-    @Override public void actionPerformed(    final AnActionEvent e){
-      performEditAction(e);
+);
+  decorator.setEditActionUpdater(new AnActionButtonUpdater(){
+    @Override public boolean isEnabled(    AnActionEvent e){
+      AnAction edit=getEditAction();
+      if (edit != null)       edit.update(e);
+      return edit != null && edit.getTemplatePresentation().isEnabled();
     }
   }
-;
-  final AnAction copyAction=new AnAction("Duplicate","Duplicate",PlatformIcons.COPY_ICON){
-    @Override public void update(    final AnActionEvent e){
-      final AnAction action=getEditAction();
-      e.getPresentation().setEnabled(action != null);
-      if (action != null)       action.update(e);
+);
+  decorator.setEditAction(new AnActionButtonRunnable(){
+    @Override public void run(    AnActionButton button){
+      performEditAction();
     }
-    @Override public void actionPerformed(    final AnActionEvent e){
+  }
+);
+  decorator.addExtraAction(new DumbAwareActionButton("Duplicate","Duplicate",PlatformIcons.COPY_ICON){
+    @Override public boolean isEnabled(){
+      return getEditAction() != null;
+    }
+    @Override public void actionPerformed(    AnActionEvent e){
       final InjInfo injection=getSelectedInjection();
       if (injection != null) {
         addInjection(injection.injection.copy());
       }
     }
   }
-;
-  group.add(addAction);
-  group.add(removeAction);
-  group.add(copyAction);
-  group.add(editAction);
-  addAction.registerCustomShortcutSet(CommonShortcuts.INSERT,myInjectionsTable);
-  removeAction.registerCustomShortcutSet(CommonShortcuts.DELETE,myInjectionsTable);
-  editAction.registerCustomShortcutSet(CommonShortcuts.ENTER,myInjectionsTable);
-  group.addSeparator();
-  group.add(new AnAction("Enable Selected Injections","Enable Selected Injections",PlatformIcons.SELECT_ALL_ICON){
+);
+  decorator.addExtraAction(new DumbAwareActionButton("Enable Selected Injections","Enable Selected Injections",PlatformIcons.SELECT_ALL_ICON){
     @Override public void actionPerformed(    final AnActionEvent e){
       performSelectedInjectionsEnabled(true);
     }
   }
 );
-  group.add(new AnAction("Disable Selected Injections","Disable Selected Injections",PlatformIcons.UNSELECT_ALL_ICON){
+  decorator.addExtraAction(new DumbAwareActionButton("Disable Selected Injections","Disable Selected Injections",PlatformIcons.UNSELECT_ALL_ICON){
     @Override public void actionPerformed(    final AnActionEvent e){
       performSelectedInjectionsEnabled(false);
     }
   }
 );
-  new AnAction("Toggle"){
+  new DumbAwareAction("Toggle"){
     @Override public void update(    AnActionEvent e){
       SpeedSearchSupply supply=SpeedSearchSupply.getSupply(myInjectionsTable);
       e.getPresentation().setEnabled(supply == null || !supply.isPopupActive());
@@ -106,8 +105,17 @@
   }
 .registerCustomShortcutSet(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE,0)),myInjectionsTable);
   if (myInfos.length > 1) {
-    group.addSeparator();
-    final AnAction shareAction=new AnAction("Make Global",null,PlatformIcons.IMPORT_ICON){
+    AnActionButton shareAction=new DumbAwareActionButton("Make Global",null,PlatformIcons.IMPORT_ICON){
+{
+        addCustomUpdater(new AnActionButtonUpdater(){
+          @Override public boolean isEnabled(          AnActionEvent e){
+            CfgInfo cfg=getTargetCfgInfo(getSelectedInjections());
+            e.getPresentation().setText(cfg == getDefaultCfgInfo() ? "Make Global" : "Move to Project");
+            return cfg != null;
+          }
+        }
+);
+      }
       @Override public void actionPerformed(      final AnActionEvent e){
         final List<InjInfo> injections=getSelectedInjections();
         final CfgInfo cfg=getTargetCfgInfo(injections);
@@ -122,12 +130,6 @@
         myInjectionsTable.getListTableModel().setItems(getInjInfoList(myInfos));
         TableUtil.selectRows(myInjectionsTable,selectedRows);
       }
-      @Override public void update(      final AnActionEvent e){
-        final CfgInfo cfg=getTargetCfgInfo(getSelectedInjections());
-        e.getPresentation().setEnabled(cfg != null);
-        e.getPresentation().setText(cfg == getDefaultCfgInfo() ? "Make Global" : "Move to Project");
-        super.update(e);
-      }
       @Nullable private CfgInfo getTargetCfgInfo(      final List<InjInfo> injections){
         CfgInfo cfg=null;
         for (        InjInfo info : injections) {
@@ -137,7 +139,7 @@
           if (cfg == null)           cfg=info.cfgInfo;
  else           if (cfg != info.cfgInfo)           return info.cfgInfo;
         }
-        if (cfg == null)         return cfg;
+        if (cfg == null)         return null;
         for (        CfgInfo info : myInfos) {
           if (info != cfg)           return info;
         }
@@ -145,18 +147,17 @@
       }
     }
 ;
-    shareAction.registerCustomShortcutSet(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE,InputEvent.SHIFT_DOWN_MASK)),myInjectionsTable);
-    group.add(shareAction);
+    shareAction.setShortcut(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE,InputEvent.SHIFT_DOWN_MASK)));
+    decorator.addExtraAction(shareAction);
   }
-  group.addSeparator();
-  group.add(new AnAction("Import","Import",AllIcons.Actions.Install){
+  decorator.addExtraAction(new DumbAwareActionButton("Import","Import",AllIcons.Actions.Install){
     @Override public void actionPerformed(    final AnActionEvent e){
       doImportAction(e.getDataContext());
       updateCountLabel();
     }
   }
 );
-  group.add(new AnAction("Export","Export",AllIcons.Actions.Export){
+  decorator.addExtraAction(new DumbAwareActionButton("Export","Export",AllIcons.Actions.Export){
     @Override public void actionPerformed(    final AnActionEvent e){
       final List<BaseInjection> injections=getInjectionList(getSelectedInjections());
       final VirtualFileWrapper wrapper=FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Export Selected Injections to File...","","xml"),myProject).save(null,null);
@@ -172,10 +173,9 @@
         Messages.showErrorDialog(myProject,msg != null && msg.length() > 0 ? msg : ex.toString(),"Export Failed");
       }
     }
-    @Override public void update(    final AnActionEvent e){
-      e.getPresentation().setEnabled(!getSelectedInjections().isEmpty());
+    @Override public boolean isEnabled(){
+      return !getSelectedInjections().isEmpty();
     }
   }
 );
-  return group;
 }
