@@ -1,0 +1,31 @@
+{
+  boolean offline=false;
+  boolean downloadJavadoc=false;
+  boolean downloadSources=true;
+  final IdeaPlugin ideaPlugin=project.getPlugins().getPlugin(IdeaPlugin.class);
+  if (ideaPlugin != null) {
+    IdeaModel ideaModel=ideaPlugin.getModel();
+    if (ideaModel != null && ideaModel.getModule() != null) {
+      offline=ideaModel.getModule().isOffline();
+      downloadJavadoc=ideaModel.getModule().isDownloadJavadoc();
+      downloadSources=ideaModel.getModule().isDownloadSources();
+    }
+  }
+  final IdeDependenciesExtractor dependenciesExtractor=new IdeDependenciesExtractor();
+  final Configuration configuration=project.getBuildscript().getConfigurations().findByName("classpath");
+  Collection<Configuration> plusConfigurations=Collections.singletonList(configuration);
+  BuildScriptClasspathModelImpl buildScriptClasspath=new BuildScriptClasspathModelImpl();
+  if (!offline) {
+    List<IdeDependenciesExtractor.IdeRepoFileDependency> repoFileDependencies=dependenciesExtractor.extractRepoFileDependencies(project.getConfigurations(),plusConfigurations,new ArrayList<Configuration>(),downloadSources,downloadJavadoc);
+    for (    IdeDependenciesExtractor.IdeRepoFileDependency dependency : repoFileDependencies) {
+      if (dependency.getFile() == null)       continue;
+      buildScriptClasspath.add(new ClasspathEntryModelImpl(dependency.getFile(),dependency.getSourceFile(),dependency.getJavadocFile()));
+    }
+  }
+  final List<IdeDependenciesExtractor.IdeLocalFileDependency> localFileDependencies=dependenciesExtractor.extractLocalFileDependencies(plusConfigurations,new ArrayList<Configuration>());
+  for (  IdeDependenciesExtractor.IdeLocalFileDependency dependency : localFileDependencies) {
+    if (dependency.getFile() == null)     continue;
+    buildScriptClasspath.add(new ClasspathEntryModelImpl(dependency.getFile(),null,null));
+  }
+  return buildScriptClasspath;
+}
