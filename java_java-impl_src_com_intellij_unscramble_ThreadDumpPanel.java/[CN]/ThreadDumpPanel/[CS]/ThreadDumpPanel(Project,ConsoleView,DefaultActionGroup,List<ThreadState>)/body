@@ -1,2 +1,69 @@
 {
+  super(new BorderLayout());
+  myThreadDump=threadDump;
+  final ThreadState[] data=threadDump.toArray(new ThreadState[threadDump.size()]);
+  final DefaultListModel model=new DefaultListModel();
+  final SearchTextField filterField=new SearchTextField();
+  myThreadList=new JBList(model);
+  myThreadList.setCellRenderer(new ThreadListCellRenderer());
+  myThreadList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+  myThreadList.addListSelectionListener(new ListSelectionListener(){
+    public void valueChanged(    final ListSelectionEvent e){
+      int index=myThreadList.getSelectedIndex();
+      if (index >= 0) {
+        ThreadState selection=(ThreadState)myThreadList.getModel().getElementAt(index);
+        AnalyzeStacktraceUtil.printStacktrace(consoleView,selection.getStackTrace());
+      }
+ else {
+        AnalyzeStacktraceUtil.printStacktrace(consoleView,"");
+      }
+      myThreadList.repaint();
+    }
+  }
+);
+  DocumentAdapter filterListener=new DocumentAdapter(){
+    @Override protected void textChanged(    DocumentEvent e){
+      String text=filterField.getText();
+      model.clear();
+      for (      ThreadState state : data) {
+        if (StringUtil.containsIgnoreCase(state.getStackTrace(),text) || StringUtil.containsIgnoreCase(state.getName(),text)) {
+          model.addElement(state);
+        }
+      }
+      if (!model.isEmpty()) {
+        myThreadList.setSelectedIndex(0);
+      }
+      myThreadList.revalidate();
+      myThreadList.repaint();
+    }
+  }
+;
+  filterField.addDocumentListener(filterListener);
+  filterListener.changedUpdate(null);
+  toolbarActions.add(new CopyToClipboardAction(threadDump,project));
+  toolbarActions.add(new SortThreadsAction());
+  add(ActionManager.getInstance().createActionToolbar(ActionPlaces.UNKNOWN,toolbarActions,false).getComponent(),BorderLayout.WEST);
+  JPanel filterPanel=new JPanel(new BorderLayout());
+  filterPanel.add(new JLabel("Filter:"),BorderLayout.WEST);
+  filterPanel.add(filterField);
+  JPanel leftPanel=new JPanel(new BorderLayout());
+  leftPanel.add(filterPanel,BorderLayout.NORTH);
+  leftPanel.add(ScrollPaneFactory.createScrollPane(myThreadList,SideBorder.LEFT | SideBorder.RIGHT),BorderLayout.CENTER);
+  final Splitter splitter=new Splitter(false,0.3f);
+  splitter.setFirstComponent(leftPanel);
+  splitter.setSecondComponent(consoleView.getComponent());
+  add(splitter,BorderLayout.CENTER);
+  new ListSpeedSearch(myThreadList).setComparator(new SpeedSearchComparator(false,true));
+  final Editor editor=CommonDataKeys.EDITOR.getData(DataManager.getInstance().getDataContext(consoleView.getPreferredFocusableComponent()));
+  if (editor != null) {
+    editor.getDocument().addDocumentListener(new com.intellij.openapi.editor.event.DocumentAdapter(){
+      @Override public void documentChanged(      com.intellij.openapi.editor.event.DocumentEvent e){
+        String filter=filterField.getText();
+        if (StringUtil.isNotEmpty(filter)) {
+          highlightOccurrences(filter,project,editor);
+        }
+      }
+    }
+);
+  }
 }
