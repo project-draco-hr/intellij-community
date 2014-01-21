@@ -1,0 +1,85 @@
+{
+  final ProjectImportAction projectImportAction=new ProjectImportAction(resolverCtx.isPreviewMode());
+  final List<KeyValue<String,String>> extraJvmArgs=new ArrayList<KeyValue<String,String>>();
+  for (GradleProjectResolverExtension resolverExtension=projectResolverChain; resolverExtension != null; resolverExtension=resolverExtension.getNext()) {
+    resolverExtension.setProjectResolverContext(resolverCtx);
+    resolverExtension.preImportCheck();
+    projectImportAction.addExtraProjectModelClasses(resolverExtension.getExtraProjectModelClasses());
+    extraJvmArgs.addAll(resolverExtension.getExtraJvmArgs());
+  }
+  final ParametersList parametersList=new ParametersList();
+  for (  KeyValue<String,String> jvmArg : extraJvmArgs) {
+    parametersList.addProperty(jvmArg.getKey(),jvmArg.getValue());
+  }
+  BuildActionExecuter<ProjectImportAction.AllModels> buildActionExecutor=resolverCtx.getConnection().action(projectImportAction);
+  GradleExecutionHelper.prepare(buildActionExecutor,resolverCtx.getExternalSystemTaskId(),resolverCtx.getSettings(),resolverCtx.getListener(),parametersList.getParameters(),resolverCtx.getConnection());
+  if (!GradleEnvironment.DISABLE_ENHANCED_TOOLING_API) {
+    GradleExecutionHelper.setInitScript(buildActionExecutor,isBuildSrcProject);
+  }
+  ProjectImportAction.AllModels allModels;
+  try {
+    allModels=buildActionExecutor.run();
+    if (allModels == null) {
+      throw new IllegalStateException("Unable to get project model for the project: " + resolverCtx.getProjectPath());
+    }
+  }
+ catch (  UnsupportedVersionException unsupportedVersionException) {
+    ModelBuilder<? extends IdeaProject> modelBuilder=myHelper.getModelBuilder(resolverCtx.isPreviewMode() ? BasicIdeaProject.class : IdeaProject.class,resolverCtx.getExternalSystemTaskId(),resolverCtx.getSettings(),resolverCtx.getConnection(),resolverCtx.getListener(),parametersList.getParameters());
+    final IdeaProject ideaProject=modelBuilder.get();
+    allModels=new ProjectImportAction.AllModels(ideaProject);
+  }
+  final BuildEnvironment buildEnvironment=getBuildEnvironment(resolverCtx);
+  allModels.setBuildEnvironment(buildEnvironment);
+  resolverCtx.setModels(allModels);
+  ProjectData projectData=projectResolverChain.createProject();
+  DataNode<ProjectData> projectDataNode=new DataNode<ProjectData>(ProjectKeys.PROJECT,projectData,null);
+  JavaProjectData javaProjectData=projectResolverChain.createJavaProjectData();
+  projectDataNode.createChild(JavaProjectData.KEY,javaProjectData);
+  IdeaProject ideaProject=resolverCtx.getModels().getIdeaProject();
+  DomainObjectSet<? extends IdeaModule> gradleModules=ideaProject.getModules();
+  if (gradleModules == null || gradleModules.isEmpty()) {
+    throw new IllegalStateException("No modules found for the target project: " + ideaProject);
+  }
+  final Map<String,Pair<DataNode<ModuleData>,IdeaModule>> moduleMap=ContainerUtilRt.newHashMap();
+  for (  IdeaModule gradleModule : gradleModules) {
+    if (gradleModule == null) {
+      continue;
+    }
+    if (ExternalSystemDebugEnvironment.DEBUG_ORPHAN_MODULES_PROCESSING) {
+      LOG.info(String.format("Importing module data: %s",gradleModule));
+    }
+    final String moduleName=gradleModule.getName();
+    if (moduleName == null) {
+      throw new IllegalStateException("Module with undefined name detected: " + gradleModule);
+    }
+    ModuleData moduleData=projectResolverChain.createModule(gradleModule,projectData);
+    Pair<DataNode<ModuleData>,IdeaModule> previouslyParsedModule=moduleMap.get(moduleName);
+    if (previouslyParsedModule != null) {
+      throw new IllegalStateException(String.format("Modules with duplicate name (%s) detected: '%s' and '%s'",moduleName,moduleData,previouslyParsedModule));
+    }
+    DataNode<ModuleData> moduleDataNode=projectDataNode.createChild(ProjectKeys.MODULE,moduleData);
+    moduleMap.put(moduleName,new Pair<DataNode<ModuleData>,IdeaModule>(moduleDataNode,gradleModule));
+  }
+  final List<TaskData> allTasks=ContainerUtil.newArrayList();
+  for (  final Pair<DataNode<ModuleData>,IdeaModule> pair : moduleMap.values()) {
+    final DataNode<ModuleData> moduleDataNode=pair.first;
+    final IdeaModule ideaModule=pair.second;
+    projectResolverChain.populateModuleExtraModels(ideaModule,moduleDataNode);
+    projectResolverChain.populateModuleContentRoots(ideaModule,moduleDataNode);
+    projectResolverChain.populateModuleCompileOutputSettings(ideaModule,moduleDataNode);
+    projectResolverChain.populateModuleDependencies(ideaModule,moduleDataNode,projectDataNode);
+    final Collection<TaskData> moduleTasks=projectResolverChain.populateModuleTasks(ideaModule,moduleDataNode,projectDataNode);
+    allTasks.addAll(moduleTasks);
+  }
+  final Collection<TaskData> rootProjectTaskCandidates=projectResolverChain.filterRootProjectTasks(allTasks);
+  Set<Pair<String,String>> rootProjectTaskCandidatesMap=ContainerUtilRt.newHashSet();
+  for (  final TaskData taskData : rootProjectTaskCandidates) {
+    rootProjectTaskCandidatesMap.add(Pair.create(taskData.getName(),taskData.getDescription()));
+  }
+  for (  final Pair<String,String> p : rootProjectTaskCandidatesMap) {
+    projectDataNode.createChild(ProjectKeys.TASK,new TaskData(GradleConstants.SYSTEM_ID,p.first,projectData.getLinkedExternalProjectPath(),p.second));
+  }
+  Collection<DataNode<LibraryData>> libraries=ExternalSystemApiUtil.getChildren(projectDataNode,ProjectKeys.LIBRARY);
+  myLibraryNamesMixer.mixNames(libraries);
+  return projectDataNode;
+}
