@@ -7,30 +7,42 @@
   final CheckCancelTask checkCancelTask=new CheckCancelTask(progress,handler);
   checkCancelTask.start(0);
   final OutputParser parser=OutputParser2.attachParser(project,handler,errorView,progress,buildFile);
-  final boolean isBackground=buildFile.isRunInBackground();
   handler.addProcessListener(new ProcessAdapter(){
+    private final StringBuilder myUnprocessedStdErr=new StringBuilder();
+    public void onTextAvailable(    ProcessEvent event,    Key outputType){
+      if (outputType == ProcessOutputTypes.STDERR) {
+        final String text=event.getText();
+synchronized (myUnprocessedStdErr) {
+          myUnprocessedStdErr.append(text);
+        }
+      }
+    }
     public void processTerminated(    ProcessEvent event){
       final long buildTime=System.currentTimeMillis() - startTime;
       checkCancelTask.cancel();
       parser.setStopped(true);
       final OutputPacketProcessor dispatcher=handler.getErr().getEventsDispatcher();
-      errorView.buildFinished(progress != null && progress.isCanceled(),buildTime,antBuildListener,dispatcher);
-      ApplicationManager.getApplication().invokeLater(new Runnable(){
-        public void run(){
-          if (project.isDisposed()) {
-            return;
-          }
-          errorView.removeProgressPanel();
-          final boolean shouldActivate=!isBackground || errorView.hasMessagesOfType(AntBuildMessageView.MessageType.ERROR);
-          if (shouldActivate) {
-            ToolWindow toolWindow=ToolWindowManager.getInstance(project).getToolWindow(ToolWindowId.MESSAGES_WINDOW);
-            if (toolWindow != null) {
-              toolWindow.activate(null,false);
+      if (event.getExitCode() != 0) {
+        final String unprocessed;
+synchronized (myUnprocessedStdErr) {
+          unprocessed=myUnprocessedStdErr.toString();
+          myUnprocessedStdErr.setLength(0);
+        }
+        if (!unprocessed.isEmpty()) {
+          dispatcher.processOutput(new Printable(){
+            public void printOn(            Printer printer){
+              errorView.outputError(unprocessed,AntBuildMessageView.PRIORITY_ERR);
             }
           }
+);
         }
       }
-,ModalityState.NON_MODAL);
+ else {
+synchronized (myUnprocessedStdErr) {
+          myUnprocessedStdErr.setLength(0);
+        }
+      }
+      errorView.buildFinished(progress != null && progress.isCanceled(),buildTime,antBuildListener,dispatcher);
     }
   }
 );

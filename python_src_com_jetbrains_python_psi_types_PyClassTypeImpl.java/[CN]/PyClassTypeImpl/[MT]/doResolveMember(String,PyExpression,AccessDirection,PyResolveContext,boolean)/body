@@ -5,22 +5,9 @@
     return ResolveResultList.to(classMember);
   }
   if (resolveContext.allowProperties()) {
-    Property property=myClass.findProperty(name);
-    if (property != null) {
-      Maybe<Callable> accessor=property.getByDirection(direction);
-      if (accessor.isDefined()) {
-        Callable accessor_code=accessor.value();
-        ResolveResultList ret=new ResolveResultList();
-        if (accessor_code != null)         ret.poke(accessor_code,RatedResolveResult.RATE_NORMAL);
-        PyTargetExpression site=property.getDefinitionSite();
-        if (site != null)         ret.poke(site,RatedResolveResult.RATE_LOW);
-        if (ret.size() > 0) {
-          return ret;
-        }
- else {
-          return null;
-        }
-      }
+    final Ref<ResolveResultList> resultRef=findProperty(name,direction,true);
+    if (resultRef != null) {
+      return resultRef.get();
     }
   }
   if ("super".equals(getClassQName()) && isBuiltin(context) && location instanceof PyCallExpression) {
@@ -43,6 +30,10 @@
   if (classMember != null) {
     return ResolveResultList.to(classMember);
   }
+  classMember=resolveByOverridingAncestorsMembersProviders(this,name,location);
+  if (classMember != null) {
+    return ResolveResultList.to(classMember);
+  }
   if (inherited) {
     for (    PyClassLikeType type : myClass.getAncestorTypes(context)) {
       if (type instanceof PyClassType) {
@@ -60,7 +51,7 @@
     }
   }
   if (isDefinition() && myClass.isNewStyleClass()) {
-    PyClassType typeType=getMetaclassType();
+    final PyClassLikeType typeType=getMetaClassType(context,inherited);
     if (typeType != null) {
       List<? extends RatedResolveResult> typeMembers=typeType.resolveMember(name,location,direction,resolveContext);
       if (typeMembers != null && !typeMembers.isEmpty()) {
@@ -78,11 +69,9 @@
     for (    PyClassLikeType type : myClass.getAncestorTypes(context)) {
       if (type instanceof PyClassType) {
         final PyClass pyClass=((PyClassType)type).getPyClass();
-        if (pyClass != null) {
-          PsiElement superMember=resolveByMembersProviders(new PyClassTypeImpl(pyClass,isDefinition()),name,location);
-          if (superMember != null) {
-            return ResolveResultList.to(superMember);
-          }
+        PsiElement superMember=resolveByMembersProviders(new PyClassTypeImpl(pyClass,isDefinition()),name,location);
+        if (superMember != null) {
+          return ResolveResultList.to(superMember);
         }
       }
     }

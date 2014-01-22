@@ -1,39 +1,13 @@
 {
-  if (project == null)   return null;
-  for (  Module module : myPlatformFacade.getModules(project)) {
-    String rootProjectPath=module.getOptionValue(ExternalSystemConstants.ROOT_PROJECT_PATH_KEY);
-    if (StringUtil.isEmpty(rootProjectPath)) {
-      continue;
+  List<File> files=getClassRoots(project,null);
+  if (files == null)   return null;
+  final LocalFileSystem localFileSystem=LocalFileSystem.getInstance();
+  final JarFileSystem jarFileSystem=JarFileSystem.getInstance();
+  return ContainerUtil.mapNotNull(files,new Function<File,VirtualFile>(){
+    @Override public VirtualFile fun(    File file){
+      final VirtualFile virtualFile=localFileSystem.refreshAndFindFileByIoFile(file);
+      return virtualFile != null ? jarFileSystem.getJarRootForLocalFile(virtualFile) : null;
     }
-    File gradleHome=getGradleHome(module.getProject(),rootProjectPath);
-    if (gradleHome == null || !gradleHome.isDirectory()) {
-      continue;
-    }
-    final Collection<File> libraries=getAllLibraries(gradleHome);
-    if (libraries == null) {
-      continue;
-    }
-    final LocalFileSystem localFileSystem=LocalFileSystem.getInstance();
-    final JarFileSystem jarFileSystem=JarFileSystem.getInstance();
-    List<VirtualFile> result=new ArrayList<VirtualFile>();
-    for (    File file : libraries) {
-      if (ANY_GRADLE_JAR_FILE_PATTERN.matcher(file.getName()).matches() || GroovyConfigUtils.matchesGroovyAll(file.getName())) {
-        final VirtualFile virtualFile=localFileSystem.refreshAndFindFileByIoFile(file);
-        if (virtualFile != null) {
-          ContainerUtil.addIfNotNull(result,jarFileSystem.getJarRootForLocalFile(virtualFile));
-        }
-      }
-    }
-    File src=new File(gradleHome,"src");
-    if (src.isDirectory()) {
-      if (new File(src,"org").isDirectory()) {
-        addRoots(localFileSystem,result,src);
-      }
- else {
-        addRoots(localFileSystem,result,src.listFiles());
-      }
-    }
-    return result;
   }
-  return null;
+);
 }

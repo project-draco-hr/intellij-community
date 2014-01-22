@@ -1,0 +1,55 @@
+{
+  final List<Location> locations=new ArrayList<Location>();
+  final ProjectFileIndex fileIndex=ProjectRootManager.getInstance(project).getFileIndex();
+  if (fileIndex.isInContent(file) && !fileIndex.isInSource(file) && !fileIndex.isInLibraryClasses(file)) {
+    final VirtualFile parent=file.getParent();
+    final VirtualFile contentRoot=fileIndex.getContentRootForFile(file);
+    if (contentRoot != null) {
+      final String relativePath=VfsUtilCore.getRelativePath(parent,contentRoot,'/');
+      if (relativePath != null) {
+        final PsiSearchHelper searchHelper=PsiSearchHelper.SERVICE.getInstance(project);
+        final List<String> words=StringUtil.getWordsIn(relativePath);
+        Collections.sort(words,new Comparator<String>(){
+          @Override public int compare(          final String o1,          final String o2){
+            return o2.length() - o1.length();
+          }
+        }
+);
+        final GlobalSearchScope testScope=GlobalSearchScopesCore.projectTestScope(project);
+        Set<PsiFile> resultFiles=null;
+        for (        String word : words) {
+          if (word.length() < 5) {
+            continue;
+          }
+          final Set<PsiFile> files=new THashSet<PsiFile>();
+          searchHelper.processAllFilesWithWordInLiterals(word,testScope,new CommonProcessors.CollectProcessor<PsiFile>(files));
+          if (resultFiles == null) {
+            resultFiles=files;
+          }
+ else {
+            resultFiles.retainAll(files);
+          }
+          if (resultFiles.isEmpty())           break;
+        }
+        if (resultFiles != null) {
+          for (Iterator<PsiFile> iterator=resultFiles.iterator(); iterator.hasNext(); ) {
+            if (!VfsUtilCore.isAncestor(contentRoot,iterator.next().getVirtualFile(),true)) {
+              iterator.remove();
+            }
+          }
+          final String fileName=file.getName();
+          final String nameWithoutExtension=file.getNameWithoutExtension();
+          for (          PsiFile resultFile : resultFiles) {
+            if (resultFile instanceof PsiClassOwner) {
+              final PsiClass[] classes=((PsiClassOwner)resultFile).getClasses();
+              if (classes.length > 0) {
+                ContainerUtil.addIfNotNull(locations,getLocation(project,fileName,nameWithoutExtension,classes[0]));
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return locations;
+}

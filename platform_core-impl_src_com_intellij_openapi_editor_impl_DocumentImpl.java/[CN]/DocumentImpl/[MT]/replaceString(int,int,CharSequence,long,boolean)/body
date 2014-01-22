@@ -5,7 +5,6 @@
   if (!isWritable()) {
     throw new ReadOnlyModificationException(this);
   }
-  assertNotNestedModification();
   final int newStringLength=s.length();
   final CharSequence chars=getCharsSequence();
   int newStartInString=0;
@@ -18,14 +17,19 @@
     newEndInString--;
     endOffset--;
   }
-  s=s.subSequence(newStartInString,newEndInString);
+  CharSequence changedPart=s.subSequence(newStartInString,newEndInString);
   CharSequence sToDelete=myText.subSequence(startOffset,endOffset);
   RangeMarker guard=getRangeGuard(startOffset,endOffset);
   if (guard != null) {
-    throwGuardedFragment(guard,startOffset,sToDelete.toString(),s.toString());
+    throwGuardedFragment(guard,startOffset,sToDelete.toString(),changedPart.toString());
   }
-  final DocumentEvent event=beforeChangedUpdate(startOffset,sToDelete,s,wholeTextReplaced);
-  myText=myText.delete(startOffset,endOffset).insert(startOffset,ImmutableText.valueOf(s));
-  changedUpdate(event,newModificationStamp);
+  ImmutableText newText;
+  if (wholeTextReplaced && s instanceof ImmutableText) {
+    newText=(ImmutableText)s;
+  }
+ else {
+    newText=myText.delete(startOffset,endOffset).insert(startOffset,changedPart);
+  }
+  updateText(newText,startOffset,sToDelete,changedPart,wholeTextReplaced,newModificationStamp);
   trimToSize();
 }

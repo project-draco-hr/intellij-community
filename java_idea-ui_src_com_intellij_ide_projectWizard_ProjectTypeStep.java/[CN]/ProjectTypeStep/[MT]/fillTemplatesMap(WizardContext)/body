@@ -1,0 +1,57 @@
+{
+  myTemplatesMap.putAllValues(CreateFromTemplateMode.getTemplatesMap(context));
+  for (  ProjectCategory category : ProjectCategory.EXTENSION_POINT_NAME.getExtensions()) {
+    myTemplatesMap.put(new TemplatesGroup(category),new ArrayList<ProjectTemplate>());
+  }
+  if (context.isCreatingNewProject()) {
+    MultiMap<String,ProjectTemplate> localTemplates=loadLocalTemplates();
+    for (    TemplatesGroup group : myTemplatesMap.keySet()) {
+      myTemplatesMap.putValues(group,localTemplates.get(group.getId()));
+    }
+  }
+  for (Iterator<Map.Entry<TemplatesGroup,Collection<ProjectTemplate>>> iterator=myTemplatesMap.entrySet().iterator(); iterator.hasNext(); ) {
+    Map.Entry<TemplatesGroup,Collection<ProjectTemplate>> entry=iterator.next();
+    if (entry.getValue().isEmpty()) {
+      iterator.remove();
+    }
+  }
+  List<TemplatesGroup> groups=new ArrayList<TemplatesGroup>(myTemplatesMap.keySet());
+  final MultiMap<ModuleType,TemplatesGroup> moduleTypes=new MultiMap<ModuleType,TemplatesGroup>();
+  for (  TemplatesGroup group : groups) {
+    ModuleType type=getModuleType(group);
+    moduleTypes.putValue(type,group);
+  }
+  Collections.sort(groups,new Comparator<TemplatesGroup>(){
+    @Override public int compare(    TemplatesGroup o1,    TemplatesGroup o2){
+      int u=Comparing.compare(ProjectTemplatesFactory.CUSTOM_GROUP.equals(o1.getName()),ProjectTemplatesFactory.CUSTOM_GROUP.equals(o2.getName()));
+      if (u != 0)       return u;
+      int i1=moduleTypes.get(getModuleType(o2)).size() - moduleTypes.get(getModuleType(o1)).size();
+      if (i1 != 0)       return i1;
+      int i=myTemplatesMap.get(o2).size() - myTemplatesMap.get(o1).size();
+      return i != 0 ? i : o1.compareTo(o2);
+    }
+  }
+);
+  Set<String> groupNames=ContainerUtil.map2Set(groups,new Function<TemplatesGroup,String>(){
+    @Override public String fun(    TemplatesGroup group){
+      return group.getName();
+    }
+  }
+);
+  MultiMap<String,TemplatesGroup> subGroups=new MultiMap<String,TemplatesGroup>();
+  for (ListIterator<TemplatesGroup> iterator=groups.listIterator(); iterator.hasNext(); ) {
+    TemplatesGroup group=iterator.next();
+    String parentGroup=group.getParentGroup();
+    if (parentGroup != null && groupNames.contains(parentGroup) && !group.getName().equals(parentGroup)) {
+      subGroups.putValue(parentGroup,group);
+      iterator.remove();
+    }
+  }
+  for (ListIterator<TemplatesGroup> iterator=groups.listIterator(); iterator.hasNext(); ) {
+    TemplatesGroup group=iterator.next();
+    for (    TemplatesGroup subGroup : subGroups.get(group.getName())) {
+      iterator.add(subGroup);
+    }
+  }
+  return groups;
+}

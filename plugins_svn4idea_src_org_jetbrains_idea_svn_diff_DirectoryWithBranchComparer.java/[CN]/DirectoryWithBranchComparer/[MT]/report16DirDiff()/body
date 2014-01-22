@@ -1,0 +1,37 @@
+{
+  final SVNWCAccess wcAccess=SVNWCAccess.newInstance(null);
+  wcAccess.setOptions(myVcs.getSvnOptions());
+  SVNRepository repository=null;
+  SVNRepository repository2=null;
+  try {
+    SVNAdminAreaInfo info=wcAccess.openAnchor(new File(myVirtualFile.getPath()),false,SVNWCAccess.INFINITE_DEPTH);
+    File anchorPath=info.getAnchor().getRoot();
+    String target="".equals(info.getTargetName()) ? null : info.getTargetName();
+    SVNEntry anchorEntry=info.getAnchor().getEntry("",false);
+    if (anchorEntry == null) {
+      SVNErrorMessage err=SVNErrorMessage.create(SVNErrorCode.ENTRY_NOT_FOUND,"''{0}'' is not under version control",anchorPath);
+      SVNErrorManager.error(err,SVNLogType.WC);
+    }
+ else     if (anchorEntry.getURL() == null) {
+      SVNErrorMessage err=SVNErrorMessage.create(SVNErrorCode.ENTRY_MISSING_URL,"''{0}'' has no URL",anchorPath);
+      SVNErrorManager.error(err,SVNLogType.WC);
+    }
+    SVNURL anchorURL=anchorEntry.getSVNURL();
+    SVNReporter reporter=new SVNReporter(info,info.getAnchor().getFile(info.getTargetName()),false,true,SVNDepth.INFINITY,false,false,true,SVNDebugLog.getDefaultLog());
+    repository=myVcs.createRepository(anchorURL.toString());
+    long rev=repository.getLatestRevision();
+    repository2=myVcs.createRepository((target == null) ? myElementUrl.toString() : myElementUrl.removePathTail().toString());
+    SvnDiffEditor diffEditor=new SvnDiffEditor((target == null) ? myVirtualFile : myVirtualFile.getParent(),repository2,rev,true);
+    repository.diff(myElementUrl,rev,rev,target,true,true,false,reporter,SVNCancellableEditor.newInstance(diffEditor,new SvnProgressCanceller(),null));
+    changes.addAll(diffEditor.getChangesMap().values());
+  }
+  finally {
+    wcAccess.close();
+    if (repository != null) {
+      repository.closeSession();
+    }
+    if (repository2 != null) {
+      repository2.closeSession();
+    }
+  }
+}
