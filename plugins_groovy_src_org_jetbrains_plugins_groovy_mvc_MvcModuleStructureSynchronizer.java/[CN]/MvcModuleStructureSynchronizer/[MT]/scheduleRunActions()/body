@@ -1,0 +1,43 @@
+{
+  if (myProject.isDisposed())   return;
+  final Application app=ApplicationManager.getApplication();
+  if (app.isUnitTestMode()) {
+    if (ourGrailsTestFlag) {
+      runActions(computeRawActions(takeOrderSnapshot()));
+    }
+    return;
+  }
+  app.invokeLater(new Runnable(){
+    @Override public void run(){
+      final Set<Pair<Object,SyncAction>> orderSnapshot=takeOrderSnapshot();
+      ProgressIndicatorUtils.scheduleWithWriteActionPriority(new ReadTask(){
+        @Override public void computeInReadAction(        @NotNull ProgressIndicator indicator){
+          if (!isUpToDate()) {
+            indicator.cancel();
+            return;
+          }
+          final Set<Trinity<Module,SyncAction,MvcFramework>> actions=computeRawActions(orderSnapshot);
+          app.invokeLater(new Runnable(){
+            @Override public void run(){
+              if (!isUpToDate()) {
+                scheduleRunActions();
+              }
+ else {
+                runActions(actions);
+              }
+            }
+          }
+,ModalityState.NON_MODAL);
+        }
+        @Override public void onCanceled(        @NotNull ProgressIndicator indicator){
+          scheduleRunActions();
+        }
+        private boolean isUpToDate(){
+          return !myProject.isDisposed() && orderSnapshot.equals(takeOrderSnapshot());
+        }
+      }
+);
+    }
+  }
+);
+}
