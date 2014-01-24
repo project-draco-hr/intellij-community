@@ -9,7 +9,11 @@
   }
   final PsiSubstitutor substitutor=LambdaUtil.getSubstitutor(interfaceMethod,classResolveResult);
   final PsiParameter[] targetParameters=interfaceMethod.getParameterList().getParameters();
-  final PsiType returnType=substitutor.substitute(interfaceMethod.getReturnType());
+  final PsiType interfaceMethodReturnType=interfaceMethod.getReturnType();
+  PsiType returnType=substitutor.substitute(interfaceMethodReturnType);
+  if (myExpression.getTypeParameters().length == 0) {
+    returnType=PsiImplUtil.normalizeWildcardTypeByPosition(returnType,myExpression);
+  }
   final PsiType[] typeParameters=myExpression.getTypeParameters();
   if (!myExpression.isExact()) {
     for (    PsiParameter parameter : targetParameters) {
@@ -113,8 +117,14 @@
       referencedMethodReturnType=method.getReturnType();
     }
     LOG.assertTrue(referencedMethodReturnType != null,method);
-    if (typeParameters.length == 0 && ((PsiMethod)resolve).getTypeParameters().length > 0 && PsiPolyExpressionUtil.mentionsTypeParameters(returnType,new HashSet<PsiTypeParameter>(Arrays.asList(interfaceMethod.getTypeParameters())))) {
-      return true;
+    if (typeParameters.length == 0 && ((PsiMethod)resolve).getTypeParameters().length > 0) {
+      final PsiClass interfaceClass=classResolveResult.getElement();
+      LOG.assertTrue(interfaceClass != null);
+      if (PsiPolyExpressionUtil.mentionsTypeParameters(interfaceMethodReturnType,ContainerUtil.newHashSet(interfaceClass.getTypeParameters()))) {
+        LOG.assertTrue(interfaceMethodReturnType != null);
+        constraints.add(new TypeCompatibilityConstraint(referencedMethodReturnType,interfaceMethodReturnType));
+        return true;
+      }
     }
     if (PsiType.VOID.equals(referencedMethodReturnType)) {
       return false;
