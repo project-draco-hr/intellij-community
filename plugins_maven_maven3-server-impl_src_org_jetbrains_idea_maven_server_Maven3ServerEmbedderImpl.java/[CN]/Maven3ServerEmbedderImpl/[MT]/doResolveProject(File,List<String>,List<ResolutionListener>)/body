@@ -8,8 +8,16 @@
         List<ProjectBuildingResult> results=builder.build(Collections.singletonList(new File(file.getPath())),false,request.getProjectBuildingRequest());
         ProjectBuildingResult buildingResult=results.get(0);
         MavenProject project=buildingResult.getProject();
+        RepositorySystemSession repositorySession=getComponent(LegacySupport.class).getRepositorySession();
+        if (repositorySession instanceof DefaultRepositorySystemSession) {
+          ((DefaultRepositorySystemSession)repositorySession).setTransferListener(new TransferListenerAdapter(myCurrentIndicator));
+          if (myWorkspaceMap != null) {
+            ((DefaultRepositorySystemSession)repositorySession).setWorkspaceReader(new Maven3WorkspaceReader(myWorkspaceMap));
+          }
+        }
+        List<Exception> exceptions=new ArrayList<Exception>();
+        loadExtensions(project,exceptions);
         project.setDependencyArtifacts(project.createArtifacts(getComponent(ArtifactFactory.class),null,null));
-        ArtifactResolver resolver=getComponent(ArtifactResolver.class);
         ArtifactResolutionRequest resolutionRequest=new ArtifactResolutionRequest();
         resolutionRequest.setArtifactDependencies(project.getDependencyArtifacts());
         resolutionRequest.setArtifact(project.getArtifact());
@@ -19,16 +27,10 @@
         resolutionRequest.setListeners(listeners);
         resolutionRequest.setResolveRoot(false);
         resolutionRequest.setResolveTransitively(true);
-        RepositorySystemSession repositorySession=getComponent(LegacySupport.class).getRepositorySession();
-        if (repositorySession instanceof DefaultRepositorySystemSession) {
-          ((DefaultRepositorySystemSession)repositorySession).setTransferListener(new TransferListenerAdapter(myCurrentIndicator));
-          if (myWorkspaceMap != null) {
-            ((DefaultRepositorySystemSession)repositorySession).setWorkspaceReader(new Maven3WorkspaceReader(myWorkspaceMap));
-          }
-        }
+        ArtifactResolver resolver=getComponent(ArtifactResolver.class);
         ArtifactResolutionResult result=resolver.resolve(resolutionRequest);
         project.setArtifacts(result.getArtifacts());
-        ref.set(new MavenExecutionResult(project,new ArrayList<Exception>()));
+        ref.set(new MavenExecutionResult(project,exceptions));
       }
  catch (      Exception e) {
         ref.set(handleException(e));
