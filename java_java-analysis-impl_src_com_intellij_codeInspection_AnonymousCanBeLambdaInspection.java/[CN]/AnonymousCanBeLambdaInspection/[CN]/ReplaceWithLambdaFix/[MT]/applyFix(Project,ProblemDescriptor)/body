@@ -9,8 +9,8 @@
     final String canonicalText=anonymousClass.getBaseClassType().getCanonicalText();
     final PsiMethod method=anonymousClass.getMethods()[0];
     LOG.assertTrue(method != null);
-    final String lambdaWithTypesDeclared=composeLambdaText(method,lambdaContext,true);
-    final String withoutTypesDeclared=composeLambdaText(method,lambdaContext,false);
+    final String lambdaWithTypesDeclared=composeLambdaText(method,true);
+    final String withoutTypesDeclared=composeLambdaText(method,false);
     final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
     PsiLambdaExpression lambdaExpression=(PsiLambdaExpression)elementFactory.createExpressionFromText(withoutTypesDeclared,anonymousClass);
     final PsiCodeBlock body=method.getBody();
@@ -26,6 +26,38 @@
     PsiElement lambdaBody=lambdaExpression.getBody();
     LOG.assertTrue(lambdaBody != null);
     lambdaBody.replace(copy);
+    final JavaCodeStyleManager codeStyleManager=JavaCodeStyleManager.getInstance(project);
+    final Map<PsiParameter,String> names=new HashMap<PsiParameter,String>();
+    for (    PsiParameter parameter : lambdaExpression.getParameterList().getParameters()) {
+      String parameterName=parameter.getName();
+      final String uniqueVariableName=codeStyleManager.suggestUniqueVariableName(parameterName,lambdaContext,false);
+      if (!Comparing.equal(parameterName,uniqueVariableName)) {
+        names.put(parameter,uniqueVariableName);
+      }
+    }
+    final LinkedHashMap<PsiElement,PsiElement> replacements=new LinkedHashMap<PsiElement,PsiElement>();
+    lambdaExpression.accept(new JavaRecursiveElementWalkingVisitor(){
+      @Override public void visitParameter(      PsiParameter parameter){
+        final String newName=names.get(parameter);
+        if (newName != null) {
+          replacements.put(parameter.getNameIdentifier(),elementFactory.createIdentifier(newName));
+        }
+      }
+      @Override public void visitReferenceExpression(      PsiReferenceExpression expression){
+        super.visitReferenceExpression(expression);
+        final PsiElement resolve=expression.resolve();
+        if (resolve instanceof PsiParameter) {
+          final String newName=names.get(resolve);
+          if (newName != null) {
+            replacements.put(expression,elementFactory.createExpressionFromText(newName,expression));
+          }
+        }
+      }
+    }
+);
+    for (    PsiElement psiElement : replacements.keySet()) {
+      psiElement.replace(replacements.get(psiElement));
+    }
     final PsiNewExpression newExpression=(PsiNewExpression)anonymousClass.getParent();
     lambdaExpression=(PsiLambdaExpression)newExpression.replace(lambdaExpression);
     ChangeContextUtil.decodeContextInfo(lambdaExpression,null,null);
