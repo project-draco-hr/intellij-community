@@ -1,30 +1,56 @@
 {
   myContext=context;
   myWizard=wizard;
-  myModulesProvider=modulesProvider;
   myTemplatesMap=new ConcurrentMultiMap<TemplatesGroup,ProjectTemplate>();
   List<TemplatesGroup> groups=fillTemplatesMap(context);
   myProjectTypeList.setModel(new CollectionListModel<TemplatesGroup>(groups));
+  myProjectTypeList.addListSelectionListener(new ListSelectionListener(){
+    @Override public void valueChanged(    ListSelectionEvent e){
+      updateSelection();
+    }
+  }
+);
   myProjectTypeList.setCellRenderer(new ColoredListCellRenderer<TemplatesGroup>(){
     @Override protected void customizeCellRenderer(    JList list,    TemplatesGroup value,    int index,    boolean selected,    boolean hasFocus){
+      Font font=list.getFont();
       if (value.getParentGroup() != null) {
+        setFont(font);
         append("         ");
       }
  else {
         setBorder(IdeBorderFactory.createEmptyBorder(2,10,2,5));
         setIcon(value.getIcon());
+        setFont(font.deriveFont(Font.BOLD));
       }
       append(value.getName());
     }
   }
 );
+  myModulesProvider=modulesProvider;
+  Project project=context.getProject();
+  final LibrariesContainer container=LibrariesContainerFactory.createContainer(project);
+  FrameworkSupportModelBase model=new FrameworkSupportModelBase(project,null,container){
+    @NotNull @Override public String getBaseDirectoryForLibrariesPath(){
+      ModuleBuilder builder=getSelectedBuilder();
+      return StringUtil.notNullize(builder.getContentEntryPath());
+    }
+  }
+;
+  myFrameworksPanel=new AddSupportForFrameworksPanel(Collections.<FrameworkSupportInModuleProvider>emptyList(),model,true);
+  Disposer.register(wizard.getDisposable(),myFrameworksPanel);
+  myFrameworksPanelPlaceholder.add(myFrameworksPanel.getMainPanel());
+  myConfigurationUpdater=new ModuleBuilder.ModuleConfigurationUpdater(){
+    @Override public void update(    @NotNull Module module,    @NotNull ModifiableRootModel rootModel){
+      myFrameworksPanel.addSupport(module,rootModel);
+    }
+  }
+;
   myProjectTypeList.getSelectionModel().addListSelectionListener(new ListSelectionListener(){
     @Override public void valueChanged(    ListSelectionEvent e){
       projectTypeChanged();
     }
   }
 );
-  myTemplatesList.setNewProject(context.isCreatingNewProject());
   myTemplatesList.addListSelectionListener(new ListSelectionListener(){
     @Override public void valueChanged(    ListSelectionEvent e){
       updateSelection();

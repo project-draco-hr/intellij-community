@@ -1,11 +1,30 @@
 {
+  myNeedDownload=false;
   TemplatesGroup group=getSelectedGroup();
   if (group == null)   return;
   PropertiesComponent.getInstance().setValue(PROJECT_WIZARD_GROUP,group.getId());
-  Collection<ProjectTemplate> templates=myTemplatesMap.get(group);
-  if (!selectCustomOptions(templates)) {
-    setTemplatesList(group,templates,false);
-    ((CardLayout)myOptionsPanel.getLayout()).show(myOptionsPanel,DEFAULT_CARD);
+  ModuleBuilder groupModuleBuilder=group.getModuleBuilder();
+  if (groupModuleBuilder == null || groupModuleBuilder.isTemplateBased()) {
+    showTemplates(group);
+  }
+ else   if (!showCustomOptions(groupModuleBuilder)) {
+    List<FrameworkSupportInModuleProvider> providers=FrameworkSupportUtil.getProviders(groupModuleBuilder);
+    final ProjectCategory category=group.getProjectCategory();
+    if (category != null) {
+      providers=ContainerUtil.filter(providers,new Condition<FrameworkSupportInModuleProvider>(){
+        @Override public boolean value(        FrameworkSupportInModuleProvider provider){
+          return matchFramework(category,provider);
+        }
+      }
+);
+      myFrameworksPanel.setProviders(providers,new HashSet<String>(Arrays.asList(category.getAssociatedFrameworkIds())),new HashSet<String>(Arrays.asList(category.getPreselectedFrameworkIds())));
+    }
+ else {
+      myFrameworksPanel.setProviders(providers);
+    }
+    getSelectedBuilder().addModuleConfigurationUpdater(myConfigurationUpdater);
+    myNeedDownload=true;
+    showCard(FRAMEWORKS_CARD);
   }
   updateSelection();
 }
