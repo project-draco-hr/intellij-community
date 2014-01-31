@@ -1,5 +1,8 @@
 {
+  myCheckHostname.setVisible(false);
+  myCheckValidityPeriod.setVisible(false);
   myTrustManager=CertificatesManager.getInstance().getCustomTrustManager();
+  myTrustManager.addListener(this);
   myCertificatesList=new JBList();
   myCertificatesList.getEmptyText().setText("No certificates");
   myCertificatesList.setCellRenderer(new ListCellRendererWrapper<X509Certificate>(){
@@ -11,9 +14,6 @@
     }
   }
 );
-  for (  X509Certificate certificate : myTrustManager.getCertificates()) {
-    addCertificatePanel(certificate);
-  }
   ToolbarDecorator decorator=ToolbarDecorator.createDecorator(myCertificatesList).disableUpDownActions();
   decorator.setVisibleRowCount(5);
   decorator.setAddAction(new AnActionButtonRunnable(){
@@ -22,13 +22,16 @@
         @Override public void consume(        VirtualFile file){
           String path=file.getPath();
           X509Certificate certificate=CertificateUtil.loadX509Certificate(path);
-          if (certificate != null) {
+          if (certificate == null) {
+            Messages.showErrorDialog(myRootPanel,"Malformed X509 server certificate","Not Imported");
+          }
+ else           if (getCertificates().contains(certificate)) {
+            Messages.showWarningDialog(myRootPanel,"Certificate already exists","Not Imported");
+          }
+ else {
             getListModel().add(certificate);
             addCertificatePanel(certificate);
             myCertificatesList.setSelectedValue(certificate,true);
-          }
- else {
-            Messages.showErrorDialog(myRootPanel,"Cannot Load Certificate","Possibly malformed X509 server certificate " + path);
           }
         }
       }
@@ -38,8 +41,11 @@
 ).setRemoveAction(new AnActionButtonRunnable(){
     @Override public void run(    AnActionButton button){
       CollectionListModel<X509Certificate> model=getListModel();
+      List<X509Certificate> selected=new ArrayList<X509Certificate>();
       for (      int i : myCertificatesList.getSelectedIndices()) {
-        X509Certificate certificate=(X509Certificate)myCertificatesList.getModel().getElementAt(i);
+        selected.add((X509Certificate)myCertificatesList.getModel().getElementAt(i));
+      }
+      for (      X509Certificate certificate : selected) {
         model.remove(certificate);
       }
       if (getListModel().getSize() > 0) {
@@ -56,7 +62,7 @@
     @Override public void valueChanged(    ListSelectionEvent e){
       X509Certificate certificate=getSelectedCertificate();
       if (certificate != null) {
-        String uniqueName=certificate.getSubjectX500Principal().getName();
+        String uniqueName=getCardName(certificate);
         ((CardLayout)myDetailsPanel.getLayout()).show(myDetailsPanel,uniqueName);
       }
     }
