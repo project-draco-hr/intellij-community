@@ -1,7 +1,8 @@
 {
   if (PsiPolyExpressionUtil.isMethodCallPolyExpression(context,method) || context instanceof PsiNewExpression && PsiDiamondType.ourDiamondGuard.currentStack().contains(context)) {
-    final PsiType returnType=method.getReturnType();
+    PsiType returnType=method.getReturnType();
     if (!PsiType.VOID.equals(returnType) && returnType != null) {
+      returnType=PsiImplUtil.normalizeWildcardTypeByPosition(returnType,context);
       PsiType targetType=PsiTypesUtil.getExpectedTypeByParent(context);
       if (targetType == null) {
         targetType=PsiResolveHelper.ourGraphGuard.doPreventingRecursion(context,true,new Computable<PsiType>(){
@@ -12,10 +13,17 @@
 );
       }
       if (targetType != null) {
-        if (targetType instanceof PsiClassType && ((PsiClassType)targetType).isRaw()) {
-          setErased();
+        final InferenceVariable inferenceVariable=shouldResolveAndInstantiate(returnType,targetType);
+        if (inferenceVariable != null) {
+          resolveBounds(Collections.singletonList(inferenceVariable),mySiteSubstitutor,true);
+          myConstraints.add(new TypeCompatibilityConstraint(inferenceVariable.getInstantiation(),returnType));
         }
-        myConstraints.add(new TypeCompatibilityConstraint(myErased ? TypeConversionUtil.erasure(targetType) : GenericsUtil.eliminateWildcards(targetType,false),PsiImplUtil.normalizeWildcardTypeByPosition(returnType,context)));
+ else {
+          if (targetType instanceof PsiClassType && ((PsiClassType)targetType).isRaw()) {
+            setErased();
+          }
+          myConstraints.add(new TypeCompatibilityConstraint(myErased ? TypeConversionUtil.erasure(targetType) : GenericsUtil.eliminateWildcards(targetType,false),returnType));
+        }
       }
     }
   }
