@@ -11,8 +11,8 @@
   }
   final PsiElement element=reference.getElement();
   final List<LocalQuickFix> actions=new ArrayList<LocalQuickFix>(2);
-  final String refname=(element instanceof PyQualifiedExpression) ? ((PyQualifiedExpression)element).getReferencedName() : ref_text;
-  if (refname == null || refname.length() <= 0) {
+  final String refName=(element instanceof PyQualifiedExpression) ? ((PyQualifiedExpression)element).getReferencedName() : ref_text;
+  if (refName == null || refName.length() <= 0) {
     return;
   }
   final QualifiedName canonicalQName=getCanonicalName(reference,myTypeEvalContext);
@@ -30,44 +30,44 @@
       }
     }
   }
-  if (myIgnoredIdentifiers.contains(refname)) {
+  if (myIgnoredIdentifiers.contains(refName)) {
     return;
   }
   if (element instanceof PyReferenceExpression) {
-    PyReferenceExpression refex=(PyReferenceExpression)element;
-    if (PyNames.COMPARISON_OPERATORS.contains(refname)) {
+    PyReferenceExpression expr=(PyReferenceExpression)element;
+    if (PyNames.COMPARISON_OPERATORS.contains(refName)) {
       return;
     }
-    if (refex.isQualified()) {
+    if (expr.isQualified()) {
       final PyClassTypeImpl object_type=(PyClassTypeImpl)PyBuiltinCache.getInstance(node).getObjectType();
-      if ((object_type != null) && object_type.getPossibleInstanceMembers().contains(refname))       return;
+      if ((object_type != null) && object_type.getPossibleInstanceMembers().contains(refName))       return;
     }
  else {
-      if (PyUnreachableCodeInspection.hasAnyInterruptedControlFlowPaths(refex)) {
+      if (PyUnreachableCodeInspection.hasAnyInterruptedControlFlowPaths(expr)) {
         return;
       }
       if (LanguageLevel.forElement(node).isOlderThan(LanguageLevel.PYTHON26)) {
-        if ("with".equals(refname)) {
+        if ("with".equals(refName)) {
           actions.add(new UnresolvedRefAddFutureImportQuickFix());
         }
       }
       if (ref_text.equals("true") || ref_text.equals("false")) {
         actions.add(new UnresolvedRefTrueFalseQuickFix(element));
       }
-      addAddSelfFix(node,refex,actions);
+      addAddSelfFix(node,expr,actions);
       PyCallExpression callExpression=PsiTreeUtil.getParentOfType(element,PyCallExpression.class);
       if (callExpression != null && (!(callExpression.getCallee() instanceof PyQualifiedExpression) || ((PyQualifiedExpression)callExpression.getCallee()).getQualifier() == null)) {
-        actions.add(new UnresolvedRefCreateFunctionQuickFix(callExpression,refex));
+        actions.add(new UnresolvedRefCreateFunctionQuickFix(callExpression,expr));
       }
       PyFunction parentFunction=PsiTreeUtil.getParentOfType(element,PyFunction.class);
       PyDecorator decorator=PsiTreeUtil.getParentOfType(element,PyDecorator.class);
       PyImportStatement importStatement=PsiTreeUtil.getParentOfType(element,PyImportStatement.class);
       if (parentFunction != null && decorator == null && importStatement == null) {
-        actions.add(new UnresolvedReferenceAddParameterQuickFix(refname));
+        actions.add(new UnresolvedReferenceAddParameterQuickFix(refName));
       }
       actions.add(new PyRenameUnresolvedRefQuickFix());
     }
-    if (PyModuleType.getPossibleInstanceMembers().contains(refname))     return;
+    if (PyModuleType.getPossibleInstanceMembers().contains(refName))     return;
     if ((PsiTreeUtil.getParentOfType(PsiTreeUtil.getParentOfType(node,PyImportElement.class),PyTryExceptStatement.class,PyIfStatement.class) != null)) {
       severity=HighlightSeverity.WEAK_WARNING;
       description=PyBundle.message("INSP.module.$0.not.found",ref_text);
@@ -82,29 +82,29 @@
       if ("__qualname__".equals(ref_text) && LanguageLevel.forElement(element).isAtLeast(LanguageLevel.PYTHON33)) {
         return;
       }
-      final PyQualifiedExpression qexpr=(PyQualifiedExpression)element;
-      if (PyNames.COMPARISON_OPERATORS.contains(qexpr.getReferencedName()) || refname == null) {
+      final PyQualifiedExpression expr=(PyQualifiedExpression)element;
+      if (PyNames.COMPARISON_OPERATORS.contains(expr.getReferencedName())) {
         return;
       }
-      final PyExpression qualifier=qexpr.getQualifier();
+      final PyExpression qualifier=expr.getQualifier();
       if (qualifier != null) {
-        PyType qtype=myTypeEvalContext.getType(qualifier);
-        if (qtype != null) {
-          if (ignoreUnresolvedMemberForType(qtype,reference,refname)) {
+        PyType type=myTypeEvalContext.getType(qualifier);
+        if (type != null) {
+          if (ignoreUnresolvedMemberForType(type,reference,refName)) {
             return;
           }
-          addCreateMemberFromUsageFixes(qtype,reference,ref_text,actions);
-          if (qtype instanceof PyClassTypeImpl) {
+          addCreateMemberFromUsageFixes(type,reference,ref_text,actions);
+          if (type instanceof PyClassTypeImpl) {
             if (reference instanceof PyOperatorReference) {
-              description=PyBundle.message("INSP.unresolved.operator.ref",qtype.getName(),refname,((PyOperatorReference)reference).getReadableOperatorName());
+              description=PyBundle.message("INSP.unresolved.operator.ref",type.getName(),refName,((PyOperatorReference)reference).getReadableOperatorName());
             }
  else {
-              description=PyBundle.message("INSP.unresolved.ref.$0.for.class.$1",ref_text,qtype.getName());
+              description=PyBundle.message("INSP.unresolved.ref.$0.for.class.$1",ref_text,type.getName());
             }
             marked_qualified=true;
           }
  else {
-            description=PyBundle.message("INSP.cannot.find.$0.in.$1",ref_text,qtype.getName());
+            description=PyBundle.message("INSP.cannot.find.$0.in.$1",ref_text,type.getName());
             marked_qualified=true;
           }
         }
@@ -138,19 +138,8 @@
     }
   }
   addPluginQuickFixes(reference,actions);
-  final PsiElement point;
-  final TextRange range;
-  final PsiElement lastChild=node.getLastChild();
-  if (reference instanceof PyOperatorReference || lastChild == null) {
-    point=node;
-    range=rangeInElement;
-  }
- else {
-    point=lastChild;
-    range=rangeInElement.shiftRight(-point.getStartOffsetInParent());
-  }
-  if (reference instanceof PyImportReference && refname != null) {
-    final QualifiedName qname=QualifiedName.fromDottedString(refname);
+  if (reference instanceof PyImportReference) {
+    final QualifiedName qname=QualifiedName.fromDottedString(refName);
     final List<String> components=qname.getComponents();
     if (!components.isEmpty()) {
       final String packageName=components.get(0);
@@ -167,5 +156,5 @@
       }
     }
   }
-  registerProblem(point,description,hl_type,null,range,actions.toArray(new LocalQuickFix[actions.size()]));
+  registerProblem(node,description,hl_type,null,rangeInElement,actions.toArray(new LocalQuickFix[actions.size()]));
 }

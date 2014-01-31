@@ -36,24 +36,7 @@
     }
     final PsiParameter[] parameters=applicableMember instanceof PsiMethod ? ((PsiMethod)applicableMember).getParameterList().getParameters() : PsiParameter.EMPTY_ARRAY;
     if (targetParameters.length == parameters.length + 1) {
-      final PsiTypeElement qualifierTypeElement=myExpression.getQualifierType();
-      final PsiExpression qualifierExpression=myExpression.getQualifierExpression();
-      PsiType qualifierType;
-      if (qualifierTypeElement != null) {
-        qualifierType=qualifierTypeElement.getType();
-      }
- else {
-        LOG.assertTrue(qualifierExpression != null);
-        qualifierType=qualifierExpression.getType();
-        if (qualifierType == null && qualifierExpression instanceof PsiReferenceExpression) {
-          final JavaResolveResult resolveResult=((PsiReferenceExpression)qualifierExpression).advancedResolve(false);
-          final PsiElement resolve=resolveResult.getElement();
-          if (resolve instanceof PsiClass) {
-            qualifierType=JavaPsiFacade.getElementFactory(resolve.getProject()).createType((PsiClass)resolve,resolveResult.getSubstitutor());
-          }
-        }
-      }
-      constraints.add(new SubtypingConstraint(qualifierType,GenericsUtil.eliminateWildcards(substitutor.substitute(targetParameters[0].getType())),true));
+      specialCase(session,constraints,substitutor,targetParameters);
       for (int i=1; i < targetParameters.length; i++) {
         constraints.add(new TypeCompatibilityConstraint(psiSubstitutor.substitute(parameters[i - 1].getType()),GenericsUtil.eliminateWildcards(substitutor.substitute(targetParameters[i].getType()))));
       }
@@ -120,7 +103,7 @@
     if (typeParameters.length == 0 && ((PsiMethod)resolve).getTypeParameters().length > 0) {
       final PsiClass interfaceClass=classResolveResult.getElement();
       LOG.assertTrue(interfaceClass != null);
-      if (PsiPolyExpressionUtil.mentionsTypeParameters(interfaceMethodReturnType,ContainerUtil.newHashSet(interfaceClass.getTypeParameters()))) {
+      if (PsiPolyExpressionUtil.mentionsTypeParameters(referencedMethodReturnType,ContainerUtil.newHashSet(method.getTypeParameters()))) {
         LOG.assertTrue(interfaceMethodReturnType != null);
         constraints.add(new TypeCompatibilityConstraint(referencedMethodReturnType,interfaceMethodReturnType));
         return true;
@@ -131,6 +114,10 @@
     }
     session.initBounds(method.getTypeParameters());
     session.initBounds(containingClass.getTypeParameters());
+    final PsiParameter[] parameters=method.getParameterList().getParameters();
+    if (targetParameters.length == parameters.length + 1) {
+      specialCase(session,constraints,substitutor,targetParameters);
+    }
     constraints.add(new TypeCompatibilityConstraint(returnType,referencedMethodReturnType));
   }
   return true;

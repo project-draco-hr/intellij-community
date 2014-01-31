@@ -1,6 +1,8 @@
 {
-  final String missingValue="missing";
+  final String missingValue="missing_value";
   if (element instanceof PyStringLiteralExpression) {
+    boolean injected=false;
+    boolean strict=true;
     final PyStringLiteralExpression expr=(PyStringLiteralExpression)element;
     final List<TextRange> ranges=expr.getStringValueTextRanges();
     final String text=expr.getText();
@@ -8,6 +10,9 @@
       if (formatting != Formatting.NONE) {
         final String part=range.substring(text);
         final List<FormatStringChunk> chunks=formatting == Formatting.NEW_STYLE ? parseNewStyleFormat(part) : parsePercentFormat(part);
+        if (!filterSubstitutions(chunks).isEmpty()) {
+          strict=false;
+        }
         for (int i=0; i < chunks.size(); i++) {
           final FormatStringChunk chunk=chunks.get(i);
           if (chunk instanceof ConstantChunk) {
@@ -34,18 +39,21 @@
             }
             final TextRange chunkRange=chunk.getTextRange().shiftRight(range.getStartOffset());
             registrar.addPlace(chunkPrefix,chunkSuffix,expr,chunkRange);
+            injected=true;
           }
         }
       }
  else {
         registrar.addPlace(prefix,suffix,expr,range);
+        injected=true;
       }
     }
+    return new InjectionResult(injected,strict);
   }
  else   if (element instanceof PyParenthesizedExpression) {
     final PyExpression contained=((PyParenthesizedExpression)element).getContainedExpression();
     if (contained != null) {
-      processStringLiteral(contained,registrar,prefix,suffix,formatting);
+      return processStringLiteral(contained,registrar,prefix,suffix,formatting);
     }
   }
  else   if (element instanceof PyBinaryExpression) {
@@ -55,21 +63,24 @@
     final boolean isLeftString=isStringLiteralPart(left,null);
     if (expr.isOperator("+")) {
       final boolean isRightString=right != null && isStringLiteralPart(right,null);
+      InjectionResult result=InjectionResult.EMPTY;
       if (isLeftString) {
-        processStringLiteral(left,registrar,prefix,isRightString ? "" : missingValue,formatting);
+        result=result.append(processStringLiteral(left,registrar,prefix,isRightString ? "" : missingValue,formatting));
       }
       if (isRightString) {
-        processStringLiteral(right,registrar,isLeftString ? "" : missingValue,suffix,formatting);
+        result=result.append(processStringLiteral(right,registrar,isLeftString ? "" : missingValue,suffix,formatting));
       }
+      return result;
     }
  else     if (expr.isOperator("%")) {
-      processStringLiteral(left,registrar,prefix,suffix,Formatting.PERCENT);
+      return processStringLiteral(left,registrar,prefix,suffix,Formatting.PERCENT);
     }
   }
  else   if (element instanceof PyCallExpression) {
     final PyExpression qualifier=getFormatCallQualifier((PyCallExpression)element);
     if (qualifier != null) {
-      processStringLiteral(qualifier,registrar,prefix,suffix,Formatting.NEW_STYLE);
+      return processStringLiteral(qualifier,registrar,prefix,suffix,Formatting.NEW_STYLE);
     }
   }
+  return InjectionResult.EMPTY;
 }

@@ -1,4 +1,6 @@
 {
+  BuildScriptClasspathModelImpl buildScriptClasspath=cache.get(project.getPath());
+  if (buildScriptClasspath != null)   return buildScriptClasspath;
   boolean offline=false;
   boolean downloadJavadoc=false;
   boolean downloadSources=true;
@@ -11,10 +13,19 @@
       downloadSources=ideaModel.getModule().isDownloadSources();
     }
   }
+  buildScriptClasspath=new BuildScriptClasspathModelImpl();
+  Project parent=project.getParent();
+  if (parent != null) {
+    BuildScriptClasspathModelImpl parentBuildScriptClasspath=(BuildScriptClasspathModelImpl)buildAll(modelName,parent);
+    if (parentBuildScriptClasspath != null) {
+      for (      ClasspathEntryModel classpathEntryModel : parentBuildScriptClasspath.getClasspath()) {
+        buildScriptClasspath.add(classpathEntryModel);
+      }
+    }
+  }
   final IdeDependenciesExtractor dependenciesExtractor=new IdeDependenciesExtractor();
   final Configuration configuration=project.getBuildscript().getConfigurations().findByName("classpath");
   Collection<Configuration> plusConfigurations=Collections.singletonList(configuration);
-  BuildScriptClasspathModelImpl buildScriptClasspath=new BuildScriptClasspathModelImpl();
   if (!offline) {
     List<IdeDependenciesExtractor.IdeRepoFileDependency> repoFileDependencies=dependenciesExtractor.extractRepoFileDependencies(project.getConfigurations(),plusConfigurations,new ArrayList<Configuration>(),downloadSources,downloadJavadoc);
     for (    IdeDependenciesExtractor.IdeRepoFileDependency dependency : repoFileDependencies) {
@@ -27,5 +38,6 @@
     if (dependency.getFile() == null)     continue;
     buildScriptClasspath.add(new ClasspathEntryModelImpl(dependency.getFile(),null,null));
   }
+  cache.put(project.getPath(),buildScriptClasspath);
   return buildScriptClasspath;
 }
