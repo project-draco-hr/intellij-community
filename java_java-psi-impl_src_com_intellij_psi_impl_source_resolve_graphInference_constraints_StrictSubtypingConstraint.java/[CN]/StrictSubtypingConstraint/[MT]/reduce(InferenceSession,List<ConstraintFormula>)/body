@@ -1,0 +1,64 @@
+{
+  if (session.isProperType(myS) && session.isProperType(myT)) {
+    if (myT == null)     return myS == null || myS.equalsToText(CommonClassNames.JAVA_LANG_OBJECT);
+    if (myS == null)     return myT.equalsToText(CommonClassNames.JAVA_LANG_OBJECT);
+    return TypeConversionUtil.isAssignable(myT,myS);
+  }
+  InferenceVariable inferenceVariable=session.getInferenceVariable(myS);
+  if (inferenceVariable != null) {
+    inferenceVariable.addBound(myT,InferenceBound.UPPER);
+    return true;
+  }
+  if (PsiType.NULL.equals(myS) || myS == null)   return true;
+  inferenceVariable=session.getInferenceVariable(myT);
+  if (inferenceVariable != null) {
+    inferenceVariable.addBound(myS,InferenceBound.LOWER);
+    return true;
+  }
+  if (myT instanceof PsiArrayType) {
+    if (!(myS instanceof PsiArrayType))     return false;
+    final PsiType tComponentType=((PsiArrayType)myT).getComponentType();
+    final PsiType sComponentType=((PsiArrayType)myS).getComponentType();
+    if (!(tComponentType instanceof PsiPrimitiveType) && !(sComponentType instanceof PsiPrimitiveType)) {
+      constraints.add(new StrictSubtypingConstraint(tComponentType,sComponentType));
+      return true;
+    }
+    return sComponentType instanceof PsiPrimitiveType && sComponentType.equals(tComponentType);
+  }
+  if (myT instanceof PsiClassType) {
+    final PsiClassType.ClassResolveResult TResult=((PsiClassType)myT).resolveGenerics();
+    final PsiClass CClass=TResult.getElement();
+    if (CClass != null) {
+      if (CClass instanceof PsiTypeParameter) {
+        if (myS instanceof PsiIntersectionType) {
+          for (          PsiType conjunct : ((PsiIntersectionType)myS).getConjuncts()) {
+            if (myT.equals(conjunct))             return true;
+          }
+        }
+        return false;
+      }
+      if (!(myS instanceof PsiClassType))       return false;
+      PsiClassType.ClassResolveResult SResult=((PsiClassType)myS).resolveGenerics();
+      PsiClass SClass=SResult.getElement();
+      final PsiSubstitutor tSubstitutor=TResult.getSubstitutor();
+      final PsiSubstitutor sSubstitutor=SClass != null ? TypeConversionUtil.getClassSubstitutor(CClass,SClass,SResult.getSubstitutor()) : null;
+      if (sSubstitutor != null) {
+        for (        PsiTypeParameter parameter : CClass.getTypeParameters()) {
+          final PsiType tSubstituted=tSubstitutor.substitute(parameter);
+          final PsiType sSubstituted=sSubstitutor.substituteWithBoundsPromotion(parameter);
+          constraints.add(new SubtypingConstraint(tSubstituted,sSubstituted));
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+  if (myT instanceof PsiIntersectionType) {
+    for (    PsiType conjunct : ((PsiIntersectionType)myT).getConjuncts()) {
+      constraints.add(new StrictSubtypingConstraint(conjunct,myS));
+    }
+    return true;
+  }
+  if (PsiType.NULL.equals(myT))   return false;
+  return true;
+}
