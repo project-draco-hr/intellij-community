@@ -1,0 +1,43 @@
+{
+  BuildScriptClasspathModelImpl buildScriptClasspath=cache.get(project.getPath());
+  if (buildScriptClasspath != null)   return buildScriptClasspath;
+  boolean offline=false;
+  boolean downloadJavadoc=false;
+  boolean downloadSources=true;
+  final IdeaPlugin ideaPlugin=project.getPlugins().getPlugin(IdeaPlugin.class);
+  if (ideaPlugin != null) {
+    IdeaModel ideaModel=ideaPlugin.getModel();
+    if (ideaModel != null && ideaModel.getModule() != null) {
+      offline=ideaModel.getModule().isOffline();
+      downloadJavadoc=ideaModel.getModule().isDownloadJavadoc();
+      downloadSources=ideaModel.getModule().isDownloadSources();
+    }
+  }
+  buildScriptClasspath=new BuildScriptClasspathModelImpl();
+  Project parent=project.getParent();
+  if (parent != null) {
+    BuildScriptClasspathModelImpl parentBuildScriptClasspath=(BuildScriptClasspathModelImpl)buildAll(modelName,parent);
+    if (parentBuildScriptClasspath != null) {
+      for (      ClasspathEntryModel classpathEntryModel : parentBuildScriptClasspath.getClasspath()) {
+        buildScriptClasspath.add(classpathEntryModel);
+      }
+    }
+  }
+  final IdeDependenciesExtractor dependenciesExtractor=new IdeDependenciesExtractor();
+  final Configuration configuration=project.getBuildscript().getConfigurations().findByName("classpath");
+  Collection<Configuration> plusConfigurations=Collections.singletonList(configuration);
+  if (!offline) {
+    List<IdeRepoFileDependency> repoFileDependencies=dependenciesExtractor.extractRepoFileDependencies(project.getConfigurations(),plusConfigurations,new ArrayList<Configuration>(),downloadSources,downloadJavadoc);
+    for (    IdeRepoFileDependency dependency : repoFileDependencies) {
+      if (dependency.getFile() == null)       continue;
+      buildScriptClasspath.add(new ClasspathEntryModelImpl(dependency.getFile(),dependency.getSourceFile(),dependency.getJavadocFile()));
+    }
+  }
+  final Collection<IdeLocalFileDependency> localFileDependencies=dependenciesExtractor.extractLocalFileDependencies(plusConfigurations,new ArrayList<Configuration>());
+  for (  IdeLocalFileDependency dependency : localFileDependencies) {
+    if (dependency.getFile() == null)     continue;
+    buildScriptClasspath.add(new ClasspathEntryModelImpl(dependency.getFile(),null,null));
+  }
+  cache.put(project.getPath(),buildScriptClasspath);
+  return buildScriptClasspath;
+}
