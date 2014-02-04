@@ -8,7 +8,7 @@
         final Pair<PsiMethod,PsiSubstitutor> pair=MethodCandidateInfo.getCurrentMethod(argumentList);
         final JavaResolveResult resolveResult;
         if (pair == null) {
-          final MethodCandidatesProcessor processor=new MethodCandidatesProcessor(gParent,context.getContainingFile()){
+          final MethodCandidatesProcessor processor=new MethodResolverProcessor((PsiCallExpression)gParent,argumentList,context.getContainingFile()){
             @Override protected PsiType[] getExpressionTypes(            PsiExpressionList argumentList){
               if (argumentList != null) {
                 final PsiExpression[] expressions=argumentList.getExpressions();
@@ -40,7 +40,13 @@
           for (          JavaResolveResult result : results) {
             final PsiType type=getTypeByMethod(context,argumentList,null,result,result.getElement());
             if (type != null) {
-              return type;
+              final Set<PsiTypeParameter> parameters=myInferenceVariables.keySet();
+              final InferenceSession session=new InferenceSession(parameters.toArray(new PsiTypeParameter[parameters.size()]),mySiteSubstitutor,myManager,myContext);
+              session.copy(this);
+              session.registerConstraints(returnType,type);
+              if (session.repeatInferencePhases(true)) {
+                return type;
+              }
             }
           }
           return null;
@@ -52,7 +58,7 @@
  else   if (parent instanceof PsiConditionalExpression) {
     PsiType targetType=PsiTypesUtil.getExpectedTypeByParent((PsiExpression)parent);
     if (targetType == null) {
-      targetType=getTargetType((PsiExpression)parent);
+      targetType=getTargetType((PsiExpression)parent,returnType);
     }
     return targetType;
   }
