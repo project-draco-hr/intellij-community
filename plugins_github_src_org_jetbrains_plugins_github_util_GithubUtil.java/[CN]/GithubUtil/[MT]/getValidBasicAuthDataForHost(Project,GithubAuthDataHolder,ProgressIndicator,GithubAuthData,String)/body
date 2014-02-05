@@ -1,21 +1,23 @@
 {
-synchronized (authHolder.myLock) {
-    if (authHolder.getAuthData() != oldAuth) {
-      return;
-    }
-    final GithubLoginDialog dialog=new GithubBasicLoginDialog(project,authHolder,host);
-    ApplicationManager.getApplication().invokeAndWait(new Runnable(){
-      @Override public void run(){
-        DialogManager.show(dialog);
+  authHolder.runTransaction(oldAuth,new ThrowableComputable<GithubAuthData,GithubOperationCanceledException>(){
+    @Override @NotNull public GithubAuthData compute() throws GithubOperationCanceledException {
+      final GithubLoginDialog dialog=new GithubBasicLoginDialog(project,oldAuth,host);
+      ApplicationManager.getApplication().invokeAndWait(new Runnable(){
+        @Override public void run(){
+          DialogManager.show(dialog);
+        }
       }
-    }
 ,indicator.getModalityState());
-    if (!dialog.isOK()) {
-      throw new GithubOperationCanceledException("Can't get valid credentials");
-    }
-    final GithubSettings settings=GithubSettings.getInstance();
-    if (settings.getAuthType() != GithubAuthData.AuthType.TOKEN) {
-      GithubSettings.getInstance().setAuthData(authHolder.getAuthData(),dialog.isSavePasswordSelected());
+      if (!dialog.isOK()) {
+        throw new GithubOperationCanceledException("Can't get valid credentials");
+      }
+      GithubAuthData authData=dialog.getAuthData();
+      final GithubSettings settings=GithubSettings.getInstance();
+      if (settings.getAuthType() != GithubAuthData.AuthType.TOKEN) {
+        GithubSettings.getInstance().setAuthData(authData,dialog.isSavePasswordSelected());
+      }
+      return authData;
     }
   }
+);
 }
