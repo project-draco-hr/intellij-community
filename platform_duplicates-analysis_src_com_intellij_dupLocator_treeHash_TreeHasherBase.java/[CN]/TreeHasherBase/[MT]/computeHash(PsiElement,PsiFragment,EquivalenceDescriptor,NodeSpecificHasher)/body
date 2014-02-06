@@ -1,0 +1,35 @@
+{
+  final NodeSpecificHasherBase ssrHasher=(NodeSpecificHasherBase)hasher;
+  final PsiElement element2=DuplocatorUtil.skipNodeIfNeccessary(element,descriptor,ssrHasher.getNodeFilter());
+  final boolean canSkip=element2 != element;
+  final PsiFragment fragment=new TreePsiFragment(hasher,element,0);
+  if (parent != null) {
+    fragment.setParent(parent);
+  }
+  int hash=canSkip ? 0 : hasher.getNodeHash(element);
+  int cost=hasher.getNodeCost(element);
+  for (  SingleChildDescriptor childDescriptor : descriptor.getSingleChildDescriptors()) {
+    final Pair<Integer,Integer> childHashResult=computeHash(childDescriptor,fragment,hasher);
+    hash=hash * 31 + childHashResult.first;
+    cost+=childHashResult.second;
+  }
+  for (  MultiChildDescriptor childDescriptor : descriptor.getMultiChildDescriptors()) {
+    final Pair<Integer,Integer> childHashResult=computeHash(childDescriptor,fragment,hasher);
+    hash=hash * 31 + childHashResult.first;
+    cost+=childHashResult.second;
+  }
+  for (  Object constant : descriptor.getConstants()) {
+    final int constantHash=constant != null ? constant.hashCode() : 0;
+    hash=hash * 31 + constantHash;
+  }
+  for (  PsiElement[] codeBlock : descriptor.getCodeBlocks()) {
+    final List<PsiElement> filteredBlock=filter(codeBlock,ssrHasher);
+    final TreeHashResult childHashResult=hashCodeBlock(filteredBlock,fragment,hasher);
+    hash=hash * 31 + childHashResult.getHash();
+    cost+=childHashResult.getCost();
+  }
+  if (myCallback != null) {
+    myCallback.add(hash,cost,fragment);
+  }
+  return new TreeHashResult(hash,cost,fragment);
+}
