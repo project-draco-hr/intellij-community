@@ -1,13 +1,21 @@
 {
   if (signature == null)   return PsiSubstitutor.EMPTY;
   PsiType[] types=method.getSignature(PsiUtil.isRawSubstitutor(method,substitutor) ? PsiSubstitutor.EMPTY : substitutor).getParameterTypes();
+  final PsiClass qualifierClass=qualifierResolveResult.getContainingClass();
+  if (qualifierClass != null) {
+    substitutor=TypeConversionUtil.getSuperClassSubstitutor(method.getContainingClass(),qualifierClass,substitutor).putAll(substitutor);
+  }
   PsiType[] rightTypes=signature.getParameterTypes();
   if (!method.isVarArgs() || types.length == 0) {
+    PsiSubstitutor psiSubstitutor=null;
     if (types.length < rightTypes.length) {
-      return getSubstitutor(rightTypes[0]);
+      psiSubstitutor=getSubstitutor(rightTypes[0]);
     }
  else     if (types.length > rightTypes.length) {
-      return getSubstitutor(types[0]);
+      psiSubstitutor=getSubstitutor(types[0]);
+    }
+    if (psiSubstitutor != null) {
+      return substitutor.putAll(psiSubstitutor);
     }
   }
  else {
@@ -25,12 +33,8 @@
     rightTypes[i]=GenericsUtil.eliminateWildcards(rightTypes[i]);
   }
   final PsiResolveHelper resolveHelper=JavaPsiFacade.getInstance(getProject()).getResolveHelper();
-  PsiSubstitutor psiSubstitutor=resolveHelper.inferTypeArguments(method.getTypeParameters(),types,rightTypes,languageLevel);
   if (method.isConstructor()) {
-    psiSubstitutor=psiSubstitutor.putAll(resolveHelper.inferTypeArguments(method.getContainingClass().getTypeParameters(),types,rightTypes,languageLevel));
+    return substitutor.putAll(resolveHelper.inferTypeArguments(method.getTypeParameters(),types,rightTypes,languageLevel));
   }
-  if (!PsiUtil.isRawSubstitutor(method,substitutor)) {
-    psiSubstitutor=psiSubstitutor.putAll(substitutor);
-  }
-  return LambdaUtil.inferFromReturnType(method.getTypeParameters(),method.getReturnType(),GenericsUtil.eliminateWildcards(interfaceMethodReturnType),psiSubstitutor,languageLevel,getProject());
+  return LambdaUtil.inferFromReturnType(method.getTypeParameters(),method.getReturnType(),GenericsUtil.eliminateWildcards(interfaceMethodReturnType),substitutor.putAll(resolveHelper.inferTypeArguments(method.getTypeParameters(),types,rightTypes,languageLevel)),languageLevel,getProject());
 }
