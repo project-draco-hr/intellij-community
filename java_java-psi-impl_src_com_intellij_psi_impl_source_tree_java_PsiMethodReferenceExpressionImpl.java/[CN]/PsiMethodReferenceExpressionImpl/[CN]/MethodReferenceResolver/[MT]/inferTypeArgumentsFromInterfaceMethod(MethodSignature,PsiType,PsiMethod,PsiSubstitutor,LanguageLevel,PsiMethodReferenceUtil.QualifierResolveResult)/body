@@ -1,0 +1,40 @@
+{
+  if (signature == null)   return PsiSubstitutor.EMPTY;
+  PsiType[] types=method.getSignature(PsiUtil.isRawSubstitutor(method,substitutor) ? PsiSubstitutor.EMPTY : substitutor).getParameterTypes();
+  final PsiClass qualifierClass=qualifierResolveResult.getContainingClass();
+  if (qualifierClass != null) {
+    substitutor=TypeConversionUtil.getSuperClassSubstitutor(method.getContainingClass(),qualifierClass,substitutor).putAll(substitutor);
+  }
+  PsiType[] rightTypes=signature.getParameterTypes();
+  if (!method.isVarArgs() || types.length == 0) {
+    PsiSubstitutor psiSubstitutor=null;
+    if (types.length < rightTypes.length) {
+      psiSubstitutor=getSubstitutor(rightTypes[0]);
+    }
+ else     if (types.length > rightTypes.length) {
+      psiSubstitutor=getSubstitutor(types[0]);
+    }
+    if (psiSubstitutor != null) {
+      return substitutor.putAll(psiSubstitutor);
+    }
+  }
+ else {
+    if (rightTypes.length != types.length || rightTypes[rightTypes.length - 1].getArrayDimensions() != types[types.length - 1].getArrayDimensions()) {
+      boolean expandTypeArray=types.length < rightTypes.length;
+      int min=Math.min(types.length,rightTypes.length);
+      types=Arrays.copyOf(types,min);
+      if (expandTypeArray) {
+        types[types.length - 1]=((PsiArrayType)types[types.length - 1]).getComponentType();
+      }
+      rightTypes=Arrays.copyOf(rightTypes,min);
+    }
+  }
+  for (int i=0; i < rightTypes.length; i++) {
+    rightTypes[i]=GenericsUtil.eliminateWildcards(rightTypes[i]);
+  }
+  final PsiResolveHelper resolveHelper=JavaPsiFacade.getInstance(getProject()).getResolveHelper();
+  if (method.isConstructor()) {
+    return substitutor.putAll(resolveHelper.inferTypeArguments(method.getTypeParameters(),types,rightTypes,languageLevel));
+  }
+  return LambdaUtil.inferFromReturnType(method.getTypeParameters(),method.getReturnType(),GenericsUtil.eliminateWildcards(interfaceMethodReturnType),substitutor.putAll(resolveHelper.inferTypeArguments(method.getTypeParameters(),types,rightTypes,languageLevel)),languageLevel,getProject());
+}
