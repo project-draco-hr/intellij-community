@@ -1,41 +1,16 @@
 {
   final RootUrlInfo rootUrlInfo=myVcs.getSvnFileUrlMapping().getWcRootForFilePath(new File(file.getPath()));
   if (rootUrlInfo == null)   return null;
-  final VirtualFile root=rootUrlInfo.getVirtualFile();
-  final SvnRepositoryLocation svnRootLocation=(SvnRepositoryLocation)getLocationFor(new FilePathImpl(root));
-  if (svnRootLocation == null)   return null;
-  final String url=svnRootLocation.getURL();
-  final long revision;
-  try {
-    revision=Long.parseLong(number.asString());
-  }
- catch (  NumberFormatException e) {
-    throw new VcsException(e);
-  }
   final SvnChangeList[] result=new SvnChangeList[1];
-  final SVNLogClient logger;
-  final SVNRevision revisionBefore;
-  final SVNURL repositoryUrl;
-  final SVNURL svnurl;
-  final SVNInfo targetInfo;
-  try {
-    logger=myVcs.createLogClient();
-    revisionBefore=SVNRevision.create(revision);
-    svnurl=SVNURL.parseURIEncoded(url);
-    final SVNInfo info=myVcs.getInfo(svnurl,SVNRevision.HEAD);
-    targetInfo=myVcs.getInfo(new File(file.getPath()));
-    if (info == null) {
-      throw new VcsException("Can not get repository URL");
-    }
-    repositoryUrl=info.getRepositoryRootURL();
-  }
- catch (  SVNException e) {
-    LOG.info(e);
-    throw new VcsException(e);
-  }
+  final SVNRevision revisionBefore=((SvnRevisionNumber)number).getRevision();
+  final SVNURL repositoryUrl=rootUrlInfo.getRepositoryUrlUrl();
+  final SVNURL svnRootUrl=rootUrlInfo.getAbsoluteUrlAsUrl();
+  final SvnRepositoryLocation svnRootLocation=new SvnRepositoryLocation(rootUrlInfo.getAbsoluteUrl());
+  final String repositoryRelativeUrl=SvnUtil.ensureStartSlash(SvnUtil.join(SvnUtil.getRelativeUrl(repositoryUrl.toDecodedString(),svnRootUrl.toDecodedString()),SvnUtil.getRelativePath(rootUrlInfo.getPath(),file.getPath())));
   FilePath filePath=VcsUtil.getFilePath(file);
-  if (!tryExactHit(svnRootLocation,result,logger,revisionBefore,repositoryUrl,svnurl) && !tryByRoot(result,logger,revisionBefore,repositoryUrl)) {
-    filePath=getOneListStepByStep(svnRootLocation,result,logger,revisionBefore,svnurl,targetInfo,filePath);
+  SVNLogClient logger=myVcs.createLogClient();
+  if (!tryExactHit(svnRootLocation,result,logger,revisionBefore,repositoryUrl,svnRootUrl) && !tryByRoot(result,logger,revisionBefore,repositoryUrl)) {
+    filePath=getOneListStepByStep(svnRootLocation,result,logger,revisionBefore,svnRootUrl,repositoryUrl,repositoryRelativeUrl,filePath);
   }
  else {
     Change change=ContainerUtil.getFirstItem(result[0].getChanges());
@@ -44,10 +19,8 @@
       filePath=afterRevision != null ? afterRevision.getFile() : filePath;
     }
  else {
-      String relativePath=SVNPathUtil.getRelativePath(targetInfo.getRepositoryRootURL().toString(),targetInfo.getURL().toString());
-      relativePath=relativePath.startsWith("/") ? relativePath : "/" + relativePath;
-      final Change targetChange=result[0].getByPath(relativePath);
-      filePath=targetChange == null ? getOneListStepByStep(svnRootLocation,result,logger,revisionBefore,svnurl,targetInfo,filePath) : filePath;
+      final Change targetChange=result[0].getByPath(repositoryRelativeUrl);
+      filePath=targetChange == null ? getOneListStepByStep(svnRootLocation,result,logger,revisionBefore,svnRootUrl,repositoryUrl,repositoryRelativeUrl,filePath) : filePath;
     }
   }
   return Pair.create(result[0],filePath);
