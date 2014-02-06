@@ -33,33 +33,22 @@
     LOG.info(e);
     throw new VcsException(e);
   }
-  tryExactHit(svnRootLocation,result,logger,revisionBefore,repositoryUrl,svnurl);
-  if (result[0] == null) {
-    tryByRoot(result,logger,revisionBefore,repositoryUrl);
-    if (result[0] == null) {
-      FilePath path=tryStepByStep(svnRootLocation,result,logger,revisionBefore,targetInfo,svnurl);
-      path=path == null ? new FilePathImpl(file) : path;
-      return new Pair<SvnChangeList,FilePath>(result[0],path);
-    }
+  FilePath filePath=VcsUtil.getFilePath(file);
+  if (!tryExactHit(svnRootLocation,result,logger,revisionBefore,repositoryUrl,svnurl) && !tryByRoot(result,logger,revisionBefore,repositoryUrl)) {
+    filePath=getOneListStepByStep(svnRootLocation,result,logger,revisionBefore,svnurl,targetInfo,filePath);
   }
-  if (result[0].getChanges().size() == 1) {
-    final Collection<Change> changes=result[0].getChanges();
-    final Change change=changes.iterator().next();
-    final ContentRevision afterRevision=change.getAfterRevision();
-    if (afterRevision != null) {
-      return new Pair<SvnChangeList,FilePath>(result[0],afterRevision.getFile());
+ else {
+    Change change=ContainerUtil.getFirstItem(result[0].getChanges());
+    if (change != null) {
+      final ContentRevision afterRevision=change.getAfterRevision();
+      filePath=afterRevision != null ? afterRevision.getFile() : filePath;
     }
  else {
-      return new Pair<SvnChangeList,FilePath>(result[0],new FilePathImpl(file));
+      String relativePath=SVNPathUtil.getRelativePath(targetInfo.getRepositoryRootURL().toString(),targetInfo.getURL().toString());
+      relativePath=relativePath.startsWith("/") ? relativePath : "/" + relativePath;
+      final Change targetChange=result[0].getByPath(relativePath);
+      filePath=targetChange == null ? getOneListStepByStep(svnRootLocation,result,logger,revisionBefore,svnurl,targetInfo,filePath) : filePath;
     }
   }
-  String relativePath=SVNPathUtil.getRelativePath(targetInfo.getRepositoryRootURL().toString(),targetInfo.getURL().toString());
-  relativePath=relativePath.startsWith("/") ? relativePath : "/" + relativePath;
-  final Change targetChange=result[0].getByPath(relativePath);
-  if (targetChange == null) {
-    FilePath path=tryStepByStep(svnRootLocation,result,logger,revisionBefore,targetInfo,svnurl);
-    path=path == null ? new FilePathImpl(file) : path;
-    return new Pair<SvnChangeList,FilePath>(result[0],path);
-  }
-  return new Pair<SvnChangeList,FilePath>(result[0],new FilePathImpl(file));
+  return Pair.create(result[0],filePath);
 }
