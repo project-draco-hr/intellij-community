@@ -1,0 +1,45 @@
+{
+  if (HighlightUtil.isSerializationImplicitlyUsedField(field)) {
+    return null;
+  }
+  if (field.hasModifierProperty(PsiModifier.PRIVATE)) {
+    if (!myRefCountHolder.isReferenced(field) && !isImplicitUsage(myProject,field,progress)) {
+      String message=JavaErrorMessages.message("private.field.is.not.used",identifier.getText());
+      HighlightInfo highlightInfo=suggestionsToMakeFieldUsed(field,identifier,message);
+      if (!field.hasInitializer()) {
+        QuickFixAction.registerQuickFixAction(highlightInfo,HighlightMethodUtil.getFixRange(field),QuickFixFactory.getInstance().createCreateConstructorParameterFromFieldFix(field));
+      }
+      return highlightInfo;
+    }
+    final boolean readReferenced=myRefCountHolder.isReferencedForRead(field);
+    if (!readReferenced && !isImplicitRead(project,field,progress)) {
+      String message=JavaErrorMessages.message("private.field.is.not.used.for.reading",identifier.getText());
+      return suggestionsToMakeFieldUsed(field,identifier,message);
+    }
+    if (field.hasInitializer()) {
+      return null;
+    }
+    final boolean writeReferenced=myRefCountHolder.isReferencedForWrite(field);
+    if (!writeReferenced && !isImplicitWrite(project,field,progress)) {
+      String message=JavaErrorMessages.message("private.field.is.not.assigned",identifier.getText());
+      final HighlightInfo info=createUnusedSymbolInfo(identifier,message,HighlightInfoType.UNUSED_SYMBOL);
+      QuickFixAction.registerQuickFixAction(info,QuickFixFactory.getInstance().createCreateGetterOrSetterFix(false,true,field),myUnusedSymbolKey);
+      QuickFixAction.registerQuickFixAction(info,HighlightMethodUtil.getFixRange(field),QuickFixFactory.getInstance().createCreateConstructorParameterFromFieldFix(field));
+      SpecialAnnotationsUtilBase.createAddToSpecialAnnotationFixes(field,new Processor<String>(){
+        @Override public boolean process(        final String annoName){
+          QuickFixAction.registerQuickFixAction(info,QuickFixFactory.getInstance().createAddToDependencyInjectionAnnotationsFix(project,annoName,"fields"));
+          return true;
+        }
+      }
+);
+      return info;
+    }
+  }
+ else   if (isImplicitUsage(myProject,field,progress)) {
+    return null;
+  }
+ else   if (isFieldUnused(myProject,myFile,field,progress,helper)) {
+    return formatUnusedSymbolHighlightInfo(project,"field.is.not.used",field,"fields",myDeadCodeKey,myDeadCodeInfoType,identifier);
+  }
+  return null;
+}
