@@ -5,26 +5,23 @@
       returnType=PsiImplUtil.normalizeWildcardTypeByPosition(returnType,context);
       PsiType targetType=PsiTypesUtil.getExpectedTypeByParent(context);
       if (targetType == null) {
-        targetType=PsiResolveHelper.ourGraphGuard.doPreventingRecursion(context,true,new Computable<PsiType>(){
+        final PsiType finalReturnType=returnType;
+        targetType=PsiResolveHelper.ourGraphGuard.doPreventingRecursion(context,false,new Computable<PsiType>(){
           @Override public PsiType compute(){
-            return getTargetType(context);
+            return getTargetType(context,finalReturnType);
           }
         }
 );
       }
       if (targetType != null) {
-        final InferenceVariable inferenceVariable=shouldResolveAndInstantiate(returnType,targetType);
-        if (inferenceVariable != null) {
-          resolveBounds(Collections.singletonList(inferenceVariable),mySiteSubstitutor,true);
-          myConstraints.add(new TypeCompatibilityConstraint(inferenceVariable.getInstantiation(),returnType));
-        }
- else {
-          if (targetType instanceof PsiClassType && ((PsiClassType)targetType).isRaw()) {
-            setErased();
-          }
-          myConstraints.add(new TypeCompatibilityConstraint(myErased ? TypeConversionUtil.erasure(targetType) : GenericsUtil.eliminateWildcards(targetType,false),returnType));
-        }
+        registerConstraints(returnType,targetType);
       }
+    }
+  }
+  for (  PsiClassType thrownType : method.getThrowsList().getReferencedTypes()) {
+    final InferenceVariable variable=getInferenceVariable(thrownType);
+    if (variable != null) {
+      variable.setThrownBound();
     }
   }
 }

@@ -1,2 +1,61 @@
 {
+  PsiElementFactory jfactory=JavaPsiFacade.getElementFactory(project);
+  final GroovyPsiElementFactory elementFactory=GroovyPsiElementFactory.getInstance(project);
+  GrCodeReferenceElement stubRef=elementFactory.createCodeReferenceElementFromClass(psiClass);
+  try {
+    GrReferenceList clause=psiClass.isInterface() ? targetClass.getImplementsClause() : targetClass.getExtendsClause();
+    if (clause == null) {
+      GrReferenceList stubRefList=psiClass.isInterface() ? elementFactory.createImplementsClause() : elementFactory.createExtendsClause();
+      clause=(GrExtendsClause)targetClass.addAfter(stubRefList,targetClass.getNameIdentifierGroovy());
+    }
+    GrCodeReferenceElement ref=(GrCodeReferenceElement)clause.add(stubRef);
+    if (psiClass.hasTypeParameters() || includeClassName) {
+      final Editor editor=CodeInsightUtil.positionCursor(project,targetClass.getContainingFile(),targetClass.getLBrace());
+      final TemplateBuilderImpl templateBuilder=editor == null || ApplicationManager.getApplication().isUnitTestMode() ? null : (TemplateBuilderImpl)TemplateBuilderFactory.getInstance().createTemplateBuilder(targetClass);
+      if (includeClassName && templateBuilder != null) {
+        templateBuilder.replaceElement(targetClass.getNameIdentifier(),targetClass.getName());
+      }
+      if (oldTypeParameterList != null && oldTypeParameterList.getTypeParameters().length > 0) {
+        GrTypeArgumentList existingList=ref.getTypeArgumentList();
+        final GrTypeParameterList typeParameterList=(GrTypeParameterList)targetClass.addAfter(elementFactory.createTypeParameterList(),targetClass.getNameIdentifierGroovy());
+        GrTypeArgumentList argList;
+        if (existingList == null) {
+          GrCodeReferenceElement codeRef=elementFactory.createCodeReferenceElementFromText("A<T>");
+          argList=((GrTypeArgumentList)ref.add(codeRef.getTypeArgumentList()));
+          argList.getTypeArgumentElements()[0].delete();
+        }
+ else {
+          argList=existingList;
+        }
+        for (        PsiTypeParameter parameter : oldTypeParameterList.getTypeParameters()) {
+          final PsiElement param=argList.add(elementFactory.createTypeElement(jfactory.createType(parameter)));
+          if (templateBuilder != null) {
+            templateBuilder.replaceElement(param,param.getText());
+          }
+          typeParameterList.add(elementFactory.createTypeParameter(parameter.getName(),parameter.getExtendsListTypes()));
+        }
+      }
+      if (templateBuilder != null) {
+        templateBuilder.setEndVariableBefore(ref);
+        final Template template=templateBuilder.buildTemplate();
+        template.addEndVariable();
+        final PsiFile containingFile=targetClass.getContainingFile();
+        PsiDocumentManager.getInstance(project).doPostponedOperationsAndUnblockDocument(editor.getDocument());
+        final TextRange textRange=targetClass.getTextRange();
+        final RangeMarker startClassOffset=editor.getDocument().createRangeMarker(textRange.getStartOffset(),textRange.getEndOffset());
+        startClassOffset.setGreedyToLeft(true);
+        startClassOffset.setGreedyToRight(true);
+        editor.getDocument().deleteString(textRange.getStartOffset(),textRange.getEndOffset());
+        CreateFromUsageBaseFix.startTemplate(editor,template,project,new TemplateEditingAdapter(){
+          @Override public void templateFinished(          Template template,          boolean brokenOff){
+            chooseAndImplement(psiClass,project,PsiTreeUtil.getParentOfType(containingFile.findElementAt(startClassOffset.getStartOffset()),GrTypeDefinition.class),editor);
+          }
+        }
+,getTitle(psiClass));
+      }
+    }
+  }
+ catch (  IncorrectOperationException e) {
+    LOG.error(e);
+  }
 }

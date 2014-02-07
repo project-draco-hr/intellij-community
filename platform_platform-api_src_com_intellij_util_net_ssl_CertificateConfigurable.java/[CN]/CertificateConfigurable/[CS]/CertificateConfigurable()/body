@@ -3,19 +3,10 @@
   myCheckValidityPeriod.setVisible(false);
   myTrustManager=CertificatesManager.getInstance().getCustomTrustManager();
   myTrustManager.addListener(this);
-  myCertificatesList=new JBList();
-  myCertificatesList.getEmptyText().setText("No certificates");
-  myCertificatesList.setCellRenderer(new ListCellRendererWrapper<X509Certificate>(){
-    @Override public void customize(    JList list,    X509Certificate certificate,    int index,    boolean selected,    boolean hasFocus){
-      if (!new CertificateWrapper(certificate).isValid()) {
-        setForeground(UIUtil.getLabelDisabledForeground());
-      }
-      setText(new CertificateWrapper(certificate).getSubjectField(COMMON_NAME));
-    }
-  }
-);
-  ToolbarDecorator decorator=ToolbarDecorator.createDecorator(myCertificatesList).disableUpDownActions();
-  decorator.setVisibleRowCount(5);
+  myTree.getEmptyText().setText("No certificates");
+  myTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+  myTree.setRootVisible(false);
+  ToolbarDecorator decorator=ToolbarDecorator.createDecorator(myTree).disableUpDownActions();
   decorator.setAddAction(new AnActionButtonRunnable(){
     @Override public void run(    AnActionButton button){
       FileChooser.chooseFile(CERTIFICATE_DESCRIPTOR,null,null,new Consumer<VirtualFile>(){
@@ -25,13 +16,14 @@
           if (certificate == null) {
             Messages.showErrorDialog(myRootPanel,"Malformed X509 server certificate","Not Imported");
           }
- else           if (getCertificates().contains(certificate)) {
+ else           if (myCertificates.contains(certificate)) {
             Messages.showWarningDialog(myRootPanel,"Certificate already exists","Not Imported");
           }
  else {
-            getListModel().add(certificate);
+            myCertificates.add(certificate);
+            myTreeBuilder.addCertificate(certificate);
             addCertificatePanel(certificate);
-            myCertificatesList.setSelectedValue(certificate,true);
+            myTreeBuilder.selectCertificate(certificate);
           }
         }
       }
@@ -40,30 +32,24 @@
   }
 ).setRemoveAction(new AnActionButtonRunnable(){
     @Override public void run(    AnActionButton button){
-      CollectionListModel<X509Certificate> model=getListModel();
-      List<X509Certificate> selected=new ArrayList<X509Certificate>();
-      for (      int i : myCertificatesList.getSelectedIndices()) {
-        selected.add((X509Certificate)myCertificatesList.getModel().getElementAt(i));
+      for (      X509Certificate certificate : myTreeBuilder.getSelectedCertificates(true)) {
+        myCertificates.remove(certificate);
+        myTreeBuilder.removeCertificate(certificate);
       }
-      for (      X509Certificate certificate : selected) {
-        model.remove(certificate);
-      }
-      if (getListModel().getSize() > 0) {
-        myCertificatesList.setSelectedIndex(0);
+      if (myCertificates.isEmpty()) {
+        showCard(EMPTY_PANEL);
       }
  else {
-        myDetailsPanel.removeAll();
-        myDetailsPanel.repaint();
+        myTreeBuilder.selectFirstCertificate();
       }
     }
   }
 );
-  myCertificatesList.addListSelectionListener(new ListSelectionListener(){
-    @Override public void valueChanged(    ListSelectionEvent e){
-      X509Certificate certificate=getSelectedCertificate();
+  myTree.addTreeSelectionListener(new TreeSelectionListener(){
+    @Override public void valueChanged(    TreeSelectionEvent e){
+      X509Certificate certificate=myTreeBuilder.getFirstSelectedCertificate(true);
       if (certificate != null) {
-        String uniqueName=getCardName(certificate);
-        ((CardLayout)myDetailsPanel.getLayout()).show(myDetailsPanel,uniqueName);
+        showCard(getCardName(certificate));
       }
     }
   }

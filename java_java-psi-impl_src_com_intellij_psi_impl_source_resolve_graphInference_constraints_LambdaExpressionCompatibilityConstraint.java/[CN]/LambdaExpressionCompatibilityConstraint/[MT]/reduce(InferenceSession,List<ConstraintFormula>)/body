@@ -2,9 +2,8 @@
   if (LambdaHighlightingUtil.checkInterfaceFunctional(myT) != null) {
     return false;
   }
-  if (myExpression.hasFormalParameterTypes()) {
-  }
-  final PsiClassType.ClassResolveResult resolveResult=PsiUtil.resolveGenericsClassInType(FunctionalInterfaceParameterizationUtil.getGroundTargetType(myT,myExpression,false));
+  final PsiType groundTargetType=FunctionalInterfaceParameterizationUtil.getGroundTargetType(myT,myExpression);
+  final PsiClassType.ClassResolveResult resolveResult=PsiUtil.resolveGenericsClassInType(groundTargetType);
   final PsiMethod interfaceMethod=LambdaUtil.getFunctionalInterfaceMethod(resolveResult);
   if (interfaceMethod == null) {
     return false;
@@ -19,6 +18,7 @@
     for (int i=0; i < lambdaParameters.length; i++) {
       constraints.add(new TypeEqualityConstraint(lambdaParameters[i].getType(),substitutor.substitute(parameters[i].getType())));
     }
+    constraints.add(new StrictSubtypingConstraint(myT,groundTargetType));
   }
  else {
     for (    PsiParameter parameter : parameters) {
@@ -27,7 +27,7 @@
       }
     }
   }
-  final PsiType returnType=interfaceMethod.getReturnType();
+  PsiType returnType=interfaceMethod.getReturnType();
   if (returnType != null) {
     final List<PsiExpression> returnExpressions=LambdaUtil.getReturnExpressions(myExpression);
     if (returnType.equals(PsiType.VOID)) {
@@ -39,8 +39,11 @@
       if (returnExpressions.isEmpty() && !myExpression.isValueCompatible()) {
         return false;
       }
-      for (      PsiExpression returnExpression : returnExpressions) {
-        constraints.add(new ExpressionCompatibilityConstraint(returnExpression,GenericsUtil.eliminateWildcards(substitutor.substitute(returnType))));
+      returnType=substitutor.substitute(returnType);
+      if (!session.isProperType(returnType)) {
+        for (        PsiExpression returnExpression : returnExpressions) {
+          constraints.add(new ExpressionCompatibilityConstraint(returnExpression,GenericsUtil.eliminateWildcards(returnType)));
+        }
       }
     }
   }

@@ -15,8 +15,9 @@
         PsiType bound=null;
         if (eqBounds.size() > 1) {
           for (Iterator<PsiType> iterator=eqBounds.iterator(); iterator.hasNext(); ) {
-            PsiType eqBound=acceptBoundsWithRecursiveDependencies(inferenceVariable,iterator.next(),substitutor);
-            if (PsiUtil.resolveClassInType(eqBound) == typeParameter || !(bound instanceof PsiCapturedWildcardType) && Comparing.equal(bound,eqBound)) {
+            final PsiType unsubstBound=iterator.next();
+            PsiType eqBound=substituteNonProperBound(unsubstBound,substitutor);
+            if (PsiUtil.resolveClassInType(eqBound) == typeParameter || !(bound instanceof PsiCapturedWildcardType && bound.equals(unsubstBound)) && Comparing.equal(bound,eqBound)) {
               iterator.remove();
             }
  else             if (bound == null) {
@@ -25,14 +26,14 @@
           }
           if (eqBounds.size() > 1)           continue;
         }
-        bound=eqBounds.isEmpty() ? null : acceptBoundsWithRecursiveDependencies(inferenceVariable,eqBounds.get(0),substitutor);
+        bound=eqBounds.isEmpty() ? null : substituteNonProperBound(eqBounds.get(0),substitutor);
         if (bound != null) {
           inferenceVariable.setInstantiation(bound);
         }
  else {
           PsiType lub=null;
           for (          PsiType lowerBound : lowerBounds) {
-            lowerBound=acceptBoundsWithRecursiveDependencies(inferenceVariable,lowerBound,substitutor);
+            lowerBound=substituteNonProperBound(lowerBound,substitutor);
             if (isProperType(lowerBound)) {
               if (lub == null) {
                 lub=lowerBound;
@@ -48,14 +49,14 @@
  else {
             boolean inferred=false;
             PsiType glb=null;
-            if (isThrowable(upperBounds)) {
+            if (inferenceVariable.isThrownBound() && isThrowable(upperBounds)) {
               glb=PsiType.getJavaLangRuntimeException(myManager,GlobalSearchScope.allScope(myManager.getProject()));
               inferred=true;
             }
  else {
               int boundCandidatesNumber=0;
               for (              PsiType upperBound : upperBounds) {
-                PsiType substitutedBound=acceptBoundsWithRecursiveDependencies(inferenceVariable,upperBound,substitutor);
+                PsiType substitutedBound=substituteNonProperBound(upperBound,substitutor);
                 if (isProperType(substitutedBound)) {
                   boundCandidatesNumber++;
                   if (!upperBound.equals(substitutedBound)) {

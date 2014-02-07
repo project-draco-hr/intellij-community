@@ -1,15 +1,24 @@
 {
   myChangedFilesCollector.ensureAllInvalidateTasksCompleted();
   ProjectIndexableFilesFilter indexableFilesFilter=projectIndexableFiles(project);
+  int filesProcessedOutsideProject=0;
   UpdateSemaphore updateSemaphore;
   do {
     updateSemaphore=obtainForceUpdateSemaphore();
     try {
-      for (      VirtualFile file : getAllFilesToUpdate()) {
+      List<VirtualFile> filesToUpdate=getAllFilesToUpdate();
+      for (int i=0, size=filesToUpdate.size(); i < size; ++i) {
+        VirtualFile file=filesToUpdate.get(i);
+        boolean forceProcessFile;
         if (indexableFilesFilter != null && file instanceof VirtualFileWithId && !indexableFilesFilter.containsFileId(((VirtualFileWithId)file).getId())) {
-          continue;
+          if (filesProcessedOutsideProject >= MAX_FILES_TO_PROCESS_OUTSIDE_PROJECT)           continue;
+          ++filesProcessedOutsideProject;
+          forceProcessFile=true;
         }
-        if (filter == null || filter.accept(file) || Comparing.equal(file,restrictedTo)) {
+ else {
+          forceProcessFile=Comparing.equal(file,restrictedTo);
+        }
+        if (filter == null || filter.accept(file) || forceProcessFile) {
           try {
             updateSemaphore.down();
             processFileImpl(project,new com.intellij.ide.caches.FileContent(file),onlyRemoveOutdatedData);
