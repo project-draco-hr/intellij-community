@@ -2,12 +2,14 @@
   final Map<File,ThroughRenameInfo> fromTo=collector.getFromTo();
   try {
     final File tmp=FileUtil.createTempDirectory("forRename","");
-    final SVNWCClient client=mySvnVcs.createWCClient();
     final ISVNPropertyHandler handler=new ISVNPropertyHandler(){
       @Override public void handleProperty(      File path,      SVNPropertyData property) throws SVNException {
         final ThroughRenameInfo info=collector.findToFile(new FilePathImpl(path,path.isDirectory()),null);
         if (info != null) {
-          properties.putValue(info.getTo(),property);
+          if (!properties.containsKey(info.getTo())) {
+            properties.put(info.getTo(),new SVNProperties());
+          }
+          properties.get(info.getTo()).put(property.getName(),property.getValue());
         }
       }
       @Override public void handleProperty(      SVNURL url,      SVNPropertyData property) throws SVNException {
@@ -20,7 +22,7 @@
       final File source=entry.getKey();
       final ThroughRenameInfo info=entry.getValue();
       if (info.isVersioned()) {
-        client.doGetProperty(source,null,SVNRevision.UNDEFINED,SVNRevision.WORKING,SVNDepth.EMPTY,handler,null);
+        mySvnVcs.getFactory(source).createPropertyClient().list(SvnTarget.fromFile(source),SVNRevision.WORKING,SVNDepth.EMPTY,handler);
       }
       if (source.isDirectory()) {
         if (!FileUtil.filesEqual(info.getTo(),info.getFirstTo())) {
@@ -38,7 +40,7 @@
  catch (  IOException e) {
     exceptions.add(new VcsException(e));
   }
-catch (  SVNException e) {
-    exceptions.add(new VcsException(e));
+catch (  VcsException e) {
+    exceptions.add(e);
   }
 }
