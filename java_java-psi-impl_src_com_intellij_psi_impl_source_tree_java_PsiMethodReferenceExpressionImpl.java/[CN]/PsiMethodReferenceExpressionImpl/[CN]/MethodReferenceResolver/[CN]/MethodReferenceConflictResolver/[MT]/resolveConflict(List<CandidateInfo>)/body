@@ -10,50 +10,32 @@
     if (psiMethod == null)     continue;
     PsiSubstitutor substitutor=conflict.getSubstitutor();
     final PsiType[] signatureParameterTypes2=psiMethod.getSignature(substitutor).getParameterTypes();
-    final boolean varArgs=psiMethod.isVarArgs();
-    if (parameterTypes.length == signatureParameterTypes2.length || (varArgs && !myFunctionalMethodVarArgs && Math.abs(parameterTypes.length - signatureParameterTypes2.length) <= 1)) {
-      boolean correct=true;
-      for (int i=0; i < parameterTypes.length; i++) {
-        final PsiType type1=substitutor.substitute(GenericsUtil.eliminateWildcards(parameterTypes[i]));
-        if (varArgs && i >= signatureParameterTypes2.length - 1) {
-          final PsiType type2=signatureParameterTypes2[signatureParameterTypes2.length - 1];
-          correct&=TypeConversionUtil.isAssignable(type2,type1) || TypeConversionUtil.isAssignable(((PsiArrayType)type2).getComponentType(),type1);
-        }
- else {
-          correct&=TypeConversionUtil.isAssignable(signatureParameterTypes2[i],type1);
-        }
-      }
-      if (correct) {
+    boolean varArgs=psiMethod.isVarArgs();
+    if (parameterTypes.length == signatureParameterTypes2.length && isCorrectAssignment(signatureParameterTypes2,parameterTypes,substitutor,false,0)) {
+      firstCandidates.add(conflict);
+      varArgs=false;
+    }
+    if (hasReceiver && parameterTypes.length == signatureParameterTypes2.length + 1 && isCorrectAssignment(signatureParameterTypes2,parameterTypes,substitutor,false,1)) {
+      secondCandidates.add(conflict);
+      varArgs=false;
+    }
+    if (varArgs && !myFunctionalMethodVarArgs) {
+      if (isCorrectAssignment(signatureParameterTypes2,parameterTypes,substitutor,true,0)) {
         firstCandidates.add(conflict);
       }
-    }
-    if (hasReceiver && parameterTypes.length == signatureParameterTypes2.length + 1) {
-      boolean correct=true;
-      for (int i=0; i < signatureParameterTypes2.length; i++) {
-        final PsiType type1=substitutor.substitute(GenericsUtil.eliminateWildcards(parameterTypes[i + 1]));
-        final PsiType type2=signatureParameterTypes2[i];
-        final boolean assignable=TypeConversionUtil.isAssignable(type2,type1);
-        if (varArgs && i == signatureParameterTypes2.length - 1) {
-          correct&=assignable || TypeConversionUtil.isAssignable(((PsiArrayType)type2).getComponentType(),type1);
-        }
- else {
-          correct&=assignable;
-        }
-      }
-      if (correct) {
+      if (hasReceiver && isCorrectAssignment(signatureParameterTypes2,parameterTypes,substitutor,true,1)) {
         secondCandidates.add(conflict);
       }
     }
   }
-  final int acceptedCount=secondCandidates.size() + firstCandidates.size();
-  if (acceptedCount != 1) {
-    if (acceptedCount == 0) {
-      conflicts.clear();
-    }
-    firstCandidates.addAll(secondCandidates);
-    conflicts.clear();
-    conflicts.addAll(firstCandidates);
-    return null;
+  final List<CandidateInfo> firstCandidateInfos=filterStaticCorrectCandidates(firstCandidates,true);
+  final List<CandidateInfo> secondCandidateInfos=filterStaticCorrectCandidates(secondCandidates,false);
+  final int acceptedCount=firstCandidateInfos.size() + secondCandidateInfos.size();
+  if (acceptedCount == 1) {
+    return !firstCandidateInfos.isEmpty() ? firstCandidateInfos.get(0) : secondCandidateInfos.get(0);
   }
-  return !firstCandidates.isEmpty() ? firstCandidates.get(0) : secondCandidates.get(0);
+  conflicts.clear();
+  firstCandidates.addAll(secondCandidates);
+  conflicts.addAll(firstCandidates);
+  return null;
 }
