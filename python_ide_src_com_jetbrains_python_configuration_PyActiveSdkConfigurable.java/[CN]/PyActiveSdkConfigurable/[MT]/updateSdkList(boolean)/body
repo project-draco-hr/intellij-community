@@ -1,5 +1,5 @@
 {
-  final List<Sdk> sdkList=myInterpreterList.getAllPythonSdks();
+  final List<Sdk> sdkList=myInterpreterList.getAllPythonSdks(myProject);
   Sdk selection=preserveSelection ? (Sdk)mySdkCombo.getSelectedItem() : null;
   if (!sdkList.contains(selection)) {
     selection=null;
@@ -8,7 +8,37 @@
   if (selection != null && !sdkList.contains(selection)) {
     sdkList.add(0,selection);
   }
-  sdkList.add(0,null);
+  List<Object> items=new ArrayList<Object>();
+  items.add(null);
+  boolean remoteSeparator=true;
+  boolean separator=true;
+  boolean detectedSeparator=true;
+  boolean hasAssociationsWithDifferentProject=false;
+  final String projectBasePath=myProject.getBasePath();
+  for (  Sdk sdk : sdkList) {
+    if (!PythonSdkType.isVirtualEnv(sdk) && !PythonSdkType.isRemote(sdk) && !(sdk instanceof PyDetectedSdk)&& separator) {
+      items.add(PySdkListCellRenderer.SEPARATOR);
+      separator=false;
+    }
+    if (PythonSdkType.isRemote(sdk) && remoteSeparator) {
+      items.add(PySdkListCellRenderer.SEPARATOR);
+      remoteSeparator=false;
+    }
+    if (sdk instanceof PyDetectedSdk && detectedSeparator) {
+      items.add(PySdkListCellRenderer.SEPARATOR);
+      detectedSeparator=false;
+    }
+    items.add(sdk);
+    final PythonSdkAdditionalData data=(PythonSdkAdditionalData)sdk.getSdkAdditionalData();
+    if (data != null) {
+      final String path=data.getAssociatedProjectPath();
+      if (path != null && !path.equals(projectBasePath))       hasAssociationsWithDifferentProject=true;
+    }
+  }
+  if (hasAssociationsWithDifferentProject) {
+    items.add(PySdkListCellRenderer.SEPARATOR);
+    items.add(SHOW_ALL);
+  }
   mySdkCombo.setRenderer(new PySdkListCellRenderer());
-  mySdkCombo.setModel(new CollectionComboBoxModel(sdkList,selection));
+  mySdkCombo.setModel(new CollectionComboBoxModel(items,selection));
 }
