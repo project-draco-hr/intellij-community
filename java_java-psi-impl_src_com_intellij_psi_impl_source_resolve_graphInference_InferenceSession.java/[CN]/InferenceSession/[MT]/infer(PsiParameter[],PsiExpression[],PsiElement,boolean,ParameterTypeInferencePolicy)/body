@@ -1,0 +1,42 @@
+{
+  boolean doesNotContainFalseBound=repeatInferencePhases(parameters == null || !policy.allowPostponeInference());
+  resolveBounds(myInferenceVariables.values(),mySiteSubstitutor,!policy.allowPostponeInference());
+  final Pair<PsiMethod,PsiCallExpression> pair=getPair(parent);
+  if (pair != null) {
+    initReturnTypeConstraint(pair.first,(PsiCallExpression)parent);
+    for (    InferenceVariable inferenceVariable : myInferenceVariables.values()) {
+      inferenceVariable.ignoreInstantiation();
+    }
+    doesNotContainFalseBound=repeatInferencePhases(true);
+    PsiSubstitutor substitutor=resolveBounds(myInferenceVariables.values(),mySiteSubstitutor,!policy.allowPostponeInference());
+    LOG.assertTrue(parent != null);
+    PsiExpressionList argumentList=((PsiCallExpression)parent).getArgumentList();
+    LOG.assertTrue(argumentList != null);
+    MethodCandidateInfo.updateSubstitutor(argumentList,substitutor);
+  }
+  if (parameters != null && args != null && (acceptNonPertinentArgs || pair != null)) {
+    final Set<ConstraintFormula> additionalConstraints=new HashSet<ConstraintFormula>();
+    if (parameters.length > 0) {
+      for (int i=0; i < args.length; i++) {
+        if (args[i] != null) {
+          PsiType parameterType=getParameterType(parameters,args,i,mySiteSubstitutor);
+          if (pair == null || !isPertinentToApplicability(args[i],pair.first)) {
+            additionalConstraints.add(new ExpressionCompatibilityConstraint(args[i],parameterType));
+          }
+          additionalConstraints.add(new CheckedExceptionCompatibilityConstraint(args[i],parameterType));
+        }
+      }
+    }
+    if (!additionalConstraints.isEmpty()) {
+      for (      InferenceVariable inferenceVariable : myInferenceVariables.values()) {
+        inferenceVariable.ignoreInstantiation();
+      }
+      doesNotContainFalseBound=proceedWithAdditionalConstraints(additionalConstraints);
+    }
+  }
+  for (  InferenceVariable inferenceVariable : myInferenceVariables.values()) {
+    inferenceVariable.ignoreInstantiation();
+  }
+  mySiteSubstitutor=resolveBounds(myInferenceVariables.values(),mySiteSubstitutor,!policy.allowPostponeInference());
+  return prepareSubstitution();
+}

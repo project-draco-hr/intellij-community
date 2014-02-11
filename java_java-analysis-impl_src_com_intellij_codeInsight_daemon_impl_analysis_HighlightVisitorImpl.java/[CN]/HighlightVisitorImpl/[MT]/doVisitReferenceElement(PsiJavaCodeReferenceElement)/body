@@ -1,25 +1,18 @@
 {
   JavaResolveResult result;
   try {
-    if (ref instanceof PsiReferenceExpressionImpl) {
-      PsiReferenceExpressionImpl referenceExpression=(PsiReferenceExpressionImpl)ref;
-      JavaResolveResult[] results=JavaResolveUtil.resolveWithContainingFile(referenceExpression,PsiReferenceExpressionImpl.OurGenericsResolver.INSTANCE,true,true,myFile);
-      result=results.length == 1 ? results[0] : JavaResolveResult.EMPTY;
-    }
- else {
-      result=ref.advancedResolve(true);
-    }
+    result=resolveOptimised(ref);
   }
  catch (  IndexNotReadyException e) {
     return null;
   }
   PsiElement resolved=result.getElement();
   PsiElement parent=ref.getParent();
+  if (myRefCountHolder != null) {
+    myRefCountHolder.registerReference(ref,result);
+  }
+  myHolder.add(HighlightUtil.checkReference(ref,result,myFile,myLanguageLevel));
   if (parent instanceof PsiJavaCodeReferenceElement || ref.isQualified()) {
-    if (myRefCountHolder != null) {
-      myRefCountHolder.registerReference(ref,result);
-    }
-    myHolder.add(HighlightUtil.checkReference(ref,result,myFile,myLanguageLevel));
     if (!myHolder.hasErrorResults() && resolved instanceof PsiTypeParameter) {
       boolean cannotSelectFromTypeParameter=!myJavaSdkVersion.isAtLeast(JavaSdkVersion.JDK_1_7);
       if (!cannotSelectFromTypeParameter) {
@@ -48,7 +41,8 @@
     }
   }
   if (parent instanceof PsiAnonymousClass && ref.equals(((PsiAnonymousClass)parent).getBaseClassReference())) {
-    myHolder.add(GenericsHighlightUtil.checkOverrideEquivalentMethods((PsiClass)parent));
+    PsiClass aClass=(PsiClass)parent;
+    myHolder.add(GenericsHighlightUtil.checkOverrideEquivalentMethods(myLanguageLevel,aClass));
   }
   if (resolved instanceof PsiVariable) {
     PsiVariable variable=(PsiVariable)resolved;
