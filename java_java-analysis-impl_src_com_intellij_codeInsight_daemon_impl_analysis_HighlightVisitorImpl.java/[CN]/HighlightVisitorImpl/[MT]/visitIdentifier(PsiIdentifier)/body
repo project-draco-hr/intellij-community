@@ -9,16 +9,16 @@
       if (child instanceof PsiErrorElement && child.getPrevSibling() == identifier)       return;
     }
     boolean isMethodParameter=variable instanceof PsiParameter && ((PsiParameter)variable).getDeclarationScope() instanceof PsiMethod;
-    if (!isMethodParameter) {
+    if (isMethodParameter) {
+      myReassignedParameters.put((PsiParameter)variable,1);
+    }
+ else {
       if (HighlightControlFlowUtil.isReassigned(variable,myFinalVarProblems)) {
         myHolder.add(HighlightNamesUtil.highlightReassignedVariable(variable,identifier));
       }
  else {
         myHolder.add(HighlightNamesUtil.highlightVariableName(variable,identifier,colorsScheme));
       }
-    }
- else {
-      myReassignedParameters.put((PsiParameter)variable,1);
     }
     myHolder.add(HighlightUtil.checkUnderscore(identifier,variable));
   }
@@ -31,6 +31,9 @@
     if (!(parent instanceof PsiAnonymousClass) && aClass.getNameIdentifier() == identifier) {
       myHolder.add(HighlightNamesUtil.highlightClassName(aClass,identifier,colorsScheme));
     }
+    if (!myHolder.hasErrorResults() && myLanguageLevel.isAtLeast(LanguageLevel.JDK_1_8)) {
+      myHolder.add(GenericsHighlightUtil.checkUnrelatedDefaultMethods(aClass,aClass.getVisibleSignatures(),identifier));
+    }
   }
  else   if (parent instanceof PsiMethod) {
     PsiMethod method=(PsiMethod)parent;
@@ -38,9 +41,7 @@
       myHolder.add(HighlightMethodUtil.checkConstructorName(method));
     }
     myHolder.add(HighlightNamesUtil.highlightMethodName(method,identifier,true,colorsScheme));
-  }
- else {
-    visitParentReference(parent);
+    myHolder.add(GenericsHighlightUtil.checkDefaultMethodOverrideEquivalentToObjectNonPrivate(myLanguageLevel,method.getContainingClass(),method,identifier));
   }
   super.visitIdentifier(identifier);
 }
