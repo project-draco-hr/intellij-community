@@ -2,8 +2,9 @@
   if (!JavaCodeFoldingSettings.getInstance().isCollapseOneLineMethods()) {
     return false;
   }
+  Document document=method.getContainingFile().getViewProvider().getDocument();
   PsiCodeBlock body=method.getBody();
-  if (body == null) {
+  if (body == null || document == null) {
     return false;
   }
   PsiJavaToken lBrace=body.getLBrace();
@@ -16,7 +17,7 @@
   if (statement.textContains('\n')) {
     return false;
   }
-  if (!areOnAdjacentLines(body.getLBrace(),statement) || !areOnAdjacentLines(statement,body.getRBrace())) {
+  if (!areOnAdjacentLines(lBrace,statement,document) || !areOnAdjacentLines(statement,rBrace,document)) {
     return false;
   }
   int leftStart=method.getParameterList().getTextRange().getEndOffset();
@@ -26,18 +27,13 @@
   if (leftEnd <= leftStart + 1 || rightEnd <= rightStart + 1) {
     return false;
   }
+  String leftText=" { ";
+  String rightText=" }";
+  if (!fitsRightMargin(method,document,leftStart,rightEnd,rightStart - leftEnd + leftText.length() + rightText.length())) {
+    return false;
+  }
   FoldingGroup group=FoldingGroup.newGroup("one-liner");
-  descriptorList.add(new FoldingDescriptor(lBrace.getNode(),new TextRange(leftStart,leftEnd),group){
-    @Nullable @Override public String getPlaceholderText(){
-      return " { ";
-    }
-  }
-);
-  descriptorList.add(new FoldingDescriptor(rBrace.getNode(),new TextRange(rightStart,rightEnd),group){
-    @Nullable @Override public String getPlaceholderText(){
-      return " }";
-    }
-  }
-);
+  descriptorList.add(new NamedFoldingDescriptor(lBrace,leftStart,leftEnd,group,leftText));
+  descriptorList.add(new NamedFoldingDescriptor(rBrace,rightStart,rightEnd,group,rightText));
   return true;
 }
