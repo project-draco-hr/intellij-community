@@ -25,40 +25,58 @@
       throw new ComparisonFailure(expectedFile,newFileText1,actualText);
     }
   }
-  if (loader.caretMarker != null) {
-    final int tabSize=CodeStyleSettingsManager.getSettings(getProject()).getIndentOptions(StdFileTypes.JAVA).TAB_SIZE;
-    int caretLine=StringUtil.offsetToLineNumber(loader.newFileText,loader.caretMarker.getStartOffset());
-    int caretCol=EditorUtil.calcColumnNumber(null,loader.newFileText,StringUtil.lineColToOffset(loader.newFileText,caretLine,0),loader.caretMarker.getStartOffset(),tabSize);
-    final int actualLine=editor.getCaretModel().getLogicalPosition().line;
-    final int actualCol=editor.getCaretModel().getLogicalPosition().column;
-    boolean caretPositionEquals=caretLine == actualLine && caretCol == actualCol;
-    Assert.assertTrue("Caret position in " + expectedFile + " differs. Expected "+ genCaretPositionPresentation(caretLine,caretCol)+ ". Actual "+ genCaretPositionPresentation(actualLine,actualCol),caretPositionEquals);
-  }
-  if (loader.selStartMarker != null && loader.selEndMarker != null) {
-    int selStartLine=StringUtil.offsetToLineNumber(loader.newFileText,loader.selStartMarker.getStartOffset());
-    int selStartCol=loader.selStartMarker.getStartOffset() - StringUtil.lineColToOffset(loader.newFileText,selStartLine,0);
-    int selEndLine=StringUtil.offsetToLineNumber(loader.newFileText,loader.selEndMarker.getEndOffset());
-    int selEndCol=loader.selEndMarker.getEndOffset() - StringUtil.lineColToOffset(loader.newFileText,selEndLine,0);
-    int selectionStart;
-    int selectionEnd;
-    if (editor.getSelectionModel().hasBlockSelection()) {
-      int[] starts=editor.getSelectionModel().getBlockSelectionStarts();
-      int[] ends=editor.getSelectionModel().getBlockSelectionEnds();
-      selectionStart=starts[starts.length - 1];
-      selectionEnd=ends[ends.length - 1];
+  boolean hasChecks=false;
+  for (int i=0; i < loader.caretState.carets.size(); i++) {
+    EditorTestUtil.Caret expected=loader.caretState.carets.get(i);
+    if (expected.offset != null || expected.selection != null) {
+      hasChecks=true;
+      break;
     }
+  }
+  if (!hasChecks) {
+    return;
+  }
+  CaretModel caretModel=editor.getCaretModel();
+  List<Caret> allCarets=caretModel.supportsMultipleCarets() ? new ArrayList<Caret>(caretModel.getAllCarets()) : null;
+  assertEquals("Unexpected number of carets",loader.caretState.carets.size(),caretModel.supportsMultipleCarets() ? allCarets.size() : 1);
+  for (int i=0; i < loader.caretState.carets.size(); i++) {
+    EditorTestUtil.Caret expected=loader.caretState.carets.get(i);
+    String caretDescription=loader.caretState.carets.size() == 1 ? "" : "(" + i + "/"+ loader.caretState.carets.size()+ ") ";
+    if (expected.offset != null) {
+      final int tabSize=CodeStyleSettingsManager.getSettings(getProject()).getIndentOptions(StdFileTypes.JAVA).TAB_SIZE;
+      int caretLine=StringUtil.offsetToLineNumber(loader.newFileText,expected.offset);
+      int caretCol=EditorUtil.calcColumnNumber(null,loader.newFileText,StringUtil.lineColToOffset(loader.newFileText,caretLine,0),expected.offset,tabSize);
+      final int actualLine=caretModel.supportsMultipleCarets() ? allCarets.get(i).getLogicalPosition().line : caretModel.getLogicalPosition().line;
+      final int actualCol=caretModel.supportsMultipleCarets() ? allCarets.get(i).getLogicalPosition().column : caretModel.getLogicalPosition().column;
+      boolean caretPositionEquals=caretLine == actualLine && caretCol == actualCol;
+      assertTrue("Caret" + caretDescription + " position in "+ expectedFile+ " differs. Expected "+ genCaretPositionPresentation(caretLine,caretCol)+ ". Actual "+ genCaretPositionPresentation(actualLine,actualCol),caretPositionEquals);
+    }
+    if (expected.selection != null) {
+      int selStartLine=StringUtil.offsetToLineNumber(loader.newFileText,expected.selection.getStartOffset());
+      int selStartCol=expected.selection.getStartOffset() - StringUtil.lineColToOffset(loader.newFileText,selStartLine,0);
+      int selEndLine=StringUtil.offsetToLineNumber(loader.newFileText,expected.selection.getEndOffset());
+      int selEndCol=expected.selection.getEndOffset() - StringUtil.lineColToOffset(loader.newFileText,selEndLine,0);
+      int selectionStart;
+      int selectionEnd;
+      if (editor.getSelectionModel().hasBlockSelection()) {
+        int[] starts=editor.getSelectionModel().getBlockSelectionStarts();
+        int[] ends=editor.getSelectionModel().getBlockSelectionEnds();
+        selectionStart=starts[starts.length - 1];
+        selectionEnd=ends[ends.length - 1];
+      }
  else {
-      selectionStart=editor.getSelectionModel().getSelectionStart();
-      selectionEnd=editor.getSelectionModel().getSelectionEnd();
+        selectionStart=caretModel.supportsMultipleCarets() ? allCarets.get(i).getSelectionStart() : editor.getSelectionModel().getSelectionStart();
+        selectionEnd=caretModel.supportsMultipleCarets() ? allCarets.get(i).getSelectionEnd() : editor.getSelectionModel().getSelectionEnd();
+      }
+      final int selStartLineActual=StringUtil.offsetToLineNumber(loader.newFileText,selectionStart);
+      final int selStartColActual=selectionStart - StringUtil.lineColToOffset(loader.newFileText,selStartLineActual,0);
+      final int selEndLineActual=StringUtil.offsetToLineNumber(loader.newFileText,selectionEnd);
+      final int selEndColActual=selectionEnd - StringUtil.lineColToOffset(loader.newFileText,selEndLineActual,0);
+      final boolean selectionEquals=selStartCol == selStartColActual && selStartLine == selStartLineActual && selEndCol == selEndColActual && selEndLine == selEndLineActual;
+      assertTrue(caretDescription + "selection in " + expectedFile+ " differs. Expected "+ genSelectionPresentation(selStartLine,selStartCol,selEndLine,selEndCol)+ ". Actual "+ genSelectionPresentation(selStartLineActual,selStartColActual,selEndLineActual,selEndColActual),selectionEquals);
     }
-    final int selStartLineActual=StringUtil.offsetToLineNumber(loader.newFileText,selectionStart);
-    final int selStartColActual=selectionStart - StringUtil.lineColToOffset(loader.newFileText,selStartLineActual,0);
-    final int selEndLineActual=StringUtil.offsetToLineNumber(loader.newFileText,selectionEnd);
-    final int selEndColActual=selectionEnd - StringUtil.lineColToOffset(loader.newFileText,selEndLineActual,0);
-    final boolean selectionEquals=selStartCol == selStartColActual && selStartLine == selStartLineActual && selEndCol == selEndColActual && selEndLine == selEndLineActual;
-    Assert.assertTrue("selection in " + expectedFile + " differs. Expected "+ genSelectionPresentation(selStartLine,selStartCol,selEndLine,selEndCol)+ ". Actual "+ genSelectionPresentation(selStartLineActual,selStartColActual,selEndLineActual,selEndColActual),selectionEquals);
-  }
- else   if (editor != null) {
-    Assert.assertTrue("has no selection in " + expectedFile,!editor.getSelectionModel().hasSelection());
+ else     if (editor != null) {
+      assertFalse(caretDescription + "has no selection in " + expectedFile,editor.getSelectionModel().hasSelection());
+    }
   }
 }
