@@ -1,0 +1,51 @@
+{
+  List<String> filterParameters=ContainerUtil.newArrayList();
+  if (filterCollection.getBranchFilter() != null) {
+    HgRepository repository=myRepositoryManager.getRepositoryForRoot(root);
+    if (repository == null) {
+      LOG.error("Repository not found for root " + root);
+      return Collections.emptyList();
+    }
+    boolean atLeastOneBranchExists=false;
+    for (    String branchName : filterCollection.getBranchFilter().getBranchNames()) {
+      if (branchExists(repository,branchName)) {
+        filterParameters.add(prepareParameter("branch",branchName));
+        atLeastOneBranchExists=true;
+      }
+    }
+    if (!atLeastOneBranchExists) {
+      return Collections.emptyList();
+    }
+  }
+  if (filterCollection.getUserFilter() != null) {
+    for (    String authorName : filterCollection.getUserFilter().getUserNames(root)) {
+      filterParameters.add(prepareParameter("user",authorName));
+    }
+  }
+  if (filterCollection.getDateFilter() != null) {
+    StringBuilder args=new StringBuilder();
+    final SimpleDateFormat dateFormatter=new SimpleDateFormat("yyyy-MM-dd HH:mm");
+    filterParameters.add("-r");
+    VcsLogDateFilter filter=filterCollection.getDateFilter();
+    if (filter.getAfter() != null) {
+      args.append("date('>").append(dateFormatter.format(filter.getAfter())).append("')");
+    }
+    if (filter.getBefore() != null) {
+      if (args.length() > 0) {
+        args.append(" and ");
+      }
+      args.append("date('<").append(dateFormatter.format(filter.getBefore())).append("')");
+    }
+    filterParameters.add(args.toString());
+  }
+  if (filterCollection.getTextFilter() != null) {
+    String textFilter=filterCollection.getTextFilter().getText();
+    filterParameters.add(prepareParameter("keyword",textFilter));
+  }
+  if (filterCollection.getStructureFilter() != null) {
+    for (    VirtualFile file : filterCollection.getStructureFilter().getFiles(root)) {
+      filterParameters.add(file.getPath());
+    }
+  }
+  return HgHistoryUtil.history(myProject,root,maxCount,filterParameters);
+}

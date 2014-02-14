@@ -1,6 +1,6 @@
 {
   new WriteCommandAction<Document>(getProject()){
-    @Override protected void run(    @NotNull Result<Document> result) throws Throwable {
+    @SuppressWarnings("ConstantConditions") @Override protected void run(    @NotNull Result<Document> result) throws Throwable {
       getProject().getComponent(PostprocessReformattingAspect.class).doPostponedFormatting();
       if (stripTrailingSpaces) {
         ((DocumentImpl)myEditor.getDocument()).stripTrailingSpaces(getProject());
@@ -9,7 +9,7 @@
       String fullPath=getTestDataPath() + filePath;
       final VirtualFile vFile=LocalFileSystem.getInstance().findFileByPath(fullPath.replace(File.separatorChar,'/'));
       assertNotNull("Cannot find file " + fullPath,vFile);
-      String ft=null;
+      String ft;
       try {
         ft=VfsUtilCore.loadText(vFile);
       }
@@ -18,21 +18,7 @@
       }
       String fileText=StringUtil.convertLineSeparators(ft);
       Document document=EditorFactory.getInstance().createDocument(fileText);
-      int caretIndex=fileText.indexOf(CARET_MARKER);
-      int selStartIndex=fileText.indexOf(SELECTION_START_MARKER);
-      int selEndIndex=fileText.indexOf(SELECTION_END_MARKER);
-      final RangeMarker caretMarker=caretIndex >= 0 ? document.createRangeMarker(caretIndex,caretIndex) : null;
-      final RangeMarker selStartMarker=selStartIndex >= 0 ? document.createRangeMarker(selStartIndex,selStartIndex) : null;
-      final RangeMarker selEndMarker=selEndIndex >= 0 ? document.createRangeMarker(selEndIndex,selEndIndex) : null;
-      if (caretMarker != null) {
-        document.deleteString(caretMarker.getStartOffset(),caretMarker.getStartOffset() + CARET_MARKER.length());
-      }
-      if (selStartMarker != null) {
-        document.deleteString(selStartMarker.getStartOffset(),selStartMarker.getStartOffset() + SELECTION_START_MARKER.length());
-      }
-      if (selEndMarker != null) {
-        document.deleteString(selEndMarker.getStartOffset(),selEndMarker.getStartOffset() + SELECTION_END_MARKER.length());
-      }
+      EditorTestUtil.CaretsState caretState=EditorTestUtil.extractCaretAndSelectionMarkers(document);
       String newFileText=document.getText();
       String newFileText1=newFileText;
       if (stripTrailingSpaces) {
@@ -47,24 +33,35 @@
       String text=myFile.getText();
       text=StringUtil.convertLineSeparators(text);
       assertEquals("Text mismatch in file " + filePath,newFileText1,text);
-      if (caretMarker != null) {
-        int caretLine=StringUtil.offsetToLineNumber(newFileText,caretMarker.getStartOffset());
-        int caretCol=caretMarker.getStartOffset() - StringUtil.lineColToOffset(newFileText,caretLine,0);
-        assertEquals("caretLine",caretLine + 1,myEditor.getCaretModel().getLogicalPosition().line + 1);
-        assertEquals("caretColumn",caretCol + 1,myEditor.getCaretModel().getLogicalPosition().column + 1);
-      }
-      if (selStartMarker != null && selEndMarker != null) {
-        int selStartLine=StringUtil.offsetToLineNumber(newFileText,selStartMarker.getStartOffset());
-        int selStartCol=selStartMarker.getStartOffset() - StringUtil.lineColToOffset(newFileText,selStartLine,0);
-        int selEndLine=StringUtil.offsetToLineNumber(newFileText,selEndMarker.getEndOffset());
-        int selEndCol=selEndMarker.getEndOffset() - StringUtil.lineColToOffset(newFileText,selEndLine,0);
-        assertEquals("selectionStartLine",selStartLine + 1,StringUtil.offsetToLineNumber(newFileText,myEditor.getSelectionModel().getSelectionStart()) + 1);
-        assertEquals("selectionStartCol",selStartCol + 1,myEditor.getSelectionModel().getSelectionStart() - StringUtil.lineColToOffset(newFileText,selStartLine,0) + 1);
-        assertEquals("selectionEndLine",selEndLine + 1,StringUtil.offsetToLineNumber(newFileText,myEditor.getSelectionModel().getSelectionEnd()) + 1);
-        assertEquals("selectionEndCol",selEndCol + 1,myEditor.getSelectionModel().getSelectionEnd() - StringUtil.lineColToOffset(newFileText,selEndLine,0) + 1);
-      }
+      CaretModel caretModel=myEditor.getCaretModel();
+      List<Caret> allCarets=new ArrayList<Caret>(caretModel.getAllCarets());
+      assertEquals("Unexpected number of carets",caretState.carets.size(),allCarets.size());
+      for (int i=0; i < caretState.carets.size(); i++) {
+        String caretDescription=caretState.carets.size() == 1 ? "" : "caret " + (i + 1) + "/"+ caretState.carets.size()+ " ";
+        Caret currentCaret=allCarets.get(i);
+        LogicalPosition actualCaretPosition=currentCaret.getLogicalPosition();
+        EditorTestUtil.Caret expected=caretState.carets.get(i);
+        if (expected.offset != null) {
+          int caretLine=StringUtil.offsetToLineNumber(newFileText,expected.offset);
+          int caretCol=expected.offset - StringUtil.lineColToOffset(newFileText,caretLine,0);
+          assertEquals(caretDescription + "caretLine",caretLine + 1,actualCaretPosition.line + 1);
+          assertEquals(caretDescription + "caretColumn",caretCol + 1,actualCaretPosition.column + 1);
+        }
+        int actualSelectionStart=currentCaret.getSelectionStart();
+        int actualSelectionEnd=currentCaret.getSelectionEnd();
+        if (expected.selection != null) {
+          int selStartLine=StringUtil.offsetToLineNumber(newFileText,expected.selection.getStartOffset());
+          int selStartCol=expected.selection.getStartOffset() - StringUtil.lineColToOffset(newFileText,selStartLine,0);
+          int selEndLine=StringUtil.offsetToLineNumber(newFileText,expected.selection.getEndOffset());
+          int selEndCol=expected.selection.getEndOffset() - StringUtil.lineColToOffset(newFileText,selEndLine,0);
+          assertEquals(caretDescription + "selectionStartLine",selStartLine + 1,StringUtil.offsetToLineNumber(newFileText,actualSelectionStart) + 1);
+          assertEquals(caretDescription + "selectionStartCol",selStartCol + 1,actualSelectionStart - StringUtil.lineColToOffset(newFileText,selStartLine,0) + 1);
+          assertEquals(caretDescription + "selectionEndLine",selEndLine + 1,StringUtil.offsetToLineNumber(newFileText,actualSelectionEnd) + 1);
+          assertEquals(caretDescription + "selectionEndCol",selEndCol + 1,actualSelectionEnd - StringUtil.lineColToOffset(newFileText,selEndLine,0) + 1);
+        }
  else {
-        assertTrue("should has no selection, but was: (" + myEditor.getSelectionModel().getSelectionStart() + ", "+ myEditor.getSelectionModel().getSelectionEnd()+ ")",!myEditor.getSelectionModel().hasSelection());
+          assertFalse(caretDescription + "should has no selection, but was: (" + actualSelectionStart+ ", "+ actualSelectionEnd+ ")",currentCaret.hasSelection());
+        }
       }
     }
   }

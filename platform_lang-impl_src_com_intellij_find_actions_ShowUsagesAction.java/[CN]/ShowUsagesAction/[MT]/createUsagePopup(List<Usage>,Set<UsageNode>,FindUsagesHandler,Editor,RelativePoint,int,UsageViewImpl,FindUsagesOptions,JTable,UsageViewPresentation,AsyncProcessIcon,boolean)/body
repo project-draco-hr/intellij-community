@@ -14,7 +14,8 @@
     builder.setAdText(getSecondInvocationTitle(options,handler));
   }
   builder.setMovable(true).setResizable(true);
-  final AtomicReference<PsiElement> selectedUsage=new AtomicReference<PsiElement>();
+  final AtomicReference<UsageInfo> selectedUsage=new AtomicReference<UsageInfo>();
+  final AtomicBoolean moreUsages=new AtomicBoolean();
   table.getSelectionModel().addListSelectionListener(new ListSelectionListener(){
     @Override public void valueChanged(    ListSelectionEvent e){
       selectedUsage.set(null);
@@ -24,10 +25,12 @@
         if (value instanceof UsageNode) {
           Usage usage=((UsageNode)value).getUsage();
           if (usage == MORE_USAGES_SEPARATOR) {
-            selectedUsage.set(PsiUtilCore.NULL_PSI_ELEMENT);
+            moreUsages.set(true);
+            selectedUsage.set(null);
           }
- else           if (usage instanceof PsiElementUsage) {
-            selectedUsage.set(((PsiElementUsage)usage).getElement());
+ else {
+            moreUsages.set(false);
+            selectedUsage.set(usage instanceof UsageInfo2UsageAdapter ? ((UsageInfo2UsageAdapter)usage).getUsageInfo().copy() : null);
           }
           break;
         }
@@ -38,13 +41,14 @@
   builder.setMovable(true).setResizable(true);
   builder.setItemChoosenCallback(new Runnable(){
     @Override public void run(){
-      PsiElement usage=selectedUsage.get();
-      if (usage == null)       return;
-      if (usage == PsiUtilCore.NULL_PSI_ELEMENT) {
+      if (moreUsages.get()) {
         appendMoreUsages(editor,popupPosition,handler,maxUsages,options);
         return;
       }
-      ((Navigatable)usage).navigate(true);
+      UsageInfo usage=selectedUsage.get();
+      if (usage != null) {
+        UsageViewUtil.navigateTo(usage,true);
+      }
     }
   }
 );

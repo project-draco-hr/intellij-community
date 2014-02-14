@@ -1,0 +1,27 @@
+{
+  if (ApplicationManager.getApplication().isUnitTestMode())   return null;
+  PsiFile containingFile=aClass.getContainingFile();
+  if (!aClass.hasModifierProperty(PsiModifier.PUBLIC) || !(containingFile instanceof PsiJavaFile))   return null;
+  PsiJavaFile file=(PsiJavaFile)containingFile;
+  VirtualFile virtualFile=file.getVirtualFile();
+  HighlightInfo errorResult=null;
+  if (virtualFile != null && !aClass.getName().equals(virtualFile.getNameWithoutExtension())) {
+    String message=JavaErrorMessages.message("public.class.should.be.named.after.file",aClass.getName());
+    TextRange range=HighlightNamesUtil.getClassDeclarationTextRange(aClass);
+    errorResult=HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(aClass,range.getStartOffset(),range.getEndOffset()).descriptionAndTooltip(message).create();
+    PsiModifierList psiModifierList=aClass.getModifierList();
+    QuickFixAction.registerQuickFixAction(errorResult,QUICK_FIX_FACTORY.createModifierListFix(psiModifierList,PsiModifier.PUBLIC,false,false));
+    PsiClass[] classes=file.getClasses();
+    if (classes.length > 1) {
+      QuickFixAction.registerQuickFixAction(errorResult,QUICK_FIX_FACTORY.createMoveClassToSeparateFileFix(aClass));
+    }
+    for (    PsiClass otherClass : classes) {
+      if (!otherClass.getManager().areElementsEquivalent(otherClass,aClass) && otherClass.hasModifierProperty(PsiModifier.PUBLIC) && otherClass.getName().equals(virtualFile.getNameWithoutExtension())) {
+        return errorResult;
+      }
+    }
+    QuickFixAction.registerQuickFixAction(errorResult,QUICK_FIX_FACTORY.createRenameFileFix(aClass.getName() + JavaFileType.DOT_DEFAULT_EXTENSION));
+    QuickFixAction.registerQuickFixAction(errorResult,QUICK_FIX_FACTORY.createRenameElementFix(aClass));
+  }
+  return errorResult;
+}
