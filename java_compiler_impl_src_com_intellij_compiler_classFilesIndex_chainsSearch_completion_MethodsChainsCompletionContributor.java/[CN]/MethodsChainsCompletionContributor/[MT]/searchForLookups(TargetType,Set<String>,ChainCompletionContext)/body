@@ -1,0 +1,42 @@
+{
+  final Project project=completionContext.getProject();
+  final MethodsUsageIndexReader methodsUsageIndexReader=MethodsUsageIndexReader.getInstance(project);
+  final List<MethodsChain> searchResult=searchChains(target,contextRelevantTypes,MAX_SEARCH_RESULT_SIZE,MAX_CHAIN_SIZE,completionContext,methodsUsageIndexReader);
+  if (searchResult.size() < MAX_SEARCH_RESULT_SIZE) {
+    if (!target.isArray()) {
+      final List<MethodsChain> inheritorFilteredSearchResult=new SmartList<MethodsChain>();
+      final Processor<TargetType> consumer=new Processor<TargetType>(){
+        @Override public boolean process(        final TargetType targetType){
+          for (          final MethodsChain chain : searchChains(targetType,contextRelevantTypes,MAX_SEARCH_RESULT_SIZE,MAX_CHAIN_SIZE,completionContext,methodsUsageIndexReader)) {
+            boolean insert=true;
+            for (            final MethodsChain baseChain : searchResult) {
+              final MethodsChain.CompareResult r=MethodsChain.compare(baseChain,chain,completionContext.getPsiManager());
+              if (r != MethodsChain.CompareResult.NOT_EQUAL) {
+                insert=false;
+                break;
+              }
+            }
+            if (insert) {
+              inheritorFilteredSearchResult.add(chain);
+            }
+          }
+          searchResult.addAll(inheritorFilteredSearchResult);
+          return searchResult.size() < MAX_SEARCH_RESULT_SIZE;
+        }
+      }
+;
+      DirectClassInheritorsSearch.search(((PsiClassType)target.getPsiType()).resolve()).forEach(new Processor<PsiClass>(){
+        @Override public boolean process(        final PsiClass psiClass){
+          final String inheritorQName=psiClass.getQualifiedName();
+          if (inheritorQName == null) {
+            return true;
+          }
+          return consumer.process(new TargetType(inheritorQName,false,new PsiImmediateClassType(psiClass,PsiSubstitutor.EMPTY)));
+        }
+      }
+);
+    }
+  }
+  final List<MethodsChain> chains=searchResult.size() > MAX_CHAIN_SIZE ? chooseHead(searchResult) : searchResult;
+  return MethodsChainLookupRangingHelper.chainsToWeightableLookupElements(filterTailAndGetSumLastMethodOccurrence(chains),completionContext);
+}
