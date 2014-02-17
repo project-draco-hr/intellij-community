@@ -1,6 +1,6 @@
 {
   final ElementPattern<PsiElement> pattern=or(CompletionContributorPatternUtil.patternForMethodParameter(),CompletionContributorPatternUtil.patternForVariableAssignment());
-  extend(CompletionType.BASIC,pattern,new CompletionProvider<CompletionParameters>(){
+  extend(COMPLETION_TYPE,pattern,new CompletionProvider<CompletionParameters>(){
     @Override protected void addCompletions(    final @NotNull CompletionParameters parameters,    final ProcessingContext context,    final @NotNull CompletionResultSet result){
       final ChainCompletionContext completionContext=extractContext(parameters);
       if (completionContext == null)       return;
@@ -14,6 +14,27 @@
       }
       contextRelevantTypes.remove(targetClassQName);
       final List<LookupElement> foundElements=searchForLookups(targetClassQName,contextRelevantTypes,completionContext);
+      if (!IS_UNIT_TEST_MODE) {
+        result.runRemainingContributors(parameters,new Consumer<CompletionResult>(){
+          @Override public void consume(          final CompletionResult completionResult){
+            final LookupElement lookupElement=completionResult.getLookupElement();
+            final PsiElement lookupElementPsi=lookupElement.getPsiElement();
+            if (lookupElementPsi != null) {
+              for (              final LookupElement element : foundElements) {
+                if (lookupElementPsi.isEquivalentTo(element.getPsiElement())) {
+                  foundElements.remove(element);
+                  break;
+                }
+              }
+            }
+            result.passResult(completionResult);
+          }
+        }
+);
+      }
+ else {
+        result.stopHere();
+      }
       result.addAllElements(foundElements);
     }
   }
