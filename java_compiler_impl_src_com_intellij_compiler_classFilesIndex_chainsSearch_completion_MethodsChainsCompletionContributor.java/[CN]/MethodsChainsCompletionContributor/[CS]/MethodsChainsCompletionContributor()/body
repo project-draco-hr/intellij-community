@@ -1,10 +1,9 @@
 {
   final ElementPattern<PsiElement> pattern=or(CompletionContributorPatternUtil.patternForMethodParameter(),CompletionContributorPatternUtil.patternForVariableAssignment());
-  extend(CompletionType.BASIC,pattern,new CompletionProvider<CompletionParameters>(){
+  extend(COMPLETION_TYPE,pattern,new CompletionProvider<CompletionParameters>(){
     @Override protected void addCompletions(    final @NotNull CompletionParameters parameters,    final ProcessingContext context,    final @NotNull CompletionResultSet result){
       final ChainCompletionContext completionContext=extractContext(parameters);
       if (completionContext == null)       return;
-      final String targetClassQName=completionContext.getTargetQName();
       final Set<String> contextTypesKeysSet=completionContext.getContextTypes();
       final Set<String> contextRelevantTypes=new HashSet<String>(contextTypesKeysSet.size() + 1);
       for (      final String type : contextTypesKeysSet) {
@@ -12,9 +11,31 @@
           contextRelevantTypes.add(type);
         }
       }
-      contextRelevantTypes.remove(targetClassQName);
-      final List<LookupElement> foundElements=searchForLookups(targetClassQName,contextRelevantTypes,completionContext);
-      result.addAllElements(foundElements);
+      final TargetType target=completionContext.getTarget();
+      contextRelevantTypes.remove(target.getClassQName());
+      final List<LookupElement> elementsFoundByMethodsChainsSearch=searchForLookups(target,contextRelevantTypes,completionContext);
+      if (!IS_UNIT_TEST_MODE) {
+        result.runRemainingContributors(parameters,new Consumer<CompletionResult>(){
+          @Override public void consume(          final CompletionResult completionResult){
+            final LookupElement lookupElement=completionResult.getLookupElement();
+            final PsiElement lookupElementPsi=lookupElement.getPsiElement();
+            if (lookupElementPsi != null) {
+              for (              final LookupElement element : elementsFoundByMethodsChainsSearch) {
+                if (lookupElementPsi.isEquivalentTo(element.getPsiElement())) {
+                  elementsFoundByMethodsChainsSearch.remove(element);
+                  break;
+                }
+              }
+            }
+            result.passResult(completionResult);
+          }
+        }
+);
+      }
+ else {
+        result.stopHere();
+      }
+      result.addAllElements(elementsFoundByMethodsChainsSearch);
     }
   }
 );
