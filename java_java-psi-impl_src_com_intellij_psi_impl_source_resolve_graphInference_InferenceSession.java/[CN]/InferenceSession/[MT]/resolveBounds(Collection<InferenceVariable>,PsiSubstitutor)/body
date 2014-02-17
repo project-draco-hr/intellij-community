@@ -1,8 +1,32 @@
 {
-  final List<List<InferenceVariable>> independentVars=InferenceVariablesOrder.resolveOrder(inferenceVariables,this);
-  for (  List<InferenceVariable> vars : independentVars) {
-    substitutor=resolveSubset(vars,substitutor,true);
-    if (substitutor == null) {
+  final Collection<InferenceVariable> allVars=new ArrayList<InferenceVariable>(inferenceVariables);
+  while (!allVars.isEmpty()) {
+    final List<InferenceVariable> vars=InferenceVariablesOrder.resolveOrder(allVars,this);
+    if (!myIncorporationPhase.hasCaptureConstraints(vars)) {
+      final PsiSubstitutor firstSubstitutor=resolveSubset(vars,substitutor,true);
+      if (firstSubstitutor != null) {
+        substitutor=firstSubstitutor;
+        allVars.removeAll(vars);
+        continue;
+      }
+    }
+    for (    InferenceVariable var : vars) {
+      final PsiTypeParameter copy=(PsiTypeParameter)var.getParameter().copy();
+      final PsiType lub=getLowerBound(var,substitutor);
+      final PsiType glb=getUpperBound(var,substitutor);
+      final InferenceVariable zVariable=new InferenceVariable(copy);
+      zVariable.addBound(glb,InferenceBound.UPPER);
+      if (lub != PsiType.NULL) {
+        if (!TypeConversionUtil.isAssignable(glb,lub)) {
+          return null;
+        }
+        copy.putUserData(LOWER_BOUND,lub);
+        zVariable.addBound(lub,InferenceBound.LOWER);
+      }
+      myInferenceVariables.put(copy,zVariable);
+    }
+    myIncorporationPhase.forgetCaptures(vars);
+    if (!myIncorporationPhase.incorporate()) {
       return null;
     }
   }
