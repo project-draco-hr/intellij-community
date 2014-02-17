@@ -2,7 +2,7 @@
   final List<Object> elements=new ArrayList<Object>();
   HistoryItem history=myHistoryItem;
   if (history != null) {
-    final HistoryType type=HistoryType.valueOf(history.type);
+    final HistoryType type=parseHistoryType(history.type);
     if (type != null) {
 switch (type) {
 case CLASS:
@@ -18,6 +18,11 @@ break;
 case SETTING:
 break;
 case ACTION:
+final AnAction action=ActionManager.getInstance().getAction(history.fqn);
+if (action != null) {
+elements.add(action);
+myAlreadyAddedActions.add(action);
+}
 break;
 }
 }
@@ -25,6 +30,9 @@ break;
 final Consumer<Object> consumer=new Consumer<Object>(){
 @Override public void consume(Object o){
 if (isSetting(o) || isVirtualFile(o) || isActionValue(o)|| o instanceof PsiElement) {
+if (o instanceof AnAction && myAlreadyAddedActions.contains(o)) {
+return;
+}
 elements.add(o);
 }
 }
@@ -36,7 +44,7 @@ for (String actionId : actions) {
 consumer.consume(actionManager.getAction(actionId));
 }
 for (SearchTopHitProvider provider : SearchTopHitProvider.EP_NAME.getExtensions()) {
-myProgressIndicator.checkCanceled();
+check();
 provider.consumeTopHits(pattern,consumer);
 }
 if (elements.size() > 0) {
