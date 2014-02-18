@@ -1,0 +1,94 @@
+{
+  if (arg instanceof PsiLambdaExpression && ((PsiLambdaExpression)arg).hasFormalParameterTypes()) {
+    final PsiType sReturnType=sSubstitutor.substitute(sInterfaceMethod.getReturnType());
+    final PsiType tReturnType=tSubstitutor.substitute(tInterfaceMethod.getReturnType());
+    if (tReturnType == PsiType.VOID) {
+      return true;
+    }
+    if (sReturnType == PsiType.VOID && session != null) {
+      return false;
+    }
+    if (LambdaUtil.isFunctionalType(sReturnType) && LambdaUtil.isFunctionalType(tReturnType) && !TypeConversionUtil.isAssignable(TypeConversionUtil.erasure(sReturnType),TypeConversionUtil.erasure(tReturnType))&& !TypeConversionUtil.isAssignable(TypeConversionUtil.erasure(tReturnType),TypeConversionUtil.erasure(sReturnType))) {
+      final List<PsiExpression> returnExpressions=LambdaUtil.getReturnExpressions((PsiLambdaExpression)arg);
+      if (!isFunctionalTypeMoreSpecific(sReturnType,tReturnType,session,returnExpressions.toArray(new PsiExpression[returnExpressions.size()]))) {
+        return false;
+      }
+    }
+ else {
+      final boolean sPrimitive=sReturnType instanceof PsiPrimitiveType;
+      final boolean tPrimitive=tReturnType instanceof PsiPrimitiveType;
+      if (sPrimitive ^ tPrimitive) {
+        for (        PsiExpression returnExpression : LambdaUtil.getReturnExpressions((PsiLambdaExpression)arg)) {
+          if (!PsiPolyExpressionUtil.isPolyExpression(returnExpression)) {
+            final PsiType returnExpressionType=returnExpression.getType();
+            if (sPrimitive) {
+              if (!(returnExpressionType instanceof PsiPrimitiveType)) {
+                return false;
+              }
+            }
+ else {
+              if (!(returnExpressionType instanceof PsiClassType)) {
+                return false;
+              }
+            }
+          }
+        }
+        return true;
+      }
+      if (session != null) {
+        session.addConstraint(new StrictSubtypingConstraint(tReturnType,sReturnType));
+        return true;
+      }
+ else {
+        return TypeConversionUtil.isAssignable(sReturnType,tReturnType);
+      }
+    }
+  }
+  if (arg instanceof PsiMethodReferenceExpression && ((PsiMethodReferenceExpression)arg).isExact()) {
+    final PsiParameter[] sParameters=sInterfaceMethod.getParameterList().getParameters();
+    final PsiParameter[] tParameters=tInterfaceMethod.getParameterList().getParameters();
+    LOG.assertTrue(sParameters.length == tParameters.length);
+    if (session != null) {
+      for (int i=0; i < tParameters.length; i++) {
+        session.addConstraint(new TypeEqualityConstraint(tSubstitutor.substitute(tParameters[i].getType()),sSubstitutor.substitute(sParameters[i].getType())));
+      }
+    }
+    final PsiType sReturnType=sSubstitutor.substitute(sInterfaceMethod.getReturnType());
+    final PsiType tReturnType=tSubstitutor.substitute(tInterfaceMethod.getReturnType());
+    if (tReturnType == PsiType.VOID) {
+      return true;
+    }
+    if (sReturnType == PsiType.VOID && session != null) {
+      return false;
+    }
+    final boolean sPrimitive=sReturnType instanceof PsiPrimitiveType;
+    final boolean tPrimitive=tReturnType instanceof PsiPrimitiveType;
+    if (sPrimitive ^ tPrimitive) {
+      final PsiMember member=((PsiMethodReferenceExpression)arg).getPotentiallyApplicableMember();
+      LOG.assertTrue(member != null);
+      if (member instanceof PsiMethod) {
+        final PsiType methodReturnType=((PsiMethod)member).getReturnType();
+        if (sPrimitive && methodReturnType instanceof PsiPrimitiveType || tPrimitive && methodReturnType instanceof PsiClassType) {
+          return true;
+        }
+      }
+      return false;
+    }
+    if (session != null) {
+      session.addConstraint(new StrictSubtypingConstraint(tReturnType,sReturnType));
+      return true;
+    }
+ else {
+      return TypeConversionUtil.isAssignable(sReturnType,tReturnType);
+    }
+  }
+  if (arg instanceof PsiParenthesizedExpression) {
+    return argConstraints(((PsiParenthesizedExpression)arg).getExpression(),session,sInterfaceMethod,sSubstitutor,tInterfaceMethod,tSubstitutor);
+  }
+  if (arg instanceof PsiConditionalExpression) {
+    final PsiExpression thenExpression=((PsiConditionalExpression)arg).getThenExpression();
+    final PsiExpression elseExpression=((PsiConditionalExpression)arg).getElseExpression();
+    return argConstraints(thenExpression,session,sInterfaceMethod,sSubstitutor,tInterfaceMethod,tSubstitutor) && argConstraints(elseExpression,session,sInterfaceMethod,sSubstitutor,tInterfaceMethod,tSubstitutor);
+  }
+  return false;
+}

@@ -1,0 +1,37 @@
+{
+  if (sdkTypes.length == 0) {
+    onSdkCreatedCallBack.consume(null);
+    return;
+  }
+  final FileChooserDescriptor descriptor=createCompositeDescriptor(sdkTypes);
+  if (SystemInfo.isMac) {
+    descriptor.putUserData(PathChooserDialog.NATIVE_MAC_CHOOSER_SHOW_HIDDEN_FILES,Boolean.TRUE);
+  }
+  String suggestedPath=sdkTypes[0].suggestHomePath();
+  VirtualFile suggestedDir=suggestedPath == null ? null : LocalFileSystem.getInstance().findFileByPath(FileUtil.toSystemIndependentName(suggestedPath));
+  FileChooser.chooseFiles(descriptor,project,suggestedDir,new FileChooser.FileChooserConsumer(){
+    @Override public void consume(    List<VirtualFile> selectedFiles){
+      for (      SdkType sdkType : sdkTypes) {
+        final String path=selectedFiles.get(0).getPath();
+        if (sdkType.isValidSdkHome(path)) {
+          Sdk newSdk=null;
+          if (!createIfExists) {
+            for (            Sdk sdk : existingSdks) {
+              if (path.equals(sdk.getHomePath())) {
+                newSdk=sdk;
+              }
+            }
+          }
+          if (newSdk == null)           newSdk=setupSdk(existingSdks,selectedFiles.get(0),sdkType,false,null,null);
+          onSdkCreatedCallBack.consume(newSdk);
+          return;
+        }
+      }
+      onSdkCreatedCallBack.consume(null);
+    }
+    @Override public void cancelled(){
+      onSdkCreatedCallBack.consume(null);
+    }
+  }
+);
+}

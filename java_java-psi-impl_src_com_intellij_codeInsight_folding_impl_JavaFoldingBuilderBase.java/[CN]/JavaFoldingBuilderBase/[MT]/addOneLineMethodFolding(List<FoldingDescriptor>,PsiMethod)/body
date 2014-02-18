@@ -1,0 +1,39 @@
+{
+  if (!JavaCodeFoldingSettings.getInstance().isCollapseOneLineMethods()) {
+    return false;
+  }
+  Document document=method.getContainingFile().getViewProvider().getDocument();
+  PsiCodeBlock body=method.getBody();
+  if (body == null || document == null) {
+    return false;
+  }
+  PsiJavaToken lBrace=body.getLBrace();
+  PsiJavaToken rBrace=body.getRBrace();
+  PsiStatement[] statements=body.getStatements();
+  if (lBrace == null || rBrace == null || statements.length != 1) {
+    return false;
+  }
+  PsiStatement statement=statements[0];
+  if (statement.textContains('\n')) {
+    return false;
+  }
+  if (!areOnAdjacentLines(lBrace,statement,document) || !areOnAdjacentLines(statement,rBrace,document)) {
+    return false;
+  }
+  int leftStart=method.getParameterList().getTextRange().getEndOffset();
+  int leftEnd=statement.getTextRange().getStartOffset();
+  int rightStart=statement.getTextRange().getEndOffset();
+  int rightEnd=body.getTextRange().getEndOffset();
+  if (leftEnd <= leftStart + 1 || rightEnd <= rightStart + 1) {
+    return false;
+  }
+  String leftText=" { ";
+  String rightText=" }";
+  if (!fitsRightMargin(method,document,leftStart,rightEnd,rightStart - leftEnd + leftText.length() + rightText.length())) {
+    return false;
+  }
+  FoldingGroup group=FoldingGroup.newGroup("one-liner");
+  descriptorList.add(new NamedFoldingDescriptor(lBrace,leftStart,leftEnd,group,leftText));
+  descriptorList.add(new NamedFoldingDescriptor(rBrace,rightStart,rightEnd,group,rightText));
+  return true;
+}
