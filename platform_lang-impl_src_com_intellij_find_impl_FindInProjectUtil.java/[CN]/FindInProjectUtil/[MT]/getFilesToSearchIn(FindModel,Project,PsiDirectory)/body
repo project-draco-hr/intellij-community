@@ -11,7 +11,7 @@
     final Pattern fileMaskRegExp=createFileMaskRegExp(findModel);
     Pair<Boolean,Collection<PsiFile>> fastWords=getFilesForFastWordSearch(findModel,project,psiDirectory,fileMaskRegExp,module,fileIndex);
     final Collection<PsiFile> filesForFastWordSearch=fastWords.getSecond();
-    if (fastWords.getFirst() && canOptimizeForFastWordSearch(findModel))     return filesForFastWordSearch;
+    final boolean useIdIndex=fastWords.getFirst() && canOptimizeForFastWordSearch(findModel);
     SearchScope customScope=findModel.getCustomScope();
     final GlobalSearchScope globalCustomScope=toGlobal(project,customScope);
 class EnumContentIterator implements ContentIterator {
@@ -19,11 +19,15 @@ class EnumContentIterator implements ContentIterator {
       final PsiManager psiManager=PsiManager.getInstance(project);
       @Override public boolean processFile(      @NotNull VirtualFile virtualFile){
         ProgressManager.checkCanceled();
-        if (!virtualFile.isDirectory() && (fileMaskRegExp == null || fileMaskRegExp.matcher(virtualFile.getName()).matches()) && (globalCustomScope == null || globalCustomScope.contains(virtualFile))) {
-          final PsiFile psiFile=findFile(psiManager,virtualFile);
-          if (psiFile != null && !filesForFastWordSearch.contains(psiFile)) {
-            myFiles.add(psiFile);
-          }
+        if (virtualFile.isDirectory() || (fileMaskRegExp != null && !fileMaskRegExp.matcher(virtualFile.getName()).matches()) || (globalCustomScope != null && !globalCustomScope.contains(virtualFile))) {
+          return true;
+        }
+        if (useIdIndex && isCoveredByIdIndex(virtualFile)) {
+          return true;
+        }
+        PsiFile psiFile=findFile(psiManager,virtualFile);
+        if (psiFile != null && !(psiFile instanceof PsiBinaryFile)) {
+          myFiles.add(psiFile);
         }
         return true;
       }
