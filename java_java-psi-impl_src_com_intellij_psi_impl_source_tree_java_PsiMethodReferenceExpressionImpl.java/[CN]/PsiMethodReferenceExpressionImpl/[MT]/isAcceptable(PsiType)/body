@@ -1,0 +1,81 @@
+{
+  if (left instanceof PsiIntersectionType) {
+    for (    PsiType conjunct : ((PsiIntersectionType)left).getConjuncts()) {
+      if (isAcceptable(conjunct))       return true;
+    }
+    return false;
+  }
+  left=FunctionalInterfaceParameterizationUtil.getGroundTargetType(left);
+  if (!isPotentiallyCompatible(left)) {
+    return false;
+  }
+  final PsiElement argsList=PsiTreeUtil.getParentOfType(this,PsiExpressionList.class);
+  if (MethodCandidateInfo.ourOverloadGuard.currentStack().contains(argsList)) {
+    if (!isExact()) {
+      return true;
+    }
+  }
+  Map<PsiMethodReferenceExpression,PsiType> map=PsiMethodReferenceUtil.ourRefs.get();
+  if (map == null) {
+    map=new HashMap<PsiMethodReferenceExpression,PsiType>();
+    PsiMethodReferenceUtil.ourRefs.set(map);
+  }
+  final JavaResolveResult result;
+  try {
+    if (map.put(this,left) != null) {
+      return false;
+    }
+    result=advancedResolve(false);
+  }
+  finally {
+    map.remove(this);
+  }
+  final PsiElement resolve=result.getElement();
+  if (resolve == null) {
+    return false;
+  }
+  final PsiClassType.ClassResolveResult resolveResult=PsiUtil.resolveGenericsClassInType(left);
+  final PsiMethod interfaceMethod=LambdaUtil.getFunctionalInterfaceMethod(resolveResult);
+  if (interfaceMethod != null) {
+    final PsiType interfaceReturnType=LambdaUtil.getFunctionalInterfaceReturnType(left);
+    LOG.assertTrue(interfaceReturnType != null);
+    if (interfaceReturnType == PsiType.VOID) {
+      return true;
+    }
+    final PsiSubstitutor subst=result.getSubstitutor();
+    PsiType methodReturnType=null;
+    PsiClass containingClass=null;
+    if (resolve instanceof PsiMethod) {
+      containingClass=((PsiMethod)resolve).getContainingClass();
+      PsiType returnType=PsiTypesUtil.patchMethodGetClassReturnType(this,this,(PsiMethod)resolve,null,PsiUtil.getLanguageLevel(this));
+      if (returnType == null) {
+        returnType=((PsiMethod)resolve).getReturnType();
+      }
+      if (returnType == PsiType.VOID) {
+        return false;
+      }
+      methodReturnType=subst.substitute(returnType);
+    }
+ else     if (resolve instanceof PsiClass) {
+      if (resolve == JavaPsiFacade.getElementFactory(resolve.getProject()).getArrayClass(PsiUtil.getLanguageLevel(resolve))) {
+        final PsiTypeParameter[] typeParameters=((PsiClass)resolve).getTypeParameters();
+        if (typeParameters.length == 1) {
+          final PsiType arrayComponentType=subst.substitute(typeParameters[0]);
+          if (arrayComponentType == null) {
+            return false;
+          }
+          methodReturnType=arrayComponentType.createArrayType();
+        }
+      }
+      containingClass=(PsiClass)resolve;
+    }
+    if (methodReturnType == null) {
+      if (containingClass == null) {
+        return false;
+      }
+      methodReturnType=JavaPsiFacade.getElementFactory(getProject()).createType(containingClass,subst);
+    }
+    return TypeConversionUtil.isAssignable(interfaceReturnType,methodReturnType,false);
+  }
+  return false;
+}
