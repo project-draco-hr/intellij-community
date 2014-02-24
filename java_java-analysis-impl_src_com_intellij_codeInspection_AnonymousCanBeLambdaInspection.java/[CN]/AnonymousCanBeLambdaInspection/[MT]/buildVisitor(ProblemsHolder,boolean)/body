@@ -9,55 +9,11 @@
           if (methods.length == 1 && aClass.getFields().length == 0) {
             final PsiCodeBlock body=methods[0].getBody();
             if (body != null) {
-              final boolean[] bodyContainsForbiddenRefs=new boolean[1];
-              final Set<PsiLocalVariable> locals=new HashSet<PsiLocalVariable>();
-              body.accept(new JavaRecursiveElementWalkingVisitor(){
-                @Override public void visitMethodCallExpression(                PsiMethodCallExpression methodCallExpression){
-                  if (bodyContainsForbiddenRefs[0])                   return;
-                  super.visitMethodCallExpression(methodCallExpression);
-                  final PsiMethod psiMethod=methodCallExpression.resolveMethod();
-                  if (psiMethod == methods[0] || psiMethod != null && !methodCallExpression.getMethodExpression().isQualified() && "getClass".equals(psiMethod.getName()) && psiMethod.getParameterList().getParametersCount() == 0) {
-                    bodyContainsForbiddenRefs[0]=true;
-                  }
-                }
-                @Override public void visitThisExpression(                PsiThisExpression expression){
-                  if (bodyContainsForbiddenRefs[0])                   return;
-                  if (expression.getQualifier() == null) {
-                    bodyContainsForbiddenRefs[0]=true;
-                  }
-                }
-                @Override public void visitSuperExpression(                PsiSuperExpression expression){
-                  if (bodyContainsForbiddenRefs[0])                   return;
-                  if (expression.getQualifier() == null) {
-                    bodyContainsForbiddenRefs[0]=true;
-                  }
-                }
-                @Override public void visitLocalVariable(                PsiLocalVariable variable){
-                  if (bodyContainsForbiddenRefs[0])                   return;
-                  super.visitLocalVariable(variable);
-                  locals.add(variable);
-                }
-                @Override public void visitReferenceExpression(                PsiReferenceExpression expression){
-                  if (bodyContainsForbiddenRefs[0])                   return;
-                  super.visitReferenceExpression(expression);
-                  if (!(expression.getParent() instanceof PsiMethodCallExpression)) {
-                    final PsiField field=PsiTreeUtil.getParentOfType(expression,PsiField.class);
-                    if (field != null) {
-                      final PsiElement resolved=expression.resolve();
-                      if (resolved instanceof PsiField && ((PsiField)resolved).getContainingClass() == field.getContainingClass()) {
-                        final PsiExpression initializer=((PsiField)resolved).getInitializer();
-                        if (initializer == null || initializer.getTextOffset() > aClass.getTextOffset() && !((PsiField)resolved).hasModifierProperty(PsiModifier.STATIC)) {
-                          bodyContainsForbiddenRefs[0]=true;
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-);
-              if (!bodyContainsForbiddenRefs[0]) {
+              final ForbiddenRefsChecker checker=new ForbiddenRefsChecker(methods[0],aClass);
+              body.accept(checker);
+              if (!checker.hasForbiddenRefs()) {
                 PsiResolveHelper helper=PsiResolveHelper.SERVICE.getInstance(body.getProject());
-                for (                PsiLocalVariable local : locals) {
+                for (                PsiLocalVariable local : checker.getLocals()) {
                   final String localName=local.getName();
                   if (localName != null && helper.resolveReferencedVariable(localName,aClass) != null)                   return;
                 }
