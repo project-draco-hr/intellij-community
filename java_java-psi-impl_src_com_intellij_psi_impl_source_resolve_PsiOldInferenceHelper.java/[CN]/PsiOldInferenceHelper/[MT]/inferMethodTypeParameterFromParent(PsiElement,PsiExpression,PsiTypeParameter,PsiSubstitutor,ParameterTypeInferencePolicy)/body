@@ -2,50 +2,10 @@
   Pair<PsiType,ConstraintType> constraint=null;
   PsiType expectedType=PsiTypesUtil.getExpectedTypeByParent(methodCall);
   if (expectedType == null) {
-    if (parent instanceof PsiReturnStatement) {
-      final PsiLambdaExpression lambdaExpression=PsiTreeUtil.getParentOfType(parent,PsiLambdaExpression.class);
-      if (lambdaExpression != null) {
-        return getFailedInferenceConstraint(typeParameter);
-      }
-    }
- else     if (parent instanceof PsiExpressionList) {
+    if (parent instanceof PsiExpressionList) {
       final PsiElement pParent=parent.getParent();
       if (pParent instanceof PsiCallExpression && parent.equals(((PsiCallExpression)pParent).getArgumentList())) {
         constraint=policy.inferTypeConstraintFromCallContext(methodCall,(PsiExpressionList)parent,(PsiCallExpression)pParent,typeParameter);
-        if (constraint == null && PsiUtil.isLanguageLevel8OrHigher(methodCall)) {
-          constraint=graphInferenceFromCallContext(methodCall,typeParameter,(PsiCallExpression)pParent);
-          if (constraint != null) {
-            final PsiType constraintFirst=constraint.getFirst();
-            if (constraintFirst == null || constraintFirst.equalsToText(CommonClassNames.JAVA_LANG_OBJECT)) {
-              constraint=null;
-            }
-          }
-        }
-      }
-    }
- else     if (parent instanceof PsiLambdaExpression) {
-      expectedType=PsiResolveHelper.ourGraphGuard.doPreventingRecursion(methodCall,true,new Computable<PsiType>(){
-        @Override public PsiType compute(){
-          return LambdaUtil.getFunctionalInterfaceReturnType(((PsiLambdaExpression)parent).getFunctionalInterfaceType());
-        }
-      }
-);
-      if (expectedType == null) {
-        return null;
-      }
-      expectedType=GenericsUtil.eliminateWildcards(expectedType);
-    }
- else     if (parent instanceof PsiConditionalExpression) {
-      if (PsiUtil.isLanguageLevel8OrHigher(parent)) {
-        try {
-          final Pair<PsiType,ConstraintType> pair=inferFromConditionalExpression(parent,methodCall,typeParameter,substitutor,policy);
-          if (pair != null) {
-            return pair;
-          }
-        }
-  finally {
-          GraphInferencePolicy.forget(parent);
-        }
       }
     }
   }
@@ -70,29 +30,6 @@
   }
   if (constraint == null) {
     if (methodCall instanceof PsiCallExpression) {
-      final PsiExpressionList argumentList=((PsiCallExpression)methodCall).getArgumentList();
-      if (argumentList != null && PsiUtil.getLanguageLevel(argumentList).isAtLeast(LanguageLevel.JDK_1_8)) {
-        for (        PsiExpression expression : argumentList.getExpressions()) {
-          if (expression instanceof PsiLambdaExpression || expression instanceof PsiMethodReferenceExpression) {
-            final PsiType functionalInterfaceType=LambdaUtil.getFunctionalInterfaceType(expression,false);
-            if (functionalInterfaceType == null || PsiUtil.resolveClassInType(functionalInterfaceType) == typeParameter) {
-              return getFailedInferenceConstraint(typeParameter);
-            }
-            final PsiMethod method=LambdaUtil.getFunctionalInterfaceMethod(functionalInterfaceType);
-            final PsiClassType.ClassResolveResult resolveResult=PsiUtil.resolveGenericsClassInType(functionalInterfaceType);
-            if (method == null || methodParamsDependOn(typeParameter,expression,functionalInterfaceType,method.getParameterList().getParameters(),LambdaUtil.getSubstitutor(method,resolveResult))) {
-              if (expression instanceof PsiMethodReferenceExpression) {
-                return getFailedInferenceConstraint(typeParameter);
-              }
-              return null;
-            }
-            final Pair<PsiType,ConstraintType> inferredExceptionTypeConstraint=inferExceptionConstrains(typeParameter,expression,method,resolveResult.getSubstitutor());
-            if (inferredExceptionTypeConstraint != null) {
-              return inferredExceptionTypeConstraint;
-            }
-          }
-        }
-      }
       PsiType[] superTypes=typeParameter.getSuperTypes();
       if (superTypes.length == 0)       return null;
       final PsiType[] types=PsiType.createArray(superTypes.length);
@@ -102,7 +39,6 @@
           superType=TypeConversionUtil.erasure(superType);
         }
         if (superType == null)         superType=PsiType.getJavaLangObject(myManager,scope);
-        if (superType == null)         return null;
         types[i]=superType;
       }
       return policy.getInferredTypeWithNoConstraint(myManager,PsiIntersectionType.createIntersection(types));
