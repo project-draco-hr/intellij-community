@@ -1,32 +1,36 @@
 {
-  final Set<File> childrenOfSomebody=new HashSet<File>();
+  final Set<String> childrenOfSomebody=ContainerUtil.newHashSet();
   new AbstractFilterChildren<File>(){
     @Override protected void sortAscending(    List<File> list){
       Collections.sort(list);
     }
     @Override protected boolean isAncestor(    File parent,    File child){
-      final boolean isAncestor=FileUtil.isAncestor(parent,child,false);
+      final boolean isAncestor=FileUtil.isAncestor(parent,child,true);
       if (isAncestor) {
-        childrenOfSomebody.add(child);
+        childrenOfSomebody.add(child.getPath());
       }
       return isAncestor;
     }
   }
 .doFilter(new ArrayList<File>(committables));
   if (!childrenOfSomebody.isEmpty()) {
-    final HashSet<File> result=new HashSet<File>(committables);
-    result.removeAll(childrenOfSomebody);
-    final SvnCommandLineStatusClient statusClient=new SvnCommandLineStatusClient(mySvnVcs);
-    for (    File file : childrenOfSomebody) {
-      try {
-        final SVNStatus status=statusClient.doStatus(file,false);
-        if (status != null && !SVNStatusType.STATUS_NONE.equals(status.getContentsStatus()) && !SVNStatusType.STATUS_UNVERSIONED.equals(status.getContentsStatus())) {
-          result.add(file);
-        }
+    List<File> result=ContainerUtil.newArrayList();
+    SvnCommandLineStatusClient statusClient=new SvnCommandLineStatusClient(mySvnVcs);
+    for (    File file : committables) {
+      if (!childrenOfSomebody.contains(file.getPath())) {
+        result.add(file);
       }
- catch (      SVNException e) {
-        LOG.info(e);
-        throw e;
+ else {
+        try {
+          final SVNStatus status=statusClient.doStatus(file,false);
+          if (status != null && !SVNStatusType.STATUS_NONE.equals(status.getContentsStatus()) && !SVNStatusType.STATUS_UNVERSIONED.equals(status.getContentsStatus())) {
+            result.add(file);
+          }
+        }
+ catch (        SVNException e) {
+          LOG.info(e);
+          throw e;
+        }
       }
     }
     return result;
