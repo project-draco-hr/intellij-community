@@ -1,0 +1,47 @@
+{
+  long ms;
+  ms=System.currentTimeMillis();
+  GraphFlags flags=new GraphFlags(commits.size());
+  final PermanentGraphImpl permanentGraph=PermanentGraphBuilder.build(flags.getSimpleNodeFlags(),commits);
+  System.out.println("PermanentGraph:" + (System.currentTimeMillis() - ms));
+  ms=System.currentTimeMillis();
+  final PermanentGraphLayout graphLayout=PermanentGraphLayoutBuilder.build(permanentGraph,new Comparator<Integer>(){
+    @Override public int compare(    @NotNull Integer o1,    @NotNull Integer o2){
+      int hashIndex1=permanentGraph.getHashIndex(o1);
+      int hashIndex2=permanentGraph.getHashIndex(o2);
+      return colorManager.compareHeads(hashIndex1,hashIndex2);
+    }
+  }
+);
+  System.out.println("LayoutModel:" + (System.currentTimeMillis() - ms));
+  ms=System.currentTimeMillis();
+  for (int i=0; i < permanentGraph.nodesCount(); i++) {
+    graphLayout.getOneOfHeadNodeIndex(i);
+  }
+  System.out.println("getOneOfHead:" + (System.currentTimeMillis() - ms));
+  ms=System.currentTimeMillis();
+  List<Integer> headers=new ArrayList<Integer>();
+  for (int i=0; i < permanentGraph.nodesCount(); i++) {
+    if (permanentGraph.getUpNodes(i).size() == 0) {
+      headers.add(i);
+    }
+  }
+  System.out.println("graph walk:" + (System.currentTimeMillis() - ms));
+  PermanentAsMutableGraph mutableGraph=new PermanentAsMutableGraph(permanentGraph,graphLayout);
+  ElementColorManager elementColorManager=new ElementColorManager(){
+    @NotNull @Override public JBColor getColor(    @NotNull GraphElement element){
+      int headNodeIndex=graphLayout.getHeadNodeIndex(element.getLayoutIndex());
+      int headHashIndex=permanentGraph.getHashIndex(headNodeIndex);
+      int baseLayoutIndex=graphLayout.getStartLayout(element.getLayoutIndex());
+      if (baseLayoutIndex == element.getLayoutIndex()) {
+        return colorManager.getColorOfBranch(headHashIndex);
+      }
+ else {
+        return colorManager.getColorOfFragment(headHashIndex,element.getLayoutIndex());
+      }
+    }
+  }
+;
+  GraphRender graphRender=new GraphRender(mutableGraph,new ThickHoverControllerTest(),elementColorManager);
+  return new GraphFacadeImpl(colorManager,flags,permanentGraph,graphLayout,mutableGraph,graphRender);
+}
