@@ -1,0 +1,33 @@
+{
+  final Map<Integer,TObjectIntHashMap<EnumeratedMethodIncompleteSignature>> map=new HashMap<Integer,TObjectIntHashMap<EnumeratedMethodIncompleteSignature>>();
+  final MethodVisitor methodVisitor=new MethodVisitor(Opcodes.ASM4){
+    @Override public void visitMethodInsn(    final int opcode,    final String owner,    final String name,    final String desc){
+      final Type returnType=Type.getReturnType(desc);
+      if (AsmUtil.isPrimitiveOrArrayOfPrimitives(returnType.getDescriptor()) || "<init>".equals(name)) {
+        return;
+      }
+      final boolean isStatic=opcode == Opcodes.INVOKESTATIC;
+      final String returnClassName=returnType.getInternalName();
+      if (!owner.equals(returnClassName) || isStatic) {
+        final EnumeratedMethodIncompleteSignature mi=new EnumeratedMethodIncompleteSignature(mappings.getName(owner),mappings.getName(name),isStatic);
+        final int enumeratedClassName=mappings.getName(returnClassName);
+        TObjectIntHashMap<EnumeratedMethodIncompleteSignature> occurrences=map.get(enumeratedClassName);
+        if (occurrences == null) {
+          occurrences=new TObjectIntHashMap<EnumeratedMethodIncompleteSignature>();
+          map.put(enumeratedClassName,occurrences);
+        }
+        if (!occurrences.increment(mi)) {
+          occurrences.put(mi,1);
+        }
+      }
+    }
+  }
+;
+  inputData.accept(new ClassVisitor(Opcodes.ASM4){
+    @Override public MethodVisitor visitMethod(    final int access,    final String name,    final String desc,    final String signature,    final String[] exceptions){
+      return methodVisitor;
+    }
+  }
+,ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+  return map;
+}
