@@ -1,0 +1,38 @@
+{
+  if (myBodyContainsForbiddenRefs)   return;
+  super.visitReferenceExpression(expression);
+  if (!(expression.getParent() instanceof PsiMethodCallExpression)) {
+    final PsiField field=PsiTreeUtil.getParentOfType(expression,PsiField.class);
+    if (field != null) {
+      final PsiElement resolved=expression.resolve();
+      if (resolved instanceof PsiField && ((PsiField)resolved).getContainingClass() == field.getContainingClass()) {
+        final PsiExpression initializer=((PsiField)resolved).getInitializer();
+        if (initializer == null || initializer.getTextOffset() > myAnonymClass.getTextOffset() && !((PsiField)resolved).hasModifierProperty(PsiModifier.STATIC)) {
+          myBodyContainsForbiddenRefs=true;
+        }
+      }
+    }
+ else {
+      final PsiMethod method=PsiTreeUtil.getParentOfType(myAnonymClass,PsiMethod.class);
+      if (method != null && method.isConstructor()) {
+        final PsiElement resolved=expression.resolve();
+        if (resolved instanceof PsiField && ((PsiField)resolved).hasModifierProperty(PsiModifier.FINAL) && ((PsiField)resolved).getContainingClass() == method.getContainingClass()) {
+          try {
+            final PsiCodeBlock constructorBody=method.getBody();
+            if (constructorBody != null) {
+              final ControlFlow flow=HighlightControlFlowUtil.getControlFlowNoConstantEvaluate(constructorBody);
+              final int startOffset=flow.getStartOffset(myAnonymClass);
+              final Collection<PsiVariable> writtenVariables=ControlFlowUtil.getWrittenVariables(flow,0,startOffset,false);
+              if (!writtenVariables.contains(resolved)) {
+                myBodyContainsForbiddenRefs=true;
+              }
+            }
+          }
+ catch (          AnalysisCanceledException e) {
+            myBodyContainsForbiddenRefs=true;
+          }
+        }
+      }
+    }
+  }
+}

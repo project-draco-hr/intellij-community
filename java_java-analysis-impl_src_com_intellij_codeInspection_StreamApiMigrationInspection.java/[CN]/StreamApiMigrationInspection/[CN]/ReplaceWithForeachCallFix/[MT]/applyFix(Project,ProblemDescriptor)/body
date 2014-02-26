@@ -1,0 +1,38 @@
+{
+  final PsiForeachStatement foreachStatement=PsiTreeUtil.getParentOfType(descriptor.getPsiElement(),PsiForeachStatement.class);
+  if (foreachStatement != null) {
+    PsiStatement body=foreachStatement.getBody();
+    final PsiExpression iteratedValue=foreachStatement.getIteratedValue();
+    if (body != null && iteratedValue != null) {
+      final PsiParameter parameter=foreachStatement.getIterationParameter();
+      final PsiIfStatement ifStmt=extractIfStatement(body);
+      String foreEachText=body.getText();
+      String iterated=iteratedValue.getText();
+      if (ifStmt != null && ifStmt.getElseBranch() == null) {
+        final PsiExpression condition=ifStmt.getCondition();
+        if (condition != null) {
+          final PsiStatement thenBranch=ifStmt.getThenBranch();
+          if (thenBranch != null && InheritanceUtil.isInheritor(iteratedValue.getType(),CommonClassNames.JAVA_UTIL_COLLECTION)) {
+            body=thenBranch;
+            foreEachText=thenBranch.getText();
+            iterated+=".stream().filter(" + parameter.getName() + " -> "+ condition.getText()+ ")";
+          }
+        }
+      }
+      final PsiParameter[] parameters={parameter};
+      final PsiCallExpression expression=LambdaCanBeMethodReferenceInspection.canBeMethodReferenceProblem(body instanceof PsiBlockStatement ? ((PsiBlockStatement)body).getCodeBlock() : body,parameters,null);
+      final String methodReferenceText=LambdaCanBeMethodReferenceInspection.createMethodReferenceText(expression,null,parameters);
+      final String lambdaText=parameter.getName() + " -> " + foreEachText;
+      final String codeBlock8=methodReferenceText != null ? methodReferenceText : lambdaText;
+      PsiExpressionStatement callStatement=(PsiExpressionStatement)JavaPsiFacade.getElementFactory(project).createStatementFromText(iterated + ".forEach(" + codeBlock8+ ");",foreachStatement);
+      callStatement=(PsiExpressionStatement)foreachStatement.replace(callStatement);
+      final PsiExpressionList argumentList=((PsiCallExpression)callStatement.getExpression()).getArgumentList();
+      LOG.assertTrue(argumentList != null,callStatement.getText());
+      final PsiExpression[] expressions=argumentList.getExpressions();
+      LOG.assertTrue(expressions.length == 1);
+      if (expressions[0] instanceof PsiLambdaExpression && ((PsiLambdaExpression)expressions[0]).getFunctionalInterfaceType() == null || expressions[0] instanceof PsiMethodReferenceExpression && ((PsiMethodReferenceExpression)expressions[0]).getFunctionalInterfaceType() == null) {
+        callStatement=(PsiExpressionStatement)callStatement.replace(JavaPsiFacade.getElementFactory(project).createStatementFromText(iterated + ".forEach((" + parameter.getText()+ ") -> "+ foreEachText+ ");",callStatement));
+      }
+    }
+  }
+}

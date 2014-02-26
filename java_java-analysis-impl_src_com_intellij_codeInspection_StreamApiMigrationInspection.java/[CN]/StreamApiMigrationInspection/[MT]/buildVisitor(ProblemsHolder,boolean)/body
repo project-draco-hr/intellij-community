@@ -1,0 +1,48 @@
+{
+  return new JavaElementVisitor(){
+    @Override public void visitForeachStatement(    PsiForeachStatement statement){
+      super.visitForeachStatement(statement);
+      if (PsiUtil.getLanguageLevel(statement).isAtLeast(LanguageLevel.JDK_1_8)) {
+        final PsiExpression iteratedValue=statement.getIteratedValue();
+        final PsiStatement body=statement.getBody();
+        if (iteratedValue != null && body != null) {
+          final PsiType iteratedValueType=iteratedValue.getType();
+          if (InheritanceUtil.isInheritor(iteratedValueType,CommonClassNames.JAVA_LANG_ITERABLE)) {
+            final PsiClass iteratorClass=PsiUtil.resolveClassInType(iteratedValueType);
+            LOG.assertTrue(iteratorClass != null);
+            try {
+              final ControlFlow controlFlow=ControlFlowFactory.getInstance(holder.getProject()).getControlFlow(body,LocalsOrMyInstanceFieldsControlFlowPolicy.getInstance());
+              int startOffset=controlFlow.getStartOffset(body);
+              int endOffset=controlFlow.getEndOffset(body);
+              final Collection<PsiStatement> exitPoints=ControlFlowUtil.findExitPointsAndStatements(controlFlow,startOffset,endOffset,new IntArrayList(),PsiContinueStatement.class,PsiBreakStatement.class,PsiReturnStatement.class,PsiThrowStatement.class);
+              if (exitPoints.isEmpty()) {
+                final boolean[] effectivelyFinal=new boolean[]{true};
+                body.accept(new JavaRecursiveElementWalkingVisitor(){
+                  @Override public void visitElement(                  PsiElement element){
+                    if (!effectivelyFinal[0])                     return;
+                    super.visitElement(element);
+                  }
+                  @Override public void visitReferenceExpression(                  PsiReferenceExpression expression){
+                    if (!effectivelyFinal[0])                     return;
+                    super.visitReferenceExpression(expression);
+                    final PsiElement resolve=expression.resolve();
+                    if (resolve instanceof PsiVariable && !(resolve instanceof PsiField)) {
+                      effectivelyFinal[0]=HighlightControlFlowUtil.isEffectivelyFinal((PsiVariable)resolve,body,expression);
+                    }
+                  }
+                }
+);
+                if (effectivelyFinal[0] && !isTrivial(body,statement.getIterationParameter(),iteratedValueType)) {
+                  holder.registerProblem(iteratedValue,"Can be replaced with foreach call",ProblemHighlightType.GENERIC_ERROR_OR_WARNING,new ReplaceWithForeachCallFix());
+                }
+              }
+            }
+ catch (            AnalysisCanceledException ignored) {
+            }
+          }
+        }
+      }
+    }
+  }
+;
+}
