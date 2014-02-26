@@ -1,17 +1,19 @@
 {
   final Sdk item=(Sdk)mySdkCombo.getSelectedItem();
+  Sdk newSdk=item;
   if (item instanceof PyDetectedSdk) {
-    ApplicationManager.getApplication().invokeLater(new Runnable(){
-      @Override public void run(){
-        final Sdk sdk=SdkConfigurationUtil.createAndAddSDK(item.getName(),PythonSdkType.getInstance());
-        myProjectSdksModel.removeSdk(item);
-        myProjectSdksModel.addSdk(sdk);
-        updateSdkList(true);
-        mySdkCombo.setSelectedItem(sdk);
-        setSdk(sdk);
+    VirtualFile sdkHome=ApplicationManager.getApplication().runWriteAction(new Computable<VirtualFile>(){
+      @Override public VirtualFile compute(){
+        return LocalFileSystem.getInstance().refreshAndFindFileByPath(item.getName());
       }
     }
-,ModalityState.any());
+);
+    newSdk=SdkConfigurationUtil.setupSdk(ProjectJdkTable.getInstance().getAllJdks(),sdkHome,PythonSdkType.getInstance(),true,null,null);
+    if (newSdk != null) {
+      myProjectSdksModel.addSdk(newSdk);
+      mySdkCombo.setSelectedItem(newSdk);
+      myProjectSdksModel.apply();
+    }
   }
  else {
     final Sdk sdk=myProjectSdksModel.findSdk(item);
@@ -25,7 +27,7 @@
     }
   }
   final Sdk prevSdk=ProjectRootManager.getInstance(myProject).getProjectSdk();
-  final Sdk selectedSdk=setSdk(item);
+  final Sdk selectedSdk=setSdk(newSdk);
   if (prevSdk != null && selectedSdk != null) {
     final PythonSdkFlavor flavor1=PythonSdkFlavor.getFlavor(selectedSdk);
     final PythonSdkFlavor flavor2=PythonSdkFlavor.getFlavor(prevSdk);
