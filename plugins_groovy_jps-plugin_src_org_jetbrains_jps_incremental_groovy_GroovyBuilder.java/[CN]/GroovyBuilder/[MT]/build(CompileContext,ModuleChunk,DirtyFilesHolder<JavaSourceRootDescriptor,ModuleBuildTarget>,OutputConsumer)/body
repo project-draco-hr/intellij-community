@@ -1,4 +1,5 @@
 {
+  long start=0;
   try {
     JpsGroovySettings settings=JpsGroovySettings.getSettings(context.getProjectDescriptor().getProject());
     final List<File> toCompile=collectChangedFiles(context,dirtyFilesHolder,settings);
@@ -12,7 +13,9 @@
     if (finalOutputs == null) {
       return ExitCode.ABORT;
     }
+    start=System.currentTimeMillis();
     final Set<String> toCompilePaths=getPathsToCompile(toCompile);
+    boolean optimizeClassLoading=ourOptimizeThreshold != 0 && toCompilePaths.size() >= ourOptimizeThreshold;
     Map<String,String> class2Src=buildClassToSourceMap(chunk,context,toCompilePaths,finalOutputs);
     final String encoding=context.getProjectDescriptor().getEncodingConfiguration().getPreferredModuleChunkEncoding(chunk);
     List<String> patchers=new ArrayList<String>();
@@ -22,8 +25,13 @@
     Map<ModuleBuildTarget,String> generationOutputs=myForStubs ? getStubGenerationOutputs(chunk,context) : finalOutputs;
     String compilerOutput=generationOutputs.get(chunk.representativeTarget());
     String finalOutput=FileUtil.toSystemDependentName(finalOutputs.get(chunk.representativeTarget()));
-    final File tempFile=GroovycOSProcessHandler.fillFileWithGroovycParameters(compilerOutput,toCompilePaths,finalOutput,class2Src,encoding,patchers);
-    final GroovycOSProcessHandler handler=runGroovyc(context,chunk,tempFile,settings);
+    Collection<String> classpath=generateClasspath(context,chunk);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Optimized class loading: " + optimizeClassLoading);
+      LOG.debug("Groovyc classpath: " + classpath);
+    }
+    final File tempFile=GroovycOSProcessHandler.fillFileWithGroovycParameters(compilerOutput,toCompilePaths,finalOutput,class2Src,encoding,patchers,optimizeClassLoading ? StringUtil.join(classpath,File.pathSeparator) : "");
+    final GroovycOSProcessHandler handler=runGroovyc(context,chunk,tempFile,settings,classpath,optimizeClassLoading);
     Map<ModuleBuildTarget,Collection<GroovycOSProcessHandler.OutputItem>> compiled=processCompiledFiles(context,chunk,generationOutputs,compilerOutput,handler);
     if (checkChunkRebuildNeeded(context,handler)) {
       return ExitCode.CHUNK_REBUILD_REQUIRED;
@@ -44,6 +52,9 @@
     throw new ProjectBuildException(e);
   }
  finally {
+    if (start > 0 && LOG.isDebugEnabled()) {
+      LOG.debug(myBuilderName + " took " + (System.currentTimeMillis() - start)+ " on "+ chunk.getName());
+    }
     if (!myForStubs) {
       FILES_MARKED_DIRTY_FOR_NEXT_ROUND.set(context,null);
     }
