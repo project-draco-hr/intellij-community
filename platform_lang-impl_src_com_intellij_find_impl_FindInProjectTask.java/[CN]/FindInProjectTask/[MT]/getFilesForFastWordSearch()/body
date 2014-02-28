@@ -1,24 +1,22 @@
 {
-  if (DumbService.getInstance(myProject).isDumb()) {
-    return new Pair<Boolean,Collection<PsiFile>>(false,Collections.<PsiFile>emptyList());
+  String stringToFind=myFindModel.getStringToFind();
+  if (stringToFind.isEmpty() || DumbService.getInstance(myProject).isDumb()) {
+    return Collections.emptySet();
   }
   SearchScope customScope=myFindModel.getCustomScope();
   GlobalSearchScope scope=myPsiDirectory != null ? GlobalSearchScopesCore.directoryScope(myPsiDirectory,true) : myModule != null ? myModule.getModuleContentScope() : customScope instanceof GlobalSearchScope ? (GlobalSearchScope)customScope : toGlobal(customScope);
   if (scope == null) {
     scope=ProjectScope.getContentScope(myProject);
   }
-  Set<Integer> keys=new THashSet<Integer>(30);
-  final Set<PsiFile> resultFiles=new THashSet<PsiFile>();
-  boolean fast=false;
-  String stringToFind=myFindModel.getStringToFind();
+  final Set<PsiFile> resultFiles=new LinkedHashSet<PsiFile>();
   if (TrigramIndex.ENABLED) {
+    Set<Integer> keys=ContainerUtil.newTroveSet();
     TIntHashSet trigrams=TrigramBuilder.buildTrigram(stringToFind);
     TIntIterator it=trigrams.iterator();
     while (it.hasNext()) {
       keys.add(it.next());
     }
     if (!keys.isEmpty()) {
-      fast=true;
       List<VirtualFile> hits=new ArrayList<VirtualFile>();
       FileBasedIndex.getInstance().getFilesWithKey(TrigramIndex.INDEX_ID,keys,new CommonProcessors.CollectProcessor<VirtualFile>(hits),scope);
       for (      VirtualFile hit : hits) {
@@ -26,10 +24,9 @@
           resultFiles.add(findFile(hit));
         }
       }
-      if (resultFiles.isEmpty())       return new Pair<Boolean,Collection<PsiFile>>(true,resultFiles);
+      return resultFiles;
     }
   }
-  fast|=myFindModel.isWholeWordsOnly() && stringToFind.indexOf('$') < 0;
   PsiSearchHelperImpl helper=(PsiSearchHelperImpl)PsiSearchHelper.SERVICE.getInstance(myProject);
   helper.processFilesWithText(scope,UsageSearchContext.ANY,myFindModel.isCaseSensitive(),stringToFind,new Processor<VirtualFile>(){
     @Override public boolean process(    VirtualFile file){
@@ -40,23 +37,10 @@
     }
   }
 );
-  if (stringToFind.isEmpty()) {
-    myFileIndex.iterateContent(new ContentIterator(){
-      @Override public boolean processFile(      VirtualFile file){
-        if (!file.isDirectory() && myFileMask.value(file)) {
-          ContainerUtil.addIfNotNull(resultFiles,findFile(file));
-        }
-        return true;
-      }
-    }
-);
-  }
- else {
-    for (    PsiFile file : CacheManager.SERVICE.getInstance(myProject).getFilesWithWord(stringToFind,UsageSearchContext.ANY,scope,myFindModel.isCaseSensitive())) {
-      if (myFileMask.value(file.getVirtualFile())) {
-        resultFiles.add(file);
-      }
+  for (  PsiFile file : CacheManager.SERVICE.getInstance(myProject).getFilesWithWord(stringToFind,UsageSearchContext.ANY,scope,myFindModel.isCaseSensitive())) {
+    if (myFileMask.value(file.getVirtualFile())) {
+      resultFiles.add(file);
     }
   }
-  return new Pair<Boolean,Collection<PsiFile>>(fast,resultFiles);
+  return resultFiles;
 }
