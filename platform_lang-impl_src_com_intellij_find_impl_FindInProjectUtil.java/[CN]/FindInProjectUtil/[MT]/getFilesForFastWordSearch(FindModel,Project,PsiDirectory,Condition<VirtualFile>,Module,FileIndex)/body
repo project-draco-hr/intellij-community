@@ -24,39 +24,29 @@
       List<VirtualFile> hits=new ArrayList<VirtualFile>();
       FileBasedIndex.getInstance().getFilesWithKey(TrigramIndex.INDEX_ID,keys,new CommonProcessors.CollectProcessor<VirtualFile>(hits),scope);
       for (      VirtualFile hit : hits) {
-        resultFiles.add(findFile(pm,hit));
+        if (fileMask.value(hit)) {
+          resultFiles.add(findFile(pm,hit));
+        }
       }
-      filterMaskedFiles(resultFiles,fileMaskRegExp);
       if (resultFiles.isEmpty())       return new Pair<Boolean,Collection<PsiFile>>(true,resultFiles);
     }
   }
   fast|=findModel.isWholeWordsOnly() && stringToFind.indexOf('$') < 0;
-  List<String> words=StringUtil.getWordsInStringLongestFirst(stringToFind);
-  for (int i=0; i < words.size(); i++) {
-    String word=words.get(i);
-    PsiFile[] files=cacheManager.getFilesWithWord(word,UsageSearchContext.ANY,scope,findModel.isCaseSensitive());
-    if (files.length == 0) {
-      resultFiles.clear();
-      break;
+  PsiSearchHelperImpl helper=(PsiSearchHelperImpl)PsiSearchHelper.SERVICE.getInstance(project);
+  helper.processFilesWithText(scope,UsageSearchContext.ANY,findModel.isCaseSensitive(),stringToFind,new Processor<VirtualFile>(){
+    @Override public boolean process(    VirtualFile file){
+      if (fileMask.value(file)) {
+        ContainerUtil.addIfNotNull(resultFiles,findFile(pm,file));
+      }
+      return true;
     }
-    final List<PsiFile> psiFiles=Arrays.asList(files);
-    if (i == 0 && keys.isEmpty()) {
-      resultFiles.addAll(psiFiles);
-    }
- else {
-      resultFiles.retainAll(psiFiles);
-    }
-    filterMaskedFiles(resultFiles,fileMaskRegExp);
-    if (resultFiles.isEmpty())     break;
   }
+);
   if (stringToFind.isEmpty()) {
     fileIndex.iterateContent(new ContentIterator(){
       @Override public boolean processFile(      VirtualFile file){
-        if (!file.isDirectory() && fileMaskRegExp.matcher(file.getName()).matches()) {
-          PsiFile psiFile=findFile(pm,file);
-          if (psiFile != null) {
-            resultFiles.add(psiFile);
-          }
+        if (!file.isDirectory() && fileMask.value(file)) {
+          ContainerUtil.addIfNotNull(resultFiles,findFile(pm,file));
         }
         return true;
       }
@@ -64,9 +54,11 @@
 );
   }
  else {
-    PsiFile[] allWordsFiles=cacheManager.getFilesWithWord(stringToFind,UsageSearchContext.ANY,scope,findModel.isCaseSensitive());
-    ContainerUtil.addAll(resultFiles,allWordsFiles);
-    filterMaskedFiles(resultFiles,fileMaskRegExp);
+    for (    PsiFile file : cacheManager.getFilesWithWord(stringToFind,UsageSearchContext.ANY,scope,findModel.isCaseSensitive())) {
+      if (fileMask.value(file.getVirtualFile())) {
+        resultFiles.add(file);
+      }
+    }
   }
   return new Pair<Boolean,Collection<PsiFile>>(fast,resultFiles);
 }
