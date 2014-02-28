@@ -1,43 +1,22 @@
 {
-  final Collection<PsiFile> psiFiles=getFilesToSearchIn();
   try {
-    final Set<PsiFile> largeFiles=new THashSet<PsiFile>();
-    int i=0;
-    long totalFilesSize=0;
-    int count=0;
-    final boolean[] warningShown={false};
-    for (    final PsiFile psiFile : psiFiles) {
-      final VirtualFile virtualFile=psiFile.getVirtualFile();
-      final int index=i++;
-      if (virtualFile == null)       continue;
-      long fileLength=UsageViewManagerImpl.getFileLength(virtualFile);
-      if (fileLength == -1)       continue;
-      if (ProjectCoreUtil.isProjectOrWorkspaceFile(virtualFile) && !Registry.is("find.search.in.project.files"))       continue;
-      if (fileLength > SINGLE_FILE_SIZE_LIMIT) {
-        largeFiles.add(psiFile);
-        continue;
-      }
-      myProgress.checkCanceled();
-      myProgress.setFraction((double)index / psiFiles.size());
-      String text=FindBundle.message("find.searching.for.string.in.file.progress",myFindModel.getStringToFind(),virtualFile.getPresentableUrl());
-      myProgress.setText(text);
-      myProgress.setText2(FindBundle.message("find.searching.for.string.in.file.occurrences.progress",count));
-      int countInFile=FindInProjectUtil.processUsagesInFile(psiFile,myFindModel,consumer);
-      count+=countInFile;
-      if (countInFile > 0) {
-        totalFilesSize+=fileLength;
-        if (totalFilesSize > FILES_SIZE_LIMIT && !warningShown[0]) {
-          warningShown[0]=true;
-          String message=FindBundle.message("find.excessive.total.size.prompt",UsageViewManagerImpl.presentableSize(totalFilesSize),ApplicationNamesInfo.getInstance().getProductName());
-          UsageLimitUtil.showAndCancelIfAborted(myProject,message,processPresentation.getUsageViewPresentation());
-        }
-      }
-    }
-    if (!largeFiles.isEmpty()) {
-      processPresentation.setLargeFilesWereNotScanned(largeFiles);
-    }
+    myProgress.setIndeterminate(true);
+    myProgress.setText("Scanning indexed files...");
+    Pair<Boolean,Collection<PsiFile>> fastWords=getFilesForFastWordSearch();
+    final Set<PsiFile> filesForFastWordSearch=ContainerUtil.newLinkedHashSet(fastWords.getSecond());
+    myProgress.setIndeterminate(false);
+    searchInFiles(consumer,processPresentation,filesForFastWordSearch);
+    myProgress.setIndeterminate(true);
+    myProgress.setText("Scanning non-indexed files...");
+    final boolean useIdIndex=fastWords.getFirst() && canOptimizeForFastWordSearch(myFindModel);
+    final Collection<PsiFile> otherFiles=collectFilesInScope(filesForFastWordSearch,useIdIndex);
+    myProgress.setIndeterminate(false);
+    searchInFiles(consumer,processPresentation,otherFiles);
   }
  catch (  ProcessCanceledException e) {
+  }
+  if (!myLargeFiles.isEmpty()) {
+    processPresentation.setLargeFilesWereNotScanned(myLargeFiles);
   }
   if (!myProgress.isCanceled()) {
     myProgress.setText(FindBundle.message("find.progress.search.completed"));
