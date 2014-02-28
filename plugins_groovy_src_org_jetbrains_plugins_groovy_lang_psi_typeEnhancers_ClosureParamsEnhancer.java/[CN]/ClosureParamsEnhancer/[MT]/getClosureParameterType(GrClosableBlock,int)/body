@@ -1,0 +1,35 @@
+{
+  if (!GroovyConfigUtils.getInstance().isVersionAtLeast(closure,GroovyConfigUtils.GROOVY2_3))   return null;
+  GrParameter[] parameters=closure.getAllParameters();
+  if (parameters.length != 1)   return null;
+  GrParameter parameter=parameters[index];
+  if (parameter.getDeclaredType() != null)   return null;
+  GrCall call=findCall(closure);
+  if (call == null)   return null;
+  GroovyResolveResult resolveResult=call.advancedResolve();
+  PsiElement element=resolveResult.getElement();
+  if (!(element instanceof PsiMethod)) {
+    return null;
+  }
+  List<Pair<PsiParameter,PsiType>> params=ResolveUtil.collectExpectedParamsByArg(closure,new GroovyResolveResult[]{resolveResult},call.getNamedArguments(),call.getExpressionArguments(),call.getClosureArguments(),closure);
+  if (params.isEmpty())   return null;
+  Pair<PsiParameter,PsiType> pair=params.get(0);
+  PsiParameter param=pair.getFirst();
+  PsiModifierList modifierList=param.getModifierList();
+  if (modifierList == null)   return null;
+  PsiAnnotation anno=modifierList.findAnnotation(GroovyCommonClassNames.GROOVY_TRANSFORM_STC_CLOSURE_PARAMS);
+  if (anno == null)   return null;
+  PsiClass closureSignatureHint=GrAnnotationUtil.inferClassAttribute(anno,"value");
+  if (closureSignatureHint == null)   return null;
+  String qnameOfClosureSignatureHint=closureSignatureHint.getQualifiedName();
+  SignatureHintProcessor signatureHintProcessor=SignatureHintProcessor.getHintProcessor(qnameOfClosureSignatureHint);
+  if (signatureHintProcessor == null)   return null;
+  List<PsiType[]> expectedSignatures=signatureHintProcessor.inferExpectedSignatures((PsiMethod)element,resolveResult.getSubstitutor(),anno.findAttributeValue("options"));
+  if (expectedSignatures.size() == 1) {
+    PsiType[] expectedSignature=expectedSignatures.get(0);
+    if (expectedSignature.length == 1) {
+      return expectedSignature[0];
+    }
+  }
+  return null;
+}
