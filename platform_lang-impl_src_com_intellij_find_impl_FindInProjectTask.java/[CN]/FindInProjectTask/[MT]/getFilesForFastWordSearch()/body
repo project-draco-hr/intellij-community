@@ -1,0 +1,46 @@
+{
+  String stringToFind=myFindModel.getStringToFind();
+  if (stringToFind.isEmpty() || DumbService.getInstance(myProject).isDumb()) {
+    return Collections.emptySet();
+  }
+  SearchScope customScope=myFindModel.getCustomScope();
+  GlobalSearchScope scope=myPsiDirectory != null ? GlobalSearchScopesCore.directoryScope(myPsiDirectory,true) : myModule != null ? myModule.getModuleContentScope() : customScope instanceof GlobalSearchScope ? (GlobalSearchScope)customScope : toGlobal(customScope);
+  if (scope == null) {
+    scope=ProjectScope.getContentScope(myProject);
+  }
+  final Set<PsiFile> resultFiles=new LinkedHashSet<PsiFile>();
+  if (TrigramIndex.ENABLED) {
+    Set<Integer> keys=ContainerUtil.newTroveSet();
+    TIntHashSet trigrams=TrigramBuilder.buildTrigram(stringToFind);
+    TIntIterator it=trigrams.iterator();
+    while (it.hasNext()) {
+      keys.add(it.next());
+    }
+    if (!keys.isEmpty()) {
+      List<VirtualFile> hits=new ArrayList<VirtualFile>();
+      FileBasedIndex.getInstance().getFilesWithKey(TrigramIndex.INDEX_ID,keys,new CommonProcessors.CollectProcessor<VirtualFile>(hits),scope);
+      for (      VirtualFile hit : hits) {
+        if (myFileMask.value(hit)) {
+          resultFiles.add(findFile(hit));
+        }
+      }
+      return resultFiles;
+    }
+  }
+  PsiSearchHelperImpl helper=(PsiSearchHelperImpl)PsiSearchHelper.SERVICE.getInstance(myProject);
+  helper.processFilesWithText(scope,UsageSearchContext.ANY,myFindModel.isCaseSensitive(),stringToFind,new Processor<VirtualFile>(){
+    @Override public boolean process(    VirtualFile file){
+      if (myFileMask.value(file)) {
+        ContainerUtil.addIfNotNull(resultFiles,findFile(file));
+      }
+      return true;
+    }
+  }
+);
+  for (  PsiFile file : CacheManager.SERVICE.getInstance(myProject).getFilesWithWord(stringToFind,UsageSearchContext.ANY,scope,myFindModel.isCaseSensitive())) {
+    if (myFileMask.value(file.getVirtualFile())) {
+      resultFiles.add(file);
+    }
+  }
+  return resultFiles;
+}
