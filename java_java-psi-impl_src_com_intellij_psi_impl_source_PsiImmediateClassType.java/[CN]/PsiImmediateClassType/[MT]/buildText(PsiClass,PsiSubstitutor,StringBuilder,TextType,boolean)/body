@@ -1,0 +1,68 @@
+{
+  if (aClass instanceof PsiAnonymousClass) {
+    ClassResolveResult baseResolveResult=((PsiAnonymousClass)aClass).getBaseClassType().resolveGenerics();
+    PsiClass baseClass=baseResolveResult.getElement();
+    if (baseClass != null) {
+      buildText(baseClass,baseResolveResult.getSubstitutor(),buffer,textType,false);
+    }
+    return;
+  }
+  boolean qualified=textType != TextType.PRESENTABLE;
+  PsiClass enclosingClass=null;
+  if (!aClass.hasModifierProperty(PsiModifier.STATIC)) {
+    PsiElement parent=aClass.getParent();
+    if (parent instanceof PsiClass && !(parent instanceof PsiAnonymousClass)) {
+      enclosingClass=(PsiClass)parent;
+    }
+  }
+  if (enclosingClass != null) {
+    buildText(enclosingClass,substitutor,buffer,textType,false);
+    buffer.append('.');
+  }
+ else   if (qualified) {
+    String fqn=aClass.getQualifiedName();
+    if (fqn != null) {
+      String prefix=StringUtil.getPackageName(fqn);
+      if (!StringUtil.isEmpty(prefix)) {
+        buffer.append(prefix);
+        buffer.append('.');
+      }
+    }
+  }
+  if (annotated) {
+    PsiNameHelper.appendAnnotations(buffer,getAnnotations(),qualified);
+  }
+  buffer.append(aClass.getName());
+  PsiTypeParameter[] typeParameters=aClass.getTypeParameters();
+  if (typeParameters.length > 0) {
+    int pos=buffer.length();
+    buffer.append('<');
+    for (int i=0; i < typeParameters.length; i++) {
+      PsiTypeParameter typeParameter=typeParameters[i];
+      PsiUtilCore.ensureValid(typeParameter);
+      if (i > 0) {
+        buffer.append(',');
+        if (textType == TextType.PRESENTABLE)         buffer.append(' ');
+      }
+      PsiType substitutionResult=substitutor.substitute(typeParameter);
+      if (substitutionResult == null) {
+        buffer.setLength(pos);
+        pos=-1;
+        break;
+      }
+      PsiUtil.ensureValidType(substitutionResult);
+      if (textType == TextType.PRESENTABLE) {
+        buffer.append(substitutionResult.getPresentableText());
+      }
+ else       if (textType == TextType.CANONICAL) {
+        buffer.append(substitutionResult.getCanonicalText(annotated));
+      }
+ else {
+        buffer.append(substitutionResult.getInternalCanonicalText());
+      }
+    }
+    if (pos >= 0) {
+      buffer.append('>');
+    }
+  }
+}
