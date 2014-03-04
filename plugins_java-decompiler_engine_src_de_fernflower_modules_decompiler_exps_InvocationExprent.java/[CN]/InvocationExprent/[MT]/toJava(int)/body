@@ -1,0 +1,118 @@
+{
+  StringBuilder buf=new StringBuilder("");
+  String super_qualifier=null;
+  boolean isInstanceThis=false;
+  if (isStatic) {
+    ClassNode node=(ClassNode)DecompilerContext.getProperty(DecompilerContext.CURRENT_CLASSNODE);
+    if (node == null || !classname.equals(node.classStruct.qualifiedName)) {
+      buf.append(DecompilerContext.getImpcollector().getShortName(ExprProcessor.buildJavaClassName(classname)));
+    }
+  }
+ else {
+    if (instance != null && instance.type == Exprent.EXPRENT_VAR) {
+      VarExprent instvar=(VarExprent)instance;
+      VarVersionPaar varpaar=new VarVersionPaar(instvar);
+      VarProcessor vproc=instvar.getProcessor();
+      if (vproc == null) {
+        MethodWrapper current_meth=(MethodWrapper)DecompilerContext.getProperty(DecompilerContext.CURRENT_METHOD_WRAPPER);
+        if (current_meth != null) {
+          vproc=current_meth.varproc;
+        }
+      }
+      String this_classname=null;
+      if (vproc != null) {
+        this_classname=vproc.getThisvars().get(varpaar);
+      }
+      if (this_classname != null) {
+        isInstanceThis=true;
+        if (invocationTyp == INVOKE_SPECIAL) {
+          if (!classname.equals(this_classname)) {
+            super_qualifier=this_classname;
+          }
+        }
+      }
+    }
+    if (functype == TYP_GENERAL) {
+      if (super_qualifier != null) {
+        StructClass current_class=((ClassNode)DecompilerContext.getProperty(DecompilerContext.CURRENT_CLASSNODE)).classStruct;
+        if (!super_qualifier.equals(current_class.qualifiedName)) {
+          buf.append(DecompilerContext.getImpcollector().getShortName(ExprProcessor.buildJavaClassName(super_qualifier)));
+          buf.append(".");
+        }
+        buf.append("super");
+      }
+ else {
+        String res=instance.toJava(indent);
+        VarType rightType=instance.getExprType();
+        VarType leftType=new VarType(CodeConstants.TYPE_OBJECT,0,classname);
+        if (rightType.equals(VarType.VARTYPE_OBJECT) && !leftType.equals(rightType)) {
+          buf.append("((" + ExprProcessor.getCastTypeName(leftType) + ")");
+          if (instance.getPrecedence() >= FunctionExprent.getPrecedence(FunctionExprent.FUNCTION_CAST)) {
+            res="(" + res + ")";
+          }
+          buf.append(res + ")");
+        }
+ else         if (instance.getPrecedence() > getPrecedence()) {
+          buf.append("(" + res + ")");
+        }
+ else {
+          buf.append(res);
+        }
+      }
+    }
+  }
+switch (functype) {
+case TYP_GENERAL:
+    if (VarExprent.VAR_NAMELESS_ENCLOSURE.equals(buf.toString())) {
+      buf=new StringBuilder("");
+    }
+  if (buf.length() > 0) {
+    buf.append(".");
+  }
+buf.append(name + "(");
+break;
+case TYP_CLINIT:
+throw new RuntimeException("Explicite invocation of <clinit>");
+case TYP_INIT:
+if (super_qualifier != null) {
+buf.append("super(");
+}
+ else if (isInstanceThis) {
+buf.append("this(");
+}
+ else {
+buf.append(instance.toJava(indent));
+buf.append(".<init>(");
+}
+}
+List<VarVersionPaar> sigFields=null;
+if (functype == TYP_INIT) {
+ClassNode newnode=DecompilerContext.getClassprocessor().getMapRootClasses().get(classname);
+if (newnode != null) {
+if (newnode.wrapper != null) {
+sigFields=newnode.wrapper.getMethodWrapper("<init>",stringDescriptor).signatureFields;
+}
+ else {
+if (newnode.type == ClassNode.CLASS_MEMBER && (newnode.access & CodeConstants.ACC_STATIC) == 0) {
+sigFields=new ArrayList<VarVersionPaar>(Collections.nCopies(lstParameters.size(),(VarVersionPaar)null));
+sigFields.set(0,new VarVersionPaar(-1,0));
+}
+}
+}
+}
+Set<Integer> setAmbiguousParameters=getAmbiguousParameters();
+boolean firstpar=true;
+for (int i=0; i < lstParameters.size(); i++) {
+if (sigFields == null || sigFields.get(i) == null) {
+if (!firstpar) {
+buf.append(", ");
+}
+StringBuilder buff=new StringBuilder();
+ExprProcessor.getCastedExprent(lstParameters.get(i),descriptor.params[i],buff,indent,true,setAmbiguousParameters.contains(i));
+buf.append(buff);
+firstpar=false;
+}
+}
+buf.append(")");
+return buf.toString();
+}

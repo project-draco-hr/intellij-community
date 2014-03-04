@@ -1,0 +1,170 @@
+{
+  if (ifstat.iftype == IfStatement.IFTYPE_IFELSE) {
+    return false;
+  }
+  boolean ifdirect=false, elsedirect=false;
+  ;
+  boolean noifstat=false, noelsestat=false;
+  boolean ifdirectpath=false, elsedirectpath=false;
+  Statement parent=ifstat.getParent();
+  Statement from=parent.type == Statement.TYPE_SEQUENCE ? parent : ifstat;
+  Statement next=getNextStatement(from);
+  if (ifstat.getIfstat() == null) {
+    noifstat=true;
+    if (ifstat.getIfEdge().getType() == StatEdge.TYPE_FINALLYEXIT) {
+      ifdirect=true;
+    }
+ else {
+      ifdirect=MergeHelper.isDirectPath(from,ifstat.getIfEdge().getDestination());
+    }
+  }
+ else {
+    List<StatEdge> lstSuccs=ifstat.getIfstat().getAllSuccessorEdges();
+    if (!lstSuccs.isEmpty() && lstSuccs.get(0).getType() == StatEdge.TYPE_FINALLYEXIT) {
+      ifdirect=true;
+    }
+ else {
+      ifdirect=hasDirectEndEdge(ifstat.getIfstat(),from);
+    }
+  }
+  Statement last=parent.type == Statement.TYPE_SEQUENCE ? ((SequenceStatement)parent).getStats().getLast() : ifstat;
+  noelsestat=(last == ifstat);
+  if (!last.getAllSuccessorEdges().isEmpty() && last.getAllSuccessorEdges().get(0).getType() == StatEdge.TYPE_FINALLYEXIT) {
+    elsedirect=true;
+  }
+ else {
+    elsedirect=hasDirectEndEdge(last,from);
+  }
+  if (!noelsestat && existsPath(ifstat,ifstat.getAllSuccessorEdges().get(0).getDestination())) {
+    return false;
+  }
+  if (!ifdirect && !noifstat) {
+    ifdirectpath=existsPath(ifstat,next);
+  }
+  if (!elsedirect && !noelsestat) {
+    SequenceStatement sequence=(SequenceStatement)parent;
+    for (int i=sequence.getStats().size() - 1; i >= 0; i--) {
+      Statement sttemp=sequence.getStats().get(i);
+      if (sttemp == ifstat) {
+        break;
+      }
+ else {
+        if (elsedirectpath=existsPath(sttemp,next)) {
+          break;
+        }
+      }
+    }
+  }
+  if ((ifdirect || ifdirectpath) && (elsedirect || elsedirectpath) && !noifstat&& !noelsestat) {
+    SequenceStatement sequence=(SequenceStatement)parent;
+    List<Statement> lst=new ArrayList<Statement>();
+    for (int i=sequence.getStats().size() - 1; i >= 0; i--) {
+      Statement sttemp=sequence.getStats().get(i);
+      if (sttemp == ifstat) {
+        break;
+      }
+ else {
+        lst.add(0,sttemp);
+      }
+    }
+    Statement stelse;
+    if (lst.size() == 1) {
+      stelse=lst.get(0);
+    }
+ else {
+      stelse=new SequenceStatement(lst);
+      stelse.setAllParent();
+    }
+    ifstat.removeSuccessor(ifstat.getAllSuccessorEdges().get(0));
+    for (    Statement st : lst) {
+      sequence.getStats().removeWithKey(st.id);
+    }
+    StatEdge elseedge=new StatEdge(StatEdge.TYPE_REGULAR,ifstat.getFirst(),stelse);
+    ifstat.getFirst().addSuccessor(elseedge);
+    ifstat.setElsestat(stelse);
+    ifstat.setElseEdge(elseedge);
+    ifstat.getStats().addWithKey(stelse,stelse.id);
+    stelse.setParent(ifstat);
+    ifstat.iftype=IfStatement.IFTYPE_IFELSE;
+  }
+ else   if (ifdirect && (!elsedirect || (noifstat && !noelsestat))) {
+    IfExprent statexpr=ifstat.getHeadexprent();
+    statexpr.setCondition(new FunctionExprent(FunctionExprent.FUNCTION_BOOLNOT,Arrays.asList(new Exprent[]{statexpr.getCondition()})));
+    if (noelsestat) {
+      StatEdge ifedge=ifstat.getIfEdge();
+      StatEdge elseedge=ifstat.getAllSuccessorEdges().get(0);
+      if (noifstat) {
+        ifstat.getFirst().removeSuccessor(ifedge);
+        ifstat.removeSuccessor(elseedge);
+        ifedge.setSource(ifstat);
+        elseedge.setSource(ifstat.getFirst());
+        ifstat.addSuccessor(ifedge);
+        ifstat.getFirst().addSuccessor(elseedge);
+        ifstat.setIfEdge(elseedge);
+      }
+ else {
+        Statement ifbranch=ifstat.getIfstat();
+        SequenceStatement newseq=new SequenceStatement(Arrays.asList(new Statement[]{ifstat,ifbranch}));
+        ifstat.getFirst().removeSuccessor(ifedge);
+        ifstat.getStats().removeWithKey(ifbranch.id);
+        ifstat.setIfstat(null);
+        ifstat.removeSuccessor(elseedge);
+        elseedge.setSource(ifstat.getFirst());
+        ifstat.getFirst().addSuccessor(elseedge);
+        ifstat.setIfEdge(elseedge);
+        ifstat.getParent().replaceStatement(ifstat,newseq);
+        newseq.setAllParent();
+        ifstat.addSuccessor(new StatEdge(StatEdge.TYPE_REGULAR,ifstat,ifbranch));
+      }
+    }
+ else {
+      SequenceStatement sequence=(SequenceStatement)parent;
+      List<Statement> lst=new ArrayList<Statement>();
+      for (int i=sequence.getStats().size() - 1; i >= 0; i--) {
+        Statement sttemp=sequence.getStats().get(i);
+        if (sttemp == ifstat) {
+          break;
+        }
+ else {
+          lst.add(0,sttemp);
+        }
+      }
+      Statement stelse;
+      if (lst.size() == 1) {
+        stelse=lst.get(0);
+      }
+ else {
+        stelse=new SequenceStatement(lst);
+        stelse.setAllParent();
+      }
+      ifstat.removeSuccessor(ifstat.getAllSuccessorEdges().get(0));
+      for (      Statement st : lst) {
+        sequence.getStats().removeWithKey(st.id);
+      }
+      if (noifstat) {
+        StatEdge ifedge=ifstat.getIfEdge();
+        ifstat.getFirst().removeSuccessor(ifedge);
+        ifedge.setSource(ifstat);
+        ifstat.addSuccessor(ifedge);
+      }
+ else {
+        Statement ifbranch=ifstat.getIfstat();
+        ifstat.getFirst().removeSuccessor(ifstat.getIfEdge());
+        ifstat.getStats().removeWithKey(ifbranch.id);
+        ifstat.addSuccessor(new StatEdge(StatEdge.TYPE_REGULAR,ifstat,ifbranch));
+        sequence.getStats().addWithKey(ifbranch,ifbranch.id);
+        ifbranch.setParent(sequence);
+      }
+      StatEdge newifedge=new StatEdge(StatEdge.TYPE_REGULAR,ifstat.getFirst(),stelse);
+      ifstat.getFirst().addSuccessor(newifedge);
+      ifstat.setIfstat(stelse);
+      ifstat.setIfEdge(newifedge);
+      ifstat.getStats().addWithKey(stelse,stelse.id);
+      stelse.setParent(ifstat);
+    }
+  }
+ else {
+    return false;
+  }
+  return true;
+}

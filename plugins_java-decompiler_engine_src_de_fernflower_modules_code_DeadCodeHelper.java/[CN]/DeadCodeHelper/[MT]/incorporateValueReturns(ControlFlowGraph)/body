@@ -1,0 +1,91 @@
+{
+  for (  BasicBlock block : graph.getBlocks()) {
+    InstructionSequence seq=block.getSeq();
+    int len=seq.length();
+    if (len > 0 && len < 3) {
+      boolean ok=false;
+      if (seq.getLastInstr().opcode >= CodeConstants.opc_ireturn && seq.getLastInstr().opcode <= CodeConstants.opc_return) {
+        if (len == 1) {
+          ok=true;
+        }
+ else         if (seq.getLastInstr().opcode != CodeConstants.opc_return) {
+switch (seq.getInstr(0).opcode) {
+case CodeConstants.opc_iload:
+case CodeConstants.opc_lload:
+case CodeConstants.opc_fload:
+case CodeConstants.opc_dload:
+case CodeConstants.opc_aload:
+case CodeConstants.opc_aconst_null:
+case CodeConstants.opc_bipush:
+case CodeConstants.opc_sipush:
+case CodeConstants.opc_lconst_0:
+case CodeConstants.opc_lconst_1:
+case CodeConstants.opc_fconst_0:
+case CodeConstants.opc_fconst_1:
+case CodeConstants.opc_fconst_2:
+case CodeConstants.opc_dconst_0:
+case CodeConstants.opc_dconst_1:
+case CodeConstants.opc_ldc:
+case CodeConstants.opc_ldc_w:
+case CodeConstants.opc_ldc2_w:
+            ok=true;
+        }
+      }
+    }
+    if (ok) {
+      if (!block.getPreds().isEmpty()) {
+        HashSet<BasicBlock> setPredHandlersUnion=new HashSet<BasicBlock>();
+        HashSet<BasicBlock> setPredHandlersIntersection=new HashSet<BasicBlock>();
+        boolean firstpred=true;
+        for (        BasicBlock pred : block.getPreds()) {
+          if (firstpred) {
+            setPredHandlersIntersection.addAll(pred.getSuccExceptions());
+            firstpred=false;
+          }
+ else {
+            setPredHandlersIntersection.retainAll(pred.getSuccExceptions());
+          }
+          setPredHandlersUnion.addAll(pred.getSuccExceptions());
+        }
+        setPredHandlersIntersection.removeAll(block.getSuccExceptions());
+        BasicBlock predecessor=block.getPreds().get(0);
+        for (        BasicBlock handler : setPredHandlersIntersection) {
+          ExceptionRangeCFG range=graph.getExceptionRange(handler,predecessor);
+          range.getProtectedRange().add(block);
+          block.addSuccessorException(handler);
+        }
+        HashSet<BasicBlock> setRangesToBeRemoved=new HashSet<BasicBlock>(block.getSuccExceptions());
+        setRangesToBeRemoved.removeAll(setPredHandlersUnion);
+        for (        BasicBlock handler : setRangesToBeRemoved) {
+          ExceptionRangeCFG range=graph.getExceptionRange(handler,block);
+          if (range.getProtectedRange().size() > 1) {
+            range.getProtectedRange().remove(block);
+            block.removeSuccessorException(handler);
+          }
+        }
+      }
+      if (block.getPreds().size() == 1 && block.getPredExceptions().isEmpty()) {
+        BasicBlock bpred=block.getPreds().get(0);
+        if (bpred.getSuccs().size() == 1) {
+          for (          BasicBlock succ : bpred.getSuccExceptions()) {
+            if (!block.getSuccExceptions().contains(succ)) {
+              ExceptionRangeCFG range=graph.getExceptionRange(succ,bpred);
+              range.getProtectedRange().add(block);
+              block.addSuccessorException(succ);
+            }
+          }
+          for (          BasicBlock succ : new HashSet<BasicBlock>(block.getSuccExceptions())) {
+            if (!bpred.getSuccExceptions().contains(succ)) {
+              ExceptionRangeCFG range=graph.getExceptionRange(succ,block);
+              if (range.getProtectedRange().size() > 1) {
+                range.getProtectedRange().remove(block);
+                block.removeSuccessorException(succ);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+}

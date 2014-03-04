@@ -1,0 +1,99 @@
+{
+  SFormsFastMapDirect mapNew=new SFormsFastMapDirect();
+  boolean isFinallyExit=dgraph.mapShortRangeFinallyPaths.containsKey(predid);
+  if (nodeid.equals(dgraph.mapNegIfBranch.get(predid))) {
+    if (outNegVarVersions.containsKey(predid)) {
+      mapNew=outNegVarVersions.get(predid).getCopy();
+    }
+  }
+ else   if (outVarVersions.containsKey(predid)) {
+    mapNew=outVarVersions.get(predid).getCopy();
+  }
+  if (isFinallyExit) {
+    SFormsFastMapDirect mapNewTemp=mapNew.getCopy();
+    SFormsFastMapDirect mapTrueSource=new SFormsFastMapDirect();
+    String exceptionDest=dgraph.mapFinallyMonitorExceptionPathExits.get(predid);
+    boolean isExceptionMonitorExit=(exceptionDest != null && !nodeid.equals(exceptionDest));
+    HashSet<String> setLongPathWrapper=new HashSet<String>();
+    for (    List<FinallyPathWrapper> lstwrapper : dgraph.mapLongRangeFinallyPaths.values()) {
+      for (      FinallyPathWrapper finwraplong : lstwrapper) {
+        setLongPathWrapper.add(finwraplong.destination + "##" + finwraplong.source);
+      }
+    }
+    for (    FinallyPathWrapper finwrap : dgraph.mapShortRangeFinallyPaths.get(predid)) {
+      SFormsFastMapDirect map;
+      boolean recFinally=dgraph.mapShortRangeFinallyPaths.containsKey(finwrap.source);
+      if (recFinally) {
+        map=getFilteredOutMap(finwrap.entry,finwrap.source,dgraph,destid);
+      }
+ else {
+        if (finwrap.entry.equals(dgraph.mapNegIfBranch.get(finwrap.source))) {
+          map=outNegVarVersions.get(finwrap.source);
+        }
+ else {
+          map=outVarVersions.get(finwrap.source);
+        }
+      }
+      boolean isFalsePath=true;
+      if (recFinally) {
+        isFalsePath=!finwrap.destination.equals(nodeid);
+      }
+ else {
+        isFalsePath=!setLongPathWrapper.contains(destid + "##" + finwrap.source);
+      }
+      if (isFalsePath) {
+        mapNewTemp.complement(map);
+      }
+ else {
+        if (mapTrueSource.isEmpty()) {
+          if (map != null) {
+            mapTrueSource=map.getCopy();
+          }
+        }
+ else {
+          mergeMaps(mapTrueSource,map);
+        }
+      }
+    }
+    if (isExceptionMonitorExit) {
+      mapNew=mapTrueSource;
+    }
+ else {
+      mapNewTemp.union(mapTrueSource);
+      mapNew.intersection(mapNewTemp);
+      if (!mapTrueSource.isEmpty() && !mapNew.isEmpty()) {
+        HashMap<VarVersionPaar,VarVersionPaar> mapPhantom=phantomexitnodes.get(predid);
+        if (mapPhantom == null) {
+          mapPhantom=new HashMap<VarVersionPaar,VarVersionPaar>();
+        }
+        SFormsFastMapDirect mapExitVar=mapNew.getCopy();
+        mapExitVar.complement(mapTrueSource);
+        for (        Entry<Integer,FastSparseSet<Integer>> ent : mapExitVar.entryList()) {
+          for (          Integer version : ent.getValue()) {
+            Integer varindex=ent.getKey();
+            VarVersionPaar exitvar=new VarVersionPaar(varindex,version);
+            FastSparseSet<Integer> newSet=mapNew.get(varindex);
+            newSet.remove(version);
+            VarVersionPaar phantomvar=mapPhantom.get(exitvar);
+            if (phantomvar == null) {
+              Integer newversion=getNextFreeVersion(exitvar.var,null);
+              phantomvar=new VarVersionPaar(exitvar.var,newversion.intValue());
+              VarVersionNode exitnode=ssuversions.nodes.getWithKey(exitvar);
+              VarVersionNode phantomnode=ssuversions.createNode(phantomvar);
+              phantomnode.flags|=VarVersionNode.FLAG_PHANTOM_FINEXIT;
+              VarVersionEdge edge=new VarVersionEdge(VarVersionEdge.EDGE_PHANTOM,exitnode,phantomnode);
+              exitnode.addSuccessor(edge);
+              phantomnode.addPredecessor(edge);
+              mapPhantom.put(exitvar,phantomvar);
+            }
+            newSet.add(phantomvar.version);
+          }
+        }
+        if (!mapPhantom.isEmpty()) {
+          phantomexitnodes.put(predid,mapPhantom);
+        }
+      }
+    }
+  }
+  return mapNew;
+}

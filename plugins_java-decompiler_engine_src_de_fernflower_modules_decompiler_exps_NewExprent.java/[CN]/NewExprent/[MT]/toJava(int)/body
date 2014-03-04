@@ -1,0 +1,168 @@
+{
+  StringBuffer buf=new StringBuffer();
+  if (anonymous) {
+    ClassNode child=DecompilerContext.getClassprocessor().getMapRootClasses().get(newtype.value);
+    buf.append("(");
+    if (constructor != null) {
+      InvocationExprent invsuper=child.superInvocation;
+      ClassNode newnode=DecompilerContext.getClassprocessor().getMapRootClasses().get(invsuper.getClassname());
+      List<VarVersionPaar> sigFields=null;
+      if (newnode != null) {
+        if (newnode.wrapper != null) {
+          sigFields=newnode.wrapper.getMethodWrapper("<init>",invsuper.getStringDescriptor()).signatureFields;
+        }
+ else {
+          if (newnode.type == ClassNode.CLASS_MEMBER && (newnode.access & CodeConstants.ACC_STATIC) == 0 && !constructor.getLstParameters().isEmpty()) {
+            sigFields=new ArrayList<VarVersionPaar>(Collections.nCopies(constructor.getLstParameters().size(),(VarVersionPaar)null));
+            sigFields.set(0,new VarVersionPaar(-1,0));
+          }
+        }
+      }
+      boolean firstpar=true;
+      for (int i=0; i < invsuper.getLstParameters().size(); i++) {
+        if (sigFields == null || sigFields.get(i) == null) {
+          if (!firstpar) {
+            buf.append(", ");
+          }
+          Exprent param=invsuper.getLstParameters().get(i);
+          if (param.type == Exprent.EXPRENT_VAR) {
+            int varindex=((VarExprent)param).getIndex();
+            if (varindex > 0 && varindex <= constructor.getLstParameters().size()) {
+              param=constructor.getLstParameters().get(varindex - 1);
+            }
+          }
+          StringBuilder buff=new StringBuilder();
+          ExprProcessor.getCastedExprent(param,invsuper.getDescriptor().params[i],buff,indent,true);
+          buf.append(buff);
+          firstpar=false;
+        }
+      }
+    }
+    if (!enumconst) {
+      String enclosing=null;
+      if (constructor != null) {
+        enclosing=getQualifiedNewInstance(child.anonimousClassType.value,constructor.getLstParameters(),indent);
+      }
+      String typename=ExprProcessor.getCastTypeName(child.anonimousClassType);
+      if (enclosing != null) {
+        ClassNode anonimousNode=DecompilerContext.getClassprocessor().getMapRootClasses().get(child.anonimousClassType.value);
+        if (anonimousNode != null) {
+          typename=anonimousNode.simpleName;
+        }
+ else {
+          typename=typename.substring(typename.lastIndexOf('.') + 1);
+        }
+      }
+      buf.insert(0,"new " + typename);
+      if (enclosing != null) {
+        buf.insert(0,enclosing + ".");
+      }
+    }
+    buf.append(")");
+    StringWriter strwriter=new StringWriter();
+    BufferedWriter bufstrwriter=new BufferedWriter(strwriter);
+    ClassWriter clwriter=new ClassWriter();
+    try {
+      clwriter.classToJava(child,bufstrwriter,indent);
+      bufstrwriter.flush();
+    }
+ catch (    IOException ex) {
+      throw new RuntimeException(ex);
+    }
+    buf.append(strwriter.toString());
+  }
+ else   if (directArrayInit) {
+    VarType leftType=newtype.copy();
+    leftType.decArrayDim();
+    buf.append("{");
+    for (int i=0; i < lstArrayElements.size(); i++) {
+      if (i > 0) {
+        buf.append(", ");
+      }
+      StringBuilder buff=new StringBuilder();
+      ExprProcessor.getCastedExprent(lstArrayElements.get(i),leftType,buff,indent,false);
+      buf.append(buff);
+    }
+    buf.append("}");
+  }
+ else {
+    if (newtype.arraydim == 0) {
+      if (constructor != null) {
+        List<Exprent> lstParameters=constructor.getLstParameters();
+        ClassNode newnode=DecompilerContext.getClassprocessor().getMapRootClasses().get(constructor.getClassname());
+        List<VarVersionPaar> sigFields=null;
+        if (newnode != null) {
+          if (newnode.wrapper != null) {
+            sigFields=newnode.wrapper.getMethodWrapper("<init>",constructor.getStringDescriptor()).signatureFields;
+          }
+ else {
+            if (newnode.type == ClassNode.CLASS_MEMBER && (newnode.access & CodeConstants.ACC_STATIC) == 0 && !constructor.getLstParameters().isEmpty()) {
+              sigFields=new ArrayList<VarVersionPaar>(Collections.nCopies(lstParameters.size(),(VarVersionPaar)null));
+              sigFields.set(0,new VarVersionPaar(-1,0));
+            }
+          }
+        }
+        buf.append("(");
+        boolean firstpar=true;
+        for (int i=0; i < lstParameters.size(); i++) {
+          if (sigFields == null || sigFields.get(i) == null) {
+            if (!firstpar) {
+              buf.append(", ");
+            }
+            StringBuilder buff=new StringBuilder();
+            ExprProcessor.getCastedExprent(lstParameters.get(i),constructor.getDescriptor().params[i],buff,indent,true);
+            buf.append(buff);
+            firstpar=false;
+          }
+        }
+        buf.append(")");
+      }
+      if (!enumconst) {
+        String enclosing=null;
+        if (constructor != null) {
+          enclosing=getQualifiedNewInstance(newtype.value,constructor.getLstParameters(),indent);
+        }
+        String typename=ExprProcessor.getTypeName(newtype);
+        if (enclosing != null) {
+          ClassNode newNode=DecompilerContext.getClassprocessor().getMapRootClasses().get(newtype.value);
+          if (newNode != null) {
+            typename=newNode.simpleName;
+          }
+ else {
+            typename=typename.substring(typename.lastIndexOf('.') + 1);
+          }
+        }
+        buf.insert(0,"new " + typename);
+        if (enclosing != null) {
+          buf.insert(0,enclosing + ".");
+        }
+      }
+    }
+ else {
+      buf.append("new " + ExprProcessor.getTypeName(newtype));
+      if (lstArrayElements.isEmpty()) {
+        for (int i=0; i < newtype.arraydim; i++) {
+          buf.append("[" + (i < lstDims.size() ? lstDims.get(i).toJava(indent) : "") + "]");
+        }
+      }
+ else {
+        for (int i=0; i < newtype.arraydim; i++) {
+          buf.append("[]");
+        }
+        VarType leftType=newtype.copy();
+        leftType.decArrayDim();
+        buf.append("{");
+        for (int i=0; i < lstArrayElements.size(); i++) {
+          if (i > 0) {
+            buf.append(", ");
+          }
+          StringBuilder buff=new StringBuilder();
+          ExprProcessor.getCastedExprent(lstArrayElements.get(i),leftType,buff,indent,false);
+          buf.append(buff);
+        }
+        buf.append("}");
+      }
+    }
+  }
+  return buf.toString();
+}

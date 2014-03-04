@@ -1,0 +1,70 @@
+{
+  StructClass cl=wrapper.getClassStruct();
+  boolean isAnonymous=DecompilerContext.getClassprocessor().getMapRootClasses().get(cl.qualifiedName).type == ClassNode.CLASS_ANONYMOUS;
+  List<List<Exprent>> lstFirst=new ArrayList<List<Exprent>>();
+  List<MethodWrapper> lstMethWrappers=new ArrayList<MethodWrapper>();
+  for (  MethodWrapper meth : wrapper.getMethods()) {
+    if ("<init>".equals(meth.methodStruct.getName()) && meth.root != null) {
+      Statement firstdata=findFirstData(meth.root);
+      if (firstdata == null || firstdata.getExprents().isEmpty()) {
+        return;
+      }
+      lstFirst.add(firstdata.getExprents());
+      lstMethWrappers.add(meth);
+      Exprent exprent=firstdata.getExprents().get(0);
+      if (!isAnonymous) {
+        if (exprent.type != Exprent.EXPRENT_INVOCATION || !isInvocationInitConstructor((InvocationExprent)exprent,meth,wrapper,false)) {
+          return;
+        }
+      }
+    }
+  }
+  if (lstFirst.isEmpty()) {
+    return;
+  }
+  for (; ; ) {
+    String fieldWithDescr=null;
+    Exprent value=null;
+    for (int i=0; i < lstFirst.size(); i++) {
+      List<Exprent> lst=lstFirst.get(i);
+      if (lst.size() < (isAnonymous ? 1 : 2)) {
+        return;
+      }
+      Exprent exprent=lst.get(isAnonymous ? 0 : 1);
+      boolean found=false;
+      if (exprent.type == Exprent.EXPRENT_ASSIGNMENT) {
+        AssignmentExprent asexpr=(AssignmentExprent)exprent;
+        if (asexpr.getLeft().type == Exprent.EXPRENT_FIELD) {
+          FieldExprent fexpr=(FieldExprent)asexpr.getLeft();
+          if (!fexpr.isStatic() && fexpr.getClassname().equals(cl.qualifiedName)) {
+            if (isExprentIndependent(asexpr.getRight(),lstMethWrappers.get(i))) {
+              String fieldKey=InterpreterUtil.makeUniqueKey(fexpr.getName(),fexpr.getDescriptor().descriptorString);
+              if (fieldWithDescr == null) {
+                fieldWithDescr=fieldKey;
+                value=asexpr.getRight();
+              }
+ else {
+                if (!fieldWithDescr.equals(fieldKey) || !value.equals(asexpr.getRight())) {
+                  return;
+                }
+              }
+              found=true;
+            }
+          }
+        }
+      }
+      if (!found) {
+        return;
+      }
+    }
+    if (!wrapper.getDynamicFieldInitializers().containsKey(fieldWithDescr)) {
+      wrapper.getDynamicFieldInitializers().addWithKey(value,fieldWithDescr);
+      for (      List<Exprent> lst : lstFirst) {
+        lst.remove(isAnonymous ? 0 : 1);
+      }
+    }
+ else {
+      return;
+    }
+  }
+}

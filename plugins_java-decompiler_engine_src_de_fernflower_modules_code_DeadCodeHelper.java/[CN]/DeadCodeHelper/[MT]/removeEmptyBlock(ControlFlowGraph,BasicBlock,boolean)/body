@@ -1,0 +1,91 @@
+{
+  boolean deletedRanges=false;
+  if (block.getSeq().isEmpty()) {
+    if (block.getSuccs().size() > 1) {
+      if (block.getPreds().size() > 1) {
+        throw new RuntimeException("ERROR: empty block with multiple predecessors and successors found");
+      }
+ else       if (!merging) {
+        throw new RuntimeException("ERROR: empty block with multiple successors found");
+      }
+    }
+    HashSet<BasicBlock> setExits=new HashSet<BasicBlock>(graph.getLast().getPreds());
+    if (block.getPredExceptions().isEmpty() && (!setExits.contains(block) || block.getPreds().size() == 1)) {
+      if (setExits.contains(block)) {
+        BasicBlock pred=block.getPreds().get(0);
+        if (pred.getSuccs().size() != 1 || (!pred.getSeq().isEmpty() && pred.getSeq().getLastInstr().group == CodeConstants.GROUP_SWITCH)) {
+          return false;
+        }
+      }
+      HashSet<BasicBlock> setPreds=new HashSet<BasicBlock>(block.getPreds());
+      HashSet<BasicBlock> setSuccs=new HashSet<BasicBlock>(block.getSuccs());
+      HashSet<BasicBlock> setCommonExceptionHandlers=null;
+      for (int i=0; i < 2; ++i) {
+        for (        BasicBlock pred : i == 0 ? setPreds : setSuccs) {
+          if (setCommonExceptionHandlers == null) {
+            setCommonExceptionHandlers=new HashSet<BasicBlock>(pred.getSuccExceptions());
+          }
+ else {
+            setCommonExceptionHandlers.retainAll(pred.getSuccExceptions());
+          }
+        }
+      }
+      if (setCommonExceptionHandlers != null && !setCommonExceptionHandlers.isEmpty()) {
+        for (        BasicBlock handler : setCommonExceptionHandlers) {
+          if (!block.getSuccExceptions().contains(handler)) {
+            return false;
+          }
+        }
+      }
+      List<ExceptionRangeCFG> lstRanges=graph.getExceptions();
+      for (int i=lstRanges.size() - 1; i >= 0; i--) {
+        ExceptionRangeCFG range=lstRanges.get(i);
+        List<BasicBlock> lst=range.getProtectedRange();
+        if (lst.size() == 1 && lst.get(0) == block) {
+          if (DecompilerContext.getOption(IFernflowerPreferences.REMOVE_EMPTY_RANGES)) {
+            block.removeSuccessorException(range.getHandler());
+            lstRanges.remove(i);
+            deletedRanges=true;
+          }
+ else {
+            return false;
+          }
+        }
+      }
+      if (merging) {
+        BasicBlock pred=block.getPreds().get(0);
+        pred.removeSuccessor(block);
+        List<BasicBlock> lstSuccs=new ArrayList<BasicBlock>(block.getSuccs());
+        for (        BasicBlock succ : lstSuccs) {
+          block.removeSuccessor(succ);
+          pred.addSuccessor(succ);
+        }
+      }
+ else {
+        for (        BasicBlock pred : setPreds) {
+          for (          BasicBlock succ : setSuccs) {
+            pred.replaceSuccessor(block,succ);
+          }
+        }
+      }
+      HashSet<BasicBlock> setFinallyExits=graph.getFinallyExits();
+      if (setFinallyExits.contains(block)) {
+        setFinallyExits.remove(block);
+        setFinallyExits.add(setPreds.iterator().next());
+      }
+      if (graph.getFirst() == block) {
+        if (setSuccs.size() != 1) {
+          throw new RuntimeException("multiple or no entry blocks!");
+        }
+ else {
+          graph.setFirst(setSuccs.iterator().next());
+        }
+      }
+      graph.removeBlock(block);
+      if (deletedRanges) {
+        DeadCodeHelper.removeDeadBlocks(graph);
+      }
+    }
+  }
+  return deletedRanges;
+}

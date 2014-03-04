@@ -1,0 +1,84 @@
+{
+  ClassWrapper wrapper=node.wrapper;
+  StructClass cl=wrapper.getClassStruct();
+  ClassNode nodeold=(ClassNode)DecompilerContext.getProperty(DecompilerContext.CURRENT_CLASSNODE);
+  DecompilerContext.setProperty(DecompilerContext.CURRENT_CLASSNODE,node);
+  invokeProcessors(node);
+  DecompilerContext.getLogger().startWriteClass(cl.qualifiedName);
+  writeClassDefinition(node,writer,indent);
+  StringWriter strwriter=new StringWriter();
+  BufferedWriter bufstrwriter=new BufferedWriter(strwriter);
+  boolean firstmt=true;
+  boolean mthidden=false;
+  for (  StructMethod mt : cl.getMethods()) {
+    int flags=mt.getAccessFlags();
+    boolean isSynthetic=(flags & CodeConstants.ACC_SYNTHETIC) != 0 || mt.getAttributes().containsKey("Synthetic");
+    boolean isBridge=(flags & CodeConstants.ACC_BRIDGE) != 0;
+    if ((!isSynthetic || !DecompilerContext.getOption(IFernflowerPreferences.REMOVE_SYNTHETIC)) && (!isBridge || !DecompilerContext.getOption(IFernflowerPreferences.REMOVE_BRIDGE)) && !wrapper.getHideMembers().contains(InterpreterUtil.makeUniqueKey(mt.getName(),mt.getDescriptor()))) {
+      if (!mthidden && (!firstmt || node.type != ClassNode.CLASS_ANONYMOUS)) {
+        bufstrwriter.newLine();
+        firstmt=false;
+      }
+      mthidden=!methodToJava(node,mt,bufstrwriter,indent + 1);
+    }
+  }
+  bufstrwriter.flush();
+  StringWriter strwriter1=new StringWriter();
+  BufferedWriter bufstrwriter1=new BufferedWriter(strwriter1);
+  int fields_count=0;
+  boolean enumfields=false;
+  for (  StructField fd : cl.getFields()) {
+    int flags=fd.access_flags;
+    boolean isSynthetic=(flags & CodeConstants.ACC_SYNTHETIC) != 0 || fd.getAttributes().containsKey("Synthetic");
+    if ((!isSynthetic || !DecompilerContext.getOption(IFernflowerPreferences.REMOVE_SYNTHETIC)) && !wrapper.getHideMembers().contains(InterpreterUtil.makeUniqueKey(fd.getName(),fd.getDescriptor()))) {
+      boolean isEnum=DecompilerContext.getOption(IFernflowerPreferences.DECOMPILE_ENUM) && (flags & CodeConstants.ACC_ENUM) != 0;
+      if (isEnum) {
+        if (enumfields) {
+          bufstrwriter1.write(",");
+          bufstrwriter1.newLine();
+        }
+ else {
+          enumfields=true;
+        }
+      }
+ else {
+        if (enumfields) {
+          bufstrwriter1.write(";");
+          bufstrwriter1.newLine();
+          enumfields=false;
+        }
+      }
+      fieldToJava(wrapper,cl,fd,bufstrwriter1,indent + 1);
+      fields_count++;
+    }
+  }
+  if (enumfields) {
+    bufstrwriter1.write(";");
+    bufstrwriter1.newLine();
+  }
+  bufstrwriter1.flush();
+  if (fields_count > 0) {
+    writer.newLine();
+    writer.write(strwriter1.toString());
+    writer.newLine();
+  }
+  writer.write(strwriter.toString());
+  for (  ClassNode inner : node.nested) {
+    if (inner.type == ClassNode.CLASS_MEMBER) {
+      StructClass innercl=inner.classStruct;
+      boolean isSynthetic=(innercl.access_flags & CodeConstants.ACC_SYNTHETIC) != 0 || innercl.getAttributes().containsKey("Synthetic");
+      if ((!isSynthetic || !DecompilerContext.getOption(IFernflowerPreferences.REMOVE_SYNTHETIC)) && !wrapper.getHideMembers().contains(innercl.qualifiedName)) {
+        writer.newLine();
+        classToJava(inner,writer,indent + 1);
+      }
+    }
+  }
+  writer.write(InterpreterUtil.getIndentString(indent));
+  writer.write("}");
+  if (node.type != ClassNode.CLASS_ANONYMOUS) {
+    writer.newLine();
+  }
+  writer.flush();
+  DecompilerContext.setProperty(DecompilerContext.CURRENT_CLASSNODE,nodeold);
+  DecompilerContext.getLogger().endWriteClass();
+}

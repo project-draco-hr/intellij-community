@@ -1,0 +1,136 @@
+{
+  HashMap<BasicBlock,Boolean> mapLast=new HashMap<BasicBlock,Boolean>();
+  BasicBlockStatement firstBlockStatement=fstat.getHandler().getBasichead();
+  BasicBlock firstBasicBlock=firstBlockStatement.getBlock();
+  Instruction instrFirst=firstBasicBlock.getInstruction(0);
+  int firstcode=0;
+switch (instrFirst.opcode) {
+case CodeConstants.opc_pop:
+    firstcode=1;
+  break;
+case CodeConstants.opc_astore:
+firstcode=2;
+}
+ExprProcessor proc=new ExprProcessor();
+proc.processStatement(root,mt.getClassStruct().getPool());
+SSAConstructorSparseEx ssa=new SSAConstructorSparseEx();
+ssa.splitVariables(root,mt);
+List<Exprent> lstExprents=firstBlockStatement.getExprents();
+VarVersionPaar varpaar=new VarVersionPaar((VarExprent)((AssignmentExprent)lstExprents.get(firstcode == 2 ? 1 : 0)).getLeft());
+FlattenStatementsHelper flatthelper=new FlattenStatementsHelper();
+DirectGraph dgraph=flatthelper.buildDirectGraph(root);
+LinkedList<DirectNode> stack=new LinkedList<DirectNode>();
+stack.add(dgraph.first);
+HashSet<DirectNode> setVisited=new HashSet<DirectNode>();
+while (!stack.isEmpty()) {
+DirectNode node=stack.removeFirst();
+if (setVisited.contains(node)) {
+continue;
+}
+setVisited.add(node);
+BasicBlockStatement blockStatement=null;
+if (node.block != null) {
+blockStatement=node.block;
+}
+ else if (node.preds.size() == 1) {
+blockStatement=node.preds.get(0).block;
+}
+boolean isTrueExit=true;
+if (firstcode != 1) {
+isTrueExit=false;
+for (int i=0; i < node.exprents.size(); i++) {
+  Exprent exprent=node.exprents.get(i);
+  if (firstcode == 0) {
+    List<Exprent> lst=exprent.getAllExprents();
+    lst.add(exprent);
+    boolean found=false;
+    for (    Exprent expr : lst) {
+      if (expr.type == Exprent.EXPRENT_VAR && new VarVersionPaar((VarExprent)expr).equals(varpaar)) {
+        found=true;
+        break;
+      }
+    }
+    if (found) {
+      found=false;
+      if (exprent.type == Exprent.EXPRENT_EXIT) {
+        ExitExprent exexpr=(ExitExprent)exprent;
+        if (exexpr.getExittype() == ExitExprent.EXIT_THROW && exexpr.getValue().type == Exprent.EXPRENT_VAR) {
+          found=true;
+        }
+      }
+      if (!found) {
+        return null;
+      }
+ else {
+        isTrueExit=true;
+      }
+    }
+  }
+ else   if (firstcode == 2) {
+    if (exprent.type == Exprent.EXPRENT_ASSIGNMENT) {
+      AssignmentExprent assexpr=(AssignmentExprent)exprent;
+      if (assexpr.getRight().type == Exprent.EXPRENT_VAR && new VarVersionPaar((VarExprent)assexpr.getRight()).equals(varpaar)) {
+        Exprent next=null;
+        if (i == node.exprents.size() - 1) {
+          if (node.succs.size() == 1) {
+            DirectNode nd=node.succs.get(0);
+            if (!nd.exprents.isEmpty()) {
+              next=nd.exprents.get(0);
+            }
+          }
+        }
+ else {
+          next=node.exprents.get(i + 1);
+        }
+        boolean found=false;
+        if (next != null && next.type == Exprent.EXPRENT_EXIT) {
+          ExitExprent exexpr=(ExitExprent)next;
+          if (exexpr.getExittype() == ExitExprent.EXIT_THROW && exexpr.getValue().type == Exprent.EXPRENT_VAR && assexpr.getLeft().equals(exexpr.getValue())) {
+            found=true;
+          }
+        }
+        if (!found) {
+          return null;
+        }
+ else {
+          isTrueExit=true;
+        }
+      }
+    }
+  }
+}
+}
+if (blockStatement != null && blockStatement.getBlock() != null) {
+Statement handler=fstat.getHandler();
+for (StatEdge edge : blockStatement.getSuccessorEdges(Statement.STATEDGE_DIRECT_ALL)) {
+  if (edge.getType() != StatEdge.TYPE_REGULAR && handler.containsStatement(blockStatement) && !handler.containsStatement(edge.getDestination())) {
+    Boolean existingFlag=mapLast.get(blockStatement.getBlock());
+    if (existingFlag == null || !existingFlag) {
+      mapLast.put(blockStatement.getBlock(),isTrueExit);
+      break;
+    }
+  }
+}
+}
+stack.addAll(node.succs);
+}
+if (fstat.getHandler().type == Statement.TYPE_BASICBLOCK) {
+boolean isEmpty=false;
+boolean isFirstLast=mapLast.containsKey(firstBasicBlock);
+InstructionSequence seq=firstBasicBlock.getSeq();
+switch (firstcode) {
+case 0:
+isEmpty=isFirstLast && seq.length() == 1;
+break;
+case 1:
+isEmpty=seq.length() == 1;
+break;
+case 2:
+isEmpty=isFirstLast ? seq.length() == 3 : seq.length() == 1;
+}
+if (isEmpty) {
+firstcode=3;
+}
+}
+return new Object[]{firstcode,mapLast};
+}

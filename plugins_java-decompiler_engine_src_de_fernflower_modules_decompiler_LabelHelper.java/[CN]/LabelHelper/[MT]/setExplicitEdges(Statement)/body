@@ -1,0 +1,102 @@
+{
+  HashMap<Statement,List<StatEdge>> mapEdges=new HashMap<Statement,List<StatEdge>>();
+  if (stat.getExprents() != null) {
+    return mapEdges;
+  }
+switch (stat.type) {
+case Statement.TYPE_TRYCATCH:
+case Statement.TYPE_CATCHALL:
+    for (    Statement st : stat.getStats()) {
+      HashMap<Statement,List<StatEdge>> mapEdges1=setExplicitEdges(st);
+      processEdgesWithNext(st,mapEdges1,null);
+      if (stat.type == Statement.TYPE_TRYCATCH || st == stat.getFirst()) {
+        if (mapEdges1 != null) {
+          for (          Entry<Statement,List<StatEdge>> entr : mapEdges1.entrySet()) {
+            if (mapEdges.containsKey(entr.getKey())) {
+              mapEdges.get(entr.getKey()).addAll(entr.getValue());
+            }
+ else {
+              mapEdges.put(entr.getKey(),entr.getValue());
+            }
+          }
+        }
+      }
+    }
+  break;
+case Statement.TYPE_DO:
+mapEdges=setExplicitEdges(stat.getFirst());
+processEdgesWithNext(stat.getFirst(),mapEdges,stat);
+break;
+case Statement.TYPE_IF:
+IfStatement ifstat=(IfStatement)stat;
+if (ifstat.getIfstat() == null) {
+processEdgesWithNext(ifstat.getFirst(),mapEdges,null);
+}
+ else {
+if (ifstat.getIfstat() != null) {
+mapEdges=setExplicitEdges(ifstat.getIfstat());
+processEdgesWithNext(ifstat.getIfstat(),mapEdges,null);
+}
+HashMap<Statement,List<StatEdge>> mapEdges1=null;
+if (ifstat.getElsestat() != null) {
+mapEdges1=setExplicitEdges(ifstat.getElsestat());
+processEdgesWithNext(ifstat.getElsestat(),mapEdges1,null);
+}
+if (mapEdges1 != null) {
+for (Entry<Statement,List<StatEdge>> entr : mapEdges1.entrySet()) {
+if (mapEdges.containsKey(entr.getKey())) {
+mapEdges.get(entr.getKey()).addAll(entr.getValue());
+}
+ else {
+mapEdges.put(entr.getKey(),entr.getValue());
+}
+}
+}
+}
+break;
+case Statement.TYPE_ROOT:
+mapEdges=setExplicitEdges(stat.getFirst());
+processEdgesWithNext(stat.getFirst(),mapEdges,((RootStatement)stat).getDummyExit());
+break;
+case Statement.TYPE_SEQUENCE:
+int index=0;
+while (index < stat.getStats().size() - 1) {
+Statement st=stat.getStats().get(index);
+processEdgesWithNext(st,setExplicitEdges(st),stat.getStats().get(index + 1));
+index++;
+}
+Statement st=stat.getStats().get(index);
+mapEdges=setExplicitEdges(st);
+processEdgesWithNext(st,mapEdges,null);
+break;
+case Statement.TYPE_SWITCH:
+SwitchStatement swst=(SwitchStatement)stat;
+for (int i=0; i < swst.getCaseStatements().size() - 1; i++) {
+Statement stt=swst.getCaseStatements().get(i);
+Statement stnext=swst.getCaseStatements().get(i + 1);
+if (stnext.getExprents() != null && stnext.getExprents().isEmpty()) {
+stnext=stnext.getAllSuccessorEdges().get(0).getDestination();
+}
+processEdgesWithNext(stt,setExplicitEdges(stt),stnext);
+}
+int last=swst.getCaseStatements().size() - 1;
+if (last >= 0) {
+Statement stlast=swst.getCaseStatements().get(last);
+if (stlast.getExprents() != null && stlast.getExprents().isEmpty()) {
+StatEdge edge=stlast.getAllSuccessorEdges().get(0);
+mapEdges.put(edge.getDestination(),new ArrayList<StatEdge>(Arrays.asList(new StatEdge[]{edge})));
+}
+ else {
+mapEdges=setExplicitEdges(stlast);
+processEdgesWithNext(stlast,mapEdges,null);
+}
+}
+break;
+case Statement.TYPE_SYNCRONIZED:
+SynchronizedStatement synstat=(SynchronizedStatement)stat;
+processEdgesWithNext(synstat.getFirst(),setExplicitEdges(stat.getFirst()),synstat.getBody());
+mapEdges=setExplicitEdges(synstat.getBody());
+processEdgesWithNext(synstat.getBody(),mapEdges,null);
+}
+return mapEdges;
+}

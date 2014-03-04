@@ -1,0 +1,100 @@
+{
+  HashMap<StatEdge,Integer> mapEdgeIndex=new HashMap<StatEdge,Integer>();
+  List<StatEdge> lstFirstSuccs=first.getSuccessorEdges(STATEDGE_DIRECT_ALL);
+  for (int i=0; i < lstFirstSuccs.size(); i++) {
+    mapEdgeIndex.put(lstFirstSuccs.get(i),i == 0 ? lstFirstSuccs.size() : i);
+  }
+  BasicBlockStatement bbstat=(BasicBlockStatement)first;
+  int[] values=((SwitchInstruction)bbstat.getBlock().getLastInstruction()).getValues();
+  List<Statement> nodes=new ArrayList<Statement>();
+  List<List<Integer>> edges=new ArrayList<List<Integer>>();
+  for (int i=1; i < stats.size(); i++) {
+    Statement stat=stats.get(i);
+    List<Integer> lst=new ArrayList<Integer>();
+    for (    StatEdge edge : stat.getPredecessorEdges(StatEdge.TYPE_REGULAR)) {
+      if (edge.getSource() == first) {
+        lst.add(mapEdgeIndex.get(edge));
+      }
+    }
+    Collections.sort(lst);
+    nodes.add(stat);
+    edges.add(lst);
+  }
+  List<StatEdge> lstExitEdges=first.getSuccessorEdges(StatEdge.TYPE_BREAK | StatEdge.TYPE_CONTINUE);
+  while (!lstExitEdges.isEmpty()) {
+    StatEdge edge=lstExitEdges.get(0);
+    List<Integer> lst=new ArrayList<Integer>();
+    for (int i=lstExitEdges.size() - 1; i >= 0; i--) {
+      StatEdge edgeTemp=lstExitEdges.get(i);
+      if (edgeTemp.getDestination() == edge.getDestination() && edgeTemp.getType() == edge.getType()) {
+        lst.add(mapEdgeIndex.get(edgeTemp));
+        lstExitEdges.remove(i);
+      }
+    }
+    Collections.sort(lst);
+    nodes.add(null);
+    edges.add(lst);
+  }
+  for (int i=0; i < edges.size() - 1; i++) {
+    for (int j=edges.size() - 1; j > i; j--) {
+      if (edges.get(j - 1).get(0) > edges.get(j).get(0)) {
+        edges.set(j,edges.set(j - 1,edges.get(j)));
+        nodes.set(j,nodes.set(j - 1,nodes.get(j)));
+      }
+    }
+  }
+  for (int index=0; index < nodes.size(); index++) {
+    Statement stat=nodes.get(index);
+    if (stat != null) {
+      HashSet<Statement> setPreds=new HashSet<Statement>(stat.getNeighbours(StatEdge.TYPE_REGULAR,DIRECTION_BACKWARD));
+      setPreds.remove(first);
+      if (!setPreds.isEmpty()) {
+        Statement pred=setPreds.iterator().next();
+        for (int j=index + 1; j < nodes.size(); j++) {
+          if (nodes.get(j) == pred) {
+            nodes.add(j + 1,stat);
+            edges.add(j + 1,edges.get(index));
+            nodes.remove(index);
+            edges.remove(index);
+            index--;
+            break;
+          }
+        }
+      }
+    }
+  }
+  List<List<StatEdge>> lstEdges=new ArrayList<List<StatEdge>>();
+  List<List<ConstExprent>> lstValues=new ArrayList<List<ConstExprent>>();
+  for (  List<Integer> lst : edges) {
+    List<StatEdge> lste=new ArrayList<StatEdge>();
+    List<ConstExprent> lstv=new ArrayList<ConstExprent>();
+    List<StatEdge> lstSuccs=first.getSuccessorEdges(STATEDGE_DIRECT_ALL);
+    for (    Integer in : lst) {
+      int index=in == lstSuccs.size() ? 0 : in;
+      lste.add(lstSuccs.get(index));
+      lstv.add(index == 0 ? null : new ConstExprent(values[index - 1],false));
+    }
+    lstEdges.add(lste);
+    lstValues.add(lstv);
+  }
+  for (int i=0; i < nodes.size(); i++) {
+    if (nodes.get(i) == null) {
+      BasicBlockStatement bstat=new BasicBlockStatement(new BasicBlock(DecompilerContext.getCountercontainer().getCounterAndIncrement(CounterContainer.STATEMENT_COUNTER)));
+      StatEdge sample_edge=lstEdges.get(i).get(0);
+      bstat.addSuccessor(new StatEdge(sample_edge.getType(),bstat,sample_edge.getDestination(),sample_edge.closure));
+      for (      StatEdge edge : lstEdges.get(i)) {
+        edge.getSource().changeEdgeType(DIRECTION_FORWARD,edge,StatEdge.TYPE_REGULAR);
+        edge.closure.getLabelEdges().remove(edge);
+        edge.getDestination().removePredecessor(edge);
+        edge.getSource().changeEdgeNode(DIRECTION_FORWARD,edge,bstat);
+        bstat.addPredecessor(edge);
+      }
+      nodes.set(i,bstat);
+      stats.addWithKey(bstat,bstat.id);
+      bstat.setParent(this);
+    }
+  }
+  caseStatements=nodes;
+  caseEdges=lstEdges;
+  caseValues=lstValues;
+}

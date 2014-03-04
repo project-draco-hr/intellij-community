@@ -1,0 +1,57 @@
+{
+  if (stat.getExprents() == null) {
+    if (stat.type == Statement.TYPE_IF) {
+      IfStatement ifelsestat=(IfStatement)stat;
+      Statement ifstat=ifelsestat.getIfstat();
+      if (ifelsestat.iftype == IfStatement.IFTYPE_IFELSE && ifstat.getExprents() != null && ifstat.getExprents().isEmpty() && (ifstat.getAllSuccessorEdges().isEmpty() || !ifstat.getAllSuccessorEdges().get(0).explicit)) {
+        ifelsestat.getStats().removeWithKey(ifstat.id);
+        ifelsestat.iftype=IfStatement.IFTYPE_IF;
+        ifelsestat.setIfstat(ifelsestat.getElsestat());
+        ifelsestat.setElsestat(null);
+        if (ifelsestat.getAllSuccessorEdges().isEmpty() && !ifstat.getAllSuccessorEdges().isEmpty()) {
+          StatEdge endedge=ifstat.getAllSuccessorEdges().get(0);
+          ifstat.removeSuccessor(endedge);
+          endedge.setSource(ifelsestat);
+          if (endedge.closure != null) {
+            ifelsestat.getParent().addLabeledEdge(endedge);
+          }
+          ifelsestat.addSuccessor(endedge);
+        }
+        ifelsestat.getFirst().removeSuccessor(ifelsestat.getIfEdge());
+        ifelsestat.setIfEdge(ifelsestat.getElseEdge());
+        ifelsestat.setElseEdge(null);
+        ifelsestat.setNegated(!ifelsestat.isNegated());
+        ifelsestat.getHeadexprentList().set(0,((IfExprent)ifelsestat.getHeadexprent().copy()).negateIf());
+        return true;
+      }
+    }
+  }
+  boolean replaced=true;
+  while (replaced) {
+    replaced=false;
+    List<Object> lstObjects=new ArrayList<Object>(stat.getExprents() == null ? stat.getSequentialObjects() : stat.getExprents());
+    for (int i=0; i < lstObjects.size(); i++) {
+      Object obj=lstObjects.get(i);
+      if (obj instanceof Statement) {
+        if (identifySecondaryFunctions((Statement)obj)) {
+          replaced=true;
+          break;
+        }
+      }
+ else       if (obj instanceof Exprent) {
+        Exprent retexpr=identifySecondaryFunctions((Exprent)obj,true);
+        if (retexpr != null) {
+          if (stat.getExprents() == null) {
+            stat.replaceExprent((Exprent)obj,retexpr);
+          }
+ else {
+            stat.getExprents().set(i,retexpr);
+          }
+          replaced=true;
+          break;
+        }
+      }
+    }
+  }
+  return false;
+}

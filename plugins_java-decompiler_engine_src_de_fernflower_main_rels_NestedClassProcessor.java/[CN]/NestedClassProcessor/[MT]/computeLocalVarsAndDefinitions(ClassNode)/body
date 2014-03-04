@@ -1,0 +1,120 @@
+{
+  final HashMap<String,HashMap<String,List<VarFieldPair>>> mapVarMasks=new HashMap<String,HashMap<String,List<VarFieldPair>>>();
+  int cltypes=0;
+  for (  ClassNode nd : node.nested) {
+    if ((nd.access & CodeConstants.ACC_STATIC) == 0 && (nd.access & CodeConstants.ACC_INTERFACE) == 0) {
+      cltypes|=nd.type;
+      HashMap<String,List<VarFieldPair>> mask=getMaskLocalVars(nd.wrapper);
+      if (mask.isEmpty()) {
+        DecompilerContext.getLogger().writeMessage("Nested class " + nd.classStruct.qualifiedName + " has no constructor!",IFernflowerLogger.WARNING);
+      }
+ else {
+        mapVarMasks.put(nd.classStruct.qualifiedName,mask);
+      }
+    }
+  }
+  final HashMap<String,HashMap<String,List<VarFieldPair>>> mapVarFieldPairs=new HashMap<String,HashMap<String,List<VarFieldPair>>>();
+  if (cltypes != ClassNode.CLASS_MEMBER) {
+    for (    final MethodWrapper meth : node.wrapper.getMethods()) {
+      if (meth.root != null) {
+        DirectGraph graph=meth.getOrBuildGraph();
+        graph.iterateExprents(new DirectGraph.ExprentIterator(){
+          public int processExprent(          Exprent exprent){
+            List<Exprent> lst=exprent.getAllExprents(true);
+            lst.add(exprent);
+            for (            Exprent expr : lst) {
+              if (expr.type == Exprent.EXPRENT_NEW) {
+                InvocationExprent constr=((NewExprent)expr).getConstructor();
+                if (constr != null && mapVarMasks.containsKey(constr.getClassname())) {
+                  String refclname=constr.getClassname();
+                  ClassNode nestedClassNode=node.getClassNode(refclname);
+                  if (nestedClassNode.type != ClassNode.CLASS_MEMBER) {
+                    List<VarFieldPair> mask=mapVarMasks.get(refclname).get(constr.getStringDescriptor());
+                    if (!mapVarFieldPairs.containsKey(refclname)) {
+                      mapVarFieldPairs.put(refclname,new HashMap<String,List<VarFieldPair>>());
+                    }
+                    List<VarFieldPair> lstTemp=new ArrayList<VarFieldPair>();
+                    for (int i=0; i < mask.size(); i++) {
+                      Exprent param=constr.getLstParameters().get(i);
+                      VarFieldPair pair=null;
+                      if (param.type == Exprent.EXPRENT_VAR && mask.get(i) != null) {
+                        VarVersionPaar varpaar=new VarVersionPaar((VarExprent)param);
+                        pair=new VarFieldPair(mask.get(i).keyfield,varpaar);
+                      }
+                      lstTemp.add(pair);
+                    }
+                    List<VarFieldPair> pairmask=mapVarFieldPairs.get(refclname).get(constr.getStringDescriptor());
+                    if (pairmask == null) {
+                      pairmask=lstTemp;
+                    }
+ else {
+                      for (int i=0; i < pairmask.size(); i++) {
+                        if (!InterpreterUtil.equalObjects(pairmask.get(i),lstTemp.get(i))) {
+                          pairmask.set(i,null);
+                        }
+                      }
+                    }
+                    mapVarFieldPairs.get(refclname).put(constr.getStringDescriptor(),pairmask);
+                    nestedClassNode.enclosingMethod=InterpreterUtil.makeUniqueKey(meth.methodStruct.getName(),meth.methodStruct.getDescriptor());
+                  }
+                }
+              }
+            }
+            return 0;
+          }
+        }
+);
+      }
+    }
+  }
+  for (  Entry<String,HashMap<String,List<VarFieldPair>>> entcl : mapVarMasks.entrySet()) {
+    ClassNode nestedNode=node.getClassNode(entcl.getKey());
+    List<VarFieldPair> intrPairMask=null;
+    if (mapVarFieldPairs.containsKey(entcl.getKey())) {
+      for (      List<VarFieldPair> mask : mapVarFieldPairs.get(entcl.getKey()).values()) {
+        if (intrPairMask == null) {
+          intrPairMask=new ArrayList<VarFieldPair>(mask);
+        }
+ else {
+          mergeListSignatures(intrPairMask,mask,false);
+        }
+      }
+    }
+    List<VarFieldPair> intrMask=null;
+    for (    List<VarFieldPair> mask : entcl.getValue().values()) {
+      if (intrMask == null) {
+        intrMask=new ArrayList<VarFieldPair>(mask);
+      }
+ else {
+        mergeListSignatures(intrMask,mask,false);
+      }
+    }
+    if (intrPairMask == null) {
+      intrPairMask=new ArrayList<VarFieldPair>(intrMask);
+      boolean found=false;
+      for (int i=0; i < intrPairMask.size(); i++) {
+        if (intrPairMask.get(i) != null) {
+          if (found) {
+            intrPairMask.set(i,null);
+          }
+          found=true;
+        }
+      }
+    }
+    mergeListSignatures(intrPairMask,intrMask,true);
+    for (int i=0; i < intrPairMask.size(); i++) {
+      VarFieldPair pair=intrPairMask.get(i);
+      if (pair != null && pair.keyfield.length() > 0) {
+        nestedNode.mapFieldsToVars.put(pair.keyfield,pair.varpaar);
+      }
+    }
+    for (    Entry<String,List<VarFieldPair>> entmt : entcl.getValue().entrySet()) {
+      mergeListSignatures(entmt.getValue(),intrPairMask,false);
+      MethodWrapper meth=nestedNode.wrapper.getMethodWrapper("<init>",entmt.getKey());
+      meth.signatureFields=new ArrayList<VarVersionPaar>();
+      for (      VarFieldPair pair : entmt.getValue()) {
+        meth.signatureFields.add(pair == null ? null : pair.varpaar);
+      }
+    }
+  }
+}

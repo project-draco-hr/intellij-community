@@ -1,0 +1,75 @@
+{
+  FlattenStatementsHelper flatthelper=new FlattenStatementsHelper();
+  DirectGraph dgraph=flatthelper.buildDirectGraph(root);
+  Set<String> setFinallyShortRangeEntryPoints=new HashSet<String>();
+  for (  List<FinallyPathWrapper> lst : dgraph.mapShortRangeFinallyPaths.values()) {
+    for (    FinallyPathWrapper finwrap : lst) {
+      setFinallyShortRangeEntryPoints.add(finwrap.entry);
+    }
+  }
+  Set<String> setFinallyLongRangeEntryPaths=new HashSet<String>();
+  for (  List<FinallyPathWrapper> lst : dgraph.mapLongRangeFinallyPaths.values()) {
+    for (    FinallyPathWrapper finwrap : lst) {
+      setFinallyLongRangeEntryPaths.add(finwrap.source + "##" + finwrap.entry);
+    }
+  }
+  Map<String,VarExprent> mapCatch=new HashMap<String,VarExprent>();
+  collectCatchVars(root,flatthelper,mapCatch);
+  Map<DirectNode,Map<String,PrimitiveExprsList>> mapData=new HashMap<DirectNode,Map<String,PrimitiveExprsList>>();
+  LinkedList<DirectNode> stack=new LinkedList<DirectNode>();
+  LinkedList<LinkedList<String>> stackEntryPoint=new LinkedList<LinkedList<String>>();
+  stack.add(dgraph.first);
+  stackEntryPoint.add(new LinkedList<String>());
+  Map<String,PrimitiveExprsList> map=new HashMap<String,PrimitiveExprsList>();
+  map.put(null,new PrimitiveExprsList());
+  mapData.put(dgraph.first,map);
+  while (!stack.isEmpty()) {
+    DirectNode node=stack.removeFirst();
+    LinkedList<String> entrypoints=stackEntryPoint.removeFirst();
+    PrimitiveExprsList data;
+    if (mapCatch.containsKey(node.id)) {
+      data=getExpressionData(mapCatch.get(node.id));
+    }
+ else {
+      data=mapData.get(node).get(buildEntryPointKey(entrypoints));
+    }
+    BasicBlockStatement block=node.block;
+    if (block != null) {
+      processBlock(block,data,pool);
+      block.setExprents(data.getLstExprents());
+    }
+    String currentEntrypoint=entrypoints.isEmpty() ? null : entrypoints.getLast();
+    for (    DirectNode nd : node.succs) {
+      boolean isSuccessor=true;
+      if (currentEntrypoint != null && dgraph.mapLongRangeFinallyPaths.containsKey(node.id)) {
+        isSuccessor=false;
+        for (        FinallyPathWrapper finwraplong : dgraph.mapLongRangeFinallyPaths.get(node.id)) {
+          if (finwraplong.source.equals(currentEntrypoint) && finwraplong.destination.equals(nd.id)) {
+            isSuccessor=true;
+            break;
+          }
+        }
+      }
+      if (isSuccessor) {
+        Map<String,PrimitiveExprsList> mapSucc=mapData.get(nd);
+        if (mapSucc == null) {
+          mapData.put(nd,mapSucc=new HashMap<String,PrimitiveExprsList>());
+        }
+        LinkedList<String> ndentrypoints=new LinkedList<String>(entrypoints);
+        if (setFinallyLongRangeEntryPaths.contains(node.id + "##" + nd.id)) {
+          ndentrypoints.addLast(node.id);
+        }
+ else         if (!setFinallyShortRangeEntryPoints.contains(nd.id) && dgraph.mapLongRangeFinallyPaths.containsKey(node.id)) {
+          ndentrypoints.removeLast();
+        }
+        String ndentrykey=buildEntryPointKey(ndentrypoints);
+        if (!mapSucc.containsKey(ndentrykey)) {
+          mapSucc.put(ndentrykey,copyVarExprents(data.copyStack()));
+          stack.add(nd);
+          stackEntryPoint.add(ndentrypoints);
+        }
+      }
+    }
+  }
+  initStatementExprents(root);
+}

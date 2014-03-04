@@ -1,0 +1,47 @@
+{
+  final HashMap<VarVersionPaar,VarType> mapExprentMaxTypes=typeproc.getMapExprentMaxTypes();
+  HashMap<VarVersionPaar,VarType> mapExprentMinTypes=typeproc.getMapExprentMinTypes();
+  HashMap<VarVersionPaar,Integer> mapFinalVars=typeproc.getMapFinalVars();
+  CounterContainer ccon=DecompilerContext.getCountercontainer();
+  final HashMap<VarVersionPaar,Integer> mapVarPaar=new HashMap<VarVersionPaar,Integer>();
+  HashMap<Integer,Integer> mapOriginalVarIndices=new HashMap<Integer,Integer>();
+  HashSet<VarVersionPaar> set=new HashSet<VarVersionPaar>(mapExprentMinTypes.keySet());
+  for (  VarVersionPaar vpaar : set) {
+    if (vpaar.version >= 0) {
+      int newindex=vpaar.version == 1 ? vpaar.var : ccon.getCounterAndIncrement(CounterContainer.VAR_COUNTER);
+      VarVersionPaar newvar=new VarVersionPaar(newindex,0);
+      mapExprentMinTypes.put(newvar,mapExprentMinTypes.get(vpaar));
+      mapExprentMaxTypes.put(newvar,mapExprentMaxTypes.get(vpaar));
+      if (mapFinalVars.containsKey(vpaar)) {
+        mapFinalVars.put(newvar,mapFinalVars.remove(vpaar));
+      }
+      mapVarPaar.put(vpaar,newindex);
+      mapOriginalVarIndices.put(newindex,vpaar.var);
+    }
+  }
+  dgraph.iterateExprents(new DirectGraph.ExprentIterator(){
+    public int processExprent(    Exprent exprent){
+      List<Exprent> lst=exprent.getAllExprents(true);
+      lst.add(exprent);
+      for (      Exprent expr : lst) {
+        if (expr.type == Exprent.EXPRENT_VAR) {
+          VarExprent varex=(VarExprent)expr;
+          Integer newvarindex=mapVarPaar.get(new VarVersionPaar(varex));
+          if (newvarindex != null) {
+            varex.setIndex(newvarindex);
+            varex.setVersion(0);
+          }
+        }
+ else         if (expr.type == Exprent.EXPRENT_CONST) {
+          VarType maxType=mapExprentMaxTypes.get(new VarVersionPaar(expr.id,-1));
+          if (maxType != null && maxType.equals(VarType.VARTYPE_CHAR)) {
+            ((ConstExprent)expr).setConsttype(maxType);
+          }
+        }
+      }
+      return 0;
+    }
+  }
+);
+  this.mapOriginalVarIndices=mapOriginalVarIndices;
+}

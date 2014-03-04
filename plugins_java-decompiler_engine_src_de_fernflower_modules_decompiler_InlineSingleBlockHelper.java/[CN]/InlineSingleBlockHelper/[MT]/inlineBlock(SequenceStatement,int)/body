@@ -1,0 +1,40 @@
+{
+  Statement first=seq.getStats().get(index);
+  Statement pre=seq.getStats().get(index - 1);
+  pre.removeSuccessor(pre.getAllSuccessorEdges().get(0));
+  StatEdge edge=first.getPredecessorEdges(StatEdge.TYPE_BREAK).get(0);
+  Statement source=edge.getSource();
+  Statement parent=source.getParent();
+  source.removeSuccessor(edge);
+  List<Statement> lst=new ArrayList<Statement>();
+  for (int i=seq.getStats().size() - 1; i >= index; i--) {
+    lst.add(0,seq.getStats().remove(i));
+  }
+  if (parent.type == Statement.TYPE_IF && ((IfStatement)parent).iftype == IfStatement.IFTYPE_IF && source == parent.getFirst()) {
+    IfStatement ifparent=(IfStatement)parent;
+    SequenceStatement block=new SequenceStatement(lst);
+    block.setAllParent();
+    StatEdge newedge=new StatEdge(StatEdge.TYPE_REGULAR,source,block);
+    source.addSuccessor(newedge);
+    ifparent.setIfEdge(newedge);
+    ifparent.setIfstat(block);
+    ifparent.getStats().addWithKey(block,block.id);
+    block.setParent(ifparent);
+  }
+ else {
+    lst.add(0,source);
+    SequenceStatement block=new SequenceStatement(lst);
+    block.setAllParent();
+    parent.replaceStatement(source,block);
+    for (    StatEdge prededge : block.getPredecessorEdges(StatEdge.TYPE_CONTINUE)) {
+      block.removePredecessor(prededge);
+      prededge.getSource().changeEdgeNode(Statement.DIRECTION_FORWARD,prededge,source);
+      source.addPredecessor(prededge);
+      source.addLabeledEdge(prededge);
+    }
+    if (parent.type == Statement.TYPE_SWITCH) {
+      ((SwitchStatement)parent).sortEdgesAndNodes();
+    }
+    source.addSuccessor(new StatEdge(StatEdge.TYPE_REGULAR,source,first));
+  }
+}

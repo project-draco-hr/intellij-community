@@ -1,0 +1,51 @@
+{
+  VBStyleCollection<Statement,Integer> stats=new VBStyleCollection<Statement,Integer>();
+  VBStyleCollection<BasicBlock,Integer> blocks=graph.getBlocks();
+  for (  BasicBlock block : blocks) {
+    stats.addWithKey(new BasicBlockStatement(block),block.id);
+  }
+  Statement firstst=stats.getWithKey(graph.getFirst().id);
+  Statement dummyexit=new Statement();
+  dummyexit.type=Statement.TYPE_DUMMYEXIT;
+  Statement general;
+  if (stats.size() > 1) {
+    general=new GeneralStatement(firstst,stats,null);
+  }
+ else {
+    RootStatement root=new RootStatement(firstst,dummyexit);
+    firstst.addSuccessor(new StatEdge(StatEdge.TYPE_BREAK,firstst,dummyexit,root));
+    return root;
+  }
+  for (  BasicBlock block : blocks) {
+    Statement stat=stats.getWithKey(block.id);
+    for (    BasicBlock succ : block.getSuccs()) {
+      Statement stsucc=stats.getWithKey(succ.id);
+      int type;
+      if (stsucc == firstst) {
+        type=StatEdge.TYPE_CONTINUE;
+      }
+ else       if (graph.getFinallyExits().contains(block)) {
+        type=StatEdge.TYPE_FINALLYEXIT;
+        stsucc=dummyexit;
+      }
+ else       if (succ.id == graph.getLast().id) {
+        type=StatEdge.TYPE_BREAK;
+        stsucc=dummyexit;
+      }
+ else {
+        type=StatEdge.TYPE_REGULAR;
+      }
+      stat.addSuccessor(new StatEdge(type,stat,(type == StatEdge.TYPE_CONTINUE) ? general : stsucc,(type == StatEdge.TYPE_REGULAR) ? null : general));
+    }
+    for (    BasicBlock succex : block.getSuccExceptions()) {
+      Statement stsuccex=stats.getWithKey(succex.id);
+      ExceptionRangeCFG range=graph.getExceptionRange(succex,block);
+      if (!range.isCircular()) {
+        stat.addSuccessor(new StatEdge(stat,stsuccex,range.getExceptionTypes()));
+      }
+    }
+  }
+  general.buildContinueSet();
+  general.buildMonitorFlags();
+  return new RootStatement(general,dummyexit);
+}

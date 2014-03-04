@@ -1,0 +1,76 @@
+{
+  boolean res=true;
+switch (exprent.type) {
+case Exprent.EXPRENT_CONST:
+    ConstExprent cexpr=(ConstExprent)exprent;
+  VarType consttype=cexpr.getConsttype();
+if (newtype.type_family > CodeConstants.TYPE_FAMILY_INTEGER || consttype.type_family > CodeConstants.TYPE_FAMILY_INTEGER) {
+  return true;
+}
+ else if (newtype.type_family == CodeConstants.TYPE_FAMILY_INTEGER) {
+  VarType mininteger=new ConstExprent((Integer)((ConstExprent)exprent).getValue(),false).getConsttype();
+  if (mininteger.isStrictSuperset(newtype)) {
+    newtype=mininteger;
+  }
+}
+case Exprent.EXPRENT_VAR:
+VarVersionPaar varpaar=null;
+if (exprent.type == Exprent.EXPRENT_CONST) {
+varpaar=new VarVersionPaar(((ConstExprent)exprent).id,-1);
+}
+ else if (exprent.type == Exprent.EXPRENT_VAR) {
+varpaar=new VarVersionPaar((VarExprent)exprent);
+}
+if (minmax == 0) {
+VarType currentMinType=mapExprentMinTypes.get(varpaar);
+VarType newMinType;
+if (currentMinType == null || newtype.type_family > currentMinType.type_family) {
+newMinType=newtype;
+}
+ else if (newtype.type_family < currentMinType.type_family) {
+return true;
+}
+ else {
+newMinType=VarType.getCommonSupertype(currentMinType,newtype);
+}
+mapExprentMinTypes.put(varpaar,newMinType);
+if (exprent.type == Exprent.EXPRENT_CONST) {
+((ConstExprent)exprent).setConsttype(newMinType);
+}
+if (currentMinType != null && (newMinType.type_family > currentMinType.type_family || newMinType.isStrictSuperset(currentMinType))) {
+return false;
+}
+}
+ else {
+VarType currentMaxType=mapExprentMaxTypes.get(varpaar);
+VarType newMaxType;
+if (currentMaxType == null || newtype.type_family < currentMaxType.type_family) {
+newMaxType=newtype;
+}
+ else if (newtype.type_family > currentMaxType.type_family) {
+return true;
+}
+ else {
+newMaxType=VarType.getCommonMinType(currentMaxType,newtype);
+}
+mapExprentMaxTypes.put(varpaar,newMaxType);
+}
+break;
+case Exprent.EXPRENT_ASSIGNMENT:
+return changeExprentType(((AssignmentExprent)exprent).getRight(),newtype,minmax);
+case Exprent.EXPRENT_FUNCTION:
+FunctionExprent func=(FunctionExprent)exprent;
+switch (func.getFunctype()) {
+case FunctionExprent.FUNCTION_IIF:
+res&=changeExprentType(func.getLstOperands().get(1),newtype,minmax);
+res&=changeExprentType(func.getLstOperands().get(2),newtype,minmax);
+break;
+case FunctionExprent.FUNCTION_AND:
+case FunctionExprent.FUNCTION_OR:
+case FunctionExprent.FUNCTION_XOR:
+res&=changeExprentType(func.getLstOperands().get(0),newtype,minmax);
+res&=changeExprentType(func.getLstOperands().get(1),newtype,minmax);
+}
+}
+return res;
+}

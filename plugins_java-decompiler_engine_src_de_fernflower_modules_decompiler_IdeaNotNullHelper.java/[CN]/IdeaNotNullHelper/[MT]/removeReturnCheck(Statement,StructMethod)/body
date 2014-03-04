@@ -1,0 +1,86 @@
+{
+  Statement parent=stat.getParent();
+  if (parent != null && parent.type == Statement.TYPE_IF && stat.type == Statement.TYPE_BASICBLOCK && stat.getExprents().size() == 1) {
+    Exprent exprent=stat.getExprents().get(0);
+    if (exprent.type == Exprent.EXPRENT_EXIT) {
+      ExitExprent exit_exprent=(ExitExprent)exprent;
+      if (exit_exprent.getExittype() == ExitExprent.EXIT_RETURN) {
+        Exprent exprent_value=exit_exprent.getValue();
+        IfStatement ifparent=(IfStatement)parent;
+        Exprent if_condition=ifparent.getHeadexprent().getCondition();
+        if (ifparent.getElsestat() == stat && if_condition.type == Exprent.EXPRENT_FUNCTION && ((FunctionExprent)if_condition).getFunctype() == FunctionExprent.FUNCTION_EQ) {
+          FunctionExprent func=(FunctionExprent)if_condition;
+          Exprent first_param=func.getLstOperands().get(0);
+          Exprent second_param=func.getLstOperands().get(1);
+          StatEdge ifedge=ifparent.getIfEdge();
+          StatEdge elseedge=ifparent.getElseEdge();
+          Statement ifbranch=ifparent.getIfstat();
+          Statement elsebranch=ifparent.getElsestat();
+          if (second_param.type == Exprent.EXPRENT_CONST && ((ConstExprent)second_param).getExprType().type == CodeConstants.TYPE_NULL) {
+            if (first_param.equals(exprent_value)) {
+              if (ifbranch.type == Statement.TYPE_BASICBLOCK && ifbranch.getExprents().size() == 1 && ifbranch.getExprents().get(0).type == Exprent.EXPRENT_EXIT) {
+                ifparent.getFirst().removeSuccessor(ifedge);
+                ifparent.getFirst().removeSuccessor(elseedge);
+                ifparent.getStats().removeWithKey(ifbranch.id);
+                ifparent.getStats().removeWithKey(elsebranch.id);
+                if (!ifbranch.getAllSuccessorEdges().isEmpty()) {
+                  ifbranch.removeSuccessor(ifbranch.getAllSuccessorEdges().get(0));
+                }
+                if (!ifparent.getFirst().getExprents().isEmpty()) {
+                  elsebranch.getExprents().addAll(0,ifparent.getFirst().getExprents());
+                }
+                ifparent.getParent().replaceStatement(ifparent,elsebranch);
+                ifparent.getParent().setAllParent();
+                return true;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+ else   if (parent != null && parent.type == Statement.TYPE_SEQUENCE && stat.type == Statement.TYPE_BASICBLOCK && stat.getExprents().size() == 1) {
+    Exprent exprent=stat.getExprents().get(0);
+    if (exprent.type == Exprent.EXPRENT_EXIT) {
+      ExitExprent exit_exprent=(ExitExprent)exprent;
+      if (exit_exprent.getExittype() == ExitExprent.EXIT_RETURN) {
+        Exprent exprent_value=exit_exprent.getValue();
+        SequenceStatement sequence=(SequenceStatement)parent;
+        int sequence_stats_number=sequence.getStats().size();
+        if (sequence_stats_number > 1 && sequence.getStats().getLast() == stat && sequence.getStats().get(sequence_stats_number - 2).type == Statement.TYPE_IF) {
+          IfStatement ifstat=(IfStatement)sequence.getStats().get(sequence_stats_number - 2);
+          Exprent if_condition=ifstat.getHeadexprent().getCondition();
+          if (ifstat.iftype == IfStatement.IFTYPE_IF && if_condition.type == Exprent.EXPRENT_FUNCTION && ((FunctionExprent)if_condition).getFunctype() == FunctionExprent.FUNCTION_EQ) {
+            FunctionExprent func=(FunctionExprent)if_condition;
+            Exprent first_param=func.getLstOperands().get(0);
+            Exprent second_param=func.getLstOperands().get(1);
+            Statement ifbranch=ifstat.getIfstat();
+            if (second_param.type == Exprent.EXPRENT_CONST && ((ConstExprent)second_param).getExprType().type == CodeConstants.TYPE_NULL) {
+              if (first_param.equals(exprent_value)) {
+                if (ifbranch.type == Statement.TYPE_BASICBLOCK && ifbranch.getExprents().size() == 1 && ifbranch.getExprents().get(0).type == Exprent.EXPRENT_EXIT) {
+                  ifstat.removeSuccessor(ifstat.getAllSuccessorEdges().get(0));
+                  if (!ifstat.getFirst().getExprents().isEmpty()) {
+                    stat.getExprents().addAll(0,ifstat.getFirst().getExprents());
+                  }
+                  for (                  StatEdge edge : ifstat.getAllPredecessorEdges()) {
+                    ifstat.removePredecessor(edge);
+                    edge.getSource().changeEdgeNode(Statement.DIRECTION_FORWARD,edge,stat);
+                    stat.addPredecessor(edge);
+                  }
+                  sequence.getStats().removeWithKey(ifstat.id);
+                  return true;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  for (  Statement st : stat.getStats()) {
+    if (removeReturnCheck(st,mt)) {
+      return true;
+    }
+  }
+  return false;
+}

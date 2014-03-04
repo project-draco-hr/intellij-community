@@ -1,0 +1,65 @@
+{
+  if (rtnode.edgetypes.get(1).intValue() == 0) {
+    IfNode elsebranch=rtnode.succs.get(1);
+    if (elsebranch.succs.size() == 2) {
+      int path=elsebranch.succs.get(1).value == rtnode.succs.get(0).value ? 2 : (elsebranch.succs.get(0).value == rtnode.succs.get(0).value ? 1 : 0);
+      if (path > 0) {
+        IfStatement firstif=(IfStatement)rtnode.value;
+        IfStatement secondif=(IfStatement)elsebranch.value;
+        Statement parent=firstif.getParent();
+        if (secondif.getFirst().getExprents().isEmpty()) {
+          firstif.getFirst().removeSuccessor(firstif.getIfEdge());
+          firstif.removeAllSuccessors(secondif);
+          for (          StatEdge edge : firstif.getAllPredecessorEdges()) {
+            if (!firstif.containsStatementStrict(edge.getSource())) {
+              firstif.removePredecessor(edge);
+              edge.getSource().changeEdgeNode(Statement.DIRECTION_FORWARD,edge,secondif);
+              secondif.addPredecessor(edge);
+            }
+          }
+          parent.getStats().removeWithKey(firstif.id);
+          if (parent.getFirst() == firstif) {
+            parent.setFirst(secondif);
+          }
+          IfExprent statexpr=secondif.getHeadexprent();
+          List<Exprent> lstOperands=new ArrayList<Exprent>();
+          lstOperands.add(firstif.getHeadexprent().getCondition());
+          if (path == 2) {
+            lstOperands.set(0,new FunctionExprent(FunctionExprent.FUNCTION_BOOLNOT,Arrays.asList(new Exprent[]{lstOperands.get(0)})));
+          }
+          lstOperands.add(statexpr.getCondition());
+          statexpr.setCondition(new FunctionExprent(path == 1 ? FunctionExprent.FUNCTION_COR : FunctionExprent.FUNCTION_CADD,lstOperands));
+          if (secondif.getFirst().getExprents().isEmpty() && !firstif.getFirst().getExprents().isEmpty()) {
+            secondif.replaceStatement(secondif.getFirst(),firstif.getFirst());
+          }
+          return true;
+        }
+      }
+    }
+ else     if (elsebranch.succs.size() == 1) {
+      if (elsebranch.succs.get(0).value == rtnode.succs.get(0).value) {
+        IfStatement firstif=(IfStatement)rtnode.value;
+        Statement second=elsebranch.value;
+        firstif.removeAllSuccessors(second);
+        for (        StatEdge edge : second.getAllSuccessorEdges()) {
+          second.removeSuccessor(edge);
+          edge.setSource(firstif);
+          firstif.addSuccessor(edge);
+        }
+        StatEdge ifedge=firstif.getIfEdge();
+        firstif.getFirst().removeSuccessor(ifedge);
+        second.addSuccessor(new StatEdge(ifedge.getType(),second,ifedge.getDestination(),ifedge.closure));
+        StatEdge newifedge=new StatEdge(StatEdge.TYPE_REGULAR,firstif.getFirst(),second);
+        firstif.getFirst().addSuccessor(newifedge);
+        firstif.setIfstat(second);
+        firstif.getStats().addWithKey(second,second.id);
+        second.setParent(firstif);
+        firstif.getParent().getStats().removeWithKey(second.id);
+        IfExprent statexpr=firstif.getHeadexprent();
+        statexpr.setCondition(new FunctionExprent(FunctionExprent.FUNCTION_BOOLNOT,Arrays.asList(new Exprent[]{statexpr.getCondition()})));
+        return true;
+      }
+    }
+  }
+  return false;
+}

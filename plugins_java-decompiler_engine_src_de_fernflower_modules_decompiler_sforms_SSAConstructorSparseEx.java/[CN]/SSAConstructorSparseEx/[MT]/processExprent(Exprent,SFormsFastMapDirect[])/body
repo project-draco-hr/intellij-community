@@ -1,0 +1,98 @@
+{
+  if (expr == null) {
+    return;
+  }
+  VarExprent varassign=null;
+  boolean finished=false;
+switch (expr.type) {
+case Exprent.EXPRENT_ASSIGNMENT:
+    AssignmentExprent assexpr=(AssignmentExprent)expr;
+  if (assexpr.getCondtype() == AssignmentExprent.CONDITION_NONE) {
+    Exprent dest=assexpr.getLeft();
+    if (dest.type == Exprent.EXPRENT_VAR) {
+      varassign=(VarExprent)dest;
+    }
+  }
+break;
+case Exprent.EXPRENT_FUNCTION:
+FunctionExprent func=(FunctionExprent)expr;
+switch (func.getFunctype()) {
+case FunctionExprent.FUNCTION_IIF:
+processExprent(func.getLstOperands().get(0),varmaparr);
+SFormsFastMapDirect varmapFalse;
+if (varmaparr[1] == null) {
+varmapFalse=new SFormsFastMapDirect(varmaparr[0]);
+}
+ else {
+varmapFalse=varmaparr[1];
+varmaparr[1]=null;
+}
+processExprent(func.getLstOperands().get(1),varmaparr);
+SFormsFastMapDirect[] varmaparrNeg=new SFormsFastMapDirect[]{varmapFalse,null};
+processExprent(func.getLstOperands().get(2),varmaparrNeg);
+mergeMaps(varmaparr[0],varmaparrNeg[0]);
+varmaparr[1]=null;
+finished=true;
+break;
+case FunctionExprent.FUNCTION_CADD:
+processExprent(func.getLstOperands().get(0),varmaparr);
+SFormsFastMapDirect[] varmaparrAnd=new SFormsFastMapDirect[]{new SFormsFastMapDirect(varmaparr[0]),null};
+processExprent(func.getLstOperands().get(1),varmaparrAnd);
+varmaparr[1]=mergeMaps(varmaparr[varmaparr[1] == null ? 0 : 1],varmaparrAnd[varmaparrAnd[1] == null ? 0 : 1]);
+varmaparr[0]=varmaparrAnd[0];
+finished=true;
+break;
+case FunctionExprent.FUNCTION_COR:
+processExprent(func.getLstOperands().get(0),varmaparr);
+SFormsFastMapDirect[] varmaparrOr=new SFormsFastMapDirect[]{new SFormsFastMapDirect(varmaparr[varmaparr[1] == null ? 0 : 1]),null};
+processExprent(func.getLstOperands().get(1),varmaparrOr);
+varmaparr[1]=varmaparrOr[varmaparrOr[1] == null ? 0 : 1];
+varmaparr[0]=mergeMaps(varmaparr[0],varmaparrOr[0]);
+finished=true;
+}
+}
+if (finished) {
+return;
+}
+List<Exprent> lst=expr.getAllExprents();
+lst.remove(varassign);
+for (Exprent ex : lst) {
+processExprent(ex,varmaparr);
+}
+SFormsFastMapDirect varmap=varmaparr[0];
+if (varassign != null) {
+Integer varindex=varassign.getIndex();
+if (varassign.getVersion() == 0) {
+Integer nextver=getNextFreeVersion(varindex);
+varassign.setVersion(nextver);
+setCurrentVar(varmap,varindex,nextver);
+}
+ else {
+setCurrentVar(varmap,varindex,varassign.getVersion());
+}
+}
+ else if (expr.type == Exprent.EXPRENT_VAR) {
+VarExprent vardest=(VarExprent)expr;
+Integer varindex=vardest.getIndex();
+FastSparseSet<Integer> vers=varmap.get(varindex);
+int cardinality=vers.getCardinality();
+if (cardinality == 1) {
+Integer it=vers.iterator().next();
+vardest.setVersion(it.intValue());
+}
+ else if (cardinality == 2) {
+Integer current_vers=vardest.getVersion();
+VarVersionPaar currpaar=new VarVersionPaar(varindex,current_vers);
+if (current_vers != 0 && phi.containsKey(currpaar)) {
+setCurrentVar(varmap,varindex,current_vers);
+phi.get(currpaar).union(vers);
+}
+ else {
+Integer nextver=getNextFreeVersion(varindex);
+vardest.setVersion(nextver);
+setCurrentVar(varmap,varindex,nextver);
+phi.put(new VarVersionPaar(varindex,nextver),vers);
+}
+}
+}
+}

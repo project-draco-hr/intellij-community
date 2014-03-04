@@ -1,0 +1,56 @@
+{
+  Statement ifstat=stat.getIfstat();
+  InvocationExprent throwError=isAssertionError(ifstat);
+  if (throwError == null) {
+    return false;
+  }
+  Object[] exprres=getAssertionExprent(stat.getHeadexprent().getCondition().copy(),classname,key);
+  if (!(Boolean)exprres[1]) {
+    return false;
+  }
+  List<Exprent> lstParams=new ArrayList<Exprent>();
+  Exprent ascond=null, retcond=null;
+  if (exprres[0] != null) {
+    ascond=new FunctionExprent(FunctionExprent.FUNCTION_BOOLNOT,Arrays.asList(new Exprent[]{(Exprent)exprres[0]}));
+    retcond=SecondaryFunctionsHelper.propagateBoolNot(ascond);
+  }
+  lstParams.add(retcond == null ? ascond : retcond);
+  if (!throwError.getLstParameters().isEmpty()) {
+    lstParams.add(throwError.getLstParameters().get(0));
+  }
+  AssertExprent asexpr=new AssertExprent(lstParams);
+  Statement newstat=new BasicBlockStatement(new BasicBlock(DecompilerContext.getCountercontainer().getCounterAndIncrement(CounterContainer.STATEMENT_COUNTER)));
+  newstat.setExprents(Arrays.asList(new Exprent[]{asexpr}));
+  Statement first=stat.getFirst();
+  if (stat.iftype == IfStatement.IFTYPE_IFELSE || (first.getExprents() != null && !first.getExprents().isEmpty())) {
+    first.removeSuccessor(stat.getIfEdge());
+    first.removeSuccessor(stat.getElseEdge());
+    List<Statement> lstStatements=new ArrayList<Statement>();
+    if (first.getExprents() != null && !first.getExprents().isEmpty()) {
+      lstStatements.add(first);
+    }
+    lstStatements.add(newstat);
+    if (stat.iftype == IfStatement.IFTYPE_IFELSE) {
+      lstStatements.add(stat.getElsestat());
+    }
+    SequenceStatement sequence=new SequenceStatement(lstStatements);
+    sequence.setAllParent();
+    for (int i=0; i < sequence.getStats().size() - 1; i++) {
+      sequence.getStats().get(i).addSuccessor(new StatEdge(StatEdge.TYPE_REGULAR,sequence.getStats().get(i),sequence.getStats().get(i + 1)));
+    }
+    if (stat.iftype == IfStatement.IFTYPE_IFELSE) {
+      Statement ifelse=stat.getElsestat();
+      List<StatEdge> lstSuccs=ifelse.getAllSuccessorEdges();
+      if (!lstSuccs.isEmpty()) {
+        StatEdge endedge=lstSuccs.get(0);
+        if (endedge.closure == stat) {
+          sequence.addLabeledEdge(endedge);
+        }
+      }
+    }
+    newstat=sequence;
+  }
+  newstat.getVarDefinitions().addAll(stat.getVarDefinitions());
+  parent.replaceStatement(stat,newstat);
+  return true;
+}

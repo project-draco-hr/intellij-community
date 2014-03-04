@@ -1,0 +1,77 @@
+{
+  if (loop.getLooptype() != DoStatement.LOOP_DO) {
+    return false;
+  }
+  Statement parentloop=loop.getParent();
+  while (parentloop != null && parentloop.type != Statement.TYPE_DO) {
+    parentloop=parentloop.getParent();
+  }
+  if (parentloop == null || parentloop.getBasichead() != loop.getBasichead()) {
+    return false;
+  }
+  List<StatEdge> lstBreakEdges=new ArrayList<StatEdge>();
+  for (  StatEdge edge : loop.getLabelEdges()) {
+    if (edge.getType() == StatEdge.TYPE_BREAK) {
+      lstBreakEdges.add(edge);
+    }
+  }
+  Statement loopcontent=loop.getFirst();
+  boolean firstok=loopcontent.getAllSuccessorEdges().isEmpty();
+  if (!firstok) {
+    StatEdge edge=loopcontent.getAllSuccessorEdges().get(0);
+    firstok=(edge.closure == loop && edge.getType() == StatEdge.TYPE_BREAK);
+    if (firstok) {
+      lstBreakEdges.remove(edge);
+    }
+  }
+  if (!lstBreakEdges.isEmpty()) {
+    if (firstok) {
+      HashMap<Integer,Boolean> statLabeled=new HashMap<Integer,Boolean>();
+      List<Statement> lstEdgeClosures=new ArrayList<Statement>();
+      for (      StatEdge edge : lstBreakEdges) {
+        Statement minclosure=LowBreakHelper.getMinClosure(loopcontent,edge.getSource());
+        lstEdgeClosures.add(minclosure);
+      }
+      int precount=loop.isLabeled() ? 1 : 0;
+      for (      Statement st : lstEdgeClosures) {
+        if (!statLabeled.containsKey(st.id)) {
+          boolean btemp=st.isLabeled();
+          precount+=btemp ? 1 : 0;
+          statLabeled.put(st.id,btemp);
+        }
+      }
+      for (int i=0; i < lstBreakEdges.size(); i++) {
+        Statement st=lstEdgeClosures.get(i);
+        statLabeled.put(st.id,LowBreakHelper.isBreakEdgeLabeled(lstBreakEdges.get(i).getSource(),st) | statLabeled.get(st.id));
+      }
+      for (int i=0; i < lstBreakEdges.size(); i++) {
+        lstEdgeClosures.set(i,getMaxBreakLift(lstEdgeClosures.get(i),lstBreakEdges.get(i),statLabeled,loop));
+      }
+      statLabeled.clear();
+      for (      Statement st : lstEdgeClosures) {
+        statLabeled.put(st.id,st.isLabeled());
+      }
+      for (int i=0; i < lstBreakEdges.size(); i++) {
+        Statement st=lstEdgeClosures.get(i);
+        statLabeled.put(st.id,LowBreakHelper.isBreakEdgeLabeled(lstBreakEdges.get(i).getSource(),st) | statLabeled.get(st.id));
+      }
+      int postcount=0;
+      for (      Boolean val : statLabeled.values()) {
+        postcount+=val ? 1 : 0;
+      }
+      if (precount <= postcount) {
+        return false;
+      }
+ else {
+        for (int i=0; i < lstBreakEdges.size(); i++) {
+          lstEdgeClosures.get(i).addLabeledEdge(lstBreakEdges.get(i));
+        }
+      }
+    }
+ else {
+      return false;
+    }
+  }
+  eliminateLoop(loop,parentloop);
+  return true;
+}

@@ -1,0 +1,64 @@
+{
+  HashMap<VarVersionPaar,VarType> mapExprentMaxTypes=typeproc.getMapExprentMaxTypes();
+  HashMap<VarVersionPaar,VarType> mapExprentMinTypes=typeproc.getMapExprentMinTypes();
+  HashMap<Integer,HashSet<Integer>> mapVarVersions=new HashMap<Integer,HashSet<Integer>>();
+  for (  VarVersionPaar varpaar : mapExprentMinTypes.keySet()) {
+    if (varpaar.version >= 0) {
+      HashSet<Integer> set=mapVarVersions.get(varpaar.var);
+      if (set == null) {
+        set=new HashSet<Integer>();
+        mapVarVersions.put(varpaar.var,set);
+      }
+      set.add(varpaar.version);
+    }
+  }
+  final HashMap<VarVersionPaar,Integer> mapMergedVersions=new HashMap<VarVersionPaar,Integer>();
+  for (  Entry<Integer,HashSet<Integer>> ent : mapVarVersions.entrySet()) {
+    if (ent.getValue().size() > 1) {
+      List<Integer> lstVersions=new ArrayList<Integer>(ent.getValue());
+      Collections.sort(lstVersions);
+      for (int i=0; i < lstVersions.size(); i++) {
+        VarVersionPaar firstpaar=new VarVersionPaar(ent.getKey(),lstVersions.get(i));
+        VarType firsttype=mapExprentMinTypes.get(firstpaar);
+        for (int j=i + 1; j < lstVersions.size(); j++) {
+          VarVersionPaar secpaar=new VarVersionPaar(ent.getKey(),lstVersions.get(j));
+          VarType sectype=mapExprentMinTypes.get(secpaar);
+          if (firsttype.equals(sectype) || (firsttype.equals(VarType.VARTYPE_NULL) && sectype.type == CodeConstants.TYPE_OBJECT) || (sectype.equals(VarType.VARTYPE_NULL) && firsttype.type == CodeConstants.TYPE_OBJECT)) {
+            VarType firstMaxType=mapExprentMaxTypes.get(firstpaar);
+            VarType secMaxType=mapExprentMaxTypes.get(secpaar);
+            mapExprentMaxTypes.put(firstpaar,firstMaxType == null ? secMaxType : (secMaxType == null ? firstMaxType : VarType.getCommonMinType(firstMaxType,secMaxType)));
+            mapMergedVersions.put(secpaar,firstpaar.version);
+            mapExprentMaxTypes.remove(secpaar);
+            mapExprentMinTypes.remove(secpaar);
+            if (firsttype.equals(VarType.VARTYPE_NULL)) {
+              mapExprentMinTypes.put(firstpaar,sectype);
+              firsttype=sectype;
+            }
+            typeproc.getMapFinalVars().put(firstpaar,VarTypeProcessor.VAR_NONFINAL);
+            lstVersions.remove(j);
+            j--;
+          }
+        }
+      }
+    }
+  }
+  if (!mapMergedVersions.isEmpty()) {
+    dgraph.iterateExprents(new DirectGraph.ExprentIterator(){
+      public int processExprent(      Exprent exprent){
+        List<Exprent> lst=exprent.getAllExprents(true);
+        lst.add(exprent);
+        for (        Exprent expr : lst) {
+          if (expr.type == Exprent.EXPRENT_VAR) {
+            VarExprent varex=(VarExprent)expr;
+            Integer newversion=mapMergedVersions.get(new VarVersionPaar(varex));
+            if (newversion != null) {
+              varex.setVersion(newversion);
+            }
+          }
+        }
+        return 0;
+      }
+    }
+);
+  }
+}

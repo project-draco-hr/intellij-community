@@ -1,0 +1,129 @@
+{
+  if (node.type == ClassNode.CLASS_ANONYMOUS) {
+    writer.write(" {");
+    writer.newLine();
+  }
+ else {
+    String indstr=InterpreterUtil.getIndentString(indent);
+    ClassWrapper wrapper=node.wrapper;
+    StructClass cl=wrapper.getClassStruct();
+    int flags=node.type == ClassNode.CLASS_ROOT ? cl.access_flags : node.access;
+    boolean isInterface=(flags & CodeConstants.ACC_INTERFACE) != 0;
+    boolean isAnnotation=(flags & CodeConstants.ACC_ANNOTATION) != 0;
+    boolean isEnum=DecompilerContext.getOption(IFernflowerPreferences.DECOMPILE_ENUM) && (flags & CodeConstants.ACC_ENUM) != 0;
+    boolean isDeprecated=cl.getAttributes().containsKey("Deprecated");
+    if (interceptor != null) {
+      String oldname=interceptor.getOldName(cl.qualifiedName);
+      if (oldname != null) {
+        writer.write(indstr);
+        writer.write("// $FF: renamed from: " + getDescriptorPrintOut(oldname,0));
+        writer.newLine();
+      }
+    }
+    List<AnnotationExprent> lstAnn=getAllAnnotations(cl.getAttributes());
+    for (    AnnotationExprent annexpr : lstAnn) {
+      if ("java/lang/Deprecated".equals(annexpr.getClassname())) {
+        isDeprecated=false;
+      }
+      writer.write(annexpr.toJava(indent));
+      writer.newLine();
+    }
+    boolean isSynthetic=(flags & CodeConstants.ACC_SYNTHETIC) != 0 || cl.getAttributes().containsKey("Synthetic");
+    if (isSynthetic) {
+      writer.write(indstr);
+      writer.write("// $FF: synthetic class");
+      writer.newLine();
+    }
+    if (isDeprecated) {
+      if (DecompilerContext.getOption(IFernflowerPreferences.DEPRECATED_COMMENT)) {
+        writer.write(indstr);
+        writer.write("/** @deprecated */");
+        writer.newLine();
+      }
+      writer.write(indstr);
+      writer.write("@Deprecated");
+      writer.newLine();
+    }
+    writer.write(indstr);
+    if (isEnum) {
+      flags&=~CodeConstants.ACC_ABSTRACT;
+      flags&=~CodeConstants.ACC_FINAL;
+    }
+    for (int i=0; i < modval_class.length; i++) {
+      if (!isInterface || !mod_notinterface.contains(modval_class[i])) {
+        if ((flags & modval_class[i]) != 0) {
+          writer.write(modstr_class[i]);
+        }
+      }
+    }
+    if (isEnum) {
+      writer.write("enum ");
+    }
+ else     if (isInterface) {
+      if (isAnnotation) {
+        writer.write("@");
+      }
+      writer.write("interface ");
+    }
+ else {
+      writer.write("class ");
+    }
+    GenericClassDescriptor descriptor=null;
+    if (DecompilerContext.getOption(IFernflowerPreferences.DECOMPILE_GENERIC_SIGNATURES)) {
+      StructGenericSignatureAttribute attr=(StructGenericSignatureAttribute)cl.getAttributes().getWithKey("Signature");
+      if (attr != null) {
+        descriptor=GenericMain.parseClassSignature(attr.getSignature());
+      }
+    }
+    writer.write(node.simpleName);
+    if (descriptor != null && !descriptor.fparameters.isEmpty()) {
+      writer.write("<");
+      for (int i=0; i < descriptor.fparameters.size(); i++) {
+        if (i > 0) {
+          writer.write(", ");
+        }
+        writer.write(descriptor.fparameters.get(i) + " extends ");
+        List<GenericType> lstBounds=descriptor.fbounds.get(i);
+        writer.write(GenericMain.getGenericCastTypeName(lstBounds.get(0)));
+        for (int j=1; j < lstBounds.size(); j++) {
+          writer.write(" & " + GenericMain.getGenericCastTypeName(lstBounds.get(j)));
+        }
+      }
+      writer.write(">");
+    }
+    writer.write(" ");
+    if (!isEnum && !isInterface && cl.superClass != null) {
+      VarType supertype=new VarType(cl.superClass.getString(),true);
+      if (!VarType.VARTYPE_OBJECT.equals(supertype)) {
+        writer.write("extends ");
+        if (descriptor != null) {
+          writer.write(GenericMain.getGenericCastTypeName(descriptor.superclass));
+        }
+ else {
+          writer.write(ExprProcessor.getCastTypeName(supertype));
+        }
+        writer.write(" ");
+      }
+    }
+    if (!isAnnotation) {
+      int[] interfaces=cl.getInterfaces();
+      if (interfaces.length > 0) {
+        writer.write(isInterface ? "extends " : "implements ");
+        for (int i=0; i < interfaces.length; i++) {
+          if (i > 0) {
+            writer.write(", ");
+          }
+          if (descriptor != null) {
+            writer.write(GenericMain.getGenericCastTypeName(descriptor.superinterfaces.get(i)));
+          }
+ else {
+            writer.write(ExprProcessor.getCastTypeName(new VarType(cl.getInterface(i),true)));
+          }
+        }
+        writer.write(" ");
+      }
+    }
+    writer.write("{");
+    writer.newLine();
+  }
+}

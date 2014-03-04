@@ -1,0 +1,57 @@
+{
+  mapSupportPoints=new HashMap<Integer,FastFixedSet<Integer>>();
+  calcReachabilitySuppPoints(StatEdge.TYPE_REGULAR);
+  iterateReachability(new IReachabilityAction(){
+    public boolean action(    Statement node,    HashMap<Integer,FastFixedSet<Integer>> mapSets){
+      Integer nodeid=node.id;
+      FastFixedSet<Integer> setReachability=mapSets.get(nodeid);
+      List<FastFixedSet<Integer>> lstPredSets=new ArrayList<FastFixedSet<Integer>>();
+      for (      StatEdge prededge : node.getPredecessorEdges(StatEdge.TYPE_REGULAR)) {
+        FastFixedSet<Integer> setPred=mapSets.get(prededge.getSource().id);
+        if (setPred == null) {
+          setPred=mapSupportPoints.get(prededge.getSource().id);
+        }
+        lstPredSets.add(setPred);
+      }
+      for (      Integer id : setReachability.toPlainSet()) {
+        FastFixedSet<Integer> setReachabilityCopy=setReachability.getCopy();
+        FastFixedSet<Integer> setIntersection=factory.spawnEmptySet();
+        boolean isIntersectionInitialized=false;
+        for (        FastFixedSet<Integer> predset : lstPredSets) {
+          if (predset.contains(id)) {
+            if (!isIntersectionInitialized) {
+              setIntersection.union(predset);
+              isIntersectionInitialized=true;
+            }
+ else {
+              setIntersection.intersection(predset);
+            }
+          }
+        }
+        if (nodeid != id.intValue()) {
+          setIntersection.add(nodeid);
+        }
+ else {
+          setIntersection.remove(nodeid);
+        }
+        setReachabilityCopy.complement(setIntersection);
+        mapExtPostdominators.get(id).complement(setReachabilityCopy);
+      }
+      return false;
+    }
+  }
+,StatEdge.TYPE_REGULAR);
+  FastFixedSet<Integer> setHandlers=factory.spawnEmptySet();
+  boolean handlerfound=false;
+  for (  Statement stat : statement.getStats()) {
+    if (stat.getPredecessorEdges(Statement.STATEDGE_DIRECT_ALL).isEmpty() && !stat.getPredecessorEdges(StatEdge.TYPE_EXCEPTION).isEmpty()) {
+      setHandlers.add(stat.id);
+      handlerfound=true;
+    }
+  }
+  if (handlerfound) {
+    for (    FastFixedSet<Integer> set : mapExtPostdominators.values()) {
+      set.complement(setHandlers);
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  HashSet<BasicBlock> tryBlocks=getAllBasicBlocks(fstat.getFirst());
+  HashSet<BasicBlock> catchBlocks=getAllBasicBlocks(fstat.getHandler());
+  int finallytype=(Integer)information[0];
+  HashMap<BasicBlock,Boolean> mapLast=(HashMap<BasicBlock,Boolean>)information[1];
+  BasicBlock first=fstat.getHandler().getBasichead().getBlock();
+  boolean skippedFirst=false;
+  if (finallytype == 3) {
+    removeExceptionInstructionsEx(first,3,finallytype);
+    if (mapLast.containsKey(first)) {
+      graph.getFinallyExits().add(first);
+    }
+    return true;
+  }
+ else {
+    if (first.getSeq().length() == 1 && finallytype > 0) {
+      BasicBlock firstsuc=first.getSuccs().get(0);
+      if (catchBlocks.contains(firstsuc)) {
+        first=firstsuc;
+        skippedFirst=true;
+      }
+    }
+  }
+  HashSet<BasicBlock> startBlocks=new HashSet<BasicBlock>();
+  for (  BasicBlock block : tryBlocks) {
+    startBlocks.addAll(block.getSuccs());
+  }
+  startBlocks.remove(graph.getLast());
+  startBlocks.removeAll(tryBlocks);
+  List<Object[]> lstAreas=new ArrayList<Object[]>();
+  for (  BasicBlock start : startBlocks) {
+    Object[] arr=compareSubgraphsEx(graph,start,catchBlocks,first,finallytype,mapLast,skippedFirst);
+    if (arr == null) {
+      return false;
+    }
+    lstAreas.add(new Object[]{start,arr[0],arr[1]});
+  }
+  try {
+    DotExporter.toDotFile(graph,new File("c:\\Temp\\fern5.dot"),true);
+  }
+ catch (  Exception ex) {
+    ex.printStackTrace();
+  }
+  for (  Object[] area : lstAreas) {
+    deleteArea(graph,area);
+  }
+  for (  Entry<BasicBlock,Boolean> entry : mapLast.entrySet()) {
+    BasicBlock last=entry.getKey();
+    if (entry.getValue()) {
+      removeExceptionInstructionsEx(last,2,finallytype);
+      graph.getFinallyExits().add(last);
+    }
+  }
+  removeExceptionInstructionsEx(fstat.getHandler().getBasichead().getBlock(),1,finallytype);
+  return true;
+}

@@ -1,0 +1,70 @@
+{
+  if (general.type == Statement.TYPE_ROOT) {
+    Statement stat=general.getFirst();
+    if (stat.type != Statement.TYPE_GENERAL) {
+      return true;
+    }
+ else {
+      boolean complete=processStatement(stat,mapExtPost);
+      if (complete) {
+        general.replaceStatement(stat,stat.getFirst());
+      }
+      return complete;
+    }
+  }
+  boolean mapRefreshed=mapExtPost.isEmpty();
+  for (int mapstage=0; mapstage < 2; mapstage++) {
+    for (int reducibility=0; reducibility < 5; reducibility++) {
+      if (reducibility > 0) {
+        if (IrreducibleCFGDeobfuscator.isStatementIrreducible(general)) {
+          if (!IrreducibleCFGDeobfuscator.splitIrreducibleNode(general)) {
+            DecompilerContext.getLogger().writeMessage("Irreducible statement cannot be decomposed!",IFernflowerLogger.ERROR);
+            break;
+          }
+        }
+ else {
+          if (mapstage == 2 || mapRefreshed) {
+            DecompilerContext.getLogger().writeMessage("Statement cannot be decomposed although reducible!",IFernflowerLogger.ERROR);
+          }
+          break;
+        }
+        mapExtPost=new HashMap<Integer,Set<Integer>>();
+        mapRefreshed=true;
+      }
+      for (int i=0; i < 2; i++) {
+        boolean forceall=i != 0;
+        for (; ; ) {
+          if (findSimpleStatements(general,mapExtPost)) {
+            reducibility=0;
+          }
+          if (general.type == Statement.TYPE_PLACEHOLDER) {
+            return true;
+          }
+          Statement stat=findGeneralStatement(general,forceall,mapExtPost);
+          if (stat != null) {
+            boolean complete=processStatement(stat,general.getFirst() == stat ? mapExtPost : new HashMap<Integer,Set<Integer>>());
+            if (complete) {
+              general.replaceStatement(stat,stat.getFirst());
+            }
+ else {
+              return false;
+            }
+            mapExtPost=new HashMap<Integer,Set<Integer>>();
+            mapRefreshed=true;
+            reducibility=0;
+          }
+ else {
+            break;
+          }
+        }
+      }
+    }
+    if (mapRefreshed) {
+      break;
+    }
+ else {
+      mapExtPost=new HashMap<Integer,Set<Integer>>();
+    }
+  }
+  return false;
+}

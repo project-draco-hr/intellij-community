@@ -1,0 +1,79 @@
+{
+  StructClass cl=mt.getClassStruct();
+  boolean isInitializer="<clinit>".equals(mt.getName());
+  mt.expandData();
+  InstructionSequence seq=mt.getInstructionSequence();
+  ControlFlowGraph graph=new ControlFlowGraph(seq);
+  DeadCodeHelper.removeDeadBlocks(graph);
+  graph.inlineJsr(mt);
+  DeadCodeHelper.connectDummyExitBlock(graph);
+  DeadCodeHelper.removeGotos(graph);
+  ExceptionDeobfuscator.removeCircularRanges(graph);
+  ExceptionDeobfuscator.restorePopRanges(graph);
+  if (DecompilerContext.getOption(IFernflowerPreferences.REMOVE_EMPTY_RANGES)) {
+    ExceptionDeobfuscator.removeEmptyRanges(graph);
+  }
+  if (DecompilerContext.getOption(IFernflowerPreferences.NO_EXCEPTIONS_RETURN)) {
+    DeadCodeHelper.incorporateValueReturns(graph);
+  }
+  ExceptionDeobfuscator.insertEmptyExceptionHandlerBlocks(graph);
+  DeadCodeHelper.mergeBasicBlocks(graph);
+  DecompilerContext.getCountercontainer().setCounter(CounterContainer.VAR_COUNTER,mt.getLocalVariables());
+  System.out.println(graph.toString());
+  if (ExceptionDeobfuscator.hasObfuscatedExceptions(graph)) {
+    DecompilerContext.getLogger().writeMessage("Heavily obfuscated exception ranges found!",IFernflowerLogger.WARNING);
+  }
+  RootStatement root=DomHelper.parseGraph(graph);
+  if (!DecompilerContext.getOption(IFernflowerPreferences.FINALLY_CATCHALL)) {
+    FinallyProcessor fproc=new FinallyProcessor(varproc);
+    while (fproc.iterateGraph(mt,root,graph)) {
+      System.out.println("~~~~~~~~~~~~~~~~~~~~~~ \r\n" + root.toJava());
+      root=DomHelper.parseGraph(graph);
+    }
+  }
+  DomHelper.removeSynchronizedHandler(root);
+  SequenceHelper.condenseSequences(root);
+  ClearStructHelper.clearStatements(root);
+  ExprProcessor proc=new ExprProcessor();
+  proc.processStatement(root,cl.getPool());
+  for (; ; ) {
+    StackVarsProcessor stackproc=new StackVarsProcessor();
+    stackproc.simplifyStackVars(root,mt);
+    varproc.setVarVersions(root);
+    if (!new PPandMMHelper().findPPandMM(root)) {
+      break;
+    }
+  }
+  for (; ; ) {
+    LabelHelper.cleanUpEdges(root);
+    for (; ; ) {
+      MergeHelper.enhanceLoops(root);
+      if (LoopExtractHelper.extractLoops(root)) {
+        continue;
+      }
+      if (!IfHelper.mergeAllIfs(root)) {
+        break;
+      }
+    }
+    if (DecompilerContext.getOption(IFernflowerPreferences.IDEA_NOT_NULL_ANNOTATION)) {
+      IdeaNotNullHelper.removeHardcodedChecks(root,mt);
+      SequenceHelper.condenseSequences(root);
+      StackVarsProcessor stackproc=new StackVarsProcessor();
+      stackproc.simplifyStackVars(root,mt);
+      varproc.setVarVersions(root);
+    }
+    LabelHelper.identifyLabels(root);
+    if (InlineSingleBlockHelper.inlineSingleBlocks(root)) {
+      continue;
+    }
+    if (isInitializer || !ExitHelper.condenseExits(root)) {
+      break;
+    }
+  }
+  ExitHelper.removeRedundantReturns(root);
+  SecondaryFunctionsHelper.identifySecondaryFunctions(root);
+  varproc.setVarDefinitions(root);
+  LabelHelper.replaceContinueWithBreak(root);
+  mt.releaseResources();
+  return root;
+}

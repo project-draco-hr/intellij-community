@@ -1,0 +1,249 @@
+{
+class StatementStackEntry {
+    public Statement statement;
+    public LinkedList<StackEntry> stackFinally;
+    public List<Exprent> tailExprents;
+    public int statementIndex;
+    public int edgeIndex;
+    public List<StatEdge> succEdges;
+    public StatementStackEntry(    Statement statement,    LinkedList<StackEntry> stackFinally,    List<Exprent> tailExprents){
+      this.statement=statement;
+      this.stackFinally=stackFinally;
+      this.tailExprents=tailExprents;
+    }
+  }
+  LinkedList<StatementStackEntry> lstStackStatements=new LinkedList<StatementStackEntry>();
+  lstStackStatements.add(new StatementStackEntry(root,new LinkedList<StackEntry>(),null));
+  mainloop:   while (!lstStackStatements.isEmpty()) {
+    StatementStackEntry statEntry=lstStackStatements.removeFirst();
+    Statement stat=statEntry.statement;
+    LinkedList<StackEntry> stackFinally=statEntry.stackFinally;
+    int statementBreakIndex=statEntry.statementIndex;
+    DirectNode node=null, nd=null;
+    List<StatEdge> lstSuccEdges=new ArrayList<StatEdge>();
+    DirectNode sourcenode=null;
+    if (statEntry.succEdges == null) {
+switch (stat.type) {
+case Statement.TYPE_BASICBLOCK:
+        node=new DirectNode(DirectNode.NODE_DIRECT,stat,(BasicBlockStatement)stat);
+      if (stat.getExprents() != null) {
+        node.exprents=stat.getExprents();
+      }
+    graph.nodes.putWithKey(node,node.id);
+  mapDestinationNodes.put(stat.id,new String[]{node.id,null});
+lstSuccEdges.addAll(stat.getSuccessorEdges(Statement.STATEDGE_DIRECT_ALL));
+sourcenode=node;
+List<Exprent> tailExprentList=statEntry.tailExprents;
+if (tailExprentList != null) {
+DirectNode tail=new DirectNode(DirectNode.NODE_TAIL,stat,stat.id + "_tail");
+tail.exprents=tailExprentList;
+graph.nodes.putWithKey(tail,tail.id);
+mapDestinationNodes.put(-stat.id,new String[]{tail.id,null});
+listEdges.add(new Edge(node.id,-stat.id,StatEdge.TYPE_REGULAR));
+sourcenode=tail;
+}
+if (stat.getLastBasicType() == Statement.LASTBASICTYPE_IF) {
+mapPosIfBranch.put(sourcenode.id,lstSuccEdges.get(0).getDestination().id.toString());
+}
+break;
+case Statement.TYPE_CATCHALL:
+case Statement.TYPE_TRYCATCH:
+DirectNode firstnd=new DirectNode(DirectNode.NODE_TRY,stat,stat.id + "_try");
+mapDestinationNodes.put(stat.id,new String[]{firstnd.id,null});
+graph.nodes.putWithKey(firstnd,firstnd.id);
+LinkedList<StatementStackEntry> lst=new LinkedList<StatementStackEntry>();
+for (Statement st : stat.getStats()) {
+listEdges.add(new Edge(firstnd.id,st.id,StatEdge.TYPE_REGULAR));
+LinkedList<StackEntry> stack=stackFinally;
+if (stat.type == Statement.TYPE_CATCHALL && ((CatchAllStatement)stat).isFinally()) {
+stack=new LinkedList<StackEntry>(stackFinally);
+if (st == stat.getFirst()) {
+stack.add(new StackEntry((CatchAllStatement)stat,Boolean.FALSE));
+}
+ else {
+stack.add(new StackEntry((CatchAllStatement)stat,Boolean.TRUE,StatEdge.TYPE_BREAK,root.getDummyExit(),st,st,firstnd,firstnd,true));
+}
+}
+lst.add(new StatementStackEntry(st,stack,null));
+}
+lstStackStatements.addAll(0,lst);
+break;
+case Statement.TYPE_DO:
+if (statementBreakIndex == 0) {
+statEntry.statementIndex=1;
+lstStackStatements.addFirst(statEntry);
+lstStackStatements.addFirst(new StatementStackEntry(stat.getFirst(),stackFinally,null));
+continue mainloop;
+}
+nd=graph.nodes.getWithKey(mapDestinationNodes.get(stat.getFirst().id)[0]);
+DoStatement dostat=(DoStatement)stat;
+int looptype=dostat.getLooptype();
+if (looptype == DoStatement.LOOP_DO) {
+mapDestinationNodes.put(stat.id,new String[]{nd.id,nd.id});
+break;
+}
+lstSuccEdges.add(stat.getSuccessorEdges(Statement.STATEDGE_DIRECT_ALL).get(0));
+switch (looptype) {
+case DoStatement.LOOP_WHILE:
+case DoStatement.LOOP_DOWHILE:
+node=new DirectNode(DirectNode.NODE_CONDITION,stat,stat.id + "_cond");
+node.exprents=dostat.getConditionExprentList();
+graph.nodes.putWithKey(node,node.id);
+listEdges.add(new Edge(node.id,stat.getFirst().id,StatEdge.TYPE_REGULAR));
+if (looptype == DoStatement.LOOP_WHILE) {
+mapDestinationNodes.put(stat.id,new String[]{node.id,node.id});
+}
+ else {
+mapDestinationNodes.put(stat.id,new String[]{nd.id,node.id});
+boolean found=false;
+for (Edge edge : listEdges) {
+if (edge.statid.equals(stat.id) && edge.edgetype == StatEdge.TYPE_CONTINUE) {
+found=true;
+break;
+}
+}
+if (!found) {
+listEdges.add(new Edge(nd.id,stat.id,StatEdge.TYPE_CONTINUE));
+}
+}
+sourcenode=node;
+break;
+case DoStatement.LOOP_FOR:
+DirectNode nodeinit=new DirectNode(DirectNode.NODE_INIT,stat,stat.id + "_init");
+if (dostat.getInitExprent() != null) {
+nodeinit.exprents=dostat.getInitExprentList();
+}
+graph.nodes.putWithKey(nodeinit,nodeinit.id);
+DirectNode nodecond=new DirectNode(DirectNode.NODE_CONDITION,stat,stat.id + "_cond");
+nodecond.exprents=dostat.getConditionExprentList();
+graph.nodes.putWithKey(nodecond,nodecond.id);
+DirectNode nodeinc=new DirectNode(DirectNode.NODE_INCREMENT,stat,stat.id + "_inc");
+nodeinc.exprents=dostat.getIncExprentList();
+graph.nodes.putWithKey(nodeinc,nodeinc.id);
+mapDestinationNodes.put(stat.id,new String[]{nodeinit.id,nodeinc.id});
+mapDestinationNodes.put(-stat.id,new String[]{nodecond.id,null});
+listEdges.add(new Edge(nodecond.id,stat.getFirst().id,StatEdge.TYPE_REGULAR));
+listEdges.add(new Edge(nodeinit.id,-stat.id,StatEdge.TYPE_REGULAR));
+listEdges.add(new Edge(nodeinc.id,-stat.id,StatEdge.TYPE_REGULAR));
+boolean found=false;
+for (Edge edge : listEdges) {
+if (edge.statid.equals(stat.id) && edge.edgetype == StatEdge.TYPE_CONTINUE) {
+found=true;
+break;
+}
+}
+if (!found) {
+listEdges.add(new Edge(nd.id,stat.id,StatEdge.TYPE_CONTINUE));
+}
+sourcenode=nodecond;
+}
+break;
+case Statement.TYPE_SYNCRONIZED:
+case Statement.TYPE_SWITCH:
+case Statement.TYPE_IF:
+case Statement.TYPE_SEQUENCE:
+case Statement.TYPE_ROOT:
+int statsize=stat.getStats().size();
+if (stat.type == Statement.TYPE_SYNCRONIZED) {
+statsize=2;
+}
+if (statementBreakIndex <= statsize) {
+List<Exprent> tailexprlst=null;
+switch (stat.type) {
+case Statement.TYPE_SYNCRONIZED:
+tailexprlst=((SynchronizedStatement)stat).getHeadexprentList();
+break;
+case Statement.TYPE_SWITCH:
+tailexprlst=((SwitchStatement)stat).getHeadexprentList();
+break;
+case Statement.TYPE_IF:
+tailexprlst=((IfStatement)stat).getHeadexprentList();
+}
+for (int i=statementBreakIndex; i < statsize; i++) {
+statEntry.statementIndex=i + 1;
+lstStackStatements.addFirst(statEntry);
+lstStackStatements.addFirst(new StatementStackEntry(stat.getStats().get(i),stackFinally,(i == 0 && tailexprlst != null && tailexprlst.get(0) != null) ? tailexprlst : null));
+continue mainloop;
+}
+node=graph.nodes.getWithKey(mapDestinationNodes.get(stat.getFirst().id)[0]);
+mapDestinationNodes.put(stat.id,new String[]{node.id,null});
+if (stat.type == Statement.TYPE_IF && ((IfStatement)stat).iftype == IfStatement.IFTYPE_IF) {
+lstSuccEdges.add(stat.getSuccessorEdges(Statement.STATEDGE_DIRECT_ALL).get(0));
+sourcenode=tailexprlst.get(0) == null ? node : graph.nodes.getWithKey(node.id + "_tail");
+}
+}
+}
+}
+if (sourcenode != null) {
+if (statEntry.succEdges != null) {
+lstSuccEdges=statEntry.succEdges;
+}
+for (int edgeindex=statEntry.edgeIndex; edgeindex < lstSuccEdges.size(); edgeindex++) {
+StatEdge edge=lstSuccEdges.get(edgeindex);
+LinkedList<StackEntry> stack=new LinkedList<StackEntry>(stackFinally);
+int edgetype=edge.getType();
+Statement destination=edge.getDestination();
+DirectNode finallyShortRangeSource=sourcenode;
+DirectNode finallyLongRangeSource=sourcenode;
+Statement finallyShortRangeEntry=null;
+Statement finallyLongRangeEntry=null;
+boolean isFinallyMonitorExceptionPath=false;
+boolean isFinallyExit=false;
+for (; ; ) {
+StackEntry entry=null;
+if (!stack.isEmpty()) {
+entry=stack.getLast();
+}
+boolean created=true;
+if (entry == null) {
+saveEdge(sourcenode,destination,edgetype,isFinallyExit ? finallyShortRangeSource : null,finallyLongRangeSource,finallyShortRangeEntry,finallyLongRangeEntry,isFinallyMonitorExceptionPath);
+}
+ else {
+CatchAllStatement catchall=entry.catchstatement;
+if (entry.state) {
+if (edgetype == StatEdge.TYPE_FINALLYEXIT) {
+stack.removeLast();
+destination=entry.destination;
+edgetype=entry.edgetype;
+finallyShortRangeSource=entry.finallyShortRangeSource;
+finallyLongRangeSource=entry.finallyLongRangeSource;
+finallyShortRangeEntry=entry.finallyShortRangeEntry;
+finallyLongRangeEntry=entry.finallyLongRangeEntry;
+isFinallyExit=true;
+isFinallyMonitorExceptionPath=(catchall.getMonitor() != null) & entry.isFinallyExceptionPath;
+created=false;
+}
+ else {
+if (!catchall.containsStatementStrict(destination)) {
+stack.removeLast();
+created=false;
+}
+ else {
+saveEdge(sourcenode,destination,edgetype,isFinallyExit ? finallyShortRangeSource : null,finallyLongRangeSource,finallyShortRangeEntry,finallyLongRangeEntry,isFinallyMonitorExceptionPath);
+}
+}
+}
+ else {
+if (!catchall.containsStatementStrict(destination)) {
+saveEdge(sourcenode,catchall.getHandler(),StatEdge.TYPE_REGULAR,isFinallyExit ? finallyShortRangeSource : null,finallyLongRangeSource,finallyShortRangeEntry,finallyLongRangeEntry,isFinallyMonitorExceptionPath);
+stack.removeLast();
+stack.add(new StackEntry(catchall,Boolean.TRUE,edgetype,destination,catchall.getHandler(),finallyLongRangeEntry == null ? catchall.getHandler() : finallyLongRangeEntry,sourcenode,finallyLongRangeSource,false));
+statEntry.edgeIndex=edgeindex + 1;
+statEntry.succEdges=lstSuccEdges;
+lstStackStatements.addFirst(statEntry);
+lstStackStatements.addFirst(new StatementStackEntry(catchall.getHandler(),stack,null));
+continue mainloop;
+}
+ else {
+saveEdge(sourcenode,destination,edgetype,isFinallyExit ? finallyShortRangeSource : null,finallyLongRangeSource,finallyShortRangeEntry,finallyLongRangeEntry,isFinallyMonitorExceptionPath);
+}
+}
+}
+if (created) {
+break;
+}
+}
+}
+}
+}
+}

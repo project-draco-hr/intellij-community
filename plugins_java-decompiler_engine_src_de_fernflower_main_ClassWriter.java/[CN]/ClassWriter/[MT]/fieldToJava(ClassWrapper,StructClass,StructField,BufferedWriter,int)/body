@@ -1,0 +1,98 @@
+{
+  String indstr=InterpreterUtil.getIndentString(indent);
+  boolean isInterface=(cl.access_flags & CodeConstants.ACC_INTERFACE) != 0;
+  int flags=fd.access_flags;
+  if (interceptor != null) {
+    String oldname=interceptor.getOldName(cl.qualifiedName + " " + fd.getName()+ " "+ fd.getDescriptor());
+    if (oldname != null) {
+      String[] element=oldname.split(" ");
+      writer.write(indstr);
+      writer.write("// $FF: renamed from: " + element[1] + " "+ getDescriptorPrintOut(element[2],1));
+      writer.newLine();
+    }
+  }
+  boolean isDeprecated=fd.getAttributes().containsKey("Deprecated");
+  List<AnnotationExprent> lstAnn=getAllAnnotations(fd.getAttributes());
+  for (  AnnotationExprent annexpr : lstAnn) {
+    if ("java/lang/Deprecated".equals(annexpr.getClassname())) {
+      isDeprecated=false;
+    }
+    writer.write(annexpr.toJava(indent));
+    writer.newLine();
+  }
+  boolean isSynthetic=(flags & CodeConstants.ACC_SYNTHETIC) != 0 || fd.getAttributes().containsKey("Synthetic");
+  boolean isEnum=DecompilerContext.getOption(IFernflowerPreferences.DECOMPILE_ENUM) && (flags & CodeConstants.ACC_ENUM) != 0;
+  if (isSynthetic) {
+    writer.write(indstr);
+    writer.write("// $FF: synthetic field");
+    writer.newLine();
+  }
+  if (isDeprecated) {
+    if (DecompilerContext.getOption(IFernflowerPreferences.DEPRECATED_COMMENT)) {
+      writer.write(indstr);
+      writer.write("/** @deprecated */");
+      writer.newLine();
+    }
+    writer.write(indstr);
+    writer.write("@Deprecated");
+    writer.newLine();
+  }
+  writer.write(indstr);
+  if (!isEnum) {
+    for (int i=0; i < modval_field.length; i++) {
+      if (!isInterface || !mod_notinterface_fields.contains(modval_field[i])) {
+        if ((flags & modval_field[i]) != 0) {
+          writer.write(modstr_field[i]);
+        }
+      }
+    }
+  }
+  VarType fieldType=new VarType(fd.getDescriptor(),false);
+  GenericFieldDescriptor descriptor=null;
+  if (DecompilerContext.getOption(IFernflowerPreferences.DECOMPILE_GENERIC_SIGNATURES)) {
+    StructGenericSignatureAttribute attr=(StructGenericSignatureAttribute)fd.getAttributes().getWithKey("Signature");
+    if (attr != null) {
+      descriptor=GenericMain.parseFieldSignature(attr.getSignature());
+    }
+  }
+  if (!isEnum) {
+    if (descriptor != null) {
+      writer.write(GenericMain.getGenericCastTypeName(descriptor.type));
+    }
+ else {
+      writer.write(ExprProcessor.getCastTypeName(fieldType));
+    }
+    writer.write(" ");
+  }
+  writer.write(fd.getName());
+  Exprent initializer;
+  if ((flags & CodeConstants.ACC_STATIC) != 0) {
+    initializer=wrapper.getStaticFieldInitializers().getWithKey(InterpreterUtil.makeUniqueKey(fd.getName(),fd.getDescriptor()));
+  }
+ else {
+    initializer=wrapper.getDynamicFieldInitializers().getWithKey(InterpreterUtil.makeUniqueKey(fd.getName(),fd.getDescriptor()));
+  }
+  if (initializer != null) {
+    if (isEnum && initializer.type == Exprent.EXPRENT_NEW) {
+      NewExprent nexpr=(NewExprent)initializer;
+      nexpr.setEnumconst(true);
+      writer.write(nexpr.toJava(indent));
+    }
+ else {
+      writer.write(" = ");
+      writer.write(initializer.toJava(indent));
+    }
+  }
+ else   if ((flags & CodeConstants.ACC_FINAL) != 0 && (flags & CodeConstants.ACC_STATIC) != 0) {
+    StructConstantValueAttribute attr=(StructConstantValueAttribute)fd.getAttributes().getWithKey(StructGeneralAttribute.ATTRIBUTE_CONSTANT_VALUE);
+    if (attr != null) {
+      PrimitiveConstant cnst=cl.getPool().getPrimitiveConstant(attr.getIndex());
+      writer.write(" = ");
+      writer.write(new ConstExprent(fieldType,cnst.value).toJava(indent));
+    }
+  }
+  if (!isEnum) {
+    writer.write(";");
+    writer.newLine();
+  }
+}

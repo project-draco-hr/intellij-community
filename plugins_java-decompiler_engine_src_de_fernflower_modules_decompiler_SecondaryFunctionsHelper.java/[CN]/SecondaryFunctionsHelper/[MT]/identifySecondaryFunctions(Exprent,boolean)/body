@@ -1,0 +1,198 @@
+{
+  if (exprent.type == Exprent.EXPRENT_FUNCTION) {
+    FunctionExprent fexpr=(FunctionExprent)exprent;
+switch (fexpr.getFunctype()) {
+case FunctionExprent.FUNCTION_BOOLNOT:
+      Exprent retparam=propagateBoolNot(fexpr);
+    if (retparam != null) {
+      return retparam;
+    }
+  break;
+case FunctionExprent.FUNCTION_EQ:
+case FunctionExprent.FUNCTION_NE:
+case FunctionExprent.FUNCTION_GT:
+case FunctionExprent.FUNCTION_GE:
+case FunctionExprent.FUNCTION_LT:
+case FunctionExprent.FUNCTION_LE:
+Exprent expr1=fexpr.getLstOperands().get(0);
+Exprent expr2=fexpr.getLstOperands().get(1);
+if (expr1.type == Exprent.EXPRENT_CONST) {
+expr2=expr1;
+expr1=fexpr.getLstOperands().get(1);
+}
+if (expr1.type == Exprent.EXPRENT_FUNCTION && expr2.type == Exprent.EXPRENT_CONST) {
+FunctionExprent funcexpr=(FunctionExprent)expr1;
+ConstExprent cexpr=(ConstExprent)expr2;
+int functype=funcexpr.getFunctype();
+if (functype == FunctionExprent.FUNCTION_LCMP || functype == FunctionExprent.FUNCTION_FCMPG || functype == FunctionExprent.FUNCTION_FCMPL || functype == FunctionExprent.FUNCTION_DCMPG || functype == FunctionExprent.FUNCTION_DCMPL) {
+int desttype=-1;
+Integer[] destcons=mapNumComparisons.get(fexpr.getFunctype());
+if (destcons != null) {
+int index=cexpr.getIntValue() + 1;
+if (index >= 0 && index <= 2) {
+  Integer destcon=destcons[index];
+  if (destcon != null) {
+    desttype=destcon.intValue();
+  }
+}
+}
+if (desttype >= 0) {
+return new FunctionExprent(desttype,funcexpr.getLstOperands());
+}
+}
+}
+}
+}
+boolean replaced=true;
+while (replaced) {
+replaced=false;
+for (Exprent expr : exprent.getAllExprents()) {
+Exprent retexpr=identifySecondaryFunctions(expr,false);
+if (retexpr != null) {
+exprent.replaceExprent(expr,retexpr);
+replaced=true;
+break;
+}
+}
+}
+switch (exprent.type) {
+case Exprent.EXPRENT_FUNCTION:
+FunctionExprent fexpr=(FunctionExprent)exprent;
+List<Exprent> lstOperands=fexpr.getLstOperands();
+switch (fexpr.getFunctype()) {
+case FunctionExprent.FUNCTION_XOR:
+for (int i=0; i < 2; i++) {
+Exprent operand=lstOperands.get(i);
+VarType operandtype=operand.getExprType();
+if (operand.type == Exprent.EXPRENT_CONST && operandtype.type != CodeConstants.TYPE_BOOLEAN) {
+ConstExprent cexpr=(ConstExprent)operand;
+long val;
+if (operandtype.type == CodeConstants.TYPE_LONG) {
+val=((Long)cexpr.getValue()).longValue();
+}
+ else {
+val=((Integer)cexpr.getValue()).intValue();
+}
+if (val == -1) {
+List<Exprent> lstBitNotOperand=new ArrayList<Exprent>();
+lstBitNotOperand.add(lstOperands.get(1 - i));
+return new FunctionExprent(FunctionExprent.FUNCTION_BITNOT,lstBitNotOperand);
+}
+}
+}
+break;
+case FunctionExprent.FUNCTION_EQ:
+case FunctionExprent.FUNCTION_NE:
+if (lstOperands.get(0).getExprType().type == CodeConstants.TYPE_BOOLEAN && lstOperands.get(1).getExprType().type == CodeConstants.TYPE_BOOLEAN) {
+for (int i=0; i < 2; i++) {
+if (lstOperands.get(i).type == Exprent.EXPRENT_CONST) {
+ConstExprent cexpr=(ConstExprent)lstOperands.get(i);
+int val=((Integer)cexpr.getValue()).intValue();
+if ((fexpr.getFunctype() == FunctionExprent.FUNCTION_EQ && val == 1) || (fexpr.getFunctype() == FunctionExprent.FUNCTION_NE && val == 0)) {
+return lstOperands.get(1 - i);
+}
+ else {
+List<Exprent> lstNotOperand=new ArrayList<Exprent>();
+lstNotOperand.add(lstOperands.get(1 - i));
+return new FunctionExprent(FunctionExprent.FUNCTION_BOOLNOT,lstNotOperand);
+}
+}
+}
+}
+break;
+case FunctionExprent.FUNCTION_BOOLNOT:
+if (lstOperands.get(0).type == Exprent.EXPRENT_CONST) {
+int val=((ConstExprent)lstOperands.get(0)).getIntValue();
+if (val == 0) {
+return new ConstExprent(VarType.VARTYPE_BOOLEAN,new Integer(1));
+}
+ else {
+return new ConstExprent(VarType.VARTYPE_BOOLEAN,new Integer(0));
+}
+}
+break;
+case FunctionExprent.FUNCTION_IIF:
+Exprent expr1=lstOperands.get(1);
+Exprent expr2=lstOperands.get(2);
+if (expr1.type == Exprent.EXPRENT_CONST && expr2.type == Exprent.EXPRENT_CONST) {
+ConstExprent cexpr1=(ConstExprent)expr1;
+ConstExprent cexpr2=(ConstExprent)expr2;
+if (cexpr1.getExprType().type == CodeConstants.TYPE_BOOLEAN && cexpr2.getExprType().type == CodeConstants.TYPE_BOOLEAN) {
+if (cexpr1.getIntValue() == 0 && cexpr2.getIntValue() != 0) {
+return new FunctionExprent(FunctionExprent.FUNCTION_BOOLNOT,Arrays.asList(new Exprent[]{lstOperands.get(0)}));
+}
+ else if (cexpr1.getIntValue() != 0 && cexpr2.getIntValue() == 0) {
+return lstOperands.get(0);
+}
+}
+}
+break;
+case FunctionExprent.FUNCTION_LCMP:
+case FunctionExprent.FUNCTION_FCMPL:
+case FunctionExprent.FUNCTION_FCMPG:
+case FunctionExprent.FUNCTION_DCMPL:
+case FunctionExprent.FUNCTION_DCMPG:
+int var=DecompilerContext.getCountercontainer().getCounterAndIncrement(CounterContainer.VAR_COUNTER);
+VarType type=lstOperands.get(0).getExprType();
+VarProcessor processor=(VarProcessor)DecompilerContext.getProperty(DecompilerContext.CURRENT_VAR_PROCESSOR);
+FunctionExprent iff=new FunctionExprent(FunctionExprent.FUNCTION_IIF,Arrays.asList(new Exprent[]{new FunctionExprent(FunctionExprent.FUNCTION_LT,Arrays.asList(new Exprent[]{new VarExprent(var,type,processor),ConstExprent.getZeroConstant(type.type)})),new ConstExprent(VarType.VARTYPE_INT,new Integer(-1)),new ConstExprent(VarType.VARTYPE_INT,new Integer(1))}));
+FunctionExprent head=new FunctionExprent(FunctionExprent.FUNCTION_EQ,Arrays.asList(new Exprent[]{new AssignmentExprent(new VarExprent(var,type,processor),new FunctionExprent(FunctionExprent.FUNCTION_SUB,Arrays.asList(new Exprent[]{lstOperands.get(0),lstOperands.get(1)}))),ConstExprent.getZeroConstant(type.type)}));
+processor.setVarType(new VarVersionPaar(var,0),type);
+return new FunctionExprent(FunctionExprent.FUNCTION_IIF,Arrays.asList(new Exprent[]{head,new ConstExprent(VarType.VARTYPE_INT,new Integer(0)),iff}));
+}
+break;
+case Exprent.EXPRENT_ASSIGNMENT:
+AssignmentExprent asexpr=(AssignmentExprent)exprent;
+Exprent right=asexpr.getRight();
+Exprent left=asexpr.getLeft();
+if (right.type == Exprent.EXPRENT_FUNCTION) {
+FunctionExprent func=(FunctionExprent)right;
+VarType midlayer=null;
+if (func.getFunctype() >= FunctionExprent.FUNCTION_I2L && func.getFunctype() <= FunctionExprent.FUNCTION_I2S) {
+right=func.getLstOperands().get(0);
+midlayer=func.getSimpleCastType();
+if (right.type == Exprent.EXPRENT_FUNCTION) {
+func=(FunctionExprent)right;
+}
+ else {
+return null;
+}
+}
+List<Exprent> lstFuncOperands=func.getLstOperands();
+Exprent cond=null;
+switch (func.getFunctype()) {
+case FunctionExprent.FUNCTION_ADD:
+case FunctionExprent.FUNCTION_AND:
+case FunctionExprent.FUNCTION_OR:
+case FunctionExprent.FUNCTION_XOR:
+if (left.equals(lstFuncOperands.get(1))) {
+cond=lstFuncOperands.get(0);
+break;
+}
+case FunctionExprent.FUNCTION_SUB:
+case FunctionExprent.FUNCTION_MUL:
+case FunctionExprent.FUNCTION_DIV:
+case FunctionExprent.FUNCTION_REM:
+case FunctionExprent.FUNCTION_SHL:
+case FunctionExprent.FUNCTION_SHR:
+case FunctionExprent.FUNCTION_USHR:
+if (left.equals(lstFuncOperands.get(0))) {
+cond=lstFuncOperands.get(1);
+}
+}
+if (cond != null && (midlayer == null || midlayer.equals(cond.getExprType()))) {
+asexpr.setRight(cond);
+asexpr.setCondtype(func.getFunctype());
+}
+}
+break;
+case Exprent.EXPRENT_INVOCATION:
+if (!statement_level) {
+Exprent retexpr=ConcatenationHelper.contractStringConcat(exprent);
+if (!exprent.equals(retexpr)) {
+return retexpr;
+}
+}
+}
+return null;
+}

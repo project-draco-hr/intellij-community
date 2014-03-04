@@ -1,0 +1,57 @@
+{
+  HashSet<BasicBlock> setCopy=new HashSet<BasicBlock>(setTry);
+  int finallytype=(Integer)information[0];
+  HashMap<BasicBlock,Boolean> mapLast=(HashMap<BasicBlock,Boolean>)information[1];
+  removeExceptionInstructionsEx(handler,1,finallytype);
+  for (  Entry<BasicBlock,Boolean> entry : mapLast.entrySet()) {
+    BasicBlock last=entry.getKey();
+    if (entry.getValue()) {
+      removeExceptionInstructionsEx(last,2,finallytype);
+      graph.getFinallyExits().add(last);
+    }
+  }
+  for (  BasicBlock block : setTry) {
+    List<BasicBlock> lstSucc=block.getSuccs();
+    for (    BasicBlock dest : lstSucc) {
+      if (!setCopy.contains(dest) && dest != graph.getLast()) {
+        SimpleInstructionSequence seq=new SimpleInstructionSequence();
+        seq.addInstruction(ConstantsUtil.getInstructionInstance(CodeConstants.opc_bipush,false,CodeConstants.GROUP_GENERAL,new int[]{0}),-1);
+        seq.addInstruction(ConstantsUtil.getInstructionInstance(CodeConstants.opc_istore,false,CodeConstants.GROUP_GENERAL,new int[]{var}),-1);
+        BasicBlock newblock=new BasicBlock(++graph.last_id);
+        newblock.setSeq(seq);
+        block.replaceSuccessor(dest,newblock);
+        newblock.addSuccessor(dest);
+        setCopy.add(newblock);
+        graph.getBlocks().addWithKey(newblock,newblock.id);
+        for (int j=0; j < block.getSuccExceptions().size(); j++) {
+          BasicBlock hd=block.getSuccExceptions().get(j);
+          newblock.addSuccessorException(hd);
+          ExceptionRangeCFG range=graph.getExceptionRange(hd,block);
+          range.getProtectedRange().add(newblock);
+        }
+      }
+    }
+  }
+  SimpleInstructionSequence seq=new SimpleInstructionSequence();
+  seq.addInstruction(ConstantsUtil.getInstructionInstance(CodeConstants.opc_bipush,false,CodeConstants.GROUP_GENERAL,new int[]{1}),-1);
+  seq.addInstruction(ConstantsUtil.getInstructionInstance(CodeConstants.opc_istore,false,CodeConstants.GROUP_GENERAL,new int[]{var}),-1);
+  BasicBlock newhead=new BasicBlock(++graph.last_id);
+  newhead.setSeq(seq);
+  insertBlockBefore(graph,head,newhead);
+  seq=new SimpleInstructionSequence();
+  seq.addInstruction(ConstantsUtil.getInstructionInstance(CodeConstants.opc_bipush,false,CodeConstants.GROUP_GENERAL,new int[]{0}),-1);
+  seq.addInstruction(ConstantsUtil.getInstructionInstance(CodeConstants.opc_istore,false,CodeConstants.GROUP_GENERAL,new int[]{var}),-1);
+  BasicBlock newheadinit=new BasicBlock(++graph.last_id);
+  newheadinit.setSeq(seq);
+  insertBlockBefore(graph,newhead,newheadinit);
+  setCopy.add(newhead);
+  setCopy.add(newheadinit);
+  for (  BasicBlock hd : new HashSet<BasicBlock>(newheadinit.getSuccExceptions())) {
+    ExceptionRangeCFG range=graph.getExceptionRange(hd,newheadinit);
+    if (setCopy.containsAll(range.getProtectedRange())) {
+      newheadinit.removeSuccessorException(hd);
+      range.getProtectedRange().remove(newheadinit);
+    }
+  }
+  return;
+}

@@ -1,0 +1,57 @@
+{
+  mapVarDefStatements=new HashMap<Integer,Statement>();
+  mapStatementVars=new HashMap<Integer,HashSet<Integer>>();
+  implDefVars=new HashSet<Integer>();
+  this.varproc=varproc;
+  VarNamesCollector vc=DecompilerContext.getVarncollector();
+  boolean thisvar=(mt.getAccessFlags() & CodeConstants.ACC_STATIC) == 0;
+  MethodDescriptor md=MethodDescriptor.parseDescriptor(mt.getDescriptor());
+  int paramcount=0;
+  if (thisvar) {
+    paramcount=1;
+  }
+  paramcount+=md.params.length;
+  int varindex=0;
+  for (int i=0; i < paramcount; i++) {
+    implDefVars.add(varindex);
+    varproc.setVarName(new VarVersionPaar(varindex,0),vc.getFreeName(varindex));
+    if (thisvar) {
+      if (i == 0) {
+        varindex++;
+      }
+ else {
+        varindex+=md.params[i - 1].stack_size;
+      }
+    }
+ else {
+      varindex+=md.params[i].stack_size;
+    }
+  }
+  if (thisvar) {
+    StructClass current_class=(StructClass)DecompilerContext.getProperty(DecompilerContext.CURRENT_CLASS);
+    varproc.getThisvars().put(new VarVersionPaar(0,0),current_class.qualifiedName);
+    varproc.setVarName(new VarVersionPaar(0,0),"this");
+    vc.addName("this");
+  }
+  LinkedList<Statement> stack=new LinkedList<Statement>();
+  stack.add(root);
+  while (!stack.isEmpty()) {
+    Statement st=stack.removeFirst();
+    List<VarExprent> lstVars=null;
+    if (st.type == Statement.TYPE_CATCHALL) {
+      lstVars=((CatchAllStatement)st).getVars();
+    }
+ else     if (st.type == Statement.TYPE_TRYCATCH) {
+      lstVars=((CatchStatement)st).getVars();
+    }
+    if (lstVars != null) {
+      for (      VarExprent var : lstVars) {
+        implDefVars.add(var.getIndex());
+        varproc.setVarName(new VarVersionPaar(var),vc.getFreeName(var.getIndex()));
+        var.setDefinition(true);
+      }
+    }
+    stack.addAll(st.getStats());
+  }
+  initStatement(root);
+}

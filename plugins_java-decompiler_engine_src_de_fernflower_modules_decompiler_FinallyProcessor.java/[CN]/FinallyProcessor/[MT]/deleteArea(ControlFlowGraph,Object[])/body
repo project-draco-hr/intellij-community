@@ -1,0 +1,65 @@
+{
+  BasicBlock start=(BasicBlock)area[0];
+  BasicBlock next=(BasicBlock)area[2];
+  if (start == next) {
+    return;
+  }
+  if (next == null) {
+    next=graph.getLast();
+  }
+  HashSet<BasicBlock> setCommonExceptionHandlers=new HashSet<BasicBlock>(next.getSuccExceptions());
+  for (  BasicBlock pred : start.getPreds()) {
+    setCommonExceptionHandlers.retainAll(pred.getSuccExceptions());
+  }
+  boolean is_outside_range=false;
+  HashSet<BasicBlock> setPredecessors=new HashSet<BasicBlock>(start.getPreds());
+  for (  BasicBlock pred : setPredecessors) {
+    pred.replaceSuccessor(start,next);
+  }
+  HashSet<BasicBlock> setBlocks=(HashSet<BasicBlock>)area[1];
+  HashSet<ExceptionRangeCFG> setCommonRemovedExceptionRanges=null;
+  for (  BasicBlock block : setBlocks) {
+    if (!block.getSuccExceptions().containsAll(setCommonExceptionHandlers)) {
+      is_outside_range=true;
+    }
+    HashSet<ExceptionRangeCFG> setRemovedExceptionRanges=new HashSet<ExceptionRangeCFG>();
+    for (    BasicBlock handler : block.getSuccExceptions()) {
+      setRemovedExceptionRanges.add(graph.getExceptionRange(handler,block));
+    }
+    if (setCommonRemovedExceptionRanges == null) {
+      setCommonRemovedExceptionRanges=setRemovedExceptionRanges;
+    }
+ else {
+      setCommonRemovedExceptionRanges.retainAll(setRemovedExceptionRanges);
+    }
+    if (graph.getBlocks().containsKey(block.id)) {
+      if (block.getSeq().isEmpty() && block.getSuccs().size() == 1) {
+        BasicBlock succs=block.getSuccs().get(0);
+        for (        BasicBlock pred : new ArrayList<BasicBlock>(block.getPreds())) {
+          if (!setBlocks.contains(pred)) {
+            pred.replaceSuccessor(block,succs);
+          }
+        }
+        if (graph.getFirst() == block) {
+          graph.setFirst(succs);
+        }
+      }
+      graph.removeBlock(block);
+    }
+  }
+  if (is_outside_range) {
+    BasicBlock emptyblock=new BasicBlock(++graph.last_id);
+    emptyblock.setSeq(new SimpleInstructionSequence());
+    graph.getBlocks().addWithKey(emptyblock,emptyblock.id);
+    if (setCommonRemovedExceptionRanges != null) {
+      for (      ExceptionRangeCFG range : setCommonRemovedExceptionRanges) {
+        emptyblock.addSuccessorException(range.getHandler());
+        range.getProtectedRange().add(emptyblock);
+      }
+    }
+    emptyblock.addSuccessor(next);
+    for (    BasicBlock pred : setPredecessors) {
+      pred.replaceSuccessor(next,emptyblock);
+    }
+  }
+}

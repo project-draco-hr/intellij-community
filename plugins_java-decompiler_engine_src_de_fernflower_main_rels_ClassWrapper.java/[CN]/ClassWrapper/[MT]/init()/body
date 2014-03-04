@@ -1,0 +1,110 @@
+{
+  DecompilerContext.setProperty(DecompilerContext.CURRENT_CLASS,classStruct);
+  DecompilerContext.getLogger().startClass(classStruct.qualifiedName);
+  HashSet<String> setFieldNames=new HashSet<String>();
+  for (  StructField fd : classStruct.getFields()) {
+    setFieldNames.add(fd.getName());
+  }
+  for (  StructMethod mt : classStruct.getMethods()) {
+    DecompilerContext.getLogger().startMethod(mt.getName() + " " + mt.getDescriptor());
+    VarNamesCollector vc=new VarNamesCollector();
+    DecompilerContext.setVarncollector(vc);
+    CounterContainer counter=new CounterContainer();
+    DecompilerContext.setCountercontainer(counter);
+    DecompilerContext.setProperty(DecompilerContext.CURRENT_METHOD,mt);
+    DecompilerContext.setProperty(DecompilerContext.CURRENT_METHOD_DESCRIPTOR,MethodDescriptor.parseDescriptor(mt.getDescriptor()));
+    VarProcessor varproc=new VarProcessor();
+    DecompilerContext.setProperty(DecompilerContext.CURRENT_VAR_PROCESSOR,varproc);
+    Thread mtthread=null;
+    RootStatement root=null;
+    boolean isError=false;
+    try {
+      if ((mt.getAccessFlags() & (CodeConstants.ACC_ABSTRACT | CodeConstants.ACC_NATIVE)) == 0) {
+        int maxsec=10 * Integer.parseInt(DecompilerContext.getProperty(IFernflowerPreferences.MAX_PROCESSING_METHOD).toString());
+        if (maxsec == 0) {
+          root=MethodProcessorThread.codeToJava(mt,varproc);
+        }
+ else {
+          MethodProcessorThread mtproc=new MethodProcessorThread(mt,varproc,DecompilerContext.getCurrentContext());
+          mtthread=new Thread(mtproc);
+          mtthread.start();
+          int sec=0;
+          while (mtthread.isAlive()) {
+synchronized (mtproc) {
+              mtproc.wait(100);
+            }
+            if (maxsec > 0 && ++sec > maxsec) {
+              DecompilerContext.getLogger().writeMessage("Processing time limit (" + maxsec + " sec.) for method "+ mt.getName()+ " "+ mt.getDescriptor()+ " exceeded, execution interrupted.",IFernflowerLogger.ERROR,0);
+              mtthread.stop();
+              isError=true;
+              break;
+            }
+          }
+          if (!isError) {
+            if (mtproc.getError() != null) {
+              throw mtproc.getError();
+            }
+ else {
+              root=mtproc.getRoot();
+            }
+          }
+        }
+      }
+ else {
+        boolean thisvar=(mt.getAccessFlags() & CodeConstants.ACC_STATIC) == 0;
+        MethodDescriptor md=MethodDescriptor.parseDescriptor(mt.getDescriptor());
+        int paramcount=0;
+        if (thisvar) {
+          varproc.getThisvars().put(new VarVersionPaar(0,0),classStruct.qualifiedName);
+          paramcount=1;
+        }
+        paramcount+=md.params.length;
+        int varindex=0;
+        for (int i=0; i < paramcount; i++) {
+          varproc.setVarName(new VarVersionPaar(varindex,0),vc.getFreeName(varindex));
+          if (thisvar) {
+            if (i == 0) {
+              varindex++;
+            }
+ else {
+              varindex+=md.params[i - 1].stack_size;
+            }
+          }
+ else {
+            varindex+=md.params[i].stack_size;
+          }
+        }
+      }
+    }
+ catch (    ThreadDeath ex) {
+      try {
+        if (mtthread != null) {
+          mtthread.stop();
+        }
+      }
+ catch (      Throwable e) {
+        ;
+      }
+      throw ex;
+    }
+catch (    Throwable ex) {
+      if (DecompilerContext.getLogger().getShowStacktrace()) {
+        ex.printStackTrace();
+      }
+      DecompilerContext.getLogger().writeMessage("Method " + mt.getName() + " "+ mt.getDescriptor()+ " couldn't be decompiled.",IFernflowerLogger.ERROR);
+      isError=true;
+    }
+    MethodWrapper meth=new MethodWrapper(root,varproc,mt,counter);
+    meth.decompiledWithErrors=isError;
+    methods.addWithKey(meth,InterpreterUtil.makeUniqueKey(mt.getName(),mt.getDescriptor()));
+    varproc.refreshVarNames(new VarNamesCollector(setFieldNames));
+    if (DecompilerContext.getOption(IFernflowerPreferences.USE_DEBUG_VARNAMES)) {
+      StructLocalVariableTableAttribute attr=(StructLocalVariableTableAttribute)mt.getAttributes().getWithKey(StructGeneralAttribute.ATTRIBUTE_LOCAL_VARIABLE_TABLE);
+      if (attr != null) {
+        varproc.setDebugVarNames(attr.getMapVarNames());
+      }
+    }
+    DecompilerContext.getLogger().endMethod();
+  }
+  DecompilerContext.getLogger().endClass();
+}

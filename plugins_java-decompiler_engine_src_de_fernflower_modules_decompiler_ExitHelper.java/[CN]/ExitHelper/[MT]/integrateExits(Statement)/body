@@ -1,0 +1,81 @@
+{
+  int ret=0;
+  Statement dest=null;
+  if (stat.getExprents() == null) {
+    for (; ; ) {
+      int changed=0;
+      for (      Statement st : stat.getStats()) {
+        changed=integrateExits(st);
+        if (changed > 0) {
+          ret=1;
+          break;
+        }
+      }
+      if (changed == 0) {
+        break;
+      }
+    }
+switch (stat.type) {
+case Statement.TYPE_IF:
+      IfStatement ifst=(IfStatement)stat;
+    if (ifst.getIfstat() == null) {
+      StatEdge ifedge=ifst.getIfEdge();
+      dest=isExitEdge(ifedge);
+      if (dest != null) {
+        BasicBlockStatement bstat=new BasicBlockStatement(new BasicBlock(DecompilerContext.getCountercontainer().getCounterAndIncrement(CounterContainer.STATEMENT_COUNTER)));
+        bstat.setExprents(DecHelper.copyExprentList(dest.getExprents()));
+        ifst.getFirst().removeSuccessor(ifedge);
+        StatEdge newedge=new StatEdge(StatEdge.TYPE_REGULAR,ifst.getFirst(),bstat);
+        ifst.getFirst().addSuccessor(newedge);
+        ifst.setIfEdge(newedge);
+        ifst.setIfstat(bstat);
+        ifst.getStats().addWithKey(bstat,bstat.id);
+        bstat.setParent(ifst);
+        StatEdge oldexitedge=dest.getAllSuccessorEdges().get(0);
+        StatEdge newexitedge=new StatEdge(StatEdge.TYPE_BREAK,bstat,oldexitedge.getDestination());
+        bstat.addSuccessor(newexitedge);
+        oldexitedge.closure.addLabeledEdge(newexitedge);
+        ret=1;
+      }
+    }
+}
+}
+if (stat.getAllSuccessorEdges().size() == 1 && stat.getAllSuccessorEdges().get(0).getType() == StatEdge.TYPE_BREAK && stat.getLabelEdges().isEmpty()) {
+Statement parent=stat.getParent();
+if (stat != parent.getFirst() || (parent.type != Statement.TYPE_IF && parent.type != Statement.TYPE_SWITCH)) {
+  StatEdge destedge=stat.getAllSuccessorEdges().get(0);
+  dest=isExitEdge(destedge);
+  if (dest != null) {
+    stat.removeSuccessor(destedge);
+    BasicBlockStatement bstat=new BasicBlockStatement(new BasicBlock(DecompilerContext.getCountercontainer().getCounterAndIncrement(CounterContainer.STATEMENT_COUNTER)));
+    bstat.setExprents(DecHelper.copyExprentList(dest.getExprents()));
+    StatEdge oldexitedge=dest.getAllSuccessorEdges().get(0);
+    StatEdge newexitedge=new StatEdge(StatEdge.TYPE_BREAK,bstat,oldexitedge.getDestination());
+    bstat.addSuccessor(newexitedge);
+    oldexitedge.closure.addLabeledEdge(newexitedge);
+    SequenceStatement block=new SequenceStatement(Arrays.asList(new Statement[]{stat,bstat}));
+    block.setAllParent();
+    parent.replaceStatement(stat,block);
+    for (    StatEdge prededge : block.getPredecessorEdges(StatEdge.TYPE_CONTINUE)) {
+      block.removePredecessor(prededge);
+      prededge.getSource().changeEdgeNode(Statement.DIRECTION_FORWARD,prededge,stat);
+      stat.addPredecessor(prededge);
+      stat.addLabeledEdge(prededge);
+    }
+    stat.addSuccessor(new StatEdge(StatEdge.TYPE_REGULAR,stat,bstat));
+    for (    StatEdge edge : dest.getAllPredecessorEdges()) {
+      if (!edge.explicit && stat.containsStatementStrict(edge.getSource()) && MergeHelper.isDirectPath(edge.getSource().getParent(),bstat)) {
+        dest.removePredecessor(edge);
+        edge.getSource().changeEdgeNode(Statement.DIRECTION_FORWARD,edge,bstat);
+        bstat.addPredecessor(edge);
+        if (!stat.containsStatementStrict(edge.closure)) {
+          stat.addLabeledEdge(edge);
+        }
+      }
+    }
+    ret=2;
+  }
+}
+}
+return ret;
+}
