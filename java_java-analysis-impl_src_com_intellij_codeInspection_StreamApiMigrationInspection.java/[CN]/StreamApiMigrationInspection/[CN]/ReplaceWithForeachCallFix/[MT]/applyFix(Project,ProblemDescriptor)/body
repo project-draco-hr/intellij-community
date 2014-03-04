@@ -21,8 +21,15 @@
         }
       }
       final PsiParameter[] parameters={parameter};
-      final PsiCallExpression expression=LambdaCanBeMethodReferenceInspection.canBeMethodReferenceProblem(body instanceof PsiBlockStatement ? ((PsiBlockStatement)body).getCodeBlock() : body,parameters,null);
-      final String methodReferenceText=LambdaCanBeMethodReferenceInspection.createMethodReferenceText(expression,null,parameters);
+      String methodReferenceText=null;
+      final PsiCallExpression callExpression=LambdaCanBeMethodReferenceInspection.extractMethodCallFromBlock(body);
+      if (callExpression != null) {
+        final JavaPsiFacade psiFacade=JavaPsiFacade.getInstance(project);
+        final PsiClass consumerClass=psiFacade.findClass("java.util.function.Consumer",GlobalSearchScope.allScope(project));
+        final PsiClassType functionalType=consumerClass != null ? psiFacade.getElementFactory().createType(consumerClass,callExpression.getType()) : null;
+        final PsiCallExpression toConvertCall=LambdaCanBeMethodReferenceInspection.canBeMethodReferenceProblem(body instanceof PsiBlockStatement ? ((PsiBlockStatement)body).getCodeBlock() : body,parameters,functionalType);
+        methodReferenceText=LambdaCanBeMethodReferenceInspection.createMethodReferenceText(toConvertCall,functionalType,parameters);
+      }
       final String lambdaText=parameter.getName() + " -> " + foreEachText;
       final String codeBlock8=methodReferenceText != null ? methodReferenceText : lambdaText;
       PsiExpressionStatement callStatement=(PsiExpressionStatement)JavaPsiFacade.getElementFactory(project).createStatementFromText(iterated + ".forEach(" + codeBlock8+ ");",foreachStatement);
