@@ -9,7 +9,7 @@
   }
   if (!FileModificationService.getInstance().preparePsiElementsForWrite(elements))   return;
   final JavaPsiFacade psiFacade=JavaPsiFacade.getInstance(project);
-  final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
+  final PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
   final PsiType fromType=psiVariable.getType();
   PsiClassType toType;
   final String atomicQualifiedName=myFromToMap.get(fromType);
@@ -18,51 +18,54 @@
     if (atomicClass == null) {
       return;
     }
-    toType=elementFactory.createType(atomicClass);
+    toType=factory.createType(atomicClass);
   }
  else   if (fromType instanceof PsiArrayType) {
     final PsiClass atomicReferenceArrayClass=psiFacade.findClass(AtomicReferenceArray.class.getName(),GlobalSearchScope.allScope(project));
     if (atomicReferenceArrayClass == null) {
       return;
     }
-    final HashMap<PsiTypeParameter,PsiType> substitutor=new HashMap<PsiTypeParameter,PsiType>();
+    final Map<PsiTypeParameter,PsiType> substitutor=ContainerUtil.newHashMap();
     final PsiTypeParameter[] typeParameters=atomicReferenceArrayClass.getTypeParameters();
     if (typeParameters.length == 1) {
-      final PsiType componentType=((PsiArrayType)fromType).getComponentType();
-      substitutor.put(typeParameters[0],componentType instanceof PsiPrimitiveType ? ((PsiPrimitiveType)componentType).getBoxedType(element) : componentType);
+      PsiType componentType=((PsiArrayType)fromType).getComponentType();
+      if (componentType instanceof PsiPrimitiveType)       componentType=((PsiPrimitiveType)componentType).getBoxedType(element);
+      substitutor.put(typeParameters[0],componentType);
     }
-    toType=elementFactory.createType(atomicReferenceArrayClass,elementFactory.createSubstitutor(substitutor));
+    toType=factory.createType(atomicReferenceArrayClass,factory.createSubstitutor(substitutor));
   }
  else {
     final PsiClass atomicReferenceClass=psiFacade.findClass(AtomicReference.class.getName(),GlobalSearchScope.allScope(project));
     if (atomicReferenceClass == null) {
       return;
     }
-    final HashMap<PsiTypeParameter,PsiType> substitutor=new HashMap<PsiTypeParameter,PsiType>();
+    final Map<PsiTypeParameter,PsiType> substitutor=ContainerUtil.newHashMap();
     final PsiTypeParameter[] typeParameters=atomicReferenceClass.getTypeParameters();
     if (typeParameters.length == 1) {
-      substitutor.put(typeParameters[0],fromType instanceof PsiPrimitiveType ? ((PsiPrimitiveType)fromType).getBoxedType(element) : fromType);
+      PsiType type=fromType;
+      if (type instanceof PsiPrimitiveType)       type=((PsiPrimitiveType)fromType).getBoxedType(element);
+      substitutor.put(typeParameters[0],type);
     }
-    toType=elementFactory.createType(atomicReferenceClass,elementFactory.createSubstitutor(substitutor));
+    toType=factory.createType(atomicReferenceClass,factory.createSubstitutor(substitutor));
   }
   try {
     for (    PsiReference reference : refs) {
       PsiElement psiElement=reference.getElement();
       if (psiElement instanceof PsiExpression) {
         final PsiElement parent=psiElement.getParent();
-        if (parent instanceof PsiExpression && !(parent instanceof PsiReferenceExpression) && !(parent instanceof PsiPolyadicExpression)) {
+        if (parent instanceof PsiExpression && !(parent instanceof PsiReferenceExpression || parent instanceof PsiPolyadicExpression)) {
           psiElement=parent;
         }
         if (psiElement instanceof PsiBinaryExpression) {
-          PsiBinaryExpression binaryExpression=(PsiBinaryExpression)psiElement;
-          if (TypeConversionUtil.isBinaryOperatorApplicable(binaryExpression.getOperationTokenType(),binaryExpression.getLOperand(),binaryExpression.getROperand(),true)) {
+          PsiBinaryExpression binary=(PsiBinaryExpression)psiElement;
+          if (isBinaryOperatorApplicable(binary.getOperationTokenType(),binary.getLOperand(),binary.getROperand(),true)) {
             continue;
           }
         }
  else         if (psiElement instanceof PsiAssignmentExpression) {
-          final PsiAssignmentExpression assignmentExpression=(PsiAssignmentExpression)psiElement;
-          IElementType opSign=TypeConversionUtil.convertEQtoOperation(assignmentExpression.getOperationTokenType());
-          if (opSign != null && TypeConversionUtil.isBinaryOperatorApplicable(opSign,assignmentExpression.getLExpression(),assignmentExpression.getRExpression(),true)) {
+          final PsiAssignmentExpression assignment=(PsiAssignmentExpression)psiElement;
+          final IElementType opSign=TypeConversionUtil.convertEQtoOperation(assignment.getOperationTokenType());
+          if (opSign != null && isBinaryOperatorApplicable(opSign,assignment.getLExpression(),assignment.getRExpression(),true)) {
             continue;
           }
         }
@@ -79,19 +82,19 @@
         TypeMigrationReplacementUtil.replaceExpression(initializer,project,directConversion);
       }
     }
- else     if (!psiVariable.getModifierList().hasModifierProperty(PsiModifier.FINAL)) {
-      final PsiExpression defaultInitializer=elementFactory.createExpressionFromText("new " + toType.getPresentableText() + "()",psiVariable);
+ else     if (!assertNotNull(psiVariable.getModifierList()).hasModifierProperty(PsiModifier.FINAL)) {
+      final PsiExpression newInitializer=factory.createExpressionFromText("new " + toType.getPresentableText() + "()",psiVariable);
       if (psiVariable instanceof PsiLocalVariable) {
-        ((PsiLocalVariable)psiVariable).setInitializer(defaultInitializer);
+        ((PsiLocalVariable)psiVariable).setInitializer(newInitializer);
       }
  else       if (psiVariable instanceof PsiField) {
-        ((PsiField)psiVariable).setInitializer(defaultInitializer);
+        ((PsiField)psiVariable).setInitializer(newInitializer);
       }
     }
-    PsiElement replaced=psiVariable.getTypeElement().replace(elementFactory.createTypeElement(toType));
+    PsiElement replaced=assertNotNull(psiVariable.getTypeElement()).replace(factory.createTypeElement(toType));
     JavaCodeStyleManager.getInstance(project).shortenClassReferences(replaced);
     if (psiVariable instanceof PsiField || CodeStyleSettingsManager.getSettings(project).GENERATE_FINAL_LOCALS) {
-      final PsiModifierList modifierList=psiVariable.getModifierList();
+      final PsiModifierList modifierList=assertNotNull(psiVariable.getModifierList());
       modifierList.setModifierProperty(PsiModifier.FINAL,true);
       modifierList.setModifierProperty(PsiModifier.VOLATILE,false);
     }
