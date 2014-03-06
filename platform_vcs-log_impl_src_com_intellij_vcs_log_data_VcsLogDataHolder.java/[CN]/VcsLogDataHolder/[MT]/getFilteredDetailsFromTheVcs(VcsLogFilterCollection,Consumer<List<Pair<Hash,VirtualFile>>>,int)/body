@@ -1,0 +1,34 @@
+{
+  runInBackground(new ThrowableConsumer<ProgressIndicator,VcsException>(){
+    @Override public void consume(    ProgressIndicator indicator) throws VcsException {
+      Collection<List<? extends TimedVcsCommit>> logs=ContainerUtil.newArrayList();
+      for (      Map.Entry<VirtualFile,VcsLogProvider> entry : myLogProviders.entrySet()) {
+        final VirtualFile root=entry.getKey();
+        if (filterCollection.getStructureFilter() != null && filterCollection.getStructureFilter().getFiles(root).isEmpty()) {
+          continue;
+        }
+        List<CommitWithRoot> details=ContainerUtil.map(entry.getValue().getCommitsMatchingFilter(root,filterCollection,maxCount),new Function<TimedVcsCommit,CommitWithRoot>(){
+          @Override public CommitWithRoot fun(          TimedVcsCommit timedVcsCommit){
+            return new CommitWithRoot(root,timedVcsCommit.getHash(),timedVcsCommit.getParents(),timedVcsCommit.getTime());
+          }
+        }
+);
+        logs.add(details);
+      }
+      final List<? extends TimedVcsCommit> compoundLog=myMultiRepoJoiner.join(logs);
+      final List<Pair<Hash,VirtualFile>> list=ContainerUtil.map(compoundLog,new Function<TimedVcsCommit,Pair<Hash,VirtualFile>>(){
+        @Override public Pair<Hash,VirtualFile> fun(        TimedVcsCommit timedVcsCommit){
+          return Pair.create(timedVcsCommit.getHash(),((CommitWithRoot)timedVcsCommit).myRoot);
+        }
+      }
+);
+      invokeAndWait(new Runnable(){
+        @Override public void run(){
+          success.consume(list);
+        }
+      }
+);
+    }
+  }
+,"Looking for more results...");
+}
