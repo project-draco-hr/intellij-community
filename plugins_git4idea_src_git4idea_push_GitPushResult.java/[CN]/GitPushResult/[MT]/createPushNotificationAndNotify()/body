@@ -1,0 +1,55 @@
+{
+  final UpdatedFiles updatedFiles=collectUpdatedFiles();
+  GroupedResult groupedResult=group();
+  boolean error=!groupedResult.myErrorResults.isEmpty();
+  boolean rejected=!groupedResult.myRejectedResults.isEmpty();
+  boolean success=!groupedResult.mySuccessfulResults.isEmpty();
+  boolean onlyError=error && !rejected && !success;
+  boolean onlyRejected=rejected && !error && !success;
+  final boolean onlySuccess=success && !rejected && !error;
+  int pushedCommitsNumber=calcPushedCommitTotalNumber(myResults);
+  String title;
+  if (error) {
+    if (onlyError) {
+      title="Push failed";
+    }
+ else {
+      title="Push partially failed";
+      if (success) {
+        title+=", " + commits(pushedCommitsNumber) + " pushed";
+      }
+    }
+  }
+ else   if (rejected) {
+    if (onlyRejected) {
+      title="Push rejected";
+    }
+ else {
+      title="Push partially rejected, " + commits(pushedCommitsNumber) + " pushed";
+    }
+  }
+ else {
+    title="Push successful";
+  }
+  String errorReport=reportForGroup(groupedResult.myErrorResults,GroupedResult.Type.ERROR);
+  String successReport=reportForGroup(groupedResult.mySuccessfulResults,GroupedResult.Type.SUCCESS);
+  String rejectedReport=reportForGroup(groupedResult.myRejectedResults,GroupedResult.Type.REJECT);
+  StringBuilder sb=new StringBuilder();
+  sb.append(errorReport);
+  sb.append(rejectedReport);
+  sb.append(successReport);
+  if (!updatedFiles.isEmpty()) {
+    sb.append("<a href='UpdatedFiles'>View files updated during the push</a>");
+  }
+  NotificationListener viewUpdateFilesListener=new ViewUpdatedFilesNotificationListener(updatedFiles);
+  VcsNotifier vcsNotifier=VcsNotifier.getInstance(myProject);
+  if (onlySuccess) {
+    vcsNotifier.notifySuccess(title,sb.toString(),viewUpdateFilesListener);
+  }
+ else   if (error) {
+    vcsNotifier.notifyError(title,sb.toString(),viewUpdateFilesListener);
+  }
+ else {
+    vcsNotifier.notifyStrongWarning(title,sb.toString(),viewUpdateFilesListener);
+  }
+}
