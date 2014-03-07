@@ -9,17 +9,21 @@
     final PsiReference reference=node.getReference(getResolveContext());
     if (reference == null)     return;
     final PsiElement resolvedExpression=reference.resolve();
+    final PyClass resolvedClass=getClassOwner(resolvedExpression);
     if (resolvedExpression instanceof PyTargetExpression) {
-      final PyClass containingClass=((PyTargetExpression)resolvedExpression).getContainingClass();
-      if (containingClass != null) {
-        final String qFixName=containingClass.getProperties().containsKey(StringUtil.trimLeading(name,'_')) ? PyBundle.message("QFIX.use.property") : PyBundle.message("QFIX.add.property");
+      final String newName=StringUtil.trimLeading(name,'_');
+      if (resolvedClass != null) {
+        final String qFixName=resolvedClass.getProperties().containsKey(newName) ? PyBundle.message("QFIX.use.property") : PyBundle.message("QFIX.add.property");
         quickFixes.add(new PyAddPropertyForFieldQuickFix(qFixName));
+        final Collection<String> usedNames=PyRefactoringUtil.collectUsedNames(resolvedClass);
+        if (!usedNames.contains(newName)) {
+          quickFixes.add(new PyMakePublicQuickFix());
+        }
       }
     }
     final PyClass parentClass=getClassOwner(node);
     if (parentClass != null) {
       if (PyTestUtil.isPyTestClass(parentClass) && ignoreTestFunctions)       return;
-      final PyClass resolvedClass=getClassOwner(resolvedExpression);
       if (parentClass.isSubclass(resolvedClass))       return;
       PyClass outerClass=getClassOwner(parentClass);
       while (outerClass != null) {
