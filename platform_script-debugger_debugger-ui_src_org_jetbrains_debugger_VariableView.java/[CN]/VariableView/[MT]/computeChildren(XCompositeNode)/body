@@ -1,0 +1,43 @@
+{
+  node.setAlreadySorted(true);
+  ObjectValue object=value.asObject();
+  if (object == null) {
+    node.addChildren(XValueChildrenList.EMPTY,true);
+    return;
+  }
+  ObsolescentAsyncResults.consume(object.getProperties(),node,new PairConsumer<ObjectPropertyData,XCompositeNode>(){
+    @Override public void consume(    ObjectPropertyData data,    XCompositeNode node){
+      if (value.getType() == ValueType.ARRAY) {
+        computeArrayRanges(data.getProperties(),node);
+        return;
+      }
+      int maxPropertiesToShow;
+      if (value.getType() == ValueType.FUNCTION) {
+        maxPropertiesToShow=Integer.MAX_VALUE;
+      }
+ else {
+        maxPropertiesToShow=XCompositeNode.MAX_CHILDREN_TO_SHOW;
+        List<Variable> list=remainingChildren;
+        if (list != null && childrenModificationStamp == data.getCacheState()) {
+          int to=Math.min(remainingChildrenOffset + XCompositeNode.MAX_CHILDREN_TO_SHOW,list.size());
+          boolean isLast=to == list.size();
+          node.addChildren(Variables.createVariablesList(list,remainingChildrenOffset,to,VariableView.this),isLast);
+          if (!isLast) {
+            node.tooManyChildren(list.size() - to);
+            remainingChildrenOffset+=XCompositeNode.MAX_CHILDREN_TO_SHOW;
+          }
+          return;
+        }
+      }
+      remainingChildren=Variables.sortFilterAndAddValueList(data.getProperties(),node,VariableView.this,maxPropertiesToShow,value.getType() != ValueType.FUNCTION);
+      if (remainingChildren != null) {
+        remainingChildrenOffset=maxPropertiesToShow;
+        childrenModificationStamp=data.getCacheState();
+      }
+      if (value.getType() == ValueType.FUNCTION) {
+        node.addChildren(XValueChildrenList.bottomGroup(new FunctionScopesValueGroup(value.asObject(),context)),true);
+      }
+    }
+  }
+);
+}
