@@ -2,7 +2,9 @@
   final Project project=executionEnvironment.getProject();
   Executor executor=DefaultDebugExecutor.getDebugExecutorInstance();
   final DebuggerPanelsManager manager=DebuggerPanelsManager.getInstance(project);
-  final RemoteConnection remoteConnection=new RemoteConnection(true,info.getHost(),String.valueOf(info.getPort()),false);
+  final JavaDebugServerModeHandler serverModeHandler=info.getServerModeHandler();
+  boolean serverMode=serverModeHandler != null;
+  final RemoteConnection remoteConnection=new RemoteConnection(true,info.getHost(),String.valueOf(info.getPort()),serverMode);
   DebugEnvironment debugEnvironment=new RemoteServerDebugEnvironment(project,remoteConnection,executionEnvironment.getRunProfile());
   DebugUIEnvironment debugUIEnvironment=new RemoteServerDebugUIEnvironment(debugEnvironment,executionEnvironment);
   RunContentDescriptor debugContentDescriptor=manager.attachVirtualMachine(debugUIEnvironment);
@@ -11,4 +13,18 @@
   LOG.assertTrue(processHandler != null);
   processHandler.startNotify();
   ExecutionManager.getInstance(project).getContentManager().showRunContent(executor,debugContentDescriptor,executionEnvironment.getContentToReuse());
+  if (serverMode) {
+    serverModeHandler.attachRemote();
+    DebuggerManager.getInstance(executionEnvironment.getProject()).addDebugProcessListener(processHandler,new DebugProcessAdapter(){
+      public void processDetached(      DebugProcess process,      boolean closedByUser){
+        try {
+          serverModeHandler.detachRemote();
+        }
+ catch (        ExecutionException e) {
+          LOG.info(e);
+        }
+      }
+    }
+);
+  }
 }
