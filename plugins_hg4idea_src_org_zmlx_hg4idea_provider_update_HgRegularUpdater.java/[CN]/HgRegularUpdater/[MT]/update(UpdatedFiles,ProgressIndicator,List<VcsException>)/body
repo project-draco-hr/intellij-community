@@ -8,22 +8,22 @@
   if (branchHeadsBeforePull.size() > 1) {
     reportWarning(warnings,HgVcsMessages.message("hg4idea.update.warning.multipleHeadsBeforeUpdate",repoRoot.getPath()));
   }
-  if (shouldPull()) {
-    boolean pullResult=pull(repoRoot,indicator);
-    if (!pullResult) {
-      return false;
-    }
+  HgRevisionNumber parentBeforeUpdate=new HgWorkingCopyRevisionsCommand(project).firstParent(repoRoot);
+  int pullResult=pull(repoRoot,indicator,shouldRebase());
+  if (pullResult == HgPullCommand.ERROR) {
+    return false;
   }
-  if (shouldUpdate()) {
-    List<HgRevisionNumber> parentsBeforeUpdate=new HgWorkingCopyRevisionsCommand(project).parents(repoRoot);
-    if (parentsBeforeUpdate.size() > 1) {
-      throw new VcsException(HgVcsMessages.message("hg4idea.update.error.uncommittedMerge",repoRoot.getPath()));
-    }
+  HgRevisionNumber paretnAfterUpdate=new HgWorkingCopyRevisionsCommand(project).firstParent(repoRoot);
+  if (pullResult == HgPullCommand.SUCCESS) {
+    addUpdatedFiles(repoRoot,updatedFiles,parentBeforeUpdate,paretnAfterUpdate);
+    return true;
+  }
+  if (shouldMerge()) {
     indicator.setText2(HgVcsMessages.message("hg4idea.progress.countingHeads"));
     List<HgRevisionNumber> branchHeadsAfterPull=new HgHeadsCommand(project,repoRoot).execute();
     List<HgRevisionNumber> pulledBranchHeads=determinePulledBranchHeads(branchHeadsBeforePull,branchHeadsAfterPull);
     List<HgRevisionNumber> remainingOriginalBranchHeads=determingRemainingOriginalBranchHeads(branchHeadsBeforePull,branchHeadsAfterPull);
-    if (branchHeadsAfterPull.size() > 1 && shouldMerge()) {
+    if (branchHeadsAfterPull.size() > 1) {
       abortOnLocalChanges();
       abortOnMultiplePulledHeads(pulledBranchHeads);
       abortOnMultipleLocalHeads(remainingOriginalBranchHeads);
@@ -32,10 +32,10 @@
         commitOrWarnAboutConflicts(warnings,mergeResult);
       }
     }
- else {
-      update(repoRoot,indicator,updatedFiles,warnings);
-    }
     resolvePossibleConflicts(updatedFiles);
+  }
+ else {
+    processRebase(updatedFiles);
   }
   return true;
 }
