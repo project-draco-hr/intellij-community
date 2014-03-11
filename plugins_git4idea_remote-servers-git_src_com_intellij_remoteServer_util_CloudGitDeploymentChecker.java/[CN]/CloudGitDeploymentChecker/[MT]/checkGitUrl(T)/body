@@ -1,0 +1,54 @@
+{
+  if (!(myDeploymentSource instanceof ModuleDeploymentSource)) {
+    return;
+  }
+  ModuleDeploymentSource moduleSource=(ModuleDeploymentSource)myDeploymentSource;
+  Module module=moduleSource.getModule();
+  if (module == null) {
+    return;
+  }
+  File contentRootFile=myDeploymentSource.getFile();
+  if (contentRootFile == null) {
+    return;
+  }
+  final Project project=module.getProject();
+  if (myGitRepositoryManager == null) {
+    myGitRepositoryManager=GitUtil.getRepositoryManager(project);
+  }
+  VirtualFile contentRoot=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(contentRootFile);
+  if (contentRoot == null) {
+    return;
+  }
+  GitRepository repository=myGitRepositoryManager.getRepositoryForRoot(contentRoot);
+  if (repository == null) {
+    return;
+  }
+  String expectedName=settings.getDeploymentSourceName(myDeploymentSource);
+  List<String> appNames=myDetector.collectApplicationNames(repository);
+  if (appNames.isEmpty() || appNames.contains(expectedName)) {
+    return;
+  }
+  RuntimeConfigurationWarning warning=new RuntimeConfigurationWarning("Cloud Git URL found in repository, but it doesn't match the run configuration");
+  warning.setQuickFix(new Runnable(){
+    @Override public void run(){
+      CloudGitApplication application=new CloudConnectionTask<CloudGitApplication,SC,T,SR>(project,"Searching for application",myServer){
+        @Override protected CloudGitApplication run(        SR serverRuntime) throws ServerRuntimeException {
+          CloudGitDeploymentRuntime deploymentRuntime=(CloudGitDeploymentRuntime)serverRuntime.createDeploymentRuntime(myDeploymentSource,settings,project);
+          return deploymentRuntime.findApplication4Repository();
+        }
+      }
+.performSync();
+      if (application == null) {
+        Messages.showErrorDialog(mySettingsEditor.getComponent(),"No application matching repository URL(s) found in account");
+      }
+ else {
+        T fixedSettings=mySettingsEditor.getFactory().create();
+        fixedSettings.setDefaultDeploymentName(false);
+        fixedSettings.setDeploymentName(application.getName());
+        mySettingsEditor.resetFrom(fixedSettings);
+      }
+    }
+  }
+);
+  throw warning;
+}

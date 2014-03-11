@@ -38,6 +38,14 @@
       }
       if (gParent instanceof PsiCall) {
         final PsiCall contextCall=(PsiCall)gParent;
+        final MethodCandidateInfo.CurrentCandidateProperties properties=MethodCandidateInfo.getCurrentMethod(contextCall.getArgumentList());
+        if (properties != null && properties.isApplicabilityCheck()) {
+          final PsiParameter[] parameters=properties.getMethod().getParameterList().getParameters();
+          final int finalLambdaIdx=adjustLambdaIdx(lambdaIdx,properties.getMethod(),parameters);
+          if (finalLambdaIdx < parameters.length) {
+            return properties.getSubstitutor().substitute(getNormalizedType(parameters[finalLambdaIdx]));
+          }
+        }
         final JavaResolveResult resolveResult=contextCall.resolveMethodGenerics();
         final PsiElement resolve=resolveResult.getElement();
         if (resolve instanceof PsiMethod) {
@@ -45,6 +53,13 @@
           final int finalLambdaIdx=adjustLambdaIdx(lambdaIdx,(PsiMethod)resolve,parameters);
           if (finalLambdaIdx < parameters.length) {
             if (!tryToSubstitute)             return getNormalizedType(parameters[finalLambdaIdx]);
+            final Map<PsiElement,PsiType> map=ourFunctionTypes.get();
+            if (map != null) {
+              final PsiType type=map.get(expression);
+              if (type != null) {
+                return type;
+              }
+            }
             return PsiResolveHelper.ourGraphGuard.doPreventingRecursion(expression,true,new Computable<PsiType>(){
               @Override public PsiType compute(){
                 return resolveResult.getSubstitutor().substitute(getNormalizedType(parameters[finalLambdaIdx]));

@@ -1,4 +1,24 @@
 {
-  final Pair<PsiMethod,PsiCallExpression> pair=getPair(parent);
-  return infer(parameters,args,parent,pair != null ? pair.first : null);
+  final MethodCandidateInfo.CurrentCandidateProperties properties=getCurrentProperties(parent);
+  final PsiSubstitutor subst=tryToInfer(parameters,args,parent instanceof PsiCallExpression ? ((PsiCallExpression)parent) : null,properties);
+  if (subst != null) {
+    return subst;
+  }
+  final PsiSubstitutor substitutor=resolveBounds(myInferenceVariables.values(),mySiteSubstitutor);
+  if (substitutor != null) {
+    if (myContext != null) {
+      myContext.putUserData(ERASED,myErased);
+    }
+    mySiteSubstitutor=substitutor;
+    for (    PsiTypeParameter parameter : substitutor.getSubstitutionMap().keySet()) {
+      final InferenceVariable variable=getInferenceVariable(parameter);
+      if (variable != null) {
+        variable.setInstantiation(substitutor.substitute(parameter));
+      }
+    }
+  }
+ else {
+    return resolveSubset(myInferenceVariables.values(),mySiteSubstitutor);
+  }
+  return prepareSubstitution();
 }

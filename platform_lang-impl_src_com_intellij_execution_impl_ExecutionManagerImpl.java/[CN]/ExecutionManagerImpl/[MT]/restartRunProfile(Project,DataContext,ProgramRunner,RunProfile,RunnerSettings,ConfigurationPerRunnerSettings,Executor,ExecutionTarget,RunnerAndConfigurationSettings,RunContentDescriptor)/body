@@ -4,18 +4,28 @@
     LOG.error("Cannot find runner for " + configuration.getName());
     return;
   }
-  final List<RunContentDescriptor> descriptorsToStop=new ArrayList<RunContentDescriptor>();
+  final List<RunContentDescriptor> runningConfigurationsOfTheSameType=new ArrayList<RunContentDescriptor>();
+  final List<RunContentDescriptor> runningIncompatibleConfigurations=new ArrayList<RunContentDescriptor>();
+  if (configuration != null) {
+    runningIncompatibleConfigurations.addAll(getIncompatibleRunningDescriptors(configuration));
+  }
   if (configuration != null && configuration.isSingleton()) {
-    descriptorsToStop.addAll(getRunningDescriptors(configuration));
+    runningConfigurationsOfTheSameType.addAll(getRunningDescriptorsOfTheSameConfigType(configuration));
   }
  else   if (currentDescriptor != null) {
-    descriptorsToStop.add(currentDescriptor);
+    runningConfigurationsOfTheSameType.add(currentDescriptor);
   }
-  if (!descriptorsToStop.isEmpty()) {
-    if (configuration != null && (descriptorsToStop.size() > 1 || currentDescriptor == null || descriptorsToStop.get(0) != currentDescriptor) && !userApprovesStop(project,configuration.getName(),descriptorsToStop.size())) {
-      return;
+  final List<RunContentDescriptor> runningConfigurationsToStop=ContainerUtil.concat(runningConfigurationsOfTheSameType,runningIncompatibleConfigurations);
+  if (!runningConfigurationsToStop.isEmpty()) {
+    if (configuration != null) {
+      if (!runningConfigurationsOfTheSameType.isEmpty() && (runningConfigurationsOfTheSameType.size() > 1 || currentDescriptor == null || runningConfigurationsOfTheSameType.get(0) != currentDescriptor) && !userApprovesStopForSameTypeConfigurations(project,configuration.getName(),runningConfigurationsOfTheSameType.size())) {
+        return;
+      }
+      if (!runningIncompatibleConfigurations.isEmpty() && !userApprovesStopForIncompatibleConfigurations(myProject,configuration.getName(),runningIncompatibleConfigurations)) {
+        return;
+      }
     }
-    for (    RunContentDescriptor descriptor : descriptorsToStop) {
+    for (    RunContentDescriptor descriptor : runningConfigurationsToStop) {
       stop(descriptor);
     }
   }
@@ -25,7 +35,7 @@
         awaitingTerminationAlarm.addRequest(this,100);
         return;
       }
-      for (      RunContentDescriptor descriptor : descriptorsToStop) {
+      for (      RunContentDescriptor descriptor : runningConfigurationsOfTheSameType) {
         ProcessHandler processHandler=descriptor.getProcessHandler();
         if (processHandler != null && !processHandler.isProcessTerminated()) {
           awaitingTerminationAlarm.addRequest(this,100);
