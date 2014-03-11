@@ -38,7 +38,7 @@
     if (role == ChildRole.ELSE_EXPRESSION && settings.TERNARY_OPERATION_SIGNS_ON_NEXT_LINE)     return null;
     return suggestedWrap;
   }
- else   if (JavaFormatterUtil.isAssignment(parent)) {
+ else   if (JavaFormatterUtil.isAssignment(parent) && role != ChildRole.TYPE) {
     if (role == ChildRole.INITIALIZER_EQ)     return settings.PLACE_ASSIGNMENT_SIGN_ON_NEXT_LINE ? suggestedWrap : null;
     if (role == ChildRole.OPERATION_SIGN)     return settings.PLACE_ASSIGNMENT_SIGN_ON_NEXT_LINE ? suggestedWrap : null;
     if (role == ChildRole.INITIALIZER)     return settings.PLACE_ASSIGNMENT_SIGN_ON_NEXT_LINE ? null : suggestedWrap;
@@ -66,28 +66,39 @@
       return null;
     }
   }
- else   if (nodeType == JavaElementType.METHOD) {
-    if (role == ChildRole.THROWS_LIST) {
-      return suggestedWrap;
-    }
+ else   if (parent.getPsi() instanceof PsiModifierListOwner) {
+    ASTNode prev=FormatterUtil.getPreviousNonWhitespaceSibling(child);
+    if (prev != null && prev.getElementType() == JavaElementType.MODIFIER_LIST) {
+      ASTNode last=prev.getLastChildNode();
+      if (last != null && last.getElementType() == JavaElementType.ANNOTATION) {
+        if (isTypeAnnotation(last.getPsi())) {
+          return Wrap.createWrap(WrapType.NONE,false);
+        }
  else {
-      return null;
+          return Wrap.createWrap(getWrapType(getAnnotationWrapType(parent,child,settings)),true);
+        }
+      }
     }
+    return null;
   }
  else   if (nodeType == JavaElementType.MODIFIER_LIST) {
     if (childType == JavaElementType.ANNOTATION) {
-      return reservedWrapsProvider.getReservedWrap(JavaElementType.MODIFIER_LIST);
+      if (isTypeAnnotation(child.getPsi())) {
+        ASTNode prev=FormatterUtil.getPreviousNonWhitespaceSibling(child);
+        if (prev == null || prev.getElementType() != JavaElementType.ANNOTATION || isTypeAnnotation(prev.getPsi())) {
+          return Wrap.createWrap(WrapType.NONE,false);
+        }
+      }
+      return Wrap.createWrap(getWrapType(getAnnotationWrapType(parent.getTreeParent(),child,settings)),true);
     }
  else     if (childType == JavaTokenType.END_OF_LINE_COMMENT) {
       return Wrap.createWrap(WrapType.NORMAL,true);
     }
-    ASTNode prevElement=FormatterUtil.getPreviousNonWhitespaceSibling(child);
-    if (prevElement != null && prevElement.getElementType() == JavaElementType.ANNOTATION) {
-      return reservedWrapsProvider.getReservedWrap(JavaElementType.MODIFIER_LIST);
+    ASTNode prev=FormatterUtil.getPreviousNonWhitespaceSibling(child);
+    if (prev != null && prev.getElementType() == JavaElementType.ANNOTATION) {
+      return Wrap.createWrap(getWrapType(getAnnotationWrapType(parent.getTreeParent(),child,settings)),true);
     }
- else {
-      return null;
-    }
+    return null;
   }
  else   if (nodeType == JavaElementType.ASSERT_STATEMENT) {
     if (role == ChildRole.CONDITION) {
