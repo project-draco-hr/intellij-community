@@ -1,8 +1,22 @@
 {
   final MethodCandidateInfo.CurrentCandidateProperties properties=getCurrentProperties(parent);
-  final PsiSubstitutor subst=tryToInfer(parameters,args,parent instanceof PsiCallExpression ? ((PsiCallExpression)parent) : null,properties);
-  if (subst != null) {
-    return subst;
+  if (!repeatInferencePhases(true)) {
+    return resolveSubset(myInferenceVariables.values(),mySiteSubstitutor);
+  }
+  if (properties != null && !properties.isApplicabilityCheck()) {
+    initReturnTypeConstraint(properties.getMethod(),(PsiCallExpression)parent);
+    if (!repeatInferencePhases(true)) {
+      return prepareSubstitution();
+    }
+    if (parameters != null && args != null) {
+      final Set<ConstraintFormula> additionalConstraints=new HashSet<ConstraintFormula>();
+      if (parameters.length > 0) {
+        collectAdditionalConstraints(parameters,args,properties.getMethod(),PsiSubstitutor.EMPTY,additionalConstraints,properties.isVarargs());
+      }
+      if (!additionalConstraints.isEmpty() && !proceedWithAdditionalConstraints(additionalConstraints)) {
+        return prepareSubstitution();
+      }
+    }
   }
   final PsiSubstitutor substitutor=resolveBounds(myInferenceVariables.values(),mySiteSubstitutor);
   if (substitutor != null) {
