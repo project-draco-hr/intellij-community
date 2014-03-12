@@ -1,13 +1,19 @@
 {
   try {
-    final PsiElement problem_elt=descriptor.getPsiElement();
-    sure(myPyFile);
-    sure(FileModificationService.getInstance().preparePsiElementForWrite(myPyFile));
+    final PsiElement problemElement=descriptor.getPsiElement();
+    if (!(problemElement instanceof PyQualifiedExpression))     return;
+    final PyExpression qualifier=((PyQualifiedExpression)problemElement).getQualifier();
+    if (qualifier == null)     return;
+    final PyType type=TypeEvalContext.userInitiated(problemElement.getContainingFile()).getType(qualifier);
+    if (!(type instanceof PyModuleType))     return;
+    final PyFile file=((PyModuleType)type).getModule();
+    sure(file);
+    sure(FileModificationService.getInstance().preparePsiElementForWrite(file));
     PyFunctionBuilder builder=new PyFunctionBuilder(myIdentifier);
-    PsiElement problemParent=problem_elt.getParent();
+    PsiElement problemParent=problemElement.getParent();
     if (problemParent instanceof PyCallExpression) {
       PyArgumentList arglist=((PyCallExpression)problemParent).getArgumentList();
-      sure(arglist);
+      if (arglist == null)       return;
       final PyExpression[] args=arglist.getArguments();
       for (      PyExpression arg : args) {
         if (arg instanceof PyKeywordArgument) {
@@ -24,7 +30,7 @@
     }
  else     if (problemParent != null) {
       for (      PyInspectionExtension extension : Extensions.getExtensions(PyInspectionExtension.EP_NAME)) {
-        List<String> params=extension.getFunctionParametersFromUsage(problem_elt);
+        List<String> params=extension.getFunctionParametersFromUsage(problemElement);
         if (params != null) {
           for (          String param : params) {
             builder.parameter(param);
@@ -33,9 +39,9 @@
         }
       }
     }
-    PyFunction function=builder.buildFunction(project,LanguageLevel.forFile(myPyFile.getVirtualFile()));
-    function=(PyFunction)myPyFile.add(function);
-    showTemplateBuilder(function);
+    PyFunction function=builder.buildFunction(project,LanguageLevel.forElement(file));
+    function=(PyFunction)file.add(function);
+    showTemplateBuilder(function,file);
   }
  catch (  IncorrectOperationException ignored) {
     PyUtil.showBalloon(project,PyBundle.message("QFIX.failed.to.add.function"),MessageType.ERROR);
