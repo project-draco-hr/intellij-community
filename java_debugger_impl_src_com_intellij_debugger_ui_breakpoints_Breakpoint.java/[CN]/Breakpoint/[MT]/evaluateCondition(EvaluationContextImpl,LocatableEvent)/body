@@ -19,34 +19,44 @@
     String typeName=calculateEventClass(context,event);
     if (!typeMatchesClassFilters(typeName))     return false;
   }
-  if (isConditionEnabled() && !getCondition().getText().isEmpty()) {
-    try {
-      ExpressionEvaluator evaluator=DebuggerInvocationUtil.commitAndRunReadAction(context.getProject(),new EvaluatingComputable<ExpressionEvaluator>(){
-        @Override public ExpressionEvaluator compute() throws EvaluateException {
-          final SourcePosition contextSourcePosition=ContextUtil.getSourcePosition(context);
-          PsiElement contextPsiElement=ContextUtil.getContextElement(contextSourcePosition);
-          if (contextPsiElement == null) {
-            contextPsiElement=getEvaluationElement();
-          }
-          return EvaluatorBuilderImpl.build(getCondition(),contextPsiElement,contextSourcePosition);
-        }
-      }
-);
-      final Value value=evaluator.evaluate(context);
-      if (!(value instanceof BooleanValue)) {
-        throw EvaluateExceptionUtil.createEvaluateException(DebuggerBundle.message("evaluation.error.boolean.expected"));
-      }
-      if (!((BooleanValue)value).booleanValue()) {
-        return false;
-      }
-    }
- catch (    EvaluateException ex) {
-      if (ex.getCause() instanceof VMDisconnectedException) {
-        return false;
-      }
-      throw EvaluateExceptionUtil.createEvaluateException(DebuggerBundle.message("error.failed.evaluating.breakpoint.condition",getCondition(),ex.getMessage()));
-    }
+  if (!isConditionEnabled() || getCondition().getText().isEmpty()) {
     return true;
+  }
+  StackFrameProxyImpl frame=context.getFrameProxy();
+  if (frame != null) {
+    Location location=frame.location();
+    if (location != null) {
+      ThreeState result=debugProcess.getPositionManager().evaluateCondition(context,frame,location,getCondition().getText());
+      if (result != ThreeState.UNSURE) {
+        return result == ThreeState.YES;
+      }
+    }
+  }
+  try {
+    ExpressionEvaluator evaluator=DebuggerInvocationUtil.commitAndRunReadAction(context.getProject(),new EvaluatingComputable<ExpressionEvaluator>(){
+      @Override public ExpressionEvaluator compute() throws EvaluateException {
+        final SourcePosition contextSourcePosition=ContextUtil.getSourcePosition(context);
+        PsiElement contextPsiElement=ContextUtil.getContextElement(contextSourcePosition);
+        if (contextPsiElement == null) {
+          contextPsiElement=getEvaluationElement();
+        }
+        return EvaluatorBuilderImpl.build(getCondition(),contextPsiElement,contextSourcePosition);
+      }
+    }
+);
+    final Value value=evaluator.evaluate(context);
+    if (!(value instanceof BooleanValue)) {
+      throw EvaluateExceptionUtil.createEvaluateException(DebuggerBundle.message("evaluation.error.boolean.expected"));
+    }
+    if (!((BooleanValue)value).booleanValue()) {
+      return false;
+    }
+  }
+ catch (  EvaluateException ex) {
+    if (ex.getCause() instanceof VMDisconnectedException) {
+      return false;
+    }
+    throw EvaluateExceptionUtil.createEvaluateException(DebuggerBundle.message("error.failed.evaluating.breakpoint.condition",getCondition(),ex.getMessage()));
   }
   return true;
 }
