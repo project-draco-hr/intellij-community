@@ -1,0 +1,35 @@
+{
+class ValidatingVisitor extends JavaRecursiveElementWalkingVisitor {
+    @Override public void visitAnnotation(    PsiAnnotation annotation){
+      final PsiJavaCodeReferenceElement nameReferenceElement=annotation.getNameReferenceElement();
+      if (nameReferenceElement == null || !nameReferenceElement.getText().equals(MatchOptions.MODIFIER_ANNOTATION_NAME)) {
+        return;
+      }
+      for (      PsiNameValuePair pair : annotation.getParameterList().getAttributes()) {
+        final PsiAnnotationMemberValue value=pair.getValue();
+        if (value instanceof PsiArrayInitializerMemberValue) {
+          for (          PsiAnnotationMemberValue v : ((PsiArrayInitializerMemberValue)value).getInitializers()) {
+            final String name=StringUtil.stripQuotesAroundValue(v.getText());
+            checkModifier(name);
+          }
+        }
+ else         if (value != null) {
+          final String name=StringUtil.stripQuotesAroundValue(value.getText());
+          checkModifier(name);
+        }
+      }
+    }
+    private void checkModifier(    final String name){
+      if (!MatchOptions.INSTANCE_MODIFIER_NAME.equals(name) && !MatchOptions.PACKAGE_LOCAL_MODIFIER_NAME.equals(name) && Arrays.binarySearch(JavaMatchingVisitor.MODIFIERS,name) < 0) {
+        throw new MalformedPatternException(SSRBundle.message("invalid.modifier.type",name));
+      }
+    }
+  }
+  ValidatingVisitor visitor=new ValidatingVisitor();
+  final NodeIterator nodes=PatternCompiler.compilePattern(project,options).getNodes();
+  while (nodes.hasNext()) {
+    nodes.current().accept(visitor);
+    nodes.advance();
+  }
+  nodes.reset();
+}
