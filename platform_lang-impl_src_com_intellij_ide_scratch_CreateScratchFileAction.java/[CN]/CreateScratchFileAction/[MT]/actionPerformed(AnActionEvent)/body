@@ -1,12 +1,41 @@
 {
   final Project project=e.getProject();
   if (project == null)   return;
-  MyDialog dialog=new MyDialog(project);
-  dialog.setResizable(false);
-  if (dialog.showAndGet()) {
-    Language language=dialog.getType();
-    VirtualFile file=ScratchpadManager.getInstance(project).createScratchFile(language);
-    OpenFileDescriptor descriptor=new OpenFileDescriptor(project,file);
-    FileEditorManager.getInstance(project).openTextEditor(descriptor,true);
+  List<Language> languages=getLanguages();
+  BaseListPopupStep<Language> step=new BaseListPopupStep<Language>("Specify the language",languages){
+    @NotNull @Override public String getTextFor(    Language value){
+      return value.getDisplayName();
+    }
+    @Override public String getIndexedString(    Language value){
+      return value.getDisplayName();
+    }
+    @Override public boolean isSpeedSearchEnabled(){
+      return true;
+    }
+    @Override public PopupStep onChosen(    Language selectedValue,    boolean finalChoice){
+      doAction(project,selectedValue);
+      return null;
+    }
+    @Override public Icon getIconFor(    Language language){
+      LanguageFileType associatedLanguage=language.getAssociatedFileType();
+      return associatedLanguage != null ? associatedLanguage.getIcon() : null;
+    }
   }
+;
+  Language previous=ScratchpadManager.getInstance(project).getLatestLanguage();
+  final String previousName=previous != null ? previous.getDisplayName() : null;
+  if (previousName != null) {
+    int defaultOption=ContainerUtil.indexOf(languages,new Condition<Language>(){
+      @Override public boolean value(      Language module){
+        return module.getDisplayName().equals(previousName);
+      }
+    }
+);
+    if (defaultOption >= 0) {
+      step.setDefaultOptionIndex(defaultOption);
+    }
+  }
+  ListPopup popup=JBPopupFactory.getInstance().createListPopup(step);
+  popup.setSize(new Dimension(190,400));
+  popup.showCenteredInCurrentWindow(project);
 }
