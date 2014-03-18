@@ -1,0 +1,31 @@
+{
+  final Channel currentChannel=channel;
+  if (currentChannel == null) {
+    return new ActionCallback.Done();
+  }
+  vm.getCommandProcessor().cancelWaitingRequests();
+  Request disconnectRequest=vm.createDisconnectRequest();
+  if (disconnectRequest == null) {
+    vm.getCommandProcessor().closed();
+    channel=null;
+    NettyUtil.closeAndReleaseFactory(currentChannel);
+    return ActionCallback.DONE;
+  }
+  ActionCallback callback=vm.getCommandProcessor().send(disconnectRequest);
+  vm.getCommandProcessor().closed();
+  channel=null;
+  final ActionCallback subCallback=new ActionCallback();
+  callback.doWhenProcessed(new Runnable(){
+    @Override public void run(){
+      try {
+        vm.getCommandProcessor().cancelWaitingRequests();
+        NettyUtil.closeAndReleaseFactory(currentChannel);
+      }
+  finally {
+        subCallback.setDone();
+      }
+    }
+  }
+);
+  return subCallback;
+}
