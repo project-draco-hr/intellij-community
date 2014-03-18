@@ -1,28 +1,20 @@
 {
-  final PsiClassType.ClassResolveResult resolveResult=classType.resolveGenerics();
-  final PsiClass aClass=resolveResult.getElement();
+  PsiClassType.ClassResolveResult resolveResult=type.resolveGenerics();
+  PsiClass aClass=resolveResult.getElement();
   if (aClass instanceof PsiAnonymousClass) {
     return visitClassType(((PsiAnonymousClass)aClass).getBaseClassType());
   }
-  final String originalText=classType.getPresentableText();
-  if (aClass == null) {
-    return new WrongType(originalText);
+ else   if (aClass == null) {
+    return new UnresolvedType(type);
   }
  else {
-    final Map<String,Type> substitutionMap=new HashMap<String,Type>();
-    final PsiSubstitutor substitutor=resolveResult.getSubstitutor();
+    Map<String,Type> substitutionMap=ContainerUtil.newHashMap();
+    PsiSubstitutor substitutor=resolveResult.getSubstitutor();
     for (    PsiTypeParameter typeParameter : PsiUtil.typeParametersIterable(aClass)) {
-      final PsiType type=substitutor.substitute(typeParameter);
-      final String name=typeParameter.getName();
-      if (type == null) {
-        substitutionMap.put(name,null);
-      }
- else {
-        substitutionMap.put(name,type.accept(this));
-      }
+      PsiType substitute=substitutor.substitute(typeParameter);
+      substitutionMap.put(typeParameter.getName(),substitute != null ? substitute.accept(this) : null);
     }
-    final String qualifiedName=aClass.getQualifiedName();
-    LOG.assertTrue(aClass.getName() != null);
-    return new ClassType(originalText,qualifiedName != null ? qualifiedName : aClass.getName(),substitutionMap);
+    String qualifiedName=ObjectUtils.notNull(aClass.getQualifiedName(),aClass.getName());
+    return new ClassType(type,qualifiedName,substitutionMap);
   }
 }

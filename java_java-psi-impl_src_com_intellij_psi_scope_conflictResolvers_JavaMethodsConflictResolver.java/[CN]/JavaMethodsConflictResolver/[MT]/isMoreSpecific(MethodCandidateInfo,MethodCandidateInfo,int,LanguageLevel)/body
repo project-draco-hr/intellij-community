@@ -82,11 +82,15 @@
     }
     if (languageLevel.isAtLeast(LanguageLevel.JDK_1_8) && myArgumentsList instanceof PsiExpressionList && (typeParameters1.length == 0 || typeParameters2.length == 0)) {
       boolean toCompareFunctional=false;
-      for (int i=0; i < getActualParametersLength(); i++) {
-        if (types1.length > 0 && LambdaUtil.isFunctionalType(types1[Math.min(i,types1.length - 1)]) && types2.length > 0 && LambdaUtil.isFunctionalType(types2[Math.min(i,types2.length - 1)])) {
-          types1AtSite[Math.min(i,types1.length - 1)]=PsiType.NULL;
-          types2AtSite[Math.min(i,types2.length - 1)]=PsiType.NULL;
-          toCompareFunctional=true;
+      if (types1.length > 0 && types2.length > 0) {
+        for (int i=0; i < getActualParametersLength(); i++) {
+          final PsiType type1=types1[Math.min(i,types1.length - 1)];
+          final PsiType type2=types2[Math.min(i,types2.length - 1)];
+          if (LambdaUtil.isFunctionalType(type1) && !TypeConversionUtil.erasure(type1).isAssignableFrom(type2) && LambdaUtil.isFunctionalType(type2)&& !TypeConversionUtil.erasure(type2).isAssignableFrom(type1)) {
+            types1AtSite[Math.min(i,types1.length - 1)]=PsiType.NULL;
+            types2AtSite[Math.min(i,types2.length - 1)]=PsiType.NULL;
+            toCompareFunctional=true;
+          }
         }
       }
       if (toCompareFunctional) {
@@ -95,7 +99,7 @@
         if (applicable12ignoreFunctionalType || applicable21ignoreFunctionalType) {
           Specifics specifics=null;
           for (int i=0; i < getActualParametersLength(); i++) {
-            if (types1.length > 0 && types1AtSite[Math.min(i,types1.length - 1)] == PsiType.NULL && types2.length > 0 && types2AtSite[Math.min(i,types2.length - 1)] == PsiType.NULL) {
+            if (types1AtSite[Math.min(i,types1.length - 1)] == PsiType.NULL && types2AtSite[Math.min(i,types2.length - 1)] == PsiType.NULL) {
               Specifics specific=isFunctionalTypeMoreSpecific(info1,info2,((PsiExpressionList)myArgumentsList).getExpressions()[i],i);
               if (specific == Specifics.NEITHER) {
                 specifics=Specifics.NEITHER;
@@ -155,6 +159,11 @@
   final boolean raw2=PsiUtil.isRawSubstitutor(method2,classSubstitutor2);
   if (raw1 ^ raw2) {
     return raw1 ? Specifics.SECOND : Specifics.FIRST;
+  }
+  final boolean varargs1=info1.isVarargs();
+  final boolean varargs2=info2.isVarargs();
+  if (varargs1 ^ varargs2) {
+    return varargs1 ? Specifics.SECOND : Specifics.FIRST;
   }
   return Specifics.NEITHER;
 }

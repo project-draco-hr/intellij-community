@@ -1,4 +1,38 @@
 {
-  final Pair<PsiMethod,PsiCallExpression> pair=getPair(parent);
-  return infer(parameters,args,parent,pair != null ? pair.first : null);
+  final MethodCandidateInfo.CurrentCandidateProperties properties=getCurrentProperties(parent);
+  if (!repeatInferencePhases(true)) {
+    return resolveSubset(myInferenceVariables.values(),mySiteSubstitutor);
+  }
+  if (properties != null && !properties.isApplicabilityCheck()) {
+    initReturnTypeConstraint(properties.getMethod(),(PsiCallExpression)parent);
+    if (!repeatInferencePhases(true)) {
+      return prepareSubstitution();
+    }
+    if (parameters != null && args != null) {
+      final Set<ConstraintFormula> additionalConstraints=new HashSet<ConstraintFormula>();
+      if (parameters.length > 0) {
+        collectAdditionalConstraints(parameters,args,properties.getMethod(),PsiSubstitutor.EMPTY,additionalConstraints,properties.isVarargs());
+      }
+      if (!additionalConstraints.isEmpty() && !proceedWithAdditionalConstraints(additionalConstraints)) {
+        return prepareSubstitution();
+      }
+    }
+  }
+  final PsiSubstitutor substitutor=resolveBounds(myInferenceVariables.values(),mySiteSubstitutor);
+  if (substitutor != null) {
+    if (myContext != null) {
+      myContext.putUserData(ERASED,myErased);
+    }
+    mySiteSubstitutor=substitutor;
+    for (    PsiTypeParameter parameter : substitutor.getSubstitutionMap().keySet()) {
+      final InferenceVariable variable=getInferenceVariable(parameter);
+      if (variable != null) {
+        variable.setInstantiation(substitutor.substitute(parameter));
+      }
+    }
+  }
+ else {
+    return resolveSubset(myInferenceVariables.values(),mySiteSubstitutor);
+  }
+  return prepareSubstitution();
 }
