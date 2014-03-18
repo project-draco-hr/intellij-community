@@ -1,7 +1,6 @@
 {
   if (myProject.isDisposed())   return null;
   ExternalSystemUtil.updateRecentTasks(new ExternalTaskExecutionInfo(mySettings.clone(),executor.getId()),myProject);
-  ConsoleView console=new TextConsoleBuilderImpl(myProject).getConsole();
   final List<ExternalTaskPojo> tasks=ContainerUtilRt.newArrayList();
   for (  String taskName : mySettings.getTaskNames()) {
     tasks.add(new ExternalTaskPojo(taskName,mySettings.getExternalProjectPath(),null));
@@ -17,7 +16,9 @@
   FileDocumentManager.getInstance().saveAllDocuments();
   final ExternalSystemExecuteTaskTask task=new ExternalSystemExecuteTaskTask(mySettings.getExternalSystemId(),myProject,tasks,mySettings.getVmOptions(),mySettings.getScriptParameters(),debuggerSetup);
   final MyProcessHandler processHandler=new MyProcessHandler(task);
-  console.attachToProcess(processHandler);
+  final ExternalSystemExecutionConsoleManager<ExternalSystemRunConfiguration> consoleManager=getConsoleManagerFor(task);
+  final ExecutionConsole consoleView=consoleManager.attachExecutionConsole(task,myProject,myConfiguration,executor,myEnv,processHandler);
+  Disposer.register(myProject,consoleView);
   ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
     @Override public void run(){
       final String startDateTime=DateFormatUtil.formatTimeWithSeconds(System.currentTimeMillis());
@@ -36,7 +37,7 @@
             processHandler.notifyTextAvailable("\r",ProcessOutputTypes.SYSTEM);
             myResetGreeting=false;
           }
-          processHandler.notifyTextAvailable(text,stdOut ? ProcessOutputTypes.STDOUT : ProcessOutputTypes.STDERR);
+          consoleManager.onOutput(text,stdOut ? ProcessOutputTypes.STDOUT : ProcessOutputTypes.STDERR);
         }
         @Override public void onFailure(        @NotNull ExternalSystemTaskId id,        @NotNull Exception e){
           String exceptionMessage=ExceptionUtil.getMessage(e);
@@ -61,5 +62,5 @@
     }
   }
 );
-  return new DefaultExecutionResult(console,processHandler);
+  return new DefaultExecutionResult(consoleView,processHandler);
 }
