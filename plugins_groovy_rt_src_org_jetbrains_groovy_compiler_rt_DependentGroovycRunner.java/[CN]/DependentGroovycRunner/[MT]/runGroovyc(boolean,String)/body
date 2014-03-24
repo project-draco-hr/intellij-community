@@ -8,8 +8,8 @@
   final List<CompilationUnitPatcher> patchers=new ArrayList<CompilationUnitPatcher>();
   final List<File> srcFiles=new ArrayList<File>();
   final Map<String,File> class2File=new HashMap<String,File>();
-  final String[] finalOutput=new String[1];
-  fillFromArgsFile(argsFile,config,patchers,compilerMessages,srcFiles,class2File,finalOutput);
+  final String[] finalOutputRef=new String[1];
+  fillFromArgsFile(argsFile,config,patchers,compilerMessages,srcFiles,class2File,finalOutputRef);
   if (srcFiles.isEmpty())   return true;
   if (forStubs) {
     Map<String,Object> options=new HashMap<String,Object>();
@@ -18,22 +18,30 @@
     config.setJointCompilationOptions(options);
   }
   System.out.println(GroovyRtConstants.PRESENTABLE_MESSAGE + "Groovyc: loading sources...");
-  final AstAwareResourceLoader resourceLoader=new AstAwareResourceLoader(class2File);
-  final CompilationUnit unit=createCompilationUnit(forStubs,config,finalOutput[0],buildClassLoaderFor(config,resourceLoader));
-  unit.addPhaseOperation(new CompilationUnit.SourceUnitOperation(){
-    public void call(    SourceUnit source) throws CompilationFailedException {
-      File file=new File(source.getName());
-      for (      ClassNode aClass : source.getAST().getClasses()) {
-        resourceLoader.myClass2File.put(aClass.getName(),file);
+  String[] finalOutputs=finalOutputRef[0].split(File.pathSeparator);
+  renameResources(finalOutputs,"",TEMP_RESOURCE_SUFFIX);
+  final List<GroovyCompilerWrapper.OutputItem> compiledFiles;
+  try {
+    final AstAwareResourceLoader resourceLoader=new AstAwareResourceLoader(class2File);
+    final CompilationUnit unit=createCompilationUnit(forStubs,config,buildClassLoaderFor(config,resourceLoader));
+    unit.addPhaseOperation(new CompilationUnit.SourceUnitOperation(){
+      public void call(      SourceUnit source) throws CompilationFailedException {
+        File file=new File(source.getName());
+        for (        ClassNode aClass : source.getAST().getClasses()) {
+          resourceLoader.myClass2File.put(aClass.getName(),file);
+        }
       }
     }
-  }
 ,Phases.CONVERSION);
-  addSources(forStubs,srcFiles,unit);
-  runPatchers(patchers,compilerMessages,unit,resourceLoader,srcFiles);
-  System.out.println(GroovyRtConstants.PRESENTABLE_MESSAGE + "Groovyc: compiling...");
-  final List<GroovyCompilerWrapper.OutputItem> compiledFiles=new GroovyCompilerWrapper(compilerMessages,forStubs).compile(unit);
-  System.out.println(GroovyRtConstants.CLEAR_PRESENTABLE);
+    addSources(forStubs,srcFiles,unit);
+    runPatchers(patchers,compilerMessages,unit,resourceLoader,srcFiles);
+    System.out.println(GroovyRtConstants.PRESENTABLE_MESSAGE + "Groovyc: compiling...");
+    compiledFiles=new GroovyCompilerWrapper(compilerMessages,forStubs).compile(unit);
+  }
+  finally {
+    renameResources(finalOutputs,TEMP_RESOURCE_SUFFIX,"");
+    System.out.println(GroovyRtConstants.CLEAR_PRESENTABLE);
+  }
   System.out.println();
   reportCompiledItems(compiledFiles);
   System.out.println();
