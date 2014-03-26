@@ -2,19 +2,34 @@
   final Sdk sdk=getSdk(sdkHome);
   ModuleRootModificationUtil.setModuleSdk(myFixture.getModule(),sdk);
   final File skeletonsPath=new File(PythonSdkType.getSkeletonsPath(PathManager.getSystemPath(),sdkHome));
-  final File skeleton=new File(skeletonsPath,"com/just/like/java.py");
-  myFixture.copyFileToProject("dotNet/testSkeleton.py",SKELETON_FILE_TO_TEST);
+  File skeletonFileOrDirectory=new File(skeletonsPath,myModuleNameToBeGenerated);
+  if (skeletonFileOrDirectory.isDirectory()) {
+    skeletonFileOrDirectory=new File(skeletonFileOrDirectory,PyNames.INIT_DOT_PY);
+  }
+ else {
+    skeletonFileOrDirectory=new File(skeletonFileOrDirectory.getAbsolutePath() + PyNames.DOT_PY);
+  }
+  final File skeletonFile=skeletonFileOrDirectory;
+  if (skeletonFile.exists()) {
+    skeletonFile.delete();
+  }
+  myFixture.copyFileToProject("dotNet/" + mySourceFileToRunGenerationOn,mySourceFileToRunGenerationOn);
   myFixture.copyFileToProject("dotNet/PythonLibs.dll","PythonLibs.dll");
-  myFixture.configureByFile(SKELETON_FILE_TO_TEST);
+  myFixture.copyFileToProject("dotNet/SingleNameSpace.dll","SingleNameSpace.dll");
+  myFixture.configureByFile(mySourceFileToRunGenerationOn);
   myFixture.enableInspections(PyUnresolvedReferencesInspection.class);
   UIUtil.invokeAndWaitIfNeeded(new Runnable(){
     @Override public void run(){
       PsiDocumentManager.getInstance(myFixture.getProject()).commitAllDocuments();
-      myFixture.findSingleIntention("Generate").invoke(myFixture.getProject(),myFixture.getEditor(),myFixture.getFile());
-      waitForSkeleton(skeleton);
+      final String intentionName=PyBundle.message("sdk.gen.stubs.for.binary.modules",myUseQuickFixWithThisModuleOnly);
+      myFixture.findSingleIntention(intentionName).invoke(myFixture.getProject(),myFixture.getEditor(),myFixture.getFile());
+      waitForSkeleton(skeletonFile);
     }
   }
 );
-  FileUtil.copy(skeleton,new File(myFixture.getTempDirPath(),skeleton.getName()));
-  myFixture.checkResultByFile(skeleton.getName(),DOT_NET_EXPECTED_SKELETON_PY,false);
+  FileUtil.copy(skeletonFile,new File(myFixture.getTempDirPath(),skeletonFile.getName()));
+  if (myExpectedSkeletonFile != null) {
+    myFixture.checkResultByFile(skeletonFile.getName(),myExpectedSkeletonFile,false);
+  }
+  myGeneratedSkeleton=(PyFile)myFixture.configureByFile(skeletonFile.getName());
 }
