@@ -1,0 +1,66 @@
+{
+  ClassWrapper wrapper=node_content.wrapper;
+  MethodWrapper meth=wrapper.getMethodWrapper(mt.getName(),mt.getDescriptor());
+  MethodWrapper methold=(MethodWrapper)DecompilerContext.getProperty(DecompilerContext.CURRENT_METHOD_WRAPPER);
+  DecompilerContext.setProperty(DecompilerContext.CURRENT_METHOD_WRAPPER,meth);
+  String indstr=InterpreterUtil.getIndentString(indent);
+  String method_name=node_lambda.lambda_information.method_name;
+  MethodDescriptor md=MethodDescriptor.parseDescriptor(node_lambda.lambda_information.method_descriptor);
+  StringWriter strwriter=new StringWriter();
+  BufferedWriter bufstrwriter=new BufferedWriter(strwriter);
+  if (!code_only) {
+    bufstrwriter.write(indstr);
+    bufstrwriter.write("public ");
+    bufstrwriter.write(method_name);
+    bufstrwriter.write("(");
+    boolean firstpar=true;
+    int index=1;
+    for (int i=0; i < md.params.length; i++) {
+      if (!firstpar) {
+        bufstrwriter.write(", ");
+      }
+      VarType partype=md.params[i].copy();
+      String strpartype=ExprProcessor.getCastTypeName(partype);
+      if (ExprProcessor.UNDEFINED_TYPE_STRING.equals(strpartype) && DecompilerContext.getOption(IFernflowerPreferences.UNDEFINED_PARAM_TYPE_OBJECT)) {
+        strpartype=ExprProcessor.getCastTypeName(VarType.VARTYPE_OBJECT);
+      }
+      bufstrwriter.write(strpartype);
+      bufstrwriter.write(" ");
+      String parname=meth.varproc.getVarName(new VarVersionPaar(index,0));
+      bufstrwriter.write(parname == null ? "param" + index : parname);
+      firstpar=false;
+      index+=md.params[i].stack_size;
+    }
+    bufstrwriter.write(")");
+    bufstrwriter.write(" ");
+    bufstrwriter.write("{");
+    bufstrwriter.newLine();
+  }
+  RootStatement root=wrapper.getMethodWrapper(mt.getName(),mt.getDescriptor()).root;
+  if (root != null && !meth.decompiledWithErrors) {
+    try {
+      String code=root.toJava(indent + 1);
+      bufstrwriter.write(code);
+    }
+ catch (    Throwable ex) {
+      if (DecompilerContext.getLogger().getShowStacktrace()) {
+        ex.printStackTrace();
+      }
+      DecompilerContext.getLogger().writeMessage("Method " + mt.getName() + " "+ mt.getDescriptor()+ " couldn't be written.",IFernflowerLogger.ERROR);
+      meth.decompiledWithErrors=true;
+    }
+  }
+  if (meth.decompiledWithErrors) {
+    bufstrwriter.write(InterpreterUtil.getIndentString(indent + 1));
+    bufstrwriter.write("// $FF: Couldn't be decompiled");
+    bufstrwriter.newLine();
+  }
+  if (!code_only) {
+    bufstrwriter.write(indstr + "}");
+    bufstrwriter.newLine();
+  }
+  bufstrwriter.flush();
+  writer.write(strwriter.toString());
+  DecompilerContext.setProperty(DecompilerContext.CURRENT_METHOD_WRAPPER,methold);
+  return true;
+}

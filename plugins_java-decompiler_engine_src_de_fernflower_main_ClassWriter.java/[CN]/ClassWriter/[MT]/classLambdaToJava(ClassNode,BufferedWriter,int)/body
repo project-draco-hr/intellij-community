@@ -1,0 +1,51 @@
+{
+  ClassNode node_content=node;
+  while (node_content != null && node_content.type == ClassNode.CLASS_LAMBDA) {
+    node_content=node_content.parent;
+  }
+  if (node_content == null) {
+    return;
+  }
+  boolean lambda_to_anonymous=DecompilerContext.getOption(IFernflowerPreferences.LAMBDA_TO_ANONYMOUS_CLASS);
+  ClassNode nodeold=(ClassNode)DecompilerContext.getProperty(DecompilerContext.CURRENT_CLASSNODE);
+  DecompilerContext.setProperty(DecompilerContext.CURRENT_CLASSNODE,node);
+  ClassWrapper wrapper=node_content.wrapper;
+  StructClass cl=wrapper.getClassStruct();
+  DecompilerContext.getLogger().startWriteClass(node.simpleName);
+  StructMethod mt=cl.getMethod(node.lambda_information.content_method_key);
+  MethodWrapper meth=wrapper.getMethodWrapper(mt.getName(),mt.getDescriptor());
+  MethodDescriptor md=MethodDescriptor.parseDescriptor(node.lambda_information.method_descriptor);
+  if (!lambda_to_anonymous) {
+    StringBuilder buff=new StringBuilder("(");
+    boolean firstpar=true;
+    int index=1;
+    for (int i=0; i < md.params.length; i++) {
+      if (!firstpar) {
+        buff.append(", ");
+      }
+      String parname=meth.varproc.getVarName(new VarVersionPaar(index,0));
+      buff.append(parname == null ? "param" + index : parname);
+      firstpar=false;
+      index+=md.params[i].stack_size;
+    }
+    buff.append(") ->");
+    writer.write(buff.toString());
+  }
+  StringWriter strwriter=new StringWriter();
+  BufferedWriter bufstrwriter=new BufferedWriter(strwriter);
+  if (lambda_to_anonymous) {
+    methodLambdaToJava(node,node_content,mt,bufstrwriter,indent + 1,false);
+  }
+ else {
+    methodLambdaToJava(node,node_content,mt,bufstrwriter,indent,true);
+  }
+  bufstrwriter.flush();
+  writer.write(" {");
+  writer.newLine();
+  writer.write(strwriter.toString());
+  writer.write(InterpreterUtil.getIndentString(indent));
+  writer.write("}");
+  writer.flush();
+  DecompilerContext.setProperty(DecompilerContext.CURRENT_CLASSNODE,nodeold);
+  DecompilerContext.getLogger().endWriteClass();
+}
