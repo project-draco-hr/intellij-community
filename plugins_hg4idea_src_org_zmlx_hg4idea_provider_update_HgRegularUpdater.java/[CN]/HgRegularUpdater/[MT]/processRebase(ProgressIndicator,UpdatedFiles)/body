@@ -1,0 +1,24 @@
+{
+  indicator.setText2(HgVcsMessages.message("hg4idea.progress.rebase"));
+  HgRepository repository=HgUtil.getRepositoryManager(project).getRepositoryForRoot(repoRoot);
+  if (repository == null) {
+    throw new VcsException("Repository not found for root " + repoRoot);
+  }
+  HgRebaseCommand rebaseCommand=new HgRebaseCommand(project,repository);
+  HgCommandResult result=new HgRebaseCommand(project,repository).startRebase();
+  if (HgErrorUtil.isAbort(result)) {
+    new HgCommandResultNotifier(project).notifyError(result,"Hg Error","Couldn't rebase repository.");
+    return;
+  }
+  while (result.getExitValue() == 1) {
+    resolvePossibleConflicts(updatedFiles);
+    if (!HgConflictResolver.findConflicts(project,repoRoot).isEmpty()) {
+      return;
+    }
+    result=rebaseCommand.continueRebase();
+    if (HgErrorUtil.isAbort(result)) {
+      new HgCommandResultNotifier(project).notifyError(result,"Hg Error","Couldn't continue rebasing");
+      return;
+    }
+  }
+}
