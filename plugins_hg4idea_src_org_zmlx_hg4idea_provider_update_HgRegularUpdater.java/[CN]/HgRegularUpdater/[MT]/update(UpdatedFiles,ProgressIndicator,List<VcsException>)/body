@@ -8,17 +8,15 @@
   if (branchHeadsBeforePull.size() > 1) {
     reportWarning(warnings,HgVcsMessages.message("hg4idea.update.warning.multipleHeadsBeforeUpdate",repoRoot.getPath()));
   }
-  HgRevisionNumber parentBeforeUpdate=new HgWorkingCopyRevisionsCommand(project).firstParent(repoRoot);
-  HgCommandExitCode pullResult=pull(repoRoot,indicator,shouldRebase());
+  HgCommandExitCode pullResult=pull(repoRoot,indicator);
   if (pullResult == HgCommandExitCode.ERROR) {
     return false;
   }
-  if (pullResult == HgCommandExitCode.SUCCESS) {
-    HgRevisionNumber parentAfterUpdate=new HgWorkingCopyRevisionsCommand(project).firstParent(repoRoot);
-    addUpdatedFiles(repoRoot,updatedFiles,parentBeforeUpdate,parentAfterUpdate);
-    return true;
-  }
   if (shouldMerge()) {
+    List<HgRevisionNumber> parentsBeforeUpdate=new HgWorkingCopyRevisionsCommand(project).parents(repoRoot);
+    if (parentsBeforeUpdate.size() > 1) {
+      throw new VcsException(HgVcsMessages.message("hg4idea.update.error.uncommittedMerge",repoRoot.getPath()));
+    }
     indicator.setText2(HgVcsMessages.message("hg4idea.progress.countingHeads"));
     List<HgRevisionNumber> branchHeadsAfterPull=new HgHeadsCommand(project,repoRoot).execute();
     List<HgRevisionNumber> pulledBranchHeads=determinePulledBranchHeads(branchHeadsBeforePull,branchHeadsAfterPull);
@@ -32,10 +30,13 @@
         commitOrWarnAboutConflicts(warnings,mergeResult);
       }
     }
+ else {
+      update(repoRoot,indicator,updatedFiles,warnings);
+    }
     resolvePossibleConflicts(updatedFiles);
   }
  else {
-    processRebase(updatedFiles);
+    processRebase(indicator,updatedFiles);
   }
   return true;
 }
