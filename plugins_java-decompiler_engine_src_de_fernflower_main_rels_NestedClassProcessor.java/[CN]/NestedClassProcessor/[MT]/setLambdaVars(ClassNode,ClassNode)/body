@@ -5,14 +5,15 @@
   final MethodDescriptor md_content=MethodDescriptor.parseDescriptor(child.lambda_information.content_method_descriptor);
   final int vars_count=md_content.params.length - md_lambda.params.length;
   final boolean is_static_lambda_content=child.lambda_information.is_content_method_static;
-  if (!is_static_lambda_content) {
-    if (DecompilerContext.getOption(IFernflowerPreferences.LAMBDA_TO_ANONYMOUS_CLASS)) {
-    }
-  }
   final String parent_class_name=parent.wrapper.getClassStruct().qualifiedName;
   final String lambda_class_name=child.simpleName;
   final VarType lambda_class_type=new VarType(lambda_class_name,true);
+  if (!is_static_lambda_content && DecompilerContext.getOption(IFernflowerPreferences.LAMBDA_TO_ANONYMOUS_CLASS)) {
+    meth.varproc.getThisvars().put(new VarVersionPaar(0,0),parent_class_name);
+    meth.varproc.setVarName(new VarVersionPaar(0,0),parent.simpleName + ".this");
+  }
   DirectGraph graph=encmeth.getOrBuildGraph();
+  final HashMap<VarVersionPaar,String> mapNewNames=new HashMap<VarVersionPaar,String>();
   graph.iterateExprents(new DirectGraph.ExprentIterator(){
     public int processExprent(    Exprent exprent){
       List<Exprent> lst=exprent.getAllExprents(true);
@@ -30,7 +31,7 @@
               if (param.type == Exprent.EXPRENT_VAR) {
                 VarVersionPaar enc_varpaar=new VarVersionPaar((VarExprent)param);
                 String enc_varname=encmeth.varproc.getVarName(enc_varpaar);
-                meth.varproc.setVarName(new VarVersionPaar(varindex,0),enc_varname);
+                mapNewNames.put(new VarVersionPaar(varindex,0),enc_varname);
               }
               varindex+=md_content.params[i].stack_size;
             }
@@ -41,4 +42,11 @@
     }
   }
 );
+  HashSet<String> setNewOuterNames=new HashSet<String>(mapNewNames.values());
+  setNewOuterNames.removeAll(meth.setOuterVarNames);
+  meth.varproc.refreshVarNames(new VarNamesCollector(setNewOuterNames));
+  meth.setOuterVarNames.addAll(setNewOuterNames);
+  for (  Entry<VarVersionPaar,String> entr : mapNewNames.entrySet()) {
+    meth.varproc.setVarName(entr.getKey(),entr.getValue());
+  }
 }
