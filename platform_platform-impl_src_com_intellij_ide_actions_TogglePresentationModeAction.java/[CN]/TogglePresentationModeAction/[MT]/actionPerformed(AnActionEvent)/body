@@ -1,8 +1,8 @@
 {
-  UISettings settings=UISettings.getInstance();
-  Project project=e.getProject();
+  final UISettings settings=UISettings.getInstance();
+  final Project project=e.getProject();
   settings.PRESENTATION_MODE=!settings.PRESENTATION_MODE;
-  if (project != null) {
+  if (settings.PRESENTATION_MODE && project != null) {
     hideToolWindows(project);
   }
   settings.fireUISettingsChanged();
@@ -27,6 +27,7 @@
     }
     oldFonts.clear();
   }
+  ActionCallback callback=ActionCallback.DONE;
   if (project != null) {
     Window window=IdeFrameImpl.getActiveFrame();
     if (window instanceof IdeFrameImpl) {
@@ -34,23 +35,31 @@
       final PropertiesComponent propertiesComponent=PropertiesComponent.getInstance(project);
       if (settings.PRESENTATION_MODE) {
         propertiesComponent.setValue("full.screen.before.presentation.mode",String.valueOf(frame.isInFullScreen()));
-        frame.toggleFullScreen(true);
+        callback=frame.toggleFullScreen(true);
       }
  else {
         if (frame.isInFullScreen()) {
           final String value=propertiesComponent.getValue("full.screen.before.presentation.mode");
-          frame.toggleFullScreen("true".equalsIgnoreCase(value));
+          callback=frame.toggleFullScreen("true".equalsIgnoreCase(value));
         }
       }
     }
   }
-  int fontSize=settings.PRESENTATION_MODE ? settings.PRESENTATION_MODE_FONT_SIZE : EditorColorsManager.getInstance().getGlobalScheme().getEditorFontSize();
-  for (  Editor editor : EditorFactory.getInstance().getAllEditors()) {
-    if (editor instanceof EditorEx) {
-      ((EditorEx)editor).setFontSize(fontSize);
+  callback.doWhenProcessed(new Runnable(){
+    @Override public void run(){
+      int fontSize=settings.PRESENTATION_MODE ? settings.PRESENTATION_MODE_FONT_SIZE : EditorColorsManager.getInstance().getGlobalScheme().getEditorFontSize();
+      for (      Editor editor : EditorFactory.getInstance().getAllEditors()) {
+        if (editor instanceof EditorEx) {
+          ((EditorEx)editor).setFontSize(fontSize);
+        }
+      }
+      UISettings.getInstance().fireUISettingsChanged();
+      LafManager.getInstance().updateUI();
+      EditorUtil.reinitSettings();
+      if (!settings.PRESENTATION_MODE && project != null) {
+        hideToolWindows(project);
+      }
     }
   }
-  UISettings.getInstance().fireUISettingsChanged();
-  LafManager.getInstance().updateUI();
-  EditorUtil.reinitSettings();
+);
 }
