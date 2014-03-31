@@ -1,42 +1,43 @@
 {
   final IElementType tokenType=expression.getOperationTokenType();
   final PsiExpression[] operands=expression.getOperands();
-  if (tokenType.equals(JavaTokenType.AND)) {
-    for (    PsiExpression operand : operands) {
-      if (isZero(operand)) {
+  PsiExpression previousOperand=null;
+  for (int i=0, length=operands.length; i < length; i++) {
+    final PsiExpression operand=operands[i];
+    if (isZero(operand)) {
+      if (tokenType.equals(JavaTokenType.AND) || (tokenType.equals(JavaTokenType.LTLT) || tokenType.equals(JavaTokenType.GTGT) || tokenType.equals(JavaTokenType.GTGTGT)) && previousOperand == null) {
+        return getText(expression,operands[0],operands[length - 1],PsiType.LONG.equals(expression.getType()) ? "0L" : "0");
+      }
+ else       if (tokenType.equals(JavaTokenType.OR) || tokenType.equals(JavaTokenType.XOR) || (tokenType.equals(JavaTokenType.LTLT) || tokenType.equals(JavaTokenType.GTGT) || tokenType.equals(JavaTokenType.GTGTGT)) && previousOperand != null) {
+        return getText(expression,i == length - 1 ? expression.getTokenBeforeOperand(operand) : operand);
+      }
+    }
+ else     if (isAllOnes(operand)) {
+      if (tokenType.equals(JavaTokenType.AND)) {
+        return getText(expression,i == length - 1 ? expression.getTokenBeforeOperand(operand) : operand);
+      }
+      if (tokenType.equals(JavaTokenType.OR)) {
         return operand.getText();
       }
- else       if (isAllOnes(operand)) {
-        return getText(expression,operand);
+ else       if (tokenType.equals(JavaTokenType.XOR)) {
+        if (previousOperand != null) {
+          return getText(expression,previousOperand,operand,"~" + previousOperand.getText());
+        }
+ else {
+          final PsiExpression nextOperand=operands[i + 1];
+          return getText(expression,operand,nextOperand,"~" + nextOperand.getText());
+        }
       }
     }
-  }
- else   if (tokenType.equals(JavaTokenType.OR)) {
-    for (    PsiExpression operand : operands) {
-      if (isZero(operand)) {
-        return getText(expression,operand);
+ else     if (EquivalenceChecker.expressionsAreEquivalent(previousOperand,operand)) {
+      if (tokenType.equals(JavaTokenType.OR) || tokenType.equals(JavaTokenType.AND)) {
+        return getText(expression,previousOperand,operand,operand.getText());
       }
- else       if (isAllOnes(operand)) {
-        return operand.getText();
+ else       if (tokenType.equals(JavaTokenType.XOR)) {
+        return getText(expression,previousOperand,operand,PsiType.LONG.equals(expression.getType()) ? "0L" : "0");
       }
     }
-  }
- else   if (tokenType.equals(JavaTokenType.XOR)) {
-    for (    PsiExpression operand : operands) {
-      if (isAllOnes(operand)) {
-        return '~' + getText(expression,operand);
-      }
- else       if (isZero(operand)) {
-        return getText(expression,operand);
-      }
-    }
-  }
- else   if (tokenType.equals(JavaTokenType.LTLT) || tokenType.equals(JavaTokenType.GTGT) || tokenType.equals(JavaTokenType.GTGTGT)) {
-    for (    PsiExpression operand : operands) {
-      if (isZero(operand)) {
-        return getText(expression,operand);
-      }
-    }
+    previousOperand=operand;
   }
   return "";
 }
