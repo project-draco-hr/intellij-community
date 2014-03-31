@@ -1,0 +1,73 @@
+{
+  java.util.List<VisualPosition> positionsToClear=new ArrayList<VisualPosition>();
+  int dxRemaining=sprite.dx;
+  int dyRemaining=sprite.dy;
+  while (dxRemaining != 0 || dyRemaining != 0) {
+    Point p=sprite.position;
+    int leftWall=getNearestWallAtLeft(p.x,p.y);
+    int rightWall=getNearestWallAtRight(p.x,p.y);
+    int aboveWall=getNearestWallAbove(p.x,p.y);
+    int belowWall=getNearestWallBelow(p.x,p.y);
+    int dxCurrent=dxRemaining;
+    int dyCurrent=dyRemaining;
+    int maxXStep=getWidthEstimate() / 2;
+    if (Math.abs(dxCurrent) > maxXStep) {
+      dxCurrent=(dxCurrent > 0) ? maxXStep : -maxXStep;
+      dyCurrent=dyCurrent * dxCurrent / dxRemaining;
+    }
+    int maxYStep=getHeightEstimate() / 2;
+    if (Math.abs(dyCurrent) > maxYStep) {
+      int dyCurrentOld=dyCurrent;
+      dyCurrent=(dyCurrent > 0) ? maxYStep : -maxYStep;
+      dxCurrent=dxCurrent * dyCurrent / dyCurrentOld;
+    }
+    sprite.position.translate(dxCurrent,dyCurrent);
+    dxRemaining-=dxCurrent;
+    dyRemaining-=dyCurrent;
+    VisualPosition pos=getVisualPosition(editor,sprite);
+    if (sprite.position.x <= leftWall) {
+      sprite.position.x=2 * leftWall - sprite.position.x;
+      sprite.dx=-sprite.dx;
+      dxRemaining=-dxRemaining;
+      int columnAdjustment=sprite.position.x == leftWall ? -1 : 0;
+      positionsToClear.add(new VisualPosition(pos.line,pos.column + columnAdjustment));
+      positionsToClear.add(new VisualPosition(pos.line + 1,pos.column + columnAdjustment));
+    }
+    if (sprite.position.y <= aboveWall) {
+      sprite.position.y=2 * aboveWall - sprite.position.y;
+      sprite.dy=-sprite.dy;
+      dyRemaining=-dyRemaining;
+      int lineAdjustment=sprite.position.y == aboveWall ? -1 : 0;
+      positionsToClear.add(new VisualPosition(pos.line + lineAdjustment,pos.column));
+      positionsToClear.add(new VisualPosition(pos.line + lineAdjustment,pos.column + 1));
+    }
+    if (sprite.position.x >= rightWall) {
+      sprite.position.x=2 * rightWall - sprite.position.x;
+      sprite.dx=-sprite.dx;
+      dxRemaining=-dxRemaining;
+      positionsToClear.add(new VisualPosition(pos.line,pos.column + 1));
+      positionsToClear.add(new VisualPosition(pos.line + 1,pos.column + 1));
+    }
+    if (sprite.position.y >= belowWall) {
+      sprite.position.y=2 * belowWall - sprite.position.y;
+      sprite.dy=-sprite.dy;
+      dyRemaining=-dyRemaining;
+      positionsToClear.add(new VisualPosition(pos.line + 1,pos.column));
+      positionsToClear.add(new VisualPosition(pos.line + 1,pos.column + 1));
+    }
+  }
+  java.util.List<Integer> offsetsToClear=new ArrayList<Integer>();
+  for (  VisualPosition visualPosition : positionsToClear) {
+    if (visualPosition.line < 0 || visualPosition.column < 0) {
+      continue;
+    }
+    int offset=editor.logicalPositionToOffset(editor.visualToLogicalPosition(new com.intellij.openapi.editor.VisualPosition(visualPosition.line,visualPosition.column)));
+    if (offset < 0 || offset >= editor.getDocument().getTextLength()) {
+      continue;
+    }
+    if (editor.getDocument().getCharsSequence().charAt(offset) != '\n') {
+      offsetsToClear.add(offset);
+    }
+  }
+  return offsetsToClear;
+}

@@ -1,0 +1,34 @@
+{
+  final JavaCodeStyleManager codeStyleManager=JavaCodeStyleManager.getInstance(project);
+  final Map<PsiVariable,String> names=new HashMap<PsiVariable,String>();
+  for (  PsiVariable parameter : parameters) {
+    String parameterName=parameter.getName();
+    final String uniqueVariableName=codeStyleManager.suggestUniqueVariableName(parameterName,lambdaContext,false);
+    if (!Comparing.equal(parameterName,uniqueVariableName)) {
+      names.put(parameter,uniqueVariableName);
+    }
+  }
+  final LinkedHashMap<PsiElement,PsiElement> replacements=new LinkedHashMap<PsiElement,PsiElement>();
+  body.accept(new JavaRecursiveElementWalkingVisitor(){
+    @Override public void visitVariable(    PsiVariable variable){
+      final String newName=names.get(variable);
+      if (newName != null) {
+        replacements.put(variable.getNameIdentifier(),elementFactory.createIdentifier(newName));
+      }
+    }
+    @Override public void visitReferenceExpression(    PsiReferenceExpression expression){
+      super.visitReferenceExpression(expression);
+      final PsiElement resolve=expression.resolve();
+      if (resolve instanceof PsiParameter) {
+        final String newName=names.get(resolve);
+        if (newName != null) {
+          replacements.put(expression,elementFactory.createExpressionFromText(newName,expression));
+        }
+      }
+    }
+  }
+);
+  for (  PsiElement psiElement : replacements.keySet()) {
+    psiElement.replace(replacements.get(psiElement));
+  }
+}
