@@ -1,2 +1,30 @@
 {
+  final PsiPolyadicExpression polyadicExpression=(PsiPolyadicExpression)expression;
+  final PsiExpression[] operands=polyadicExpression.getOperands();
+  final IElementType tokenType=polyadicExpression.getOperationTokenType();
+  PsiElement fromTarget=null;
+  PsiElement untilTarget=null;
+  PsiExpression previousOperand=null;
+  @NonNls String replacement="";
+  for (int i=0, length=operands.length; i < length; i++) {
+    final PsiExpression operand=operands[i];
+    if (tokenType.equals(JavaTokenType.PLUS) && isZero(operand) || tokenType.equals(JavaTokenType.MINUS) && isZero(operand) && i > 0 || tokenType.equals(JavaTokenType.ASTERISK) && isOne(operand) || tokenType.equals(JavaTokenType.DIV) && isOne(operand) && i > 0) {
+      fromTarget=(i == length - 1) ? polyadicExpression.getTokenBeforeOperand(operand) : operand;
+      break;
+    }
+ else     if ((tokenType.equals(JavaTokenType.MINUS) || tokenType.equals(JavaTokenType.DIV)) && EquivalenceChecker.expressionsAreEquivalent(previousOperand,operand)) {
+      fromTarget=previousOperand;
+      untilTarget=operand;
+      replacement=PsiType.LONG.equals(polyadicExpression.getType()) ? tokenType.equals(JavaTokenType.DIV) ? "1L" : "0L" : tokenType.equals(JavaTokenType.DIV) ? "1" : "0";
+      break;
+    }
+ else     if (tokenType.equals(JavaTokenType.ASTERISK) && isZero(operand) || tokenType.equals(JavaTokenType.PERC) && (isOne(operand) || EquivalenceChecker.expressionsAreEquivalent(previousOperand,operand))) {
+      return PsiType.LONG.equals(polyadicExpression.getType()) ? "0L" : "0";
+    }
+ else     if (tokenType.equals(JavaTokenType.LE) || tokenType.equals(JavaTokenType.GE) || tokenType.equals(JavaTokenType.LT)|| tokenType.equals(JavaTokenType.GT)) {
+      return (tokenType.equals(JavaTokenType.LT) || tokenType.equals(JavaTokenType.GT)) ? "false" : "true";
+    }
+    previousOperand=operand;
+  }
+  return buildReplacementExpression(polyadicExpression,fromTarget,untilTarget,replacement).trim();
 }
