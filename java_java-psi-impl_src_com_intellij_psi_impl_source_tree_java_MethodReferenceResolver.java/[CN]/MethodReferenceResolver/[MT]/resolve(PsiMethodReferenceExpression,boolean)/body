@@ -3,8 +3,8 @@
   final PsiClass containingClass=qualifierResolveResult.getContainingClass();
   PsiSubstitutor substitutor=qualifierResolveResult.getSubstitutor();
   if (containingClass != null) {
-    final PsiElement element=getReferenceNameElement();
-    final boolean isConstructor=isConstructor();
+    final PsiElement element=reference.getReferenceNameElement();
+    final boolean isConstructor=reference.isConstructor();
     if (element instanceof PsiIdentifier || isConstructor) {
       if (isConstructor && (containingClass.isEnum() || containingClass.hasModifierProperty(PsiModifier.ABSTRACT))) {
         return JavaResolveResult.EMPTY_ARRAY;
@@ -18,21 +18,21 @@
       if (isConstructor && containingClass.getConstructors().length == 0) {
         if (interfaceMethod != null) {
           final PsiClassType returnType=composeReturnType(containingClass,substitutor);
-          final InferenceSession session=new InferenceSession(containingClass.getTypeParameters(),substitutor,getManager(),null);
+          final InferenceSession session=new InferenceSession(containingClass.getTypeParameters(),substitutor,reference.getManager(),null);
           if (!(session.isProperType(returnType) && session.isProperType(interfaceMethodReturnType))) {
             session.registerConstraints(returnType,interfaceMethodReturnType);
             substitutor=session.infer();
           }
         }
         ClassCandidateInfo candidateInfo=null;
-        final boolean isArray=containingClass == JavaPsiFacade.getElementFactory(getProject()).getArrayClass(PsiUtil.getLanguageLevel(containingClass));
-        if (signature == null || !isArray && (containingClass.getContainingClass() == null || !isLocatedInStaticContext(containingClass)) && signature.getParameterTypes().length == 0 || isArray && arrayCreationSignature(signature)) {
+        final boolean isArray=containingClass == JavaPsiFacade.getElementFactory(reference.getProject()).getArrayClass(PsiUtil.getLanguageLevel(containingClass));
+        if (signature == null || !isArray && (containingClass.getContainingClass() == null || !isLocatedInStaticContext(containingClass,reference)) && signature.getParameterTypes().length == 0 || isArray && arrayCreationSignature(signature)) {
           candidateInfo=new ClassCandidateInfo(containingClass,substitutor);
         }
         return candidateInfo == null ? JavaResolveResult.EMPTY_ARRAY : new JavaResolveResult[]{candidateInfo};
       }
-      final PsiConflictResolver conflictResolver=createResolver(qualifierResolveResult,interfaceMethod,signature);
-      final MethodCandidatesProcessor processor=new MethodCandidatesProcessor(reference,getContainingFile(),new PsiConflictResolver[]{conflictResolver},new SmartList<CandidateInfo>()){
+      final PsiConflictResolver conflictResolver=createResolver(reference,qualifierResolveResult,interfaceMethod,signature);
+      final MethodCandidatesProcessor processor=new MethodCandidatesProcessor(reference,reference.getContainingFile(),new PsiConflictResolver[]{conflictResolver},new SmartList<CandidateInfo>()){
         @Override protected boolean acceptVarargs(){
           return true;
         }
@@ -49,7 +49,7 @@
             public PsiSubstitutor inferTypeArguments(            boolean varargs){
               if (interfaceMethod == null)               return substitutor;
               final PsiSubstitutor qualifierResultSubstitutor=qualifierResolveResult.getSubstitutor();
-              final InferenceSession session=new InferenceSession(method.getTypeParameters(),substitutor,getManager(),reference);
+              final InferenceSession session=new InferenceSession(method.getTypeParameters(),substitutor,reference.getManager(),reference);
               final CurrentCandidateProperties methodSubstitutorPair=MethodCandidateInfo.getCurrentMethod(reference.getParent());
               if (methodSubstitutorPair != null) {
                 session.initBounds(methodSubstitutorPair.getMethod().getTypeParameters());
@@ -80,7 +80,7 @@
                     psiSubstitutor=receiverSubstitutor;
                   }
                 }
-                final PsiType qType=JavaPsiFacade.getElementFactory(getProject()).createType(containingClass,psiSubstitutor);
+                final PsiType qType=JavaPsiFacade.getElementFactory(reference.getProject()).createType(containingClass,psiSubstitutor);
                 session.addConstraint(new TypeCompatibilityConstraint(qType,pType));
                 for (int i=0; i < signature.getParameterTypes().length - 1; i++) {
                   final PsiType interfaceParamType=signature.getParameterTypes()[i + 1];
@@ -113,11 +113,11 @@
 ;
       processor.setIsConstructor(isConstructor);
       processor.setName(isConstructor ? containingClass.getName() : element.getText());
-      final PsiExpression expression=getQualifierExpression();
+      final PsiExpression expression=reference.getQualifierExpression();
       if (expression == null || !(expression.getType() instanceof PsiArrayType)) {
         processor.setAccessClass(containingClass);
       }
-      if (qualifierResolveResult.isReferenceTypeQualified() && isLocatedInStaticContext(containingClass)) {
+      if (qualifierResolveResult.isReferenceTypeQualified() && isLocatedInStaticContext(containingClass,reference)) {
         processor.handleEvent(JavaScopeProcessorEvent.START_STATIC,null);
       }
       ResolveState state=ResolveState.initial().put(PsiSubstitutor.KEY,substitutor);
