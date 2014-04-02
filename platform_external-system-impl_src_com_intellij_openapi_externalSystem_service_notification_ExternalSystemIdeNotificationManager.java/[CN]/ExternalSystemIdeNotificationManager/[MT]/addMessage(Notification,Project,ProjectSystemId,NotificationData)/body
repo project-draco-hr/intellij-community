@@ -1,0 +1,37 @@
+{
+  notification.expire();
+  final NewErrorTreeViewPanel[] errorTreeView={null};
+  CommandProcessor commandProcessor=CommandProcessor.getInstance();
+  commandProcessor.executeCommand(project,new Runnable(){
+    @Override public void run(){
+      errorTreeView[0]=prepareMessagesView(project,externalSystemId,notificationData);
+    }
+  }
+,"Open message view",null);
+  final ToolWindow tw=ToolWindowManager.getInstance(project).getToolWindow(ToolWindowId.MESSAGES_WINDOW);
+  if (tw != null) {
+    tw.activate(null,false);
+  }
+  final VirtualFile virtualFile=notificationData.getFilePath() != null ? LocalFileSystem.getInstance().refreshAndFindFileByPath(notificationData.getFilePath()) : null;
+  final String groupName=virtualFile != null ? virtualFile.getPresentableUrl() : notificationData.getTitle();
+  int line=notificationData.getLine() - 1;
+  int column=notificationData.getColumn() - 1;
+  if (virtualFile == null)   line=column=-1;
+  final int guiLine=line < 0 ? -1 : line + 1;
+  final int guiColumn=column < 0 ? 0 : column + 1;
+  final Navigatable navigatable=notificationData.getNavigatable() != null ? notificationData.getNavigatable() : virtualFile != null ? new OpenFileDescriptor(project,virtualFile,line,column) : null;
+  final ErrorTreeElementKind kind=getErrorTreeElementKind(notificationData.getNotificationType());
+  final String[] message=notificationData.getMessage().split("\n");
+  final GroupingElement groupingElement=errorTreeView[0].getErrorViewStructure().getGroupingElement(groupName,null,virtualFile);
+  final String exportPrefix=NewErrorTreeViewPanel.createExportPrefix(guiLine);
+  final String rendererPrefix=NewErrorTreeViewPanel.createRendererPrefix(guiLine,guiColumn);
+  final NavigatableMessageElement navigatableMessageElement;
+  if (notificationData.hasLinks()) {
+    navigatableMessageElement=new EditableNotificationMessageElement(notification,kind,groupingElement,message,navigatable,exportPrefix,rendererPrefix);
+  }
+ else {
+    navigatableMessageElement=new NotificationMessageElement(kind,groupingElement,message,navigatable,exportPrefix,rendererPrefix);
+  }
+  errorTreeView[0].getErrorViewStructure().addNavigatableMessage(groupName,navigatableMessageElement);
+  errorTreeView[0].updateTree();
+}
