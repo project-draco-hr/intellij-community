@@ -1,0 +1,39 @@
+{
+  if (targetClass == null)   return;
+  PsiMethodReferenceExpression expression=getMethodReference();
+  if (expression == null)   return;
+  if (isValidElement(expression))   return;
+  PsiClass parentClass=PsiTreeUtil.getParentOfType(expression,PsiClass.class);
+  PsiMember enclosingContext=PsiTreeUtil.getParentOfType(expression,PsiMethod.class,PsiField.class,PsiClassInitializer.class);
+  String methodName=expression.getReferenceName();
+  LOG.assertTrue(methodName != null);
+  final Project project=targetClass.getProject();
+  JVMElementFactory elementFactory=JVMElementFactories.getFactory(targetClass.getLanguage(),project);
+  if (elementFactory == null)   elementFactory=JavaPsiFacade.getElementFactory(project);
+  PsiMethod method=expression.isConstructor() ? (PsiMethod)targetClass.add(elementFactory.createConstructor()) : CreateMethodFromUsageFix.createMethod(targetClass,parentClass,enclosingContext,methodName);
+  if (method == null) {
+    return;
+  }
+  if (!expression.isConstructor()) {
+    setupVisibility(parentClass,targetClass,method.getModifierList());
+  }
+  expression=getMethodReference();
+  LOG.assertTrue(expression.isValid());
+  if (!expression.isConstructor() && shouldCreateStaticMember(expression,targetClass)) {
+    PsiUtil.setModifierProperty(method,PsiModifier.STATIC,true);
+  }
+  final PsiElement context=PsiTreeUtil.getParentOfType(expression,PsiClass.class,PsiMethod.class);
+  final PsiType functionalInterfaceType=expression.getFunctionalInterfaceType();
+  final PsiClassType.ClassResolveResult classResolveResult=PsiUtil.resolveGenericsClassInType(functionalInterfaceType);
+  final PsiMethod interfaceMethod=LambdaUtil.getFunctionalInterfaceMethod(classResolveResult);
+  LOG.assertTrue(interfaceMethod != null);
+  final PsiType interfaceReturnType=LambdaUtil.getFunctionalInterfaceReturnType(functionalInterfaceType);
+  LOG.assertTrue(interfaceReturnType != null);
+  final ExpectedTypeInfo[] expectedTypes={new ExpectedTypeInfoImpl(interfaceReturnType,ExpectedTypeInfo.TYPE_OR_SUBTYPE,interfaceReturnType,TailType.NONE,null,ExpectedTypeInfoImpl.NULL)};
+  CreateMethodFromUsageFix.doCreate(targetClass,method,false,ContainerUtil.map2List(interfaceMethod.getParameterList().getParameters(),new Function<PsiParameter,Pair<PsiExpression,PsiType>>(){
+    @Override public Pair<PsiExpression,PsiType> fun(    PsiParameter parameter){
+      return Pair.create(null,parameter.getType());
+    }
+  }
+),LambdaUtil.getSubstitutor(interfaceMethod,classResolveResult),expectedTypes,context);
+}
