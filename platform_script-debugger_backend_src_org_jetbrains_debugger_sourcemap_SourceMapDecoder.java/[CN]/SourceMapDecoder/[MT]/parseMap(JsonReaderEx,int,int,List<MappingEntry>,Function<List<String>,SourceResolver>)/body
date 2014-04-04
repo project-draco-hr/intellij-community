@@ -1,0 +1,70 @@
+{
+  reader.beginObject();
+  String sourceRoot=null;
+  JsonReaderEx sourcesReader=null;
+  List<String> names=null;
+  String encodedMappings=null;
+  String file=null;
+  int version=-1;
+  while (reader.hasNext()) {
+    String propertyName=reader.nextName();
+    if (propertyName.equals("sections")) {
+      throw new IOException("sections is not supported yet");
+    }
+ else     if (propertyName.equals("version")) {
+      version=reader.nextInt();
+    }
+ else     if (propertyName.equals("sourceRoot")) {
+      sourceRoot=readSourcePath(reader);
+    }
+ else     if (propertyName.equals("sources")) {
+      sourcesReader=reader.subReader();
+      reader.skipValue();
+    }
+ else     if (propertyName.equals("names")) {
+      reader.beginArray();
+      if (reader.hasNext()) {
+        names=new ArrayList<String>();
+        do {
+          names.add(reader.nextString(true));
+        }
+ while (reader.hasNext());
+      }
+ else {
+        names=Collections.emptyList();
+      }
+      reader.endArray();
+    }
+ else     if (propertyName.equals("mappings")) {
+      encodedMappings=reader.nextString();
+    }
+ else     if (propertyName.equals("file")) {
+      file=reader.nextString();
+    }
+ else {
+      reader.skipValue();
+    }
+  }
+  reader.close();
+  if (version != 3) {
+    throw new IOException("Unsupported sourcemap version: " + version);
+  }
+  if (sourcesReader == null) {
+    throw new IOException("sources is not specified");
+  }
+  if (StringUtil.isEmpty(encodedMappings)) {
+    return null;
+  }
+  List<String> sources=readSources(sourcesReader,sourceRoot);
+  @SuppressWarnings("unchecked") List<MappingEntry>[] reverseMappingsBySourceUrl=new List[sources.size()];
+  readMappings(encodedMappings,line,column,mappings,reverseMappingsBySourceUrl,names);
+  MappingList[] sourceToEntries=new MappingList[reverseMappingsBySourceUrl.length];
+  for (int i=0; i < reverseMappingsBySourceUrl.length; i++) {
+    List<MappingEntry> entries=reverseMappingsBySourceUrl[i];
+    if (entries != null) {
+      Collections.sort(entries,MAPPING_COMPARATOR_BY_SOURCE_POSITION);
+      sourceToEntries[i]=new SourceMappingList(entries);
+    }
+  }
+  return new SourceMap(file,new GeneratedMappingList(mappings),sourceToEntries,sourceResolverFactory.fun(sources));
+}
