@@ -1,0 +1,36 @@
+{
+  if (!isRepositoryReady(root)) {
+    return Collections.emptyList();
+  }
+  int commitCount=requirements.getCommitCount();
+  if (requirements.isOrdered()) {
+    commitCount*=2;
+  }
+  String[] params=new String[]{"HEAD","--branches","--remotes","--max-count=" + commitCount};
+  List<VcsCommitMetadata> firstBlock=GitHistoryUtils.loadMetadata(myProject,root,params);
+  if (requirements instanceof VcsLogProviderRequirementsEx) {
+    VcsLogProviderRequirementsEx rex=(VcsLogProviderRequirementsEx)requirements;
+    if (!rex.isOrdered()) {
+      Collection<VcsRef> newTags=getNewTags(rex.getCurrentRefs(),rex.getPreviousRefs());
+      if (!newTags.isEmpty()) {
+        final Set<Hash> firstBlockHashes=ContainerUtil.map2Set(firstBlock,new Function<VcsCommitMetadata,Hash>(){
+          @Override public Hash fun(          VcsCommitMetadata metadata){
+            return metadata.getHash();
+          }
+        }
+);
+        List<VcsRef> unmatchedHeads=getUnmatchedHeads(firstBlockHashes,newTags);
+        if (!unmatchedHeads.isEmpty()) {
+          List<VcsCommitMetadata> detailsFromTaggedBranches=loadSomeCommitsOnTaggedBranches(root,commitCount,unmatchedHeads);
+          Collection<VcsCommitMetadata> unmatchedCommits=getUnmatchedCommits(firstBlockHashes,detailsFromTaggedBranches);
+          firstBlock.addAll(unmatchedCommits);
+        }
+      }
+    }
+  }
+  if (requirements.isOrdered()) {
+    firstBlock=VcsLogSorter.sortByDateTopoOrder(firstBlock);
+    firstBlock=new ArrayList<VcsCommitMetadata>(firstBlock.subList(0,Math.min(firstBlock.size(),requirements.getCommitCount())));
+  }
+  return firstBlock;
+}
