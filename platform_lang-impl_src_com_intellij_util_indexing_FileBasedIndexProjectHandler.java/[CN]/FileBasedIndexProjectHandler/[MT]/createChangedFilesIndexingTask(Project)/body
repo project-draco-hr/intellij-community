@@ -1,19 +1,22 @@
 {
   final FileBasedIndexImpl index=(FileBasedIndexImpl)FileBasedIndex.getInstance();
   final Collection<VirtualFile> files=index.getFilesToUpdate(project);
-  if (files.size() + index.getNumberOfPendingInvalidations() < 20) {
+  if (files.isEmpty())   return null;
+  if (files.size() + index.getNumberOfPendingInvalidations() < 20 && !DumbService.isDumb(project)) {
+    try {
+      HeavyProcessLatch.INSTANCE.processStarted();
+      reindexRefreshedFiles(new EmptyProgressIndicator(),files,project,index);
+    }
+  finally {
+      HeavyProcessLatch.INSTANCE.processFinished();
+    }
     return null;
   }
   return new DumbModeTask(){
     @Override public void performInDumbMode(    @NotNull ProgressIndicator indicator){
       indicator.setIndeterminate(false);
       indicator.setText(IdeBundle.message("progress.indexing.updating"));
-      CacheUpdateRunner.processFiles(indicator,true,files,project,new Consumer<FileContent>(){
-        @Override public void consume(        FileContent content){
-          index.processRefreshedFile(project,content);
-        }
-      }
-);
+      reindexRefreshedFiles(indicator,files,project,index);
     }
   }
 ;
