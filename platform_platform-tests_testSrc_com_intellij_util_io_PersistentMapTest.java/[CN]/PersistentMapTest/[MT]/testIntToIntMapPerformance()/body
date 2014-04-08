@@ -1,0 +1,56 @@
+{
+  if (!DO_SLOW_TEST)   return;
+  File file=FileUtil.createTempFile("persistent","map");
+  FileUtil.createParentDirs(file);
+  int size=10000000;
+  TIntIntHashMap checkMap=new TIntIntHashMap(size);
+  Random r=new Random(1);
+  while (size != checkMap.size()) {
+    checkMap.put(r.nextInt(),size == 0 ? 0 : r.nextInt());
+  }
+  long started=System.currentTimeMillis();
+  PersistentHashMap<Integer,Integer> map=null;
+  try {
+    map=new PersistentHashMap<Integer,Integer>(file,EnumeratorIntegerDescriptor.INSTANCE,EnumeratorIntegerDescriptor.INSTANCE);
+    final PersistentHashMap<Integer,Integer> mapFinal=map;
+    boolean result=checkMap.forEachEntry(new TIntIntProcedure(){
+      @Override public boolean execute(      int a,      int b){
+        try {
+          mapFinal.put(a,b);
+        }
+ catch (        IOException e) {
+          e.printStackTrace();
+          assertTrue(false);
+          return false;
+        }
+        return true;
+      }
+    }
+);
+    assertTrue(result);
+    map.close();
+    System.out.println("Done:" + (System.currentTimeMillis() - started));
+    started=System.currentTimeMillis();
+    map=new PersistentHashMap<Integer,Integer>(file,EnumeratorIntegerDescriptor.INSTANCE,EnumeratorIntegerDescriptor.INSTANCE);
+    final PersistentHashMap<Integer,Integer> mapFinal2=map;
+    result=checkMap.forEachEntry(new TIntIntProcedure(){
+      @Override public boolean execute(      int a,      int b){
+        try {
+          assertTrue(b == mapFinal2.get(a));
+        }
+ catch (        IOException e) {
+          e.printStackTrace();
+          assertTrue(false);
+          return false;
+        }
+        return true;
+      }
+    }
+);
+    assertTrue(result);
+    System.out.println("Done 2:" + (System.currentTimeMillis() - started));
+  }
+  finally {
+    clearMap(file,map);
+  }
+}
