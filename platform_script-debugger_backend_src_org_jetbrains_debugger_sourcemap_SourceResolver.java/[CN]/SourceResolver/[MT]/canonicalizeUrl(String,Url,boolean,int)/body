@@ -1,0 +1,41 @@
+{
+  if (trimFileScheme && url.startsWith(StandardFileSystems.FILE_PROTOCOL_PREFIX)) {
+    return Urls.newLocalFileUrl(FileUtil.toCanonicalPath(VfsUtilCore.toIdeaUrl(url,true).substring(StandardFileSystems.FILE_PROTOCOL_PREFIX.length()),'/'));
+  }
+ else   if (baseUrl == null || url.contains(URLUtil.SCHEME_SEPARATOR) || url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("javascript:")) {
+    return Urls.parseEncoded(url);
+  }
+  String path=url;
+  if (url.charAt(0) != '/') {
+    String basePath=baseUrl.getPath();
+    int lastSlashIndex=basePath.lastIndexOf('/');
+    StringBuilder pathBuilder=new StringBuilder();
+    if (lastSlashIndex == -1) {
+      pathBuilder.append(basePath).append('/');
+    }
+ else {
+      pathBuilder.append(basePath,0,lastSlashIndex + 1);
+    }
+    path=pathBuilder.append(url).toString();
+  }
+  path=FileUtil.toCanonicalPath(path,'/');
+  if (baseUrl.getScheme() == null && baseUrl.isInLocalFileSystem()) {
+    return Urls.newLocalFileUrl(path);
+  }
+  if (isAbsolute(path)) {
+    VirtualFile file=LocalFileFinder.findFile(path);
+    if (file != null) {
+      if (absoluteLocalPathToSourceIndex == null) {
+        absoluteLocalPathToSourceIndex=new TObjectIntHashMap<String>(rawSources.size());
+        sourceIndexToAbsoluteLocalPath=new String[rawSources.size()];
+      }
+      absoluteLocalPathToSourceIndex.put(path,sourceIndex);
+      sourceIndexToAbsoluteLocalPath[sourceIndex]=path;
+      String canonicalPath=file.getCanonicalPath();
+      if (canonicalPath != null && !canonicalPath.equals(path)) {
+        absoluteLocalPathToSourceIndex.put(canonicalPath,sourceIndex);
+      }
+    }
+  }
+  return new UrlImpl(baseUrl.getScheme(),baseUrl.getAuthority(),path,null);
+}

@@ -7,18 +7,23 @@
   final Element classpathElement=JDOMUtil.loadDocument(fileText).getRootElement();
   final Module module=WriteCommandAction.runWriteCommandAction(null,new Computable<Module>(){
     @Override public Module compute(){
-      return ModuleManager.getInstance(project).newModule(path + "/" + EclipseProjectFinder.findProjectName(path)+ IdeaXml.IML_EXT,StdModuleTypes.JAVA.getId());
+      String imlPath=path + "/" + EclipseProjectFinder.findProjectName(path)+ IdeaXml.IML_EXT;
+      return ModuleManager.getInstance(project).newModule(imlPath,StdModuleTypes.JAVA.getId());
     }
   }
 );
-  final ModifiableRootModel rootModel=ModuleRootManager.getInstance(module).getModifiableModel();
-  final EclipseClasspathReader classpathReader=new EclipseClasspathReader(path,project,null);
-  classpathReader.init(rootModel);
-  classpathReader.readClasspath(rootModel,new ArrayList<String>(),new ArrayList<String>(),new HashSet<String>(),new HashSet<String>(),null,classpathElement);
-  new EclipseClasspathStorageProvider().assertCompatible(rootModel);
-  ApplicationManager.getApplication().runWriteAction(new Runnable(){
-    public void run(){
-      rootModel.commit();
+  ModuleRootModificationUtil.updateModel(module,new Consumer<ModifiableRootModel>(){
+    @Override public void consume(    ModifiableRootModel model){
+      try {
+        final Set<String> sink=ContainerUtil.newHashSet();
+        final EclipseClasspathReader classpathReader=new EclipseClasspathReader(path,project,null);
+        classpathReader.init(model);
+        classpathReader.readClasspath(model,sink,sink,sink,sink,null,classpathElement);
+        new EclipseClasspathStorageProvider().assertCompatible(model);
+      }
+ catch (      Exception e) {
+        throw new RuntimeException(e);
+      }
     }
   }
 );

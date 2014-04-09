@@ -8,22 +8,20 @@
   if (branchHeadsBeforePull.size() > 1) {
     reportWarning(warnings,HgVcsMessages.message("hg4idea.update.warning.multipleHeadsBeforeUpdate",repoRoot.getPath()));
   }
-  HgRevisionNumber parentBeforeUpdate=new HgWorkingCopyRevisionsCommand(project).firstParent(repoRoot);
-  HgCommandExitCode pullResult=pull(repoRoot,indicator,shouldRebase());
+  HgCommandExitCode pullResult=pull(repoRoot,indicator);
   if (pullResult == HgCommandExitCode.ERROR) {
     return false;
   }
-  if (pullResult == HgCommandExitCode.SUCCESS) {
-    HgRevisionNumber parentAfterUpdate=new HgWorkingCopyRevisionsCommand(project).firstParent(repoRoot);
-    addUpdatedFiles(repoRoot,updatedFiles,parentBeforeUpdate,parentAfterUpdate);
-    return true;
+  List<HgRevisionNumber> parentsBeforeUpdate=new HgWorkingCopyRevisionsCommand(project).parents(repoRoot);
+  if (parentsBeforeUpdate.size() > 1) {
+    throw new VcsException(HgVcsMessages.message("hg4idea.update.error.uncommittedMerge",repoRoot.getPath()));
   }
-  if (shouldMerge()) {
-    indicator.setText2(HgVcsMessages.message("hg4idea.progress.countingHeads"));
-    List<HgRevisionNumber> branchHeadsAfterPull=new HgHeadsCommand(project,repoRoot).execute();
-    List<HgRevisionNumber> pulledBranchHeads=determinePulledBranchHeads(branchHeadsBeforePull,branchHeadsAfterPull);
-    List<HgRevisionNumber> remainingOriginalBranchHeads=determingRemainingOriginalBranchHeads(branchHeadsBeforePull,branchHeadsAfterPull);
-    if (branchHeadsAfterPull.size() > 1) {
+  indicator.setText2(HgVcsMessages.message("hg4idea.progress.countingHeads"));
+  List<HgRevisionNumber> branchHeadsAfterPull=new HgHeadsCommand(project,repoRoot).execute();
+  List<HgRevisionNumber> pulledBranchHeads=determinePulledBranchHeads(branchHeadsBeforePull,branchHeadsAfterPull);
+  List<HgRevisionNumber> remainingOriginalBranchHeads=determingRemainingOriginalBranchHeads(branchHeadsBeforePull,branchHeadsAfterPull);
+  if (branchHeadsAfterPull.size() > 1) {
+    if (shouldMerge()) {
       abortOnLocalChanges();
       abortOnMultiplePulledHeads(pulledBranchHeads);
       abortOnMultipleLocalHeads(remainingOriginalBranchHeads);
@@ -32,10 +30,14 @@
         commitOrWarnAboutConflicts(warnings,mergeResult);
       }
     }
-    resolvePossibleConflicts(updatedFiles);
+ else {
+      processRebase(indicator,updatedFiles);
+      return true;
+    }
   }
  else {
-    processRebase(updatedFiles);
+    update(repoRoot,indicator,updatedFiles,warnings);
   }
+  resolvePossibleConflicts(updatedFiles);
   return true;
 }
