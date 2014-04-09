@@ -1,0 +1,55 @@
+{
+  boolean isDebug=myConsoleProperties.isDebug();
+  final MyRunProfile profile=getRunProfile();
+  if (profile == null) {
+    return;
+  }
+  final Executor executor=isDebug ? DefaultDebugExecutor.getDebugExecutorInstance() : DefaultRunExecutor.getRunExecutorInstance();
+  final InputEvent event=e.getInputEvent();
+  if (!(event instanceof MouseEvent)) {
+    final ProgramRunner runner=RunnerRegistry.getInstance().getRunner(executor.getId(),profile);
+    LOG.assertTrue(runner != null);
+    performAction(runner,profile,myEnvironment.getExecutor());
+    return;
+  }
+  final LinkedHashMap<Executor,ProgramRunner> availableRunners=new LinkedHashMap<Executor,ProgramRunner>();
+  final Executor[] executors=new Executor[]{DefaultRunExecutor.getRunExecutorInstance(),DefaultDebugExecutor.getDebugExecutorInstance()};
+  for (  Executor ex : executors) {
+    final ProgramRunner runner=RunnerRegistry.getInstance().getRunner(ex.getId(),profile);
+    if (runner != null) {
+      availableRunners.put(ex,runner);
+    }
+  }
+  if (availableRunners.isEmpty()) {
+    LOG.error(executor.getActionName() + " is not available now");
+    return;
+  }
+  if (availableRunners.size() == 1) {
+    performAction(availableRunners.get(executor),profile,executor);
+  }
+ else {
+    final JBList list=new JBList(availableRunners.keySet());
+    list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+    list.setSelectedValue(executor,true);
+    list.setCellRenderer(new DefaultListCellRenderer(){
+      @Override public Component getListCellRendererComponent(      JList<?> list,      Object value,      int index,      boolean isSelected,      boolean cellHasFocus){
+        final Component component=super.getListCellRendererComponent(list,value,index,isSelected,cellHasFocus);
+        if (value instanceof Executor) {
+          setText(UIUtil.removeMnemonic(((Executor)value).getStartActionText()));
+          setIcon(((Executor)value).getIcon());
+        }
+        return component;
+      }
+    }
+);
+    JBPopupFactory.getInstance().createListPopupBuilder(list).setTitle("Restart Failed Tests").setMovable(false).setResizable(false).setRequestFocus(true).setItemChoosenCallback(new Runnable(){
+      public void run(){
+        final Object value=list.getSelectedValue();
+        if (value instanceof Executor) {
+          performAction(availableRunners.get(value),profile,(Executor)value);
+        }
+      }
+    }
+).createPopup().showUnderneathOf(event.getComponent());
+  }
+}
