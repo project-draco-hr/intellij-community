@@ -1,3 +1,46 @@
 {
-  return executeMethod(getHttpClient(),method);
+  LOG.debug("URI: " + method.getURI());
+  HttpClient client=getHttpClient();
+  boolean cookieAuthenticated=false;
+  for (  Cookie cookie : client.getState().getCookies()) {
+    if (cookie.getName().equals("JSESSIONID") && !cookie.isExpired()) {
+      cookieAuthenticated=true;
+      break;
+    }
+  }
+  boolean enableBasicAuthentication=!(isRestApiSupported() && cookieAuthenticated);
+  if (enableBasicAuthentication != isUseHttpAuthentication()) {
+    LOG.info("Basic authentication for subsequent requests was " + (enableBasicAuthentication ? "enabled" : "disabled"));
+  }
+  setUseHttpAuthentication(enableBasicAuthentication);
+  int statusCode=client.executeMethod(method);
+  LOG.debug("Status code: " + statusCode);
+  final InputStream stream=method.getResponseBodyAsStream();
+  String entityContent=stream == null ? "" : StreamUtil.readText(stream,CharsetToolkit.UTF8);
+  TaskUtil.prettyFormatJsonToLog(LOG,entityContent);
+  if (statusCode >= 200 && statusCode < 300) {
+    return entityContent;
+  }
+ else   if (method.getResponseHeader("Content-Type") != null) {
+    Header header=method.getResponseHeader("Content-Type");
+    if (header.getValue().startsWith("application/json")) {
+      JsonObject object=GSON.fromJson(entityContent,JsonObject.class);
+      if (object.has("errorMessages")) {
+        String reason=StringUtil.join(object.getAsJsonArray("errorMessages")," ");
+        LOG.warn(reason);
+        throw new Exception(TaskBundle.message("failure.server.message",reason));
+      }
+    }
+  }
+  if (method.getResponseHeader("X-Authentication-Denied-Reason") != null) {
+    Header header=method.getResponseHeader("X-Authentication-Denied-Reason");
+    if (header.getValue().startsWith("CAPTCHA_CHALLENGE")) {
+      throw new Exception(TaskBundle.message("jira.failure.captcha"));
+    }
+  }
+  if (statusCode == HttpStatus.SC_UNAUTHORIZED) {
+    throw new Exception(TaskBundle.message("failure.login"));
+  }
+  String statusText=HttpStatus.getStatusText(method.getStatusCode());
+  throw new Exception(TaskBundle.message("failure.http.error",statusCode,statusText));
 }
