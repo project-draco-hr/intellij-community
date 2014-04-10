@@ -3,9 +3,6 @@
     return null;
   }
   try {
-    for (    TextWithMarkupBuilder builder : myBuilders) {
-      builder.reset();
-    }
     RichCopySettings settings=RichCopySettings.getInstance();
     Document document=editor.getDocument();
     final int indentSymbolsToStrip;
@@ -25,15 +22,18 @@
     EditorHighlighter highlighter=HighlighterFactory.createHighlighter(file.getVirtualFile(),schemeToUse,file.getProject());
     highlighter.setText(text);
     MarkupModel markupModel=DocumentMarkupModel.forDocument(document,file.getProject(),false);
-    Context context=new Context(text,schemeToUse,indentSymbolsToStrip);
-    for (int i=0; i < startOffsets.length; i++) {
+    myBuilders.getMulticaster().init(schemeToUse.getDefaultForeground(),schemeToUse.getDefaultBackground(),FontMapper.getPhysicalFontName(schemeToUse.getEditorFontName()),schemeToUse.getEditorFontSize());
+    EventDispatcher<TextWithMarkupBuilder> activeBuilders=EventDispatcher.create(TextWithMarkupBuilder.class);
+    activeBuilders.getListeners().addAll(myBuilders.getListeners());
+    Context context=new Context(activeBuilders.getMulticaster(),text,schemeToUse,indentSymbolsToStrip);
+    outer:     for (int i=0; i < startOffsets.length; i++) {
       int startOffsetToUse;
       if (i == 0) {
         startOffsetToUse=firstLineStartOffset;
       }
  else {
         startOffsetToUse=startOffsets[i];
-        context.outputInfos.add(new Text('\n'));
+        activeBuilders.getMulticaster().addTextFragment("\n",0,1);
       }
       int endOffsetToUse=endOffsets[i];
       context.reset();
@@ -43,6 +43,15 @@
       DisposableIterator<SegmentInfo> it=aggregateSyntaxInfo(schemeToUse,wrap(highlighter,text,schemeToUse,startOffsetToUse,endOffsetToUse),wrap(markupModel,text,schemeToUse,startOffsetToUse,endOffsetToUse));
       try {
         while (it.hasNext()) {
+          Iterator<TextWithMarkupBuilder> builderIterator=activeBuilders.getListeners().iterator();
+          while (builderIterator.hasNext()) {
+            if (builderIterator.next().isOverflowed()) {
+              builderIterator.remove();
+              if (activeBuilders.getListeners().isEmpty()) {
+                break outer;
+              }
+            }
+          }
           SegmentInfo info=it.next();
           if (info.startOffset >= endOffsetToUse) {
             break;
@@ -55,11 +64,7 @@
       }
       context.onIterationEnd(endOffsetToUse);
     }
-    SyntaxInfo syntaxInfo=context.finish();
-    logSyntaxInfo(syntaxInfo);
-    for (    TextWithMarkupBuilder builder : myBuilders) {
-      builder.build(text,syntaxInfo);
-    }
+    myBuilders.getMulticaster().complete();
   }
  catch (  Exception e) {
     LOG.error(e);
