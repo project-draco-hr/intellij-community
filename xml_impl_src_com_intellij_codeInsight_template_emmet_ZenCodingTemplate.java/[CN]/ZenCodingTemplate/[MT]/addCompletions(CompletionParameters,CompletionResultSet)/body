@@ -1,0 +1,34 @@
+{
+  PsiFile file=parameters.getOriginalFile();
+  int offset=parameters.getOffset();
+  Editor editor=parameters.getEditor();
+  ZenCodingGenerator generator=findApplicableDefaultGenerator(CustomTemplateCallback.getContext(file,offset),false);
+  if (generator != null && generator.hasCompletionItem()) {
+    final Ref<TemplateImpl> generatedTemplate=new Ref<TemplateImpl>();
+    final CustomTemplateCallback callback=new CustomTemplateCallback(editor,file,false){
+      @Override public void deleteTemplateKey(      String key){
+      }
+      @Override public void startTemplate(      Template template,      Map<String,String> predefinedValues,      TemplateEditingListener listener){
+        if (template instanceof TemplateImpl && !((TemplateImpl)template).isDeactivated()) {
+          generatedTemplate.set((TemplateImpl)template);
+        }
+      }
+    }
+;
+    String templatePrefix=computeTemplateKeyWithoutContextChecking(callback);
+    if (templatePrefix != null) {
+      if (LiveTemplateCompletionContributor.findApplicableTemplate(file,offset,templatePrefix) == null) {
+        final Collection<SingleLineEmmetFilter> extraFilters=ContainerUtil.newLinkedList(new SingleLineEmmetFilter());
+        expand(templatePrefix,callback,null,generator,extraFilters,false);
+        if (!generatedTemplate.isNull()) {
+          final TemplateImpl template=generatedTemplate.get();
+          template.setKey(templatePrefix);
+          template.setDescription(template.getTemplateText());
+          CompletionResultSet resultSet=result.withPrefixMatcher(result.getPrefixMatcher().cloneWithPrefix(templatePrefix));
+          resultSet.restartCompletionOnPrefixChange(StandardPatterns.string().startsWith(templatePrefix));
+          resultSet.addElement(generator.createLookupElement(this,template));
+        }
+      }
+    }
+  }
+}

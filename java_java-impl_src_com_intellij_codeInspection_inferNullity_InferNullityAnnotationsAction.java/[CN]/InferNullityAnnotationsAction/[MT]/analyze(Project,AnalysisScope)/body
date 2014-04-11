@@ -1,4 +1,5 @@
 {
+  PropertiesComponent.getInstance().setValue(ANNOTATE_LOCAL_VARIABLES,String.valueOf(myAnnotateLocalVariablesCb.isSelected()));
   final ProgressManager progressManager=ProgressManager.getInstance();
   final int totalFiles=scope.getFileCount();
   final Set<Module> modulesWithoutAnnotations=new HashSet<Module>();
@@ -18,7 +19,7 @@
             }
             progressIndicator.setFraction(((double)myFileCount) / totalFiles);
           }
-          final Module module=ModuleUtil.findModuleForPsiElement(file);
+          final Module module=ModuleUtilCore.findModuleForPsiElement(file);
           if (module != null && !processed.contains(module)) {
             processed.add(module);
             if (JavaPsiFacade.getInstance(project).findClass(NullableNotNullManager.getInstance(project).getDefaultNullable(),GlobalSearchScope.moduleWithDependenciesAndLibrariesScope(module)) == null) {
@@ -90,57 +91,17 @@
   }
   if (scope.checkScopeWritable(project))   return;
   PsiDocumentManager.getInstance(project).commitAllDocuments();
-  final NullityInferrer inferrer=new NullityInferrer(myAnnotateLocalVariablesCb.isSelected(),project);
-  final PsiManager psiManager=PsiManager.getInstance(project);
-  if (!progressManager.runProcessWithProgressSynchronously(new Runnable(){
-    @Override public void run(){
-      scope.accept(new PsiElementVisitor(){
-        int myFileCount=0;
-        @Override public void visitFile(        final PsiFile file){
-          myFileCount++;
-          final VirtualFile virtualFile=file.getVirtualFile();
-          final FileViewProvider viewProvider=psiManager.findViewProvider(virtualFile);
-          final Document document=viewProvider == null ? null : viewProvider.getDocument();
-          if (document == null || virtualFile.getFileType().isBinary())           return;
-          final ProgressIndicator progressIndicator=ProgressManager.getInstance().getProgressIndicator();
-          if (progressIndicator != null) {
-            if (virtualFile != null) {
-              progressIndicator.setText2(ProjectUtil.calcRelativeToProjectPath(virtualFile,project));
-            }
-            progressIndicator.setFraction(((double)myFileCount) / totalFiles);
-          }
-          if (file instanceof PsiJavaFile) {
-            inferrer.collect(file);
-          }
-        }
-      }
-);
-    }
-  }
-,INFER_NULLITY_ANNOTATIONS,true,project)) {
-    return;
-  }
-  final Runnable applyRunnable=new Runnable(){
-    @Override public void run(){
-      final LocalHistoryAction action=LocalHistory.getInstance().startAction(INFER_NULLITY_ANNOTATIONS);
-      try {
-        new WriteCommandAction(project,INFER_NULLITY_ANNOTATIONS){
-          @Override protected void run(          Result result) throws Throwable {
-            if (!inferrer.nothingFoundMessage(project)) {
-              final SequentialModalProgressTask progressTask=new SequentialModalProgressTask(project,INFER_NULLITY_ANNOTATIONS,false);
-              progressTask.setMinIterationTime(200);
-              progressTask.setTask(new AnnotateTask(project,inferrer,progressTask));
-              ProgressManager.getInstance().run(progressTask);
-            }
-          }
-        }
-.execute();
-      }
-  finally {
-        action.finish();
+  final UsageInfo[] usageInfos=findUsages(project,scope);
+  if (usageInfos == null)   return;
+  if (usageInfos.length < 5) {
+    SwingUtilities.invokeLater(applyRunnable(project,new Computable<UsageInfo[]>(){
+      @Override public UsageInfo[] compute(){
+        return usageInfos;
       }
     }
+));
   }
-;
-  SwingUtilities.invokeLater(applyRunnable);
+ else {
+    showUsageView(project,usageInfos,scope);
+  }
 }
