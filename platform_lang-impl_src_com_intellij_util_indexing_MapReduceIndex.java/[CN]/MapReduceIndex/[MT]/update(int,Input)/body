@@ -1,27 +1,57 @@
 {
   final Map<Key,Value> data=content != null ? myIndexer.map(content) : Collections.<Key,Value>emptyMap();
   ProgressManager.checkCanceled();
+  final NotNullComputable<Collection<Key>> oldKeysGetter;
+  final int savedInputId;
+  if (myHasSnapshotMapping && !((MemoryIndexStorage)getStorage()).isBufferingEnabled()) {
+    oldKeysGetter=new NotNullComputable<Collection<Key>>(){
+      @NotNull @Override public Collection<Key> compute(){
+        try {
+          Integer hashId=myInputsSnapshotMapping.get(inputId);
+          Collection<Key> keys=hashId != null ? mySnapshotMapping.get(hashId) : null;
+          return keys == null ? Collections.<Key>emptyList() : keys;
+        }
+ catch (        IOException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+;
+    try {
+      if (content instanceof FileContent) {
+        FileContent fileContent=(FileContent)content;
+        savedInputId=ContentHashesSupport.calcContentHashIdWithFileType(fileContent.getContent(),fileContent.getFileType());
+      }
+ else {
+        savedInputId=NULL_MAPPING;
+      }
+    }
+ catch (    IOException ex) {
+      throw new RuntimeException(ex);
+    }
+  }
+ else {
+    oldKeysGetter=new NotNullComputable<Collection<Key>>(){
+      @NotNull @Override public Collection<Key> compute(){
+        try {
+          Collection<Key> oldKeys=myInputsIndex.get(inputId);
+          return oldKeys == null ? Collections.<Key>emptyList() : oldKeys;
+        }
+ catch (        IOException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+;
+    savedInputId=inputId;
+  }
   return new Computable<Boolean>(){
     @Override public Boolean compute(){
       final Ref<StorageException> exRef=new Ref<StorageException>(null);
       ProgressManager.getInstance().executeNonCancelableSection(new Runnable(){
         @Override public void run(){
           try {
-            updateWithMap(inputId,data,new NotNullComputable<Collection<Key>>(){
-              @NotNull @Override public Collection<Key> compute(){
-                if (myInputsIndex == null) {
-                  return new SmartList<Key>((Key)(Integer)inputId);
-                }
-                try {
-                  Collection<Key> oldKeys=myInputsIndex.get(inputId);
-                  return oldKeys == null ? Collections.<Key>emptyList() : oldKeys;
-                }
- catch (                IOException e) {
-                  throw new RuntimeException(e);
-                }
-              }
-            }
-);
+            updateWithMap(inputId,savedInputId,data,oldKeysGetter);
           }
  catch (          StorageException ex) {
             exRef.set(ex);
