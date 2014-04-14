@@ -1,2 +1,47 @@
 {
+  return new InputIndexDataExternalizer<Integer>(getKeyDescriptor(),INDEX_ID){
+    @Override public void save(    @NotNull DataOutput out,    @NotNull Collection<Integer> value) throws IOException {
+      final int maxSerializedLength=4 * value.size() + 4;
+      byte[] originalBuffer=spareBufferLocal.getBuffer(maxSerializedLength);
+      UnsyncByteArrayOutputStream originalBytes=new UnsyncByteArrayOutputStream(originalBuffer);
+      DataOutputStream originalDataOutput=new DataOutputStream(originalBytes);
+      super.save(originalDataOutput,value);
+      final int size=originalBytes.size();
+      DataInputOutputUtil.writeINT(out,size);
+      Deflater deflater=new Deflater(Deflater.HUFFMAN_ONLY);
+      DeflaterOutputStream compressedDeflaterOutput=new DeflaterOutputStream((OutputStream)out,deflater);
+      try {
+        compressedDeflaterOutput.write(originalBuffer,0,size);
+      }
+  finally {
+        try {
+          compressedDeflaterOutput.close();
+        }
+ catch (        IOException ignore) {
+        }
+        deflater.end();
+      }
+    }
+    @NotNull @Override public Collection<Integer> read(    @NotNull DataInput in) throws IOException {
+      byte[] originalBuffer;
+      int size;
+      Deflater deflater=new Deflater(Deflater.HUFFMAN_ONLY);
+      DeflaterInputStream is=new DeflaterInputStream((DataInputStream)in,deflater);
+      try {
+        size=DataInputOutputUtil.readINT(in);
+        originalBuffer=spareBufferLocal.getBuffer(size);
+        is.read(originalBuffer,0,size);
+      }
+  finally {
+        try {
+          is.close();
+        }
+ catch (        IOException ignore) {
+        }
+        deflater.end();
+      }
+      return super.read(new DataInputStream(new UnsyncByteArrayInputStream(originalBuffer,0,size)));
+    }
+  }
+;
 }
