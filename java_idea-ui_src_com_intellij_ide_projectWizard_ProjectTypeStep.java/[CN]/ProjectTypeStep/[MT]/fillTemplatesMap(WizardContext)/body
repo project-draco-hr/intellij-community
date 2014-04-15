@@ -22,7 +22,9 @@
   MultiMap<TemplatesGroup,ProjectTemplate> map=CreateFromTemplateMode.getTemplatesMap(context);
   myTemplatesMap.putAllValues(map);
   for (  ProjectCategory category : ProjectCategory.EXTENSION_POINT_NAME.getExtensions()) {
-    myTemplatesMap.put(new TemplatesGroup(category),new ArrayList<ProjectTemplate>());
+    TemplatesGroup group=new TemplatesGroup(category);
+    myTemplatesMap.remove(group);
+    myTemplatesMap.put(group,new ArrayList<ProjectTemplate>());
   }
   if (context.isCreatingNewProject()) {
     MultiMap<String,ProjectTemplate> localTemplates=loadLocalTemplates();
@@ -46,18 +48,17 @@
   }
   Collections.sort(groups,new Comparator<TemplatesGroup>(){
     @Override public int compare(    TemplatesGroup o1,    TemplatesGroup o2){
-      int u=Comparing.compare(ProjectTemplatesFactory.CUSTOM_GROUP.equals(o1.getName()),ProjectTemplatesFactory.CUSTOM_GROUP.equals(o2.getName()));
-      if (u != 0)       return u;
+      int i=o2.getWeight() - o1.getWeight();
+      if (i != 0)       return i;
       int i1=moduleTypes.get(getModuleType(o2)).size() - moduleTypes.get(getModuleType(o1)).size();
       if (i1 != 0)       return i1;
-      int i=myTemplatesMap.get(o2).size() - myTemplatesMap.get(o1).size();
-      return i != 0 ? i : o1.compareTo(o2);
+      return o1.compareTo(o2);
     }
   }
 );
   Set<String> groupNames=ContainerUtil.map2Set(groups,new Function<TemplatesGroup,String>(){
     @Override public String fun(    TemplatesGroup group){
-      return group.getName();
+      return group.getParentGroup();
     }
   }
 );
@@ -65,7 +66,7 @@
   for (ListIterator<TemplatesGroup> iterator=groups.listIterator(); iterator.hasNext(); ) {
     TemplatesGroup group=iterator.next();
     String parentGroup=group.getParentGroup();
-    if (parentGroup != null && groupNames.contains(parentGroup) && !group.getName().equals(parentGroup)) {
+    if (parentGroup != null && groupNames.contains(parentGroup) && !group.getName().equals(parentGroup) && groupMap.containsKey(parentGroup)) {
       subGroups.putValue(parentGroup,group);
       iterator.remove();
     }

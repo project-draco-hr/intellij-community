@@ -6,17 +6,14 @@
       anchor=url.substring(sharpPos);
       url=url.substring(0,sharpPos);
     }
-    VirtualFile file=VirtualFileManager.getInstance().findFileByUrl(url);
-    if (file == null || !(file.getFileSystem() instanceof JarFileSystem))     return null;
-    JarFileSystem jarFileSystem=(JarFileSystem)file.getFileSystem();
-    VirtualFile jarVirtualFile=jarFileSystem.getVirtualFileForJar(file);
-    if (jarVirtualFile == null)     return null;
-    String targetFilePath=file.getPath();
-    String targetFileRelativePath=StringUtil.substringAfter(targetFilePath,JarFileSystem.JAR_SEPARATOR);
-    LOG.assertTrue(targetFileRelativePath != null);
-    String jarVirtualFileLocationHash=jarVirtualFile.getName() + Integer.toHexString(jarVirtualFile.getUrl().hashCode());
-    final File outputDir=new File(getExtractedFilesDir(),jarVirtualFileLocationHash);
-    final String currentTimestamp=String.valueOf(new File(jarVirtualFile.getPath()).lastModified());
+    Pair<String,String> pair=URLUtil.splitJarUrl(url);
+    if (pair == null)     return null;
+    File jarFile=new File(FileUtil.toSystemDependentName(pair.first));
+    if (!jarFile.canRead())     return null;
+    String jarUrl=StandardFileSystems.FILE_PROTOCOL_PREFIX + FileUtil.toSystemIndependentName(jarFile.getPath());
+    String jarLocationHash=jarFile.getName() + "." + Integer.toHexString(jarUrl.hashCode());
+    final File outputDir=new File(getExtractedFilesDir(),jarLocationHash);
+    final String currentTimestamp=String.valueOf(new File(jarFile.getPath()).lastModified());
     final File timestampFile=new File(outputDir,".idea.timestamp");
     String previousTimestamp=null;
     if (timestampFile.exists()) {
@@ -50,20 +47,21 @@ catch (      InterruptedException ignored) {
       if (!extract.get()) {
         return null;
       }
-      @SuppressWarnings("ConstantConditions") final ZipFile zipFile=jarFileSystem.getJarFile(file).getZipFile();
-      if (zipFile == null) {
-        return null;
-      }
-      ZipEntry entry=zipFile.getEntry(targetFileRelativePath);
-      if (entry == null) {
-        return null;
-      }
-      InputStream is=zipFile.getInputStream(entry);
+      boolean closeZip=true;
+      final ZipFile zipFile=new ZipFile(jarFile);
       try {
+        ZipEntry entry=zipFile.getEntry(pair.second);
+        if (entry == null) {
+          return null;
+        }
+        InputStream is=zipFile.getInputStream(entry);
         ZipUtil.extractEntry(entry,is,outputDir);
+        closeZip=false;
       }
   finally {
-        is.close();
+        if (closeZip) {
+          zipFile.close();
+        }
       }
       ApplicationManager.getApplication().invokeLater(new Runnable(){
         @Override public void run(){
@@ -72,7 +70,7 @@ catch (      InterruptedException ignored) {
               final int size=zipFile.size();
               final int[] counter=new int[]{0};
 class MyFilter implements FilenameFilter {
-                private final Set<File> myImportantDirs=new HashSet<File>(Arrays.asList(outputDir,new File(outputDir,"resources")));
+                private final Set<File> myImportantDirs=ContainerUtil.newHashSet(outputDir,new File(outputDir,"resources"));
                 private final boolean myImportantOnly;
                 private MyFilter(                boolean importantOnly){
                   myImportantOnly=importantOnly;
@@ -88,9 +86,14 @@ class MyFilter implements FilenameFilter {
                 }
               }
               try {
-                ZipUtil.extract(zipFile,outputDir,new MyFilter(true));
-                ZipUtil.extract(zipFile,outputDir,new MyFilter(false));
-                FileUtil.writeToFile(timestampFile,currentTimestamp.getBytes());
+                try {
+                  ZipUtil.extract(zipFile,outputDir,new MyFilter(true));
+                  ZipUtil.extract(zipFile,outputDir,new MyFilter(false));
+                  FileUtil.writeToFile(timestampFile,currentTimestamp);
+                }
+  finally {
+                  zipFile.close();
+                }
               }
  catch (              IOException ignore) {
               }
@@ -101,7 +104,7 @@ class MyFilter implements FilenameFilter {
       }
 );
     }
-    return VfsUtilCore.pathToUrl(FileUtil.toSystemIndependentName(new File(outputDir,targetFileRelativePath).getPath())) + anchor;
+    return VfsUtilCore.pathToUrl(FileUtil.toSystemIndependentName(new File(outputDir,pair.second).getPath())) + anchor;
   }
  catch (  IOException e) {
     LOG.warn(e);

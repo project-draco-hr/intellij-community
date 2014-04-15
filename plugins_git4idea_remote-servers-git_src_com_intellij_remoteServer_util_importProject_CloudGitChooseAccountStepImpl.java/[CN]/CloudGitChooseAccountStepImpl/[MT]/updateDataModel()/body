@@ -1,0 +1,47 @@
+{
+  final MultiMap<CloudGitProjectRoot,DetectedSourceRoot> project2sourceRoots=new MultiMap<CloudGitProjectRoot,DetectedSourceRoot>();
+  new RootIterator(){
+    CloudGitProjectRoot lastProjectRoot=null;
+    @Override protected void processProjectRoot(    CloudGitProjectRoot root){
+      lastProjectRoot=root;
+      project2sourceRoots.put(lastProjectRoot,new ArrayList<DetectedSourceRoot>());
+    }
+    @Override protected void processJavaSourceRoot(    DetectedSourceRoot root){
+      project2sourceRoots.putValue(lastProjectRoot,root);
+    }
+  }
+.iterate();
+  List<ModuleDescriptor> modules=new ArrayList<ModuleDescriptor>(myProjectDescriptor.getModules());
+  for (  Map.Entry<CloudGitProjectRoot,Collection<DetectedSourceRoot>> project2sourceRootsEntry : project2sourceRoots.entrySet()) {
+    final CloudGitProjectRoot projectRoot=project2sourceRootsEntry.getKey();
+    final File directory=projectRoot.getDirectory();
+    ModuleDescriptor moduleDescriptor=new ModuleDescriptor(directory,StdModuleTypes.JAVA,project2sourceRootsEntry.getValue());
+    final String applicationName=projectRoot.getApplicationName();
+    moduleDescriptor.addConfigurationUpdater(new ModuleBuilder.ModuleConfigurationUpdater(){
+      @Override public void update(      final @NotNull Module module,      @NotNull ModifiableRootModel rootModel){
+        final MessageBusConnection connection=module.getProject().getMessageBus().connect();
+        connection.subscribe(ProjectTopics.MODULES,new ModuleAdapter(){
+          @Override public void moduleAdded(          Project project,          Module addedModule){
+            if (addedModule == module) {
+              StartupManager.getInstance(project).runWhenProjectIsInitialized(new Runnable(){
+                @Override public void run(){
+                  onModuleAdded(module);
+                }
+              }
+);
+              connection.disconnect();
+            }
+          }
+        }
+);
+      }
+      private void onModuleAdded(      Module module){
+        createRunConfiguration(module,applicationName);
+        GitInit.refreshAndConfigureVcsMappings(module.getProject(),projectRoot.getRepositoryRoot(),directory.getAbsolutePath());
+      }
+    }
+);
+    modules.add(moduleDescriptor);
+  }
+  myProjectDescriptor.setModules(modules);
+}
