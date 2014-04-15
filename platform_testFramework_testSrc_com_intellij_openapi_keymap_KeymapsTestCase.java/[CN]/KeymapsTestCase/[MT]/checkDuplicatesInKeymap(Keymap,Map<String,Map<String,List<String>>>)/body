@@ -1,0 +1,71 @@
+{
+  Set<Shortcut> shortcuts=new LinkedHashSet<Shortcut>();
+  Set<String> aids=new THashSet<String>(Arrays.asList(keymap.getActionIds()));
+  removeBoundActionIds(aids);
+  nextId:   for (  String id : aids) {
+    Map<String,List<String>> knownDuplicates=allKnownDuplicates.get(keymap.getName());
+    if (knownDuplicates != null) {
+      for (      List<String> actionsMapping : knownDuplicates.values()) {
+        for (        String eachAction : actionsMapping) {
+          if (eachAction.equals(id))           continue nextId;
+        }
+      }
+    }
+    for (    Shortcut shortcut : keymap.getShortcuts(id)) {
+      if (!(shortcut instanceof KeyboardShortcut)) {
+        continue;
+      }
+      shortcuts.add(shortcut);
+    }
+  }
+  List<Shortcut> sorted=new ArrayList<Shortcut>(shortcuts);
+  Collections.sort(sorted,new Comparator<Shortcut>(){
+    @Override public int compare(    Shortcut o1,    Shortcut o2){
+      return getText(o1).compareTo(getText(o2));
+    }
+  }
+);
+  if (OUTPUT_TEST_DATA) {
+    System.out.println("put(\"" + keymap.getName() + "\", new String[][] {");
+  }
+ else {
+    System.out.println(keymap.getName());
+  }
+  StringBuilder failMessage=new StringBuilder();
+  for (  Shortcut shortcut : sorted) {
+    if (!(shortcut instanceof KeyboardShortcut)) {
+      continue;
+    }
+    Set<String> ids=new THashSet<String>(Arrays.asList(keymap.getActionIds(shortcut)));
+    removeBoundActionIds(ids);
+    if (ids.size() == 1)     continue;
+    Keymap parent=keymap.getParent();
+    if (parent != null) {
+      boolean differFromParent=false;
+      for (      String id : ids) {
+        Shortcut[] here=keymap.getShortcuts(id);
+        Shortcut[] there=parent.getShortcuts(id);
+        if (keymap.getName().startsWith("Mac"))         convertMac(there);
+        if (!new HashSet<Shortcut>(Arrays.asList(here)).equals(new HashSet<Shortcut>(Arrays.asList(there)))) {
+          differFromParent=true;
+          break;
+        }
+      }
+      if (!differFromParent)       continue;
+    }
+    String def="{ " + "\"" + getText(shortcut) + "\","+ StringUtil.repeatSymbol(' ',25 - getText(shortcut).length())+ StringUtil.join(ids,StringUtil.QUOTER,", ")+ "},";
+    if (OUTPUT_TEST_DATA) {
+      System.out.println(def);
+    }
+ else {
+      if (failMessage.length() == 0) {
+        failMessage.append("Shortcut '" + getText(shortcut) + "' conflicts found in keymap '"+ keymap.getName()+ "':\n");
+      }
+      failMessage.append(def + "\n");
+    }
+  }
+  if (OUTPUT_TEST_DATA) {
+    System.out.println("});");
+  }
+  return failMessage.toString();
+}
