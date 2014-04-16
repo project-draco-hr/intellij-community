@@ -8,39 +8,31 @@
     final StateCache<ValidityState> cache=getGeneratingCompilerCache(compiler);
     final Set<String> pathsToRemove=new HashSet<String>(cache.getUrls());
     final Map<GeneratingCompiler.GenerationItem,String> itemToOutputPathMap=new HashMap<GeneratingCompiler.GenerationItem,String>();
-    final IOException[] ex={null};
-    ApplicationManager.getApplication().runReadAction(new Runnable(){
-      public void run(){
+    ApplicationManager.getApplication().runReadAction(new ThrowableComputable<Void,IOException>(){
+      @Override public Void compute() throws IOException {
         for (        final GeneratingCompiler.GenerationItem item : allItems) {
           final Module itemModule=item.getModule();
           final String outputDirPath=CompilerPaths.getGenerationOutputPath(compiler,itemModule,item.isTestSource());
           final String outputPath=outputDirPath + "/" + item.getPath();
           itemToOutputPathMap.put(item,outputPath);
-          try {
-            final ValidityState savedState=cache.getState(outputPath);
-            if (forceGenerate || savedState == null || !savedState.equalsTo(item.getValidityState())) {
-              final String outputPathUrl=VirtualFileManager.constructUrl(LocalFileSystem.PROTOCOL,outputPath);
-              if (context.getCompileScope().belongs(outputPathUrl)) {
-                toGenerate.add(item);
-              }
- else {
-                pathsToRemove.remove(outputPath);
-              }
+          final ValidityState savedState=cache.getState(outputPath);
+          if (forceGenerate || savedState == null || !savedState.equalsTo(item.getValidityState())) {
+            final String outputPathUrl=VirtualFileManager.constructUrl(LocalFileSystem.PROTOCOL,outputPath);
+            if (context.getCompileScope().belongs(outputPathUrl)) {
+              toGenerate.add(item);
             }
  else {
               pathsToRemove.remove(outputPath);
             }
           }
- catch (          IOException e) {
-            ex[0]=e;
+ else {
+            pathsToRemove.remove(outputPath);
           }
         }
+        return null;
       }
     }
 );
-    if (ex[0] != null) {
-      throw ex[0];
-    }
     if (onlyCheckStatus) {
       if (toGenerate.isEmpty() && pathsToRemove.isEmpty()) {
         return false;
