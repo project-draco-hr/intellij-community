@@ -1,0 +1,64 @@
+{
+  EvaluationContextImpl evaluationContext=debuggerContext.createEvaluationContext();
+  final SourcePosition sourcePosition=debuggerContext.getSourcePosition();
+  if (sourcePosition == null) {
+    return;
+  }
+  try {
+    if (!ViewsGeneralSettings.getInstance().ENABLE_AUTO_EXPRESSIONS && !myAutoWatchMode) {
+      superBuildVariables(evaluationContext,children);
+    }
+ else {
+      final Map<String,LocalVariableProxyImpl> visibleVariables=FrameVariablesTree.getVisibleVariables(myStackFrameProxy);
+      final EvaluationContextImpl evalContext=evaluationContext;
+      final Pair<Set<String>,Set<TextWithImports>> usedVars=ApplicationManager.getApplication().runReadAction(new Computable<Pair<Set<String>,Set<TextWithImports>>>(){
+        @Override public Pair<Set<String>,Set<TextWithImports>> compute(){
+          return FrameVariablesTree.findReferencedVars(visibleVariables.keySet(),sourcePosition,evalContext);
+        }
+      }
+);
+      if (myAutoWatchMode) {
+        for (        String var : usedVars.first) {
+          final LocalVariableDescriptorImpl descriptor=myNodeManager.getLocalVariableDescriptor(null,visibleVariables.get(var));
+          children.add(new JavaValue(descriptor,evaluationContext));
+        }
+      }
+ else {
+        superBuildVariables(evaluationContext,children);
+      }
+      final EvaluationContextImpl evalContextCopy=evaluationContext.createEvaluationContext(evaluationContext.getThisObject());
+      evalContextCopy.setAutoLoadClasses(false);
+      for (      TextWithImports text : usedVars.second) {
+        WatchItemDescriptor descriptor=myNodeManager.getWatchItemDescriptor(null,text,null);
+        children.add(new JavaValue(descriptor,evaluationContext));
+      }
+    }
+  }
+ catch (  EvaluateException e) {
+    if (e.getCause() instanceof AbsentInformationException) {
+      final StackFrameProxyImpl frame=myStackFrameProxy;
+      final Collection<Value> argValues=frame.getArgumentValues();
+      int index=0;
+      for (      Value argValue : argValues) {
+        final ArgumentValueDescriptorImpl descriptor=myNodeManager.getArgumentValueDescriptor(null,index++,argValue,null);
+        children.add(new JavaValue(descriptor,evaluationContext));
+      }
+      final List<DecompiledLocalVariable> decompiled=FrameVariablesTree.collectVariablesFromBytecode(frame,argValues.size());
+      if (!decompiled.isEmpty()) {
+        try {
+          final Map<DecompiledLocalVariable,Value> values=LocalVariablesUtil.fetchValues(frame.getStackFrame(),decompiled);
+          for (          DecompiledLocalVariable var : decompiled) {
+            final Value value=values.get(var);
+            final ArgumentValueDescriptorImpl descriptor=myNodeManager.getArgumentValueDescriptor(null,var.getSlot(),value,var.getName());
+            children.add(new JavaValue(descriptor,evaluationContext));
+          }
+        }
+ catch (        Exception ex) {
+        }
+      }
+    }
+ else {
+      throw e;
+    }
+  }
+}
