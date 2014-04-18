@@ -4,23 +4,34 @@
   final NotNullComputable<Collection<Key>> oldKeysGetter;
   final int savedInputId;
   if (myHasSnapshotMapping && !((MemoryIndexStorage)getStorage()).isBufferingEnabled()) {
-    oldKeysGetter=new NotNullComputable<Collection<Key>>(){
-      @NotNull @Override public Collection<Key> compute(){
-        try {
-          Integer hashId=myInputsSnapshotMapping.get(inputId);
-          Collection<Key> keys=hashId != null ? mySnapshotMapping.get(hashId) : null;
-          return keys == null ? Collections.<Key>emptyList() : keys;
-        }
- catch (        IOException e) {
-          throw new RuntimeException(e);
+    try {
+      final Integer hashId=myInputsSnapshotMapping.get(inputId);
+      final Collection<Key> keys=hashId != null ? mySnapshotMapping.get(hashId) : null;
+      oldKeysGetter=new NotNullComputable<Collection<Key>>(){
+        @NotNull @Override public Collection<Key> compute(){
+          try {
+            Integer currentHashId=myInputsSnapshotMapping.get(inputId);
+            Collection<Key> currentKeys;
+            if ((currentHashId == null && hashId == null) || (currentHashId != null && currentHashId.equals(hashId))) {
+              currentKeys=keys;
+            }
+ else {
+              currentKeys=currentHashId != null ? mySnapshotMapping.get(currentHashId) : null;
+            }
+            return currentKeys == null ? Collections.<Key>emptyList() : currentKeys;
+          }
+ catch (          IOException e) {
+            throw new RuntimeException(e);
+          }
         }
       }
-    }
 ;
-    try {
       if (content instanceof FileContent) {
         FileContent fileContent=(FileContent)content;
         savedInputId=ContentHashesSupport.calcContentHashIdWithFileType(fileContent.getContent(),fileContent.getFileType());
+        if (!mySnapshotMapping.containsMapping(savedInputId)) {
+          mySnapshotMapping.put(savedInputId,data.keySet());
+        }
       }
  else {
         savedInputId=NULL_MAPPING;
