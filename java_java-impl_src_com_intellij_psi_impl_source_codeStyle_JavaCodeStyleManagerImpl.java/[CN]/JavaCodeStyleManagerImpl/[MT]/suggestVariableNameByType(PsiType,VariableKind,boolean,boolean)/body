@@ -10,7 +10,7 @@
       return new String[]{name};
     }
   }
-  Collection<String> suggestions=new LinkedHashSet<String>();
+  final Collection<String> suggestions=new LinkedHashSet<String>();
   if (!skipIndices) {
     suggestNamesForCollectionInheritors(type,variableKind,suggestions,correctKeywords);
     suggestNamesFromGenericParameters(type,variableKind,suggestions,correctKeywords);
@@ -19,6 +19,20 @@
   if (typeName != null) {
     typeName=normalizeTypeName(typeName);
     ContainerUtil.addAll(suggestions,getSuggestionsByName(typeName,variableKind,type instanceof PsiArrayType,correctKeywords));
+  }
+  if (!skipIndices && type instanceof PsiClassType) {
+    final PsiClass psiClass=((PsiClassType)type).resolve();
+    if (psiClass != null && psiClass.getContainingClass() != null) {
+      InheritanceUtil.processSupers(psiClass,false,new Processor<PsiClass>(){
+        @Override public boolean process(        PsiClass superClass){
+          if (PsiTreeUtil.isAncestor(superClass,psiClass,true)) {
+            ContainerUtil.addAll(suggestions,getSuggestionsByName(superClass.getName(),variableKind,false,correctKeywords));
+          }
+          return false;
+        }
+      }
+);
+    }
   }
   return ArrayUtil.toStringArray(suggestions);
 }
