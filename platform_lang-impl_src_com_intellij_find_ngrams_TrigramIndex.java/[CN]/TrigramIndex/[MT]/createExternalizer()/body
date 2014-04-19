@@ -1,46 +1,30 @@
 {
-  return new InputIndexDataExternalizer<Integer>(getKeyDescriptor(),INDEX_ID){
+  return new DataExternalizer<Collection<Integer>>(){
     @Override public void save(    @NotNull DataOutput out,    @NotNull Collection<Integer> value) throws IOException {
-      final int maxSerializedLength=4 * value.size() + 4;
-      byte[] originalBuffer=spareBufferLocal.getBuffer(maxSerializedLength);
-      UnsyncByteArrayOutputStream originalBytes=new UnsyncByteArrayOutputStream(originalBuffer);
-      DataOutputStream originalDataOutput=new DataOutputStream(originalBytes);
-      super.save(originalDataOutput,value);
-      final int size=originalBytes.size();
-      DataInputOutputUtil.writeINT(out,size);
-      Deflater deflater=new Deflater(Deflater.HUFFMAN_ONLY);
-      DeflaterOutputStream compressedDeflaterOutput=new DeflaterOutputStream((OutputStream)out,deflater);
-      try {
-        compressedDeflaterOutput.write(originalBuffer,0,size);
+      final int numberOfValues=value.size();
+      int[] buffer=spareBufferLocal.getBuffer(numberOfValues);
+      int ptr=0;
+      for (      Integer i : value) {
+        buffer[ptr++]=i;
       }
-  finally {
-        try {
-          compressedDeflaterOutput.close();
-        }
- catch (        IOException ignore) {
-        }
-        deflater.end();
+      Arrays.sort(buffer,0,numberOfValues);
+      DataInputOutputUtil.writeINT(out,numberOfValues);
+      int prev=0;
+      for (ptr=0; ptr < numberOfValues; ++ptr) {
+        DataInputOutputUtil.writeLONG(out,(long)buffer[ptr] - prev);
+        prev=buffer[ptr];
       }
     }
     @NotNull @Override public Collection<Integer> read(    @NotNull DataInput in) throws IOException {
-      byte[] originalBuffer;
-      int size;
-      Inflater inflater=new Inflater();
-      InflaterInputStream is=new InflaterInputStream((DataInputStream)in,inflater);
-      try {
-        size=DataInputOutputUtil.readINT(in);
-        originalBuffer=spareBufferLocal.getBuffer(size);
-        is.read(originalBuffer,0,size);
+      int size=DataInputOutputUtil.readINT(in);
+      ArrayList<Integer> result=new ArrayList<Integer>(size);
+      int prev=0;
+      while (size-- > 0) {
+        int l=(int)(DataInputOutputUtil.readLONG(in) + prev);
+        result.add(l);
+        prev=l;
       }
-  finally {
-        try {
-          is.close();
-        }
- catch (        IOException ignore) {
-        }
-        inflater.end();
-      }
-      return super.read(new DataInputStream(new UnsyncByteArrayInputStream(originalBuffer,0,size)));
+      return result;
     }
   }
 ;
