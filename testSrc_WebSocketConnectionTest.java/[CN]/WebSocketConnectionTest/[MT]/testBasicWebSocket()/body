@@ -1,28 +1,19 @@
 {
-  final Kernel kernel=getFirstKernel("http://" + LOCATION + KERNELS_URL);
-  assertNotNull(kernel);
-  final URI shellURI=new URI("ws://" + LOCATION + KERNELS_URL+ "/"+ kernel.getId()+ "/shell");
-  final WebSocketClient shellClient=new WebSocketClient(shellURI,new Draft_17()){
-    @Override public void onOpen(    @NotNull ServerHandshake handshakeData){
-      System.out.format("onOpen(%s)\n",handshakeData);
+  final Ref<Boolean> evaluated=Ref.create(false);
+  final IpnbConnection connection=new IpnbConnection(getTestServerURI(),new IpnbConnectionListenerBase(){
+    private String myMessageId;
+    @Override public void onOpen(    @NotNull IpnbConnection connection){
+      myMessageId=connection.execute("2 + 2");
     }
-    @Override public void onMessage(    @NotNull String message){
-      System.out.format("onMessage(%s)\n",message);
-    }
-    @Override public void onClose(    int code,    @NotNull String reason,    boolean remote){
-      System.out.format("onClose(%d, %s, %b)\n",code,reason,remote);
-    }
-    @Override public void onError(    @NotNull Exception e){
-      System.out.format("onError(%s)\n",e);
+    @Override public void onOutput(    @NotNull IpnbConnection connection,    @NotNull String parentMessageId,    @NotNull Map<String,String> outputs){
+      if (myMessageId.equals(parentMessageId)) {
+        assertEquals("4",outputs.get("text/plain"));
+        evaluated.set(true);
+        connection.shutdown();
+      }
     }
   }
-;
-  final Thread thread=new Thread(shellClient);
-  thread.start();
-  try {
-    thread.join();
-  }
-  finally {
-    shellClient.close();
-  }
+);
+  connection.close();
+  assertTrue(evaluated.get());
 }

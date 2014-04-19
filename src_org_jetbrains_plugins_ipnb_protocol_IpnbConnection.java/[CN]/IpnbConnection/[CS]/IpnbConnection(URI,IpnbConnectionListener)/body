@@ -1,0 +1,49 @@
+{
+  myURI=uri;
+  myListener=listener;
+  mySessionId=UUID.randomUUID().toString();
+  myKernelId=startKernel();
+  final Draft draft=new Draft17WithOrigin();
+  final String authMessage="identity:foo";
+  myShellClient=new WebSocketClient(getShellURI(),draft){
+    @Override public void onOpen(    @NotNull ServerHandshake handshakeData){
+      send(authMessage);
+      myIsShellOpen=true;
+      notifyOpen();
+    }
+    @Override public void onMessage(    @NotNull String message){
+    }
+    @Override public void onClose(    int code,    @NotNull String reason,    boolean remote){
+    }
+    @Override public void onError(    @NotNull Exception e){
+    }
+  }
+;
+  myShellThread=new Thread(myShellClient);
+  myShellThread.start();
+  myIOPubClient=new WebSocketClient(getIOPubURI(),draft){
+    @Override public void onOpen(    ServerHandshake handshakeData){
+      send(authMessage);
+      myIsIOPubOpen=true;
+      notifyOpen();
+    }
+    @Override public void onMessage(    String message){
+      final Gson gson=new Gson();
+      final Message msg=gson.fromJson(message,Message.class);
+      final Header header=msg.getHeader();
+      final Header parentHeader=gson.fromJson(msg.getParentHeader(),Header.class);
+      final String messageType=header.getMessageType();
+      if (messageType.equals("pyout")) {
+        final PyOutContent content=gson.fromJson(msg.getContent(),PyOutContent.class);
+        myListener.onOutput(IpnbConnection.this,parentHeader.getMessageId(),content.getData());
+      }
+    }
+    @Override public void onClose(    int code,    String reason,    boolean remote){
+    }
+    @Override public void onError(    Exception ex){
+    }
+  }
+;
+  myIOPubThread=new Thread(myIOPubClient);
+  myIOPubThread.start();
+}
