@@ -1,0 +1,57 @@
+{
+  Map<String,Map<String,List<String>>> duplicates=getKnownDuplicates();
+  THashSet<String> allMaps=new THashSet<String>(ContainerUtil.map(KeymapManagerEx.getInstanceEx().getAllKeymaps(),new Function<Keymap,String>(){
+    @Override public String fun(    Keymap keymap){
+      return keymap.getName();
+    }
+  }
+));
+  TestCase.assertTrue("Modify 'known duplicates list' test data. Keymaps were added: " + ContainerUtil.subtract(allMaps,duplicates.keySet()),ContainerUtil.subtract(allMaps,duplicates.keySet()).isEmpty());
+  TestCase.assertTrue("Modify 'known duplicates list' test data. Keymaps were removed: " + ContainerUtil.subtract(duplicates.keySet(),allMaps),ContainerUtil.subtract(duplicates.keySet(),allMaps).isEmpty());
+  @SuppressWarnings("MismatchedQueryAndUpdateOfCollection") Map<String,List<String>> reassignedShortcuts=new FactoryMap<String,List<String>>(){
+    @Override protected Map<String,List<String>> createMap(){
+      return new LinkedHashMap<String,List<String>>();
+    }
+    @Nullable @Override protected List<String> create(    String key){
+      return new ArrayList<String>();
+    }
+  }
+;
+  for (  String name : duplicates.keySet()) {
+    Keymap keymap=KeymapManagerEx.getInstanceEx().getKeymap(name);
+    TestCase.assertNotNull("KeyMap " + name + " not found",keymap);
+    Map<String,List<String>> duplicateIdsList=duplicates.get(name);
+    Set<String> mentionedShortcuts=new THashSet<String>();
+    for (    Map.Entry<String,List<String>> shortcutMappings : duplicateIdsList.entrySet()) {
+      String shortcutString=shortcutMappings.getKey();
+      if (!mentionedShortcuts.add(shortcutString)) {
+        TestCase.fail("Shortcut '" + shortcutString + "' duplicate in keymap '"+ keymap+ "'. Please modify 'known duplicates list'");
+      }
+      Shortcut shortcut=parse(shortcutString);
+      String[] ids=keymap.getActionIds(shortcut);
+      Set<String> actualSc=new HashSet<String>(Arrays.asList(ids));
+      removeBoundActionIds(actualSc);
+      Set<String> expectedSc=new HashSet<String>(shortcutMappings.getValue());
+      for (      String s : actualSc) {
+        if (!expectedSc.contains(s)) {
+          reassignedShortcuts.get(keymap.getName()).add(getText(shortcut));
+        }
+      }
+      for (      String s : expectedSc) {
+        if (!actualSc.contains(s)) {
+          System.out.println("Expected action '" + s + "' does not reassign shortcut "+ getText(shortcut)+ " in keymap "+ keymap+ " or is not registered");
+        }
+      }
+    }
+  }
+  if (!reassignedShortcuts.isEmpty()) {
+    StringBuilder message=new StringBuilder();
+    for (    Map.Entry<String,List<String>> keymapToShortcuts : reassignedShortcuts.entrySet()) {
+      message.append("The following shortcuts was reassigned in keymap ").append(keymapToShortcuts.getKey()).append(". Please modify known duplicates list:\n");
+      for (      String eachShortcut : keymapToShortcuts.getValue()) {
+        message.append(eachShortcut).append("\n");
+      }
+    }
+    TestCase.fail("\n" + message.toString());
+  }
+}

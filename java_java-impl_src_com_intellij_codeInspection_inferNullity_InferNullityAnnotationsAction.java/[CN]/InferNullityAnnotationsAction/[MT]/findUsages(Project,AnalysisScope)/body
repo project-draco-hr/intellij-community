@@ -1,0 +1,40 @@
+{
+  final NullityInferrer inferrer=new NullityInferrer(myAnnotateLocalVariablesCb.isSelected(),project);
+  final PsiManager psiManager=PsiManager.getInstance(project);
+  final Runnable searchForUsages=new Runnable(){
+    @Override public void run(){
+      final int totalFiles=scope.getFileCount();
+      scope.accept(new PsiElementVisitor(){
+        int myFileCount=0;
+        @Override public void visitFile(        final PsiFile file){
+          myFileCount++;
+          final VirtualFile virtualFile=file.getVirtualFile();
+          final FileViewProvider viewProvider=psiManager.findViewProvider(virtualFile);
+          final Document document=viewProvider == null ? null : viewProvider.getDocument();
+          if (document == null || virtualFile.getFileType().isBinary())           return;
+          final ProgressIndicator progressIndicator=ProgressManager.getInstance().getProgressIndicator();
+          if (progressIndicator != null) {
+            progressIndicator.setText2(ProjectUtil.calcRelativeToProjectPath(virtualFile,project));
+            progressIndicator.setFraction(((double)myFileCount) / totalFiles);
+          }
+          if (file instanceof PsiJavaFile) {
+            inferrer.collect(file);
+          }
+        }
+      }
+);
+    }
+  }
+;
+  if (ApplicationManager.getApplication().isDispatchThread()) {
+    if (!ProgressManager.getInstance().runProcessWithProgressSynchronously(searchForUsages,INFER_NULLITY_ANNOTATIONS,true,project)) {
+      return null;
+    }
+  }
+ else {
+    searchForUsages.run();
+  }
+  final List<UsageInfo> usages=new ArrayList<UsageInfo>();
+  inferrer.collect(usages);
+  return usages.toArray(new UsageInfo[usages.size()]);
+}

@@ -1,8 +1,22 @@
 {
-  if (LOG.isDebugEnabled()) {
-    String content=getResponseContentAsString(response);
-    TaskUtil.prettyFormatJsonToLog(LOG,content);
-    return myGson.fromJson(content,myTypeToken.getType());
+  int statusCode=response.getStatusLine().getStatusCode();
+  if (!isSuccessful(statusCode)) {
+    if (statusCode == HttpStatus.SC_NOT_FOUND && myIgnoreNotFound) {
+      return Collections.emptyList();
+    }
+    throw RequestFailedException.forStatusCode(statusCode);
   }
-  return myGson.fromJson(getResponseContentAsReader(response),myTypeToken.getType());
+  LOG.info("Status code: " + statusCode);
+  try {
+    if (LOG.isDebugEnabled()) {
+      String content=getResponseContentAsString(response);
+      TaskUtil.prettyFormatJsonToLog(LOG,content);
+      return myGson.fromJson(content,myTypeToken.getType());
+    }
+    return myGson.fromJson(getResponseContentAsReader(response),myTypeToken.getType());
+  }
+ catch (  JsonSyntaxException e) {
+    LOG.warn("Malformed server response",e);
+    return Collections.emptyList();
+  }
 }
