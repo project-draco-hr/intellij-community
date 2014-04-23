@@ -1,0 +1,42 @@
+{
+  BuildScriptClasspathModelImpl buildScriptClasspath=cache.get(project.getPath());
+  if (buildScriptClasspath != null)   return buildScriptClasspath;
+  buildScriptClasspath=new BuildScriptClasspathModelImpl();
+  final IdeaPlugin ideaPlugin=project.getPlugins().getPlugin(IdeaPlugin.class);
+  if (ideaPlugin != null) {
+    Project parent=project.getParent();
+    if (parent != null) {
+      BuildScriptClasspathModelImpl parentBuildScriptClasspath=(BuildScriptClasspathModelImpl)buildAll(modelName,parent);
+      if (parentBuildScriptClasspath != null) {
+        for (        ClasspathEntryModel classpathEntryModel : parentBuildScriptClasspath.getClasspath()) {
+          buildScriptClasspath.add(classpathEntryModel);
+        }
+      }
+    }
+    final Configuration configuration=project.getBuildscript().getConfigurations().findByName("classpath");
+    Collection<Configuration> plusConfigurations=Collections.singletonList(configuration);
+    final Map<String,Map<String,Collection<Configuration>>> scopes=new HashMap<String,Map<String,Collection<Configuration>>>(ideaPlugin.getModel().getModule().getScopes());
+    Map<String,Map<String,Collection<Configuration>>> buildScriptScope=new HashMap<String,Map<String,Collection<Configuration>>>();
+    Map<String,Collection<Configuration>> plusConfiguration=new HashMap<String,Collection<Configuration>>();
+    plusConfiguration.put("plus",plusConfigurations);
+    if (scopes.get("COMPILE") != null) {
+      plusConfiguration.put("minus",scopes.get("COMPILE").get("plus"));
+    }
+    buildScriptScope.put("COMPILE",plusConfiguration);
+    ideaPlugin.getModel().getModule().setScopes(buildScriptScope);
+    ideaPlugin.getModel().getModule().getProject().getConfigurations().add(configuration);
+    final Set<Dependency> buildScriptDependencies=ideaPlugin.getModel().getModule().resolveDependencies();
+    for (    Dependency dependency : buildScriptDependencies) {
+      if (dependency instanceof ModuleLibrary) {
+        ModuleLibrary moduleLibrary=(ModuleLibrary)dependency;
+        if ("COMPILE".equals(moduleLibrary.getScope())) {
+          buildScriptClasspath.add(new ClasspathEntryModelImpl(convert(moduleLibrary.getClasses()),convert(moduleLibrary.getSources()),convert(moduleLibrary.getJavadoc())));
+        }
+      }
+    }
+    ideaPlugin.getModel().getModule().setScopes(scopes);
+    ideaPlugin.getModel().getModule().getProject().getConfigurations().remove(configuration);
+  }
+  cache.put(project.getPath(),buildScriptClasspath);
+  return buildScriptClasspath;
+}
