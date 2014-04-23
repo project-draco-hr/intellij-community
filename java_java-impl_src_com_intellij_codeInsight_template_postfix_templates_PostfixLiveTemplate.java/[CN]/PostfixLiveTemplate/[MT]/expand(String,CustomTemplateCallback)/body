@@ -2,11 +2,19 @@
   ApplicationManager.getApplication().assertIsDispatchThread();
   FeatureUsageTracker.getInstance().triggerFeatureUsed("editing.completion.postfix");
   Editor editor=callback.getEditor();
-  Language language=getLanguage(callback);
-  for (  PostfixTemplateProvider provider : templates.allForLanguage(language)) {
-    PostfixTemplate postfixTemplate=provider.get(key);
+  for (  PostfixTemplateProvider provider : LANG_EP.allForLanguage(getLanguage(callback))) {
+    PostfixTemplate postfixTemplate=getTemplate(provider,key);
     if (postfixTemplate != null) {
-      expandForProvider(provider,key,callback);
+      final PsiFile file=callback.getContext().getContainingFile();
+      if (isApplicableTemplate(provider,key,file,editor)) {
+        int currentOffset=editor.getCaretModel().getOffset();
+        PsiElement newContext=deleteTemplateKey(file,editor.getDocument(),currentOffset,key);
+        newContext=provider.preExpand(editor,newContext,currentOffset,key);
+        expandTemplate(postfixTemplate,editor,newContext);
+      }
+ else       if (editor.getCaretModel().getAllCarets().size() == 1) {
+        LOG.error("Template not found by key: " + key);
+      }
       return;
     }
   }
