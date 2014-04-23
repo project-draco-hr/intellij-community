@@ -1,11 +1,21 @@
 {
-  final DebuggerPanelsManager manager=DebuggerPanelsManager.getInstance(project);
-  final RunContentDescriptor res=manager.attachVirtualMachine(env.getExecutor(),this,env,state,contentToReuse,connection,pollConnection);
-  if (res == null)   return null;
+  DefaultDebugUIEnvironment debugEnvironment=new DefaultDebugUIEnvironment(project,env.getExecutor(),this,env,state,contentToReuse,connection,pollConnection);
+  DebugEnvironment environment=debugEnvironment.getEnvironment();
+  final DebuggerSession debuggerSession=DebuggerManagerEx.getInstanceEx(project).attachVirtualMachine(environment);
+  if (debuggerSession == null) {
+    return null;
+  }
+  final DebugProcessImpl debugProcess=debuggerSession.getProcess();
+  if (debugProcess.isDetached() || debugProcess.isDetaching()) {
+    debuggerSession.dispose();
+    return null;
+  }
+  if (environment.isRemote()) {
+    debugProcess.putUserData(BatchEvaluator.REMOTE_SESSION_KEY,Boolean.TRUE);
+  }
   XDebugSession debugSession=XDebuggerManager.getInstance(project).startSession(this,env,contentToReuse,new XDebugProcessStarter(){
     @Override @NotNull public XDebugProcess start(    @NotNull XDebugSession session){
-      final DebuggerManagerImpl debugManager=(DebuggerManagerImpl)DebuggerManager.getInstance(project);
-      return new JavaDebugProcess(session,debugManager.getDebugSession(res.getProcessHandler()));
+      return new JavaDebugProcess(session,debuggerSession);
     }
   }
 );
