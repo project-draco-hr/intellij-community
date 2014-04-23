@@ -1,0 +1,31 @@
+{
+  StopWatch sw=StopWatch.start("refresh");
+  PermanentGraph<Integer> permanentGraph=myCurrentDataPack.isFull() ? myCurrentDataPack.getPermanentGraph() : null;
+  Map<VirtualFile,Collection<VcsRef>> currentRefs=myCurrentDataPack.getRefsModel().getAllRefsByRoot();
+  try {
+    if (permanentGraph != null) {
+      loadLogAndRefs(roots,currentRefs,myRecentCommitCount);
+      List<? extends TimedVcsCommit> compoundLog=compound(ContainerUtil.map(myLoadedInfos.values(),new Function<LogAndRefs,List<? extends TimedVcsCommit>>(){
+        @Override public List<? extends TimedVcsCommit> fun(        LogAndRefs refs){
+          return refs.log;
+        }
+      }
+));
+      List<GraphCommit<Integer>> preparedLog=compactCommits(compoundLog,myHashMap);
+      Map<VirtualFile,Collection<VcsRef>> allNewRefs=getAllNewRefs(myLoadedInfos,currentRefs);
+      List<GraphCommit<Integer>> joinedFullLog=join(preparedLog,permanentGraph.getAllCommits(),currentRefs,allNewRefs);
+      if (joinedFullLog != null) {
+        return DataPack.build(joinedFullLog,new RefsModel(allNewRefs,myHashMap.asIndexGetter()),myHashMap.asIndexGetter(),myHashMap.asHashGetter(),myProviders,true);
+      }
+    }
+    Pair<PermanentGraph<Integer>,Map<VirtualFile,Collection<VcsRef>>> fullLogAndRefs=loadFullLog();
+    return DataPack.build(fullLogAndRefs.first,myProviders,new RefsModel(fullLogAndRefs.second,myHashMap.asIndexGetter()),true);
+  }
+ catch (  Exception e) {
+    myExceptionHandler.consume(e);
+    return EmptyDataPack.getInstance();
+  }
+ finally {
+    sw.report();
+  }
+}
