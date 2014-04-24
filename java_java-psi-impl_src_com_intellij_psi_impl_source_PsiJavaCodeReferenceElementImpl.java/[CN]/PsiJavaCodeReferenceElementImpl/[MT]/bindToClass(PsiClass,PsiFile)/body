@@ -1,0 +1,30 @@
+{
+  String qName=aClass.getQualifiedName();
+  Project project=containingFile.getProject();
+  boolean preserveQualification=JavaCodeStyleSettingsFacade.getInstance(project).useFQClassNames() && isFullyQualified(containingFile);
+  JavaPsiFacade facade=JavaPsiFacade.getInstance(project);
+  if (qName == null) {
+    qName=aClass.getName();
+    PsiClass psiClass=facade.getResolveHelper().resolveReferencedClass(qName,this);
+    if (!getManager().areElementsEquivalent(psiClass,aClass)) {
+      throw cannotBindError(aClass);
+    }
+  }
+ else   if (facade.findClass(qName,getResolveScope()) == null && !preserveQualification) {
+    return this;
+  }
+  List<PsiAnnotation> annotations=getAnnotations();
+  String text=qName;
+  PsiReferenceParameterList parameterList=getParameterList();
+  if (parameterList != null) {
+    text+=parameterList.getText();
+  }
+  PsiJavaCodeReferenceElement ref=facade.getParserFacade().createReferenceFromText(text,getParent());
+  getTreeParent().replaceChildInternal(this,(TreeElement)ref.getNode());
+  ((PsiJavaCodeReferenceElementImpl)ref).setAnnotations(annotations);
+  if (!preserveQualification) {
+    JavaCodeStyleManager codeStyleManager=JavaCodeStyleManager.getInstance(project);
+    ref=(PsiJavaCodeReferenceElement)codeStyleManager.shortenClassReferences(ref,JavaCodeStyleManager.UNCOMPLETE_CODE);
+  }
+  return ref;
+}
