@@ -1,55 +1,31 @@
 {
   node.setAlreadySorted(true);
-  if (!(value instanceof ObjectValue) || ((ObjectValue)value).hasProperties() == ThreeState.NO) {
-    node.addChildren(XValueChildrenList.EMPTY,true);
+  List<Variable> list=remainingChildren;
+  if (list != null) {
+    int to=Math.min(remainingChildrenOffset + XCompositeNode.MAX_CHILDREN_TO_SHOW,list.size());
+    boolean isLast=to == list.size();
+    node.addChildren(Variables.createVariablesList(list,remainingChildrenOffset,to,this),isLast);
+    if (!isLast) {
+      node.tooManyChildren(list.size() - to);
+      remainingChildrenOffset+=XCompositeNode.MAX_CHILDREN_TO_SHOW;
+    }
     return;
   }
-  ObsolescentAsyncResults.consume(((ObjectValue)value).getProperties(),node,new PairConsumer<List<Variable>,XCompositeNode>(){
-    @Override public void consume(    List<Variable> variables,    XCompositeNode node){
-      if (value instanceof ArrayValue) {
-        return;
-      }
-      if (value.getType() == ValueType.ARRAY) {
-        computeArrayRanges(variables,node);
-        return;
-      }
-      int maxPropertiesToShow;
-      if (value.getType() == ValueType.FUNCTION) {
-        maxPropertiesToShow=Integer.MAX_VALUE;
-      }
- else {
-        maxPropertiesToShow=XCompositeNode.MAX_CHILDREN_TO_SHOW;
-        List<Variable> list=remainingChildren;
-        if (list != null && childrenModificationStamp == ((ObjectValue)value).getCacheStamp()) {
-          int to=Math.min(remainingChildrenOffset + XCompositeNode.MAX_CHILDREN_TO_SHOW,list.size());
-          boolean isLast=to == list.size();
-          node.addChildren(Variables.createVariablesList(list,remainingChildrenOffset,to,VariableView.this),isLast);
-          if (!isLast) {
-            node.tooManyChildren(list.size() - to);
-            remainingChildrenOffset+=XCompositeNode.MAX_CHILDREN_TO_SHOW;
-          }
-          return;
-        }
-      }
-      FunctionValue functionValue=value instanceof FunctionValue ? (FunctionValue)value : null;
-      if (functionValue != null && functionValue.hasScopes() == ThreeState.NO) {
-        functionValue=null;
-      }
-      remainingChildren=Variables.sortFilterAndAddValueList(variables,node,VariableView.this,maxPropertiesToShow,functionValue == null);
-      if (remainingChildren != null) {
-        remainingChildrenOffset=maxPropertiesToShow;
-        childrenModificationStamp=((ObjectValue)value).getCacheStamp();
-      }
-      if (functionValue != null) {
-        node.addChildren(XValueChildrenList.bottomGroup(new FunctionScopesValueGroup(functionValue,context)),true);
-      }
-    }
+  boolean hasNamedProperties=value instanceof ObjectValue && ((ObjectValue)value).hasProperties() != ThreeState.NO;
+  boolean hasIndexedProperties=value instanceof ArrayValue;
+  ActionCallback.Chunk chunk=new ActionCallback.Chunk();
+  if (hasIndexedProperties) {
+    chunk.add(computeIndexedProperties((ArrayValue)value,node,!hasNamedProperties));
   }
-);
-  if (value instanceof ArrayValue) {
-    ObsolescentAsyncResults.consume(((ArrayValue)value).getVariables(),node,new PairConsumer<List<Variable>,XCompositeNode>(){
-      @Override public void consume(      List<Variable> variables,      XCompositeNode node){
-        computeIndexedValuesRanges(variables,node);
+  if (hasNamedProperties) {
+    chunk.add(computeNamedProperties((ObjectValue)value,node,!hasIndexedProperties));
+  }
+  if (hasIndexedProperties == hasNamedProperties) {
+    chunk.create().doWhenProcessed(new Runnable(){
+      @Override public void run(){
+        if (!node.isObsolete()) {
+          node.addChildren(XValueChildrenList.EMPTY,true);
+        }
       }
     }
 );
