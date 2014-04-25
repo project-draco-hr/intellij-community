@@ -1,0 +1,94 @@
+{
+  boolean afterNew=JavaClassNameCompletionContributor.AFTER_NEW.accepts(myRef);
+switch (myRef.getKind(true)) {
+case STATIC_MEMBER_FQ:
+{
+      final GrCodeReferenceElement qualifier=myRef.getQualifier();
+      if (qualifier != null) {
+        final PsiElement resolve=qualifier.resolve();
+        if (resolve instanceof PsiClass) {
+          final PsiClass clazz=(PsiClass)resolve;
+          for (          PsiField field : clazz.getFields()) {
+            if (field.hasModifierProperty(PsiModifier.STATIC)) {
+              feedLookupElements(field,afterNew);
+            }
+          }
+          for (          PsiMethod method : clazz.getMethods()) {
+            if (method.hasModifierProperty(PsiModifier.STATIC)) {
+              feedLookupElements(method,afterNew);
+            }
+          }
+          for (          PsiClass inner : clazz.getInnerClasses()) {
+            if (inner.hasModifierProperty(PsiModifier.STATIC)) {
+              feedLookupElements(inner,afterNew);
+            }
+          }
+          return;
+        }
+      }
+    }
+case PACKAGE_FQ:
+case CLASS_FQ:
+case CLASS_OR_PACKAGE_FQ:
+{
+    final String refText=PsiUtil.getQualifiedReferenceText(myRef);
+    LOG.assertTrue(refText != null,myRef.getText());
+    String parentPackageFQName=StringUtil.getPackageName(refText);
+    final PsiPackage parentPackage=JavaPsiFacade.getInstance(myRef.getProject()).findPackage(parentPackageFQName);
+    if (parentPackage != null) {
+      final GlobalSearchScope scope=myRef.getResolveScope();
+      if (myRef.getKind(true) == PACKAGE_FQ) {
+        for (        PsiPackage aPackage : parentPackage.getSubPackages(scope)) {
+          feedLookupElements(aPackage,afterNew);
+        }
+        return;
+      }
+      if (myRef.getKind(true) == CLASS_FQ) {
+        for (        PsiClass aClass : parentPackage.getClasses(scope)) {
+          feedLookupElements(aClass,afterNew);
+        }
+        return;
+      }
+      for (      PsiPackage aPackage : parentPackage.getSubPackages(scope)) {
+        feedLookupElements(aPackage,afterNew);
+      }
+      for (      PsiClass aClass : parentPackage.getClasses(scope)) {
+        feedLookupElements(aClass,afterNew);
+      }
+      return;
+    }
+  }
+case CLASS_OR_PACKAGE:
+case CLASS_IN_QUALIFIED_NEW:
+case CLASS:
+{
+  GrCodeReferenceElement qualifier=myRef.getQualifier();
+  if (qualifier != null) {
+    PsiElement qualifierResolved=qualifier.resolve();
+    if (qualifierResolved instanceof PsiPackage) {
+      PsiPackage aPackage=(PsiPackage)qualifierResolved;
+      for (      PsiClass aClass : aPackage.getClasses(myRef.getResolveScope())) {
+        feedLookupElements(aClass,afterNew);
+      }
+      if (myRef.getKind(true) == CLASS)       return;
+      for (      PsiPackage subpackage : aPackage.getSubPackages(myRef.getResolveScope())) {
+        feedLookupElements(subpackage,afterNew);
+      }
+    }
+ else     if (qualifierResolved instanceof PsiClass) {
+      for (      PsiClass aClass : ((PsiClass)qualifierResolved).getInnerClasses()) {
+        feedLookupElements(aClass,afterNew);
+      }
+    }
+  }
+ else {
+    ResolverProcessor classProcessor=CompletionProcessor.createClassCompletionProcessor(myRef);
+    processTypeParametersFromUnfinishedMethodOrField(classProcessor);
+    ResolveUtil.treeWalkUp(myRef,classProcessor,false);
+    for (    LookupElement o : GroovyCompletionUtil.getCompletionVariants(classProcessor.getCandidates(),afterNew,myMatcher,myRef)) {
+      myConsumer.consume(o);
+    }
+  }
+}
+}
+}
