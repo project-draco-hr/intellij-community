@@ -7,22 +7,23 @@
       final PsiType functionalType=FunctionalInterfaceParameterizationUtil.getGroundTargetType(defaultType);
       final PsiType returnType=LambdaUtil.getFunctionalInterfaceReturnType(functionalType);
       if (returnType != null) {
-        final PsiMethodReferenceExpression ref=(PsiMethodReferenceExpression)parameters.getPosition().getParent();
+        final PsiElement position=parameters.getPosition();
+        final PsiElement refPlace=position.getParent();
         final ExpectedTypeInfoImpl typeInfo=new ExpectedTypeInfoImpl(returnType,ExpectedTypeInfo.TYPE_OR_SUBTYPE,returnType,TailType.UNKNOWN,null,ExpectedTypeInfoImpl.NULL);
         final Map<PsiMethodReferenceExpression,PsiType> map=PsiMethodReferenceUtil.getFunctionalTypeMap();
         Consumer<LookupElement> noTypeCheck=new Consumer<LookupElement>(){
           @Override public void consume(          final LookupElement lookupElement){
             final PsiElement element=lookupElement.getPsiElement();
             if (element instanceof PsiMethod) {
-              final PsiMethodReferenceExpression referenceExpression=(PsiMethodReferenceExpression)ref.copy();
-              final PsiElement referenceNameElement=referenceExpression.getReferenceNameElement();
-              LOG.assertTrue(referenceNameElement != null,referenceExpression);
-              referenceNameElement.replace(JavaPsiFacade.getElementFactory(element.getProject()).createIdentifier(((PsiMethod)element).getName()));
+              final PsiMethodReferenceExpression referenceExpression=createMethodReferenceExpression((PsiMethod)element);
+              if (referenceExpression == null) {
+                return;
+              }
               final PsiType added=map.put(referenceExpression,functionalType);
               try {
                 final PsiElement resolve=referenceExpression.resolve();
-                if (resolve == element && PsiMethodReferenceUtil.checkMethodReferenceContext(referenceExpression,resolve,functionalType) == null) {
-                  result.addElement(lookupElement);
+                if (resolve != null && PsiEquivalenceUtil.areElementsEquivalent(element,resolve) && PsiMethodReferenceUtil.checkMethodReferenceContext(referenceExpression,resolve,functionalType) == null) {
+                  result.addElement(new JavaMethodReferenceElement((PsiMethod)element,refPlace,referenceExpression));
                 }
               }
   finally {
@@ -30,6 +31,24 @@
                   map.remove(referenceExpression);
                 }
               }
+            }
+          }
+          private PsiMethodReferenceExpression createMethodReferenceExpression(          PsiMethod method){
+            if (refPlace instanceof PsiMethodReferenceExpression) {
+              final PsiMethodReferenceExpression referenceExpression=(PsiMethodReferenceExpression)refPlace.copy();
+              final PsiElement referenceNameElement=referenceExpression.getReferenceNameElement();
+              LOG.assertTrue(referenceNameElement != null,referenceExpression);
+              referenceNameElement.replace(JavaPsiFacade.getElementFactory(method.getProject()).createIdentifier(method.getName()));
+              return referenceExpression;
+            }
+ else             if (method.hasModifierProperty(PsiModifier.STATIC)) {
+              final PsiClass aClass=method.getContainingClass();
+              LOG.assertTrue(aClass != null);
+              final String qualifiedName=aClass.getQualifiedName();
+              return (PsiMethodReferenceExpression)JavaPsiFacade.getElementFactory(method.getProject()).createExpressionFromText(qualifiedName + "::" + method.getName(),refPlace);
+            }
+ else {
+              return null;
             }
           }
         }
