@@ -1,0 +1,31 @@
+{
+  final File jarFile=IoTestUtil.createTestFile("empty.jar");
+  final int[] logCount={0};
+  LoggedErrorProcessor.setNewInstance(new LoggedErrorProcessor(){
+    @Override public void processWarn(    String message,    Throwable t,    @NotNull Logger logger){
+      super.processWarn(message,t,logger);
+      if (message.contains(jarFile.getName()))       logCount[0]++;
+    }
+  }
+);
+  try {
+    String rootUrl="jar://" + FileUtil.toSystemIndependentName(jarFile.getPath()) + "!/";
+    String entryUrl=rootUrl + JarFile.MANIFEST_NAME;
+    VirtualFile jarRoot=VirtualFileManager.getInstance().findFileByUrl(rootUrl);
+    assertNotNull(jarRoot);
+    assertTrue(jarRoot.isValid());
+    assertEquals(0,jarRoot.getChildren().length);
+    assertNull(VirtualFileManager.getInstance().findFileByUrl(entryUrl));
+    VirtualFile local=JarFileSystem.getInstance().getVirtualFileForJar(jarRoot);
+    assertNotNull(local);
+    IoTestUtil.createTestJar(jarFile);
+    local.refresh(false,false);
+    assertTrue(jarRoot.isValid());
+    assertEquals(1,jarRoot.getChildren().length);
+    assertNotNull(VirtualFileManager.getInstance().findFileByUrl(entryUrl));
+  }
+  finally {
+    LoggedErrorProcessor.restoreDefaultProcessor();
+  }
+  assertEquals(1,logCount[0]);
+}
