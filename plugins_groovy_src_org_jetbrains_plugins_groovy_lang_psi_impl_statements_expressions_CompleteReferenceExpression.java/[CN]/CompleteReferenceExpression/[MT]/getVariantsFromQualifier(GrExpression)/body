@@ -1,0 +1,39 @@
+{
+  Project project=qualifier.getProject();
+  PsiType qualifierType=qualifier.getType();
+  final ResolveState state=ResolveState.initial();
+  if (qualifierType == null || qualifierType == PsiType.VOID) {
+    if (qualifier instanceof GrReferenceExpression) {
+      PsiElement resolved=((GrReferenceExpression)qualifier).resolve();
+      if (resolved instanceof PsiPackage || resolved instanceof PsiVariable) {
+        resolved.processDeclarations(myProcessor,state,null,myRefExpr);
+        return;
+      }
+    }
+    getVariantsFromQualifierType(PsiType.getJavaLangObject(myRefExpr.getManager(),qualifier.getResolveScope()),project);
+  }
+ else   if (qualifierType instanceof PsiIntersectionType) {
+    for (    PsiType conjunct : ((PsiIntersectionType)qualifierType).getConjuncts()) {
+      getVariantsFromQualifierType(conjunct,project);
+    }
+  }
+ else {
+    getVariantsFromQualifierType(qualifierType,project);
+    if (qualifier instanceof GrReferenceExpression && !PsiUtil.isSuperReference(qualifier) && !PsiUtil.isInstanceThisRef(qualifier)) {
+      PsiElement resolved=((GrReferenceExpression)qualifier).resolve();
+      if (resolved instanceof PsiClass) {
+        GlobalSearchScope scope=myRefExpr.getResolveScope();
+        PsiClass javaLangClass=PsiUtil.getJavaLangClass(resolved,scope);
+        if (javaLangClass != null) {
+          PsiSubstitutor substitutor=PsiSubstitutor.EMPTY;
+          PsiTypeParameter[] typeParameters=javaLangClass.getTypeParameters();
+          if (typeParameters.length == 1) {
+            substitutor=substitutor.put(typeParameters[0],qualifierType);
+          }
+          PsiType javaLangClassType=JavaPsiFacade.getElementFactory(myRefExpr.getProject()).createType(javaLangClass,substitutor);
+          ResolveUtil.processAllDeclarations(javaLangClassType,myProcessor,state,myRefExpr);
+        }
+      }
+    }
+  }
+}
