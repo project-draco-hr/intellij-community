@@ -1,4 +1,18 @@
 {
-  TextRangeInterval rangeInterval=roundToLineBoundaries(start,end);
-  return myHighlighterTree.sweep(rangeInterval.getStartOffset(),rangeInterval.getEndOffset(),sweepProcessor);
+  TextRangeInterval lines=roundToLineBoundaries(start,end);
+  List<RangeHighlighterEx> linesInRange=new ArrayList<RangeHighlighterEx>();
+  myHighlighterTreeForLines.processOverlappingWith(lines.getStartOffset(),lines.getEndOffset(),new CommonProcessors.CollectProcessor<RangeHighlighterEx>(linesInRange));
+  if (linesInRange.isEmpty()) {
+    return myHighlighterTree.sweep(start,end,sweepProcessor);
+  }
+  final List<RangeHighlighterEx> highlighters=new ArrayList<RangeHighlighterEx>();
+  myHighlighterTree.processOverlappingWith(start,end,new CommonProcessors.CollectProcessor<RangeHighlighterEx>(highlighters));
+  highlighters.addAll(linesInRange);
+  Collections.sort(highlighters,RangeHighlighterEx.BY_AFFECTED_START_OFFSET);
+  return RangeMarkerTree.sweep(new RangeMarkerTree.Generator<RangeHighlighterEx>(){
+    @Override public boolean generateInStartOffsetOrder(    @NotNull Processor<RangeHighlighterEx> processor){
+      return ContainerUtil.process(highlighters,processor);
+    }
+  }
+,sweepProcessor);
 }
