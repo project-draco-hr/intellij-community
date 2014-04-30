@@ -23,7 +23,7 @@
  else {
     final PsiMethodReferenceUtil.QualifierResolveResult qualifierResolveResult=PsiMethodReferenceUtil.getQualifierResolveResult(myExpression);
     PsiSubstitutor psiSubstitutor=qualifierResolveResult.getSubstitutor();
-    final PsiMember applicableMember=((PsiMethodReferenceExpressionImpl)myExpression).getPotentiallyApplicableMember();
+    final PsiMember applicableMember=myExpression.getPotentiallyApplicableMember();
     LOG.assertTrue(applicableMember != null);
     PsiType applicableMethodReturnType=applicableMember instanceof PsiMethod ? ((PsiMethod)applicableMember).getReturnType() : null;
     int idx=0;
@@ -67,23 +67,24 @@
   }
   final Map<PsiMethodReferenceExpression,PsiType> map=PsiMethodReferenceUtil.getFunctionalTypeMap();
   final PsiType added=map.put(myExpression,groundTargetType);
-  final PsiElement resolve;
+  final JavaResolveResult resolve;
   try {
-    resolve=myExpression.resolve();
+    resolve=myExpression.advancedResolve(true);
   }
   finally {
     if (added == null) {
       map.remove(myExpression);
     }
   }
-  if (resolve == null) {
+  final PsiElement element=resolve.getElement();
+  if (element == null) {
     return false;
   }
   if (PsiType.VOID.equals(returnType) || returnType == null) {
     return true;
   }
-  if (resolve instanceof PsiMethod) {
-    final PsiMethod method=(PsiMethod)resolve;
+  if (element instanceof PsiMethod) {
+    final PsiMethod method=(PsiMethod)element;
     final PsiType referencedMethodReturnType;
     final PsiClass containingClass=method.getContainingClass();
     LOG.assertTrue(containingClass != null,method);
@@ -102,7 +103,8 @@
       final PsiClass interfaceClass=classResolveResult.getElement();
       LOG.assertTrue(interfaceClass != null);
       if (PsiPolyExpressionUtil.mentionsTypeParameters(referencedMethodReturnType,ContainerUtil.newHashSet(method.getTypeParameters()))) {
-        session.registerConstraints(referencedMethodReturnType,returnType);
+        session.collectApplicabilityConstraints(myExpression,((MethodCandidateInfo)resolve),groundTargetType);
+        session.registerReturnTypeConstraints(referencedMethodReturnType,returnType);
         return true;
       }
     }
