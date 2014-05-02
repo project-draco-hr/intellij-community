@@ -101,17 +101,26 @@ synchronized (LOCK) {
     }
   }
   myPsiDisposedCheck.performCheck();
-  if (addedText.length() > myBuffer.getCyclicBufferSize() / 10 || myInSpareTimeUpdate) {
-    if (!myInSpareTimeUpdate) {
+  if (addedText.length() > myBuffer.getCyclicBufferSize() / 10 || myTooMuchOfOutput) {
+    if (!myTooMuchOfOutput) {
       final int lastProcessedOffset=Math.max(0,myEditor.getDocument().getTextLength() - addedText.length() - 1);
-      lastProcessedOutput=document.createRangeMarker(lastProcessedOffset,lastProcessedOffset);
-      myInSpareTimeUpdate=true;
+      final RangeMarker lastProcessedOutput=document.createRangeMarker(lastProcessedOffset,lastProcessedOffset);
+      myTooMuchOfOutput=true;
       final EditorNotificationPanel comp=new EditorNotificationPanel().text("Too much output to process").icon(AllIcons.General.ExclMark);
       add(comp,BorderLayout.NORTH);
       performWhenNoDeferredOutput(new Runnable(){
         @Override public void run(){
-          remove(comp);
-          add(processAllOutputLinkLabel,BorderLayout.NORTH);
+          try {
+            final int startLine=lastProcessedOutput.isValid() ? myEditor.getDocument().getLineNumber(lastProcessedOutput.getEndOffset()) : 0;
+            final boolean oldUpdateFoldingsEnabled=myUpdateFoldingsEnabled;
+            myUpdateFoldingsEnabled=false;
+            highlightHyperlinksAndFoldings(startLine,myEditor.getDocument().getLineCount() - 1);
+            myUpdateFoldingsEnabled=oldUpdateFoldingsEnabled;
+          }
+  finally {
+            myTooMuchOfOutput=false;
+            remove(comp);
+          }
         }
       }
 );
