@@ -101,7 +101,8 @@ synchronized (LOCK) {
     }
   }
   myPsiDisposedCheck.performCheck();
-  if (addedText.length() > myBuffer.getCyclicBufferSize() / 100 || myTooMuchOfOutput) {
+  myLastAddedTextLength=addedText.length();
+  if (myLastAddedTextLength > myBuffer.getCyclicBufferSize() / 50 || myTooMuchOfOutput) {
     if (!myTooMuchOfOutput) {
       final int lastProcessedOffset=Math.max(0,myEditor.getDocument().getTextLength() - addedText.length() - 1);
       final RangeMarker lastProcessedOutput=document.createRangeMarker(lastProcessedOffset,lastProcessedOffset);
@@ -110,16 +111,21 @@ synchronized (LOCK) {
       add(comp,BorderLayout.NORTH);
       performWhenNoDeferredOutput(new Runnable(){
         @Override public void run(){
-          try {
-            final int startLine=lastProcessedOutput.isValid() ? myEditor.getDocument().getLineNumber(lastProcessedOutput.getEndOffset()) : 0;
-            final boolean oldUpdateFoldingsEnabled=myUpdateFoldingsEnabled;
-            myUpdateFoldingsEnabled=false;
-            highlightHyperlinksAndFoldings(startLine,myEditor.getDocument().getLineCount() - 1);
-            myUpdateFoldingsEnabled=oldUpdateFoldingsEnabled;
-          }
+          if (myLastAddedTextLength < myBuffer.getCyclicBufferSize() / 50) {
+            try {
+              final int startLine=lastProcessedOutput.isValid() ? myEditor.getDocument().getLineNumber(lastProcessedOutput.getEndOffset()) : 0;
+              final boolean oldUpdateFoldingsEnabled=myUpdateFoldingsEnabled;
+              myUpdateFoldingsEnabled=false;
+              highlightHyperlinksAndFoldings(startLine,myEditor.getDocument().getLineCount() - 1);
+              myUpdateFoldingsEnabled=oldUpdateFoldingsEnabled;
+            }
   finally {
-            myTooMuchOfOutput=false;
-            remove(comp);
+              myTooMuchOfOutput=false;
+              remove(comp);
+            }
+          }
+ else {
+            performLaterWhenNoDeferredOutput(this);
           }
         }
       }
