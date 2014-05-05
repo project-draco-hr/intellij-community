@@ -5,7 +5,7 @@
   myNoCopyJarDir=!runningFromDist ? null : new File(PathManager.getHomePath());
   bus.connect().subscribe(VirtualFileManager.VFS_CHANGES,new BulkFileListener.Adapter(){
     @Override public void after(    @NotNull List<? extends VFileEvent> events){
-      List<VirtualFile> rootsToRefresh=new ArrayList<VirtualFile>();
+      List<VirtualFile> rootsToRefresh=ContainerUtil.newSmartList();
       for (      VFileEvent event : events) {
         if (event.getFileSystem() instanceof LocalFileSystem) {
           String path=event.getPath();
@@ -28,6 +28,13 @@ synchronized (LOCK) {
         }
       }
       if (!rootsToRefresh.isEmpty()) {
+        List<String> pathsToReset=ContainerUtil.newArrayListWithCapacity(rootsToRefresh.size());
+        for (        VirtualFile root : rootsToRefresh) {
+          String rootPath=root.getPath();
+          String jarPath=rootPath.substring(0,rootPath.length() - 2);
+          pathsToReset.add(FileUtil.toSystemDependentName(jarPath));
+        }
+        ZipFileCache.reset(pathsToReset);
         boolean async=!ApplicationManager.getApplication().isUnitTestMode();
         RefreshQueue.getInstance().refresh(async,true,null,rootsToRefresh);
       }
