@@ -8,14 +8,10 @@
     return;
   }
   if (clear) {
-    final DocumentEx document;
+    final DocumentEx document=editor.getDocument();
 synchronized (LOCK) {
-      myHyperlinks.clearHyperlinks();
       myTokens.clear();
-      editor.getMarkupModel().removeAllHighlighters();
-      document=editor.getDocument();
-      myFoldingAlarm.cancelAllRequests();
-      cancelHeavyAlarm();
+      clearHyperlinkAndFoldings();
     }
     final int documentTextLength=document.getTextLength();
     if (documentTextLength > 0) {
@@ -37,13 +33,13 @@ synchronized (LOCK) {
 ,null,DocCommandGroupId.noneGroupId(document));
     }
   }
-  final String text;
+  final String addedText;
   final Collection<ConsoleViewContentType> contentTypes;
   int deferredTokensSize;
 synchronized (LOCK) {
     if (myOutputPaused)     return;
     if (myBuffer.isEmpty())     return;
-    text=myBuffer.getText();
+    addedText=myBuffer.getText();
     contentTypes=Collections.unmodifiableCollection(new HashSet<ConsoleViewContentType>(myBuffer.getDeferredTokenTypes()));
     List<TokenInfo> deferredTokens=myBuffer.getDeferredTokens();
     for (    TokenInfo deferredToken : deferredTokens) {
@@ -54,12 +50,8 @@ synchronized (LOCK) {
     cancelHeavyAlarm();
   }
   final Document document=myEditor.getDocument();
-  final int oldLineCount=document.getLineCount();
+  final RangeMarker lastProcessedOutput=document.createRangeMarker(document.getTextLength(),document.getTextLength());
   final boolean isAtEndOfDocument=myEditor.getCaretModel().getOffset() == document.getTextLength();
-  boolean cycleUsed=myBuffer.isUseCyclicBuffer() && document.getTextLength() + text.length() > myBuffer.getCyclicBufferSize();
-  if (cycleUsed) {
-    clearHyperlinkAndFoldings();
-  }
   CommandProcessor.getInstance().executeCommand(myProject,new Runnable(){
     @Override public void run(){
       int offset=myEditor.getCaretModel().getOffset();
@@ -69,7 +61,7 @@ synchronized (LOCK) {
       }
       try {
         myInDocumentUpdate=true;
-        String[] strings=text.split("\\r");
+        String[] strings=addedText.split("\\r");
         for (int i=0; i < strings.length - 1; i++) {
           document.insertString(document.getTextLength(),strings[i]);
           int lastLine=document.getLineCount() - 1;
@@ -107,29 +99,34 @@ synchronized (LOCK) {
     }
   }
   myPsiDisposedCheck.performCheck();
-  final int newLineCount=document.getLineCount();
-  if (cycleUsed) {
-    if (!myInSpareTimeUpdate) {
-      myInSpareTimeUpdate=true;
+  myLastAddedTextLength=addedText.length();
+  if (!myTooMuchOfOutput) {
+    if (isTheAmountOfTextTooBig(myLastAddedTextLength)) {
+      myTooMuchOfOutput=true;
       final EditorNotificationPanel comp=new EditorNotificationPanel().text("Too much output to process").icon(AllIcons.General.ExclMark);
       add(comp,BorderLayout.NORTH);
       performWhenNoDeferredOutput(new Runnable(){
         @Override public void run(){
-          try {
-            clearHyperlinkAndFoldings();
-            highlightHyperlinksAndFoldings(0,document.getLineCount() - 1);
-          }
+          if (!isTheAmountOfTextTooBig(myLastAddedTextLength)) {
+            try {
+              highlightHyperlinksAndFoldings(lastProcessedOutput);
+            }
   finally {
-            myInSpareTimeUpdate=false;
-            remove(comp);
+              myTooMuchOfOutput=false;
+              remove(comp);
+            }
+          }
+ else {
+            myLastAddedTextLength=0;
+            performLaterWhenNoDeferredOutput(this);
           }
         }
       }
 );
     }
-  }
- else   if (oldLineCount < newLineCount) {
-    highlightHyperlinksAndFoldings(oldLineCount - 1,newLineCount - 1);
+ else {
+      highlightHyperlinksAndFoldings(lastProcessedOutput);
+    }
   }
   if (isAtEndOfDocument) {
     EditorUtil.scrollToTheEnd(myEditor);
