@@ -1,0 +1,33 @@
+{
+  File[] pathsToCommit=ArrayUtil.toObjectArray(paths,File.class);
+  boolean keepLocks=myVcs.getSvnConfiguration().isKeepLocks();
+  SVNCommitPacket[] commitPackets=null;
+  SVNCommitInfo[] results;
+  SVNCommitClient committer=myVcs.createCommitClient();
+  IdeaCommitHandler handler=new IdeaCommitHandler(ProgressManager.getInstance().getProgressIndicator(),true,true);
+  committer.setEventHandler(handler);
+  try {
+    commitPackets=committer.doCollectCommitItems(pathsToCommit,keepLocks,true,SVNDepth.EMPTY,true,null);
+    results=committer.doCommit(commitPackets,keepLocks,comment);
+    commitPackets=null;
+  }
+ catch (  SVNException e) {
+    throw new SvnBindException(e);
+  }
+ finally {
+    if (commitPackets != null) {
+      for (      SVNCommitPacket commitPacket : commitPackets) {
+        try {
+          commitPacket.dispose();
+        }
+ catch (        SVNException e) {
+          LOG.info(e);
+        }
+      }
+    }
+  }
+  for (  VirtualFile f : handler.getDeletedFiles()) {
+    f.putUserData(VirtualFile.REQUESTOR_MARKER,this);
+  }
+  return results;
+}
