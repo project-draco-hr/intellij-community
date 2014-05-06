@@ -1,0 +1,67 @@
+{
+  try {
+    final StackFrameDescriptorImpl stackDescriptor=myDescriptor;
+    final StackFrameProxyImpl frame=getStackFrameProxy();
+    final EvaluationContextImpl evaluationContext=debuggerContext.createEvaluationContext();
+    if (!debuggerContext.isEvaluationPossible()) {
+    }
+    final Location location=frame.location();
+    final ObjectReference thisObjectReference=frame.thisObject();
+    if (thisObjectReference != null) {
+      ValueDescriptorImpl thisDescriptor=myNodeManager.getThisDescriptor(stackDescriptor,thisObjectReference);
+      children.add(new JavaValue(thisDescriptor,evaluationContext,myNodeManager));
+    }
+ else {
+      StaticDescriptorImpl staticDecriptor=myNodeManager.getStaticDescriptor(stackDescriptor,location.method().declaringType());
+      children.addTopGroup(new JavaStaticGroup(staticDecriptor,evaluationContext,myNodeManager));
+    }
+    final ClassRenderer classRenderer=NodeRendererSettings.getInstance().getClassRenderer();
+    if (classRenderer.SHOW_VAL_FIELDS_AS_LOCAL_VARIABLES) {
+      if (thisObjectReference != null && evaluationContext.getDebugProcess().getVirtualMachineProxy().canGetSyntheticAttribute()) {
+        final ReferenceType thisRefType=thisObjectReference.referenceType();
+        if (thisRefType instanceof ClassType && thisRefType.equals(location.declaringType()) && thisRefType.name().contains("$")) {
+          final ClassType clsType=(ClassType)thisRefType;
+          final DebugProcessImpl debugProcess=debuggerContext.getDebugProcess();
+          final VirtualMachineProxyImpl vm=debugProcess.getVirtualMachineProxy();
+          for (          Field field : clsType.fields()) {
+            if ((!vm.canGetSyntheticAttribute() || field.isSynthetic()) && StringUtil.startsWith(field.name(),FieldDescriptorImpl.OUTER_LOCAL_VAR_FIELD_PREFIX)) {
+              final FieldDescriptorImpl fieldDescriptor=myNodeManager.getFieldDescriptor(stackDescriptor,thisObjectReference,field);
+              children.add(new JavaValue(fieldDescriptor,evaluationContext,myNodeManager));
+            }
+          }
+        }
+      }
+    }
+    try {
+      buildVariables(debuggerContext,evaluationContext,children);
+    }
+ catch (    EvaluateException e) {
+    }
+    final Pair<Method,Value> methodValuePair=debuggerContext.getDebugProcess().getLastExecutedMethod();
+    if (methodValuePair != null) {
+      ValueDescriptorImpl returnValueDescriptor=myNodeManager.getMethodReturnValueDescriptor(stackDescriptor,methodValuePair.getFirst(),methodValuePair.getSecond());
+      children.add(new JavaValue(returnValueDescriptor,evaluationContext,myNodeManager));
+    }
+    for (    Pair<Breakpoint,Event> pair : DebuggerUtilsEx.getEventDescriptors(debuggerContext.getSuspendContext())) {
+      final Event debugEvent=pair.getSecond();
+      if (debugEvent instanceof ExceptionEvent) {
+        final ObjectReference exception=((ExceptionEvent)debugEvent).exception();
+        if (exception != null) {
+          final ValueDescriptorImpl exceptionDescriptor=myNodeManager.getThrownExceptionObjectDescriptor(stackDescriptor,exception);
+          children.add(new JavaValue(exceptionDescriptor,evaluationContext,myNodeManager));
+        }
+      }
+    }
+  }
+ catch (  EvaluateException e) {
+  }
+catch (  InvalidStackFrameException e) {
+  }
+catch (  InternalException e) {
+    if (e.errorCode() == 35) {
+    }
+ else {
+      throw e;
+    }
+  }
+}
