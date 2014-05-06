@@ -4,22 +4,32 @@
 synchronized (myLock) {
       map=SoftReference.dereference(myRelPathsToEntries);
       if (map == null) {
-        JarFile zip=getJar();
-        if (zip != null) {
+        if (myCorruptedJar) {
+          map=Collections.emptyMap();
+        }
+ else {
           LogUtil.debug(LOG,"mapping %s",myBasePath);
           map=new THashMap<String,EntryInfo>();
           map.put("",new EntryInfo(null,"",true,DEFAULT_LENGTH,DEFAULT_TIMESTAMP));
-          Enumeration<? extends JarFile.JarEntry> entries=zip.entries();
-          while (entries.hasMoreElements()) {
-            JarFile.JarEntry entry=entries.nextElement();
-            if (entry == null)             break;
-            getOrCreate(entry,map,zip);
+          try {
+            ZipFile zip=getZipFile();
+            try {
+              Enumeration<? extends ZipEntry> entries=zip.entries();
+              while (entries.hasMoreElements()) {
+                getOrCreate(entries.nextElement(),map,zip);
+              }
+            }
+  finally {
+              ZipFileCache.release(zip);
+            }
           }
-          myRelPathsToEntries=new SoftReference<Map<String,EntryInfo>>(Collections.unmodifiableMap(map));
+ catch (          IOException e) {
+            myCorruptedJar=true;
+            LOG.warn(e.getMessage() + ": " + myBasePath,e);
+            map=Collections.emptyMap();
+          }
         }
- else {
-          map=Collections.emptyMap();
-        }
+        myRelPathsToEntries=new SoftReference<Map<String,EntryInfo>>(Collections.unmodifiableMap(map));
       }
     }
   }
