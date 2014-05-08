@@ -1,0 +1,27 @@
+{
+  checkSubscription();
+  String rootPath=vfs.extractRootPath(entryFile.getPath());
+  ArchiveHandler handler;
+  boolean refresh=false;
+synchronized (ourLock) {
+    Pair<ArchiveFileSystem,ArchiveHandler> record=ourHandlers.get(rootPath);
+    if (record == null) {
+      handler=producer.fun(rootPath);
+      record=Pair.create(vfs,handler);
+      ourHandlers.put(rootPath,record);
+      refresh=true;
+    }
+    handler=record.second;
+  }
+  if (refresh) {
+    final File file=handler.getFile();
+    ApplicationManager.getApplication().invokeLater(new Runnable(){
+      @Override public void run(){
+        LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file);
+      }
+    }
+,ModalityState.defaultModalityState());
+  }
+  @SuppressWarnings("unchecked") T t=(T)handler;
+  return t;
+}
