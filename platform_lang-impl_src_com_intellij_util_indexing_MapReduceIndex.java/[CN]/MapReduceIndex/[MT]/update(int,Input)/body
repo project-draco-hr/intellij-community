@@ -1,25 +1,48 @@
 {
-  final Map<Key,Value> data=content != null ? myIndexer.map(content) : Collections.<Key,Value>emptyMap();
+  final boolean weProcessPhysicalContent=content == null || (content instanceof FileContent && ((FileContent)content).getUserData(FileBasedIndexImpl.ourPhysicalContentKey) != null);
+  Map<Key,Value> data=null;
+  boolean havePersistentData=false;
+  Integer hashId=null;
+  if (myContents != null && weProcessPhysicalContent && content != null) {
+    try {
+      hashId=getHashOfContent((FileContent)content);
+      if (doReadSavedPersistentData) {
+        ByteSequence bytes=myContents.get(hashId);
+        if (bytes != null) {
+          data=deserializeSavedPersistentData(bytes);
+          havePersistentData=true;
+        }
+      }
+ else {
+        havePersistentData=myContents.containsMapping(hashId);
+      }
+    }
+ catch (    IOException ex) {
+      throw new RuntimeException(ex);
+    }
+  }
+  if (data == null)   data=content != null ? myIndexer.map(content) : Collections.<Key,Value>emptyMap();
+  if (hashId != null && !havePersistentData && data.size() > 0) {
+    savePersistentData(data,hashId);
+  }
   ProgressManager.checkCanceled();
   final NotNullComputable<Collection<Key>> oldKeysGetter;
   final int savedInputId;
-  boolean weProcessPhysicalContent=content == null || (content instanceof FileContent && ((FileContent)content).getUserData(FileBasedIndexImpl.ourPhysicalContentKey) != null);
   if (myHasSnapshotMapping && weProcessPhysicalContent) {
     try {
-      final Integer hashId=myInputsSnapshotMapping.get(inputId);
-      final Collection<Key> keys=hashId != null ? mySnapshotMapping.get(hashId) : null;
       oldKeysGetter=new NotNullComputable<Collection<Key>>(){
         @NotNull @Override public Collection<Key> compute(){
           try {
             Integer currentHashId=myInputsSnapshotMapping.get(inputId);
             Collection<Key> currentKeys;
-            if ((currentHashId == null && hashId == null) || (currentHashId != null && currentHashId.equals(hashId))) {
-              currentKeys=keys;
+            if (currentHashId != null) {
+              ByteSequence byteSequence=myContents.get(currentHashId);
+              currentKeys=byteSequence != null ? deserializeSavedPersistentData(byteSequence).keySet() : Collections.<Key>emptyList();
             }
  else {
-              currentKeys=currentHashId != null ? mySnapshotMapping.get(currentHashId) : null;
+              currentKeys=Collections.emptyList();
             }
-            return currentKeys == null ? Collections.<Key>emptyList() : currentKeys;
+            return currentKeys;
           }
  catch (          IOException e) {
             throw new RuntimeException(e);
@@ -28,22 +51,7 @@
       }
 ;
       if (content instanceof FileContent) {
-        FileContent fileContent=(FileContent)content;
-        Integer previouslyCalculatedContentHashId=fileContent.getUserData(ourSavedContentHashIdKey);
-        if (previouslyCalculatedContentHashId == null) {
-          byte[] hash=fileContent instanceof FileContentImpl ? ((FileContentImpl)fileContent).getHash() : null;
-          if (hash == null) {
-            previouslyCalculatedContentHashId=ContentHashesSupport.calcContentHashIdWithFileType(fileContent.getContent(),fileContent.getFileType());
-          }
- else {
-            previouslyCalculatedContentHashId=ContentHashesSupport.enumerateHash(hash);
-          }
-          fileContent.putUserData(ourSavedContentHashIdKey,previouslyCalculatedContentHashId);
-        }
-        savedInputId=previouslyCalculatedContentHashId;
-        if (!mySnapshotMapping.containsMapping(savedInputId)) {
-          mySnapshotMapping.put(savedInputId,data.keySet());
-        }
+        savedInputId=getHashOfContent((FileContent)content);
       }
  else {
         savedInputId=NULL_MAPPING;
@@ -68,13 +76,14 @@
 ;
     savedInputId=inputId;
   }
+  final Map<Key,Value> finalData=data;
   return new Computable<Boolean>(){
     @Override public Boolean compute(){
       final Ref<StorageException> exRef=new Ref<StorageException>(null);
       ProgressManager.getInstance().executeNonCancelableSection(new Runnable(){
         @Override public void run(){
           try {
-            updateWithMap(inputId,savedInputId,data,oldKeysGetter);
+            updateWithMap(inputId,savedInputId,finalData,oldKeysGetter);
           }
  catch (          StorageException ex) {
             exRef.set(ex);
