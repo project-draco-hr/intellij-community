@@ -2,26 +2,40 @@
   final Collection<PsiClass> classes=JavaShortClassNameIndex.getInstance().get(name,myManager.getProject(),scope);
   if (classes.isEmpty())   return PsiClass.EMPTY_ARRAY;
   ArrayList<PsiClass> list=new ArrayList<PsiClass>(classes.size());
+  Map<String,List<PsiClass>> uniqueQName2Classes=new THashMap<String,List<PsiClass>>(classes.size());
+  Set<PsiClass> hiddenClassesToRemove=null;
   OuterLoop:   for (  PsiClass aClass : classes) {
     VirtualFile vFile=aClass.getContainingFile().getVirtualFile();
     if (!scope.contains(vFile))     continue;
-    for (int j=0; j < list.size(); j++) {
-      PsiClass aClass1=list.get(j);
-      String qName=aClass.getQualifiedName();
-      String qName1=aClass1.getQualifiedName();
-      if (qName != null && qName1 != null && qName.equals(qName1)) {
-        VirtualFile vFile1=aClass1.getContainingFile().getVirtualFile();
-        int res=scope.compare(vFile1,vFile);
-        if (res > 0) {
-          continue OuterLoop;
-        }
- else         if (res < 0) {
-          list.remove(j);
-          j--;
+    String qName=aClass.getQualifiedName();
+    if (qName != null) {
+      List<PsiClass> previousQNamedClasses=uniqueQName2Classes.get(qName);
+      List<PsiClass> qNamedClasses;
+      if (previousQNamedClasses != null) {
+        qNamedClasses=new SmartList<PsiClass>();
+        for (        PsiClass previousClass : previousQNamedClasses) {
+          VirtualFile previousClassVFile=previousClass.getContainingFile().getVirtualFile();
+          int res=scope.compare(previousClassVFile,vFile);
+          if (res > 0) {
+            continue OuterLoop;
+          }
+ else           if (res < 0) {
+            if (hiddenClassesToRemove == null)             hiddenClassesToRemove=new THashSet<PsiClass>();
+            hiddenClassesToRemove.add(previousClass);
+            qNamedClasses.add(aClass);
+          }
+ else {
+            qNamedClasses.add(aClass);
+          }
         }
       }
+ else {
+        qNamedClasses=new SmartList<PsiClass>(aClass);
+      }
+      uniqueQName2Classes.put(qName,qNamedClasses);
     }
     list.add(aClass);
   }
+  if (hiddenClassesToRemove != null)   list.removeAll(hiddenClassesToRemove);
   return list.toArray(new PsiClass[list.size()]);
 }
