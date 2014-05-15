@@ -1,0 +1,46 @@
+{
+  GroovyCompletionData.addGroovyDocKeywords(parameters,result);
+  PsiElement position=parameters.getPosition();
+  if (psiElement().inside(false,psiElement(PsiComment.class)).accepts(position)) {
+    return;
+  }
+  GroovyCompletionData.addGroovyKeywords(parameters,result);
+  addUnfinishedMethodTypeParameters(position,result);
+  suggestVariableNames(position,result);
+  GrReferenceElement reference=findGroovyReference(position);
+  if (reference == null) {
+    if (parameters.getInvocationCount() >= 2) {
+      result.stopHere();
+      addAllClasses(parameters,result.withPrefixMatcher(CompletionUtil.findJavaIdentifierPrefix(parameters)),new InheritorsHolder(parameters.getPosition(),result));
+    }
+    return;
+  }
+  if (reference.getParent() instanceof GrImportStatement && reference.getQualifier() != null) {
+    result.addElement(LookupElementBuilder.create("*"));
+  }
+  InheritorsHolder inheritors=new InheritorsHolder(position,result);
+  if (GroovySmartCompletionContributor.AFTER_NEW.accepts(position)) {
+    GroovySmartCompletionContributor.generateInheritorVariants(parameters,result.getPrefixMatcher(),inheritors);
+  }
+  Runnable addSlowVariants=completeReference(parameters,reference,inheritors,result.getPrefixMatcher(),new Consumer<LookupElement>(){
+    @Override public void consume(    LookupElement lookupElement){
+      result.addElement(lookupElement);
+    }
+  }
+);
+  if (reference.getQualifier() == null) {
+    if (!GroovySmartCompletionContributor.AFTER_NEW.accepts(position)) {
+      GroovySmartCompletionContributor.addExpectedClassMembers(parameters,result);
+    }
+    if (isClassNamePossible(position) && JavaCompletionContributor.mayStartClassName(result)) {
+      result.stopHere();
+      if (parameters.getInvocationCount() >= 2) {
+        addAllClasses(parameters,result,inheritors);
+      }
+ else {
+        JavaCompletionContributor.advertiseSecondCompletion(position.getProject(),result);
+      }
+    }
+  }
+  addSlowVariants.run();
+}
