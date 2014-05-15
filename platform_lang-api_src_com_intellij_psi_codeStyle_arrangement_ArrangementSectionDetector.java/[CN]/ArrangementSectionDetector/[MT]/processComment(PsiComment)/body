@@ -3,14 +3,19 @@
   final TextRange expandedRange=myDocument == null ? range : ArrangementUtil.expandToLineIfPossible(range,myDocument);
   final TextRange sectionTextRange=new TextRange(expandedRange.getStartOffset(),expandedRange.getEndOffset());
   final String commentText=comment.getText().trim();
-  final boolean start=isSectionStartComment(mySettings,commentText);
-  String lastOpenedSection=myOpenedSections.isEmpty() ? null : myOpenedSections.peek();
-  if (start) {
+  final ArrangementSectionRule openSectionRule=isSectionStartComment(mySettings,commentText);
+  if (openSectionRule != null) {
     mySectionEntryProducer.consume(new ArrangementSectionEntryTemplate(comment,START_SECTION,sectionTextRange,commentText));
-    myOpenedSections.push(commentText);
+    myOpenedSections.push(openSectionRule);
+    return true;
   }
- else   if (lastOpenedSection != null && isSectionEndComment(mySettings,commentText)) {
-    mySectionEntryProducer.consume(new ArrangementSectionEntryTemplate(comment,END_SECTION,sectionTextRange,commentText));
-    myOpenedSections.pop();
+  if (!myOpenedSections.isEmpty()) {
+    final ArrangementSectionRule lastSection=myOpenedSections.peek();
+    if (lastSection.getEndComment() != null && StringUtil.equals(commentText,lastSection.getEndComment())) {
+      mySectionEntryProducer.consume(new ArrangementSectionEntryTemplate(comment,END_SECTION,sectionTextRange,commentText));
+      myOpenedSections.pop();
+      return true;
+    }
   }
+  return false;
 }
