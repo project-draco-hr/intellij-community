@@ -1,0 +1,65 @@
+{
+  super(session);
+  myJavaSession=javaSession;
+  myEditorsProvider=new JavaDebuggerEditorsProvider();
+  DebugProcessImpl process=javaSession.getProcess();
+  List<XBreakpointHandler> handlers=new ArrayList<XBreakpointHandler>();
+  handlers.add(new JavaBreakpointHandler.JavaLineBreakpointHandler(process));
+  handlers.add(new JavaBreakpointHandler.JavaExceptionBreakpointHandler(process));
+  handlers.add(new JavaBreakpointHandler.JavaFieldBreakpointHandler(process));
+  handlers.add(new JavaBreakpointHandler.JavaMethodBreakpointHandler(process));
+  handlers.add(new JavaBreakpointHandler.JavaWildcardBreakpointHandler(process));
+  for (  JavaBreakpointHandlerFactory factory : Extensions.getExtensions(JavaBreakpointHandlerFactory.EP_NAME)) {
+    handlers.add(factory.createHandler(process));
+  }
+  myBreakpointHandlers=handlers.toArray(new XBreakpointHandler[handlers.size()]);
+  process.addDebugProcessListener(new DebugProcessAdapter(){
+    @Override public void paused(    final SuspendContext suspendContext){
+      SuspendContextImpl context=(SuspendContextImpl)suspendContext;
+      context.initExecutionStacks();
+      List<Pair<Breakpoint,Event>> descriptors=DebuggerUtilsEx.getEventDescriptors(context);
+      if (!descriptors.isEmpty()) {
+        Breakpoint breakpoint=descriptors.get(0).getFirst();
+        XBreakpoint xBreakpoint=breakpoint.getXBreakpoint();
+        if (xBreakpoint != null) {
+          getSession().breakpointReached(xBreakpoint,null,context);
+          return;
+        }
+      }
+      getSession().positionReached(context);
+    }
+  }
+);
+  myNodeManager=new NodeManagerImpl(session.getProject(),null){
+    @Override public DebuggerTreeNodeImpl createNode(    final NodeDescriptor descriptor,    EvaluationContext evaluationContext){
+      ((NodeDescriptorImpl)descriptor).setContext((EvaluationContextImpl)evaluationContext);
+      final DebuggerTreeNodeImpl node=new DebuggerTreeNodeImpl(null,descriptor);
+      ((NodeDescriptorImpl)descriptor).updateRepresentation((EvaluationContextImpl)evaluationContext,DescriptorLabelListener.DUMMY_LISTENER);
+      return node;
+    }
+    @Override public DebuggerTreeNodeImpl createMessageNode(    MessageDescriptor descriptor){
+      return new DebuggerTreeNodeImpl(null,descriptor);
+    }
+  }
+;
+  session.addSessionListener(new XDebugSessionAdapter(){
+    @Override public void beforeSessionResume(){
+      myJavaSession.getProcess().getManagerThread().schedule(new DebuggerCommandImpl(){
+        @Override protected void action() throws Exception {
+          myNodeManager.setHistoryByContext(getDebuggerStateManager().getContext());
+        }
+        @Override public Priority getPriority(){
+          return Priority.NORMAL;
+        }
+      }
+);
+    }
+    @Override public void stackFrameChanged(){
+      XStackFrame frame=session.getCurrentStackFrame();
+      if (frame instanceof JavaStackFrame) {
+        DebuggerContextUtil.setStackFrame(javaSession.getContextManager(),((JavaStackFrame)frame).getStackFrameProxy());
+      }
+    }
+  }
+);
+}
