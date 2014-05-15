@@ -1,34 +1,29 @@
 {
-  File canonicalSkeleton=null;
-  File canonicalUserSkeletonsDir=null;
+  final Ref<File> canonicalSkeleton=Ref.create();
+  final Ref<File> canonicalUserSkeletonsDir=Ref.create();
   try {
     if (skeletonsPath != null) {
-      canonicalSkeleton=new File(skeletonsPath).getCanonicalFile();
+      canonicalSkeleton.set(new File(skeletonsPath).getCanonicalFile());
     }
     final VirtualFile userSkeletonsDir=PyUserSkeletonsUtil.getUserSkeletonsDirectory();
     if (userSkeletonsDir != null) {
-      canonicalUserSkeletonsDir=new File(userSkeletonsDir.getPath());
+      canonicalUserSkeletonsDir.set(new File(userSkeletonsDir.getPath()));
     }
   }
  catch (  final IOException e) {
     LOG.error("Error getting real paths",e);
   }
   final VirtualFile[] classDirs=sdk.getRootProvider().getFiles(OrderRootType.CLASSES);
-  final StringBuilder builder=new StringBuilder("");
-  int countAddedPaths=0;
-  for (  final VirtualFile file : classDirs) {
-    if (countAddedPaths > 0) {
-      builder.append(File.pathSeparator);
-    }
-    if (file.isInLocalFileSystem()) {
-      final File canonicalFile=new File(file.getPath());
-      if (canonicalFile.exists() && !canonicalFile.equals(canonicalSkeleton) && !canonicalFile.equals(canonicalUserSkeletonsDir)) {
-        final String pathname=file.getPath();
-        builder.append(pathname);
-        countAddedPaths+=1;
+  return Joiner.on(File.pathSeparator).join(ContainerUtil.mapNotNull(classDirs,new com.intellij.util.Function<VirtualFile,Object>(){
+    @Override public Object fun(    VirtualFile file){
+      if (file.isInLocalFileSystem()) {
+        final File canonicalFile=new File(file.getPath());
+        if (canonicalFile.exists() && !FileUtil.filesEqual(canonicalFile,canonicalSkeleton.get()) && !FileUtil.filesEqual(canonicalFile,canonicalUserSkeletonsDir.get())) {
+          return file.getPath();
+        }
       }
+      return null;
     }
   }
-  builder.append("");
-  return builder.toString();
+));
 }
