@@ -1,26 +1,32 @@
 {
   final Map<VirtualFile,VcsLogProvider> logProviders=findLogProviders();
-  final VcsLogContainer mainPanel=new VcsLogContainer(myProject);
-  myLogDataHolder=new VcsLogDataHolder(myProject,this,logProviders,mySettings);
-  myLogDataHolder.initialize(new PairConsumer<VcsLogDataHolder,DataPack>(){
-    @Override public void consume(    VcsLogDataHolder vcsLogDataHolder,    DataPack dataPack){
-      VcsLogUiImpl logUI=new VcsLogUiImpl(vcsLogDataHolder,myProject,mySettings,new VcsLogColorManagerImpl(logProviders.keySet()),myUiProperties,dataPack);
-      myLogDataHolder=vcsLogDataHolder;
-      myUi=logUI;
-      mainPanel.init(logUI.getMainFrame().getMainComponent());
-      final VcsLogGraphTable graphTable=logUI.getTable();
-      if (graphTable.getRowCount() > 0) {
-        IdeFocusManager.getInstance(myProject).requestFocus(graphTable,true).doWhenProcessed(new Runnable(){
-          @Override public void run(){
-            graphTable.setRowSelectionInterval(0,0);
+  Consumer<DataPack> dataPackUpdateHandler=new Consumer<DataPack>(){
+    @Override public void consume(    final DataPack dataPack){
+      UIUtil.invokeAndWaitIfNeeded(new Runnable(){
+        @Override public void run(){
+          if (!Disposer.isDisposed(myUi)) {
+            myUi.setDataPack(dataPack);
+            myProject.getMessageBus().syncPublisher(VcsLogDataHolder.REFRESH_COMPLETED).refresh(dataPack);
           }
         }
-);
       }
-      myLogRefresher=new PostponeableLogRefresher(myProject,vcsLogDataHolder);
-      refreshLogOnVcsEvents(logProviders);
+);
     }
   }
+;
+  VcsLogDataHolder logDataHolder=new VcsLogDataHolder(myProject,this,logProviders,mySettings,dataPackUpdateHandler);
+  myUi=new VcsLogUiImpl(logDataHolder,myProject,mySettings,new VcsLogColorManagerImpl(logProviders.keySet()),myUiProperties,EmptyDataPack.getInstance());
+  myLogRefresher=new PostponeableLogRefresher(myProject,logDataHolder);
+  refreshLogOnVcsEvents(logProviders);
+  logDataHolder.initialize();
+  final VcsLogGraphTable graphTable=myUi.getTable();
+  if (graphTable.getRowCount() > 0) {
+    IdeFocusManager.getInstance(myProject).requestFocus(graphTable,true).doWhenProcessed(new Runnable(){
+      @Override public void run(){
+        graphTable.setRowSelectionInterval(0,0);
+      }
+    }
 );
-  return mainPanel;
+  }
+  return myUi.getMainFrame().getMainComponent();
 }
