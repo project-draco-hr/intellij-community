@@ -1,0 +1,38 @@
+{
+  Map<MethodSignature,PsiMethod> abstracts=ContainerUtil.newLinkedHashMap();
+  Map<MethodSignature,PsiMethod> finals=ContainerUtil.newLinkedHashMap();
+  Map<MethodSignature,PsiMethod> concretes=ContainerUtil.newLinkedHashMap();
+  PsiUtilCore.ensureValid(aClass);
+  Collection<HierarchicalMethodSignature> allMethodSignatures=aClass.getVisibleSignatures();
+  PsiResolveHelper resolveHelper=JavaPsiFacade.getInstance(aClass.getProject()).getResolveHelper();
+  for (  HierarchicalMethodSignature signature : allMethodSignatures) {
+    PsiMethod method=signature.getMethod();
+    if (method instanceof GrTraitMethod) {
+      for (      HierarchicalMethodSignature superSignature : signature.getSuperSignatures()) {
+        processMethod(aClass,skipImplemented,abstracts,finals,concretes,resolveHelper,superSignature,superSignature.getMethod());
+      }
+    }
+ else {
+      processMethod(aClass,skipImplemented,abstracts,finals,concretes,resolveHelper,signature,method);
+    }
+  }
+  final Map<MethodSignature,CandidateInfo> result=new TreeMap<MethodSignature,CandidateInfo>(new OverrideImplementExploreUtil.MethodSignatureComparator());
+  if (toImplement || aClass.isInterface()) {
+    collectMethodsToImplement(aClass,abstracts,finals,concretes,result);
+  }
+ else {
+    for (    Map.Entry<MethodSignature,PsiMethod> entry : concretes.entrySet()) {
+      MethodSignature signature=entry.getKey();
+      PsiMethod concrete=entry.getValue();
+      if (finals.get(signature) == null) {
+        PsiMethod abstractOne=abstracts.get(signature);
+        if (abstractOne == null || !abstractOne.getContainingClass().isInheritor(concrete.getContainingClass(),true) || CommonClassNames.JAVA_LANG_OBJECT.equals(concrete.getContainingClass().getQualifiedName())) {
+          PsiSubstitutor subst=OverrideImplementExploreUtil.correctSubstitutor(concrete,signature.getSubstitutor());
+          CandidateInfo info=new CandidateInfo(concrete,subst);
+          result.put(signature,info);
+        }
+      }
+    }
+  }
+  return result;
+}
