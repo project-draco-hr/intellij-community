@@ -1,0 +1,50 @@
+{
+  final PsiJavaCodeReferenceElement nameRef=annotation.getNameReferenceElement();
+  if (nameRef == null) {
+    return true;
+  }
+  final PsiClass aClass=(PsiClass)nameRef.resolve();
+  if (aClass == null || !aClass.isAnnotationType()) {
+    return true;
+  }
+  final Set<String> names=new HashSet<String>();
+  final PsiAnnotationParameterList annotationParameterList=annotation.getParameterList();
+  if (PsiUtilCore.hasErrorElementChild(annotationParameterList)) {
+    return true;
+  }
+  final PsiNameValuePair[] attributes=annotationParameterList.getAttributes();
+  for (  PsiNameValuePair attribute : attributes) {
+    final PsiReference reference=attribute.getReference();
+    if (reference == null) {
+      return true;
+    }
+    final PsiMethod method=(PsiMethod)reference.resolve();
+    if (method == null) {
+      return true;
+    }
+    final PsiAnnotationMemberValue value=attribute.getValue();
+    if (value == null || PsiUtilCore.hasErrorElementChild(value)) {
+      return true;
+    }
+    if (value instanceof PsiAnnotation && containsError((PsiAnnotation)value)) {
+      return true;
+    }
+    if (!hasCorrectType(value,method.getReturnType())) {
+      return true;
+    }
+    final String name=attribute.getName();
+    if (!names.add(name != null ? name : PsiAnnotation.DEFAULT_REFERENCED_METHOD_NAME)) {
+      return true;
+    }
+  }
+  for (  PsiMethod method : aClass.getMethods()) {
+    if (!(method instanceof PsiAnnotationMethod)) {
+      continue;
+    }
+    final PsiAnnotationMethod annotationMethod=(PsiAnnotationMethod)method;
+    if (annotationMethod.getDefaultValue() == null && !names.contains(annotationMethod.getName())) {
+      return true;
+    }
+  }
+  return false;
+}
