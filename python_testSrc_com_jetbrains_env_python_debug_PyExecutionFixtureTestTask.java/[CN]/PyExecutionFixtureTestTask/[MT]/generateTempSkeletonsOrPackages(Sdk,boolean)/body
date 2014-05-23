@@ -1,7 +1,7 @@
 {
-  final Project project=fixture.getProject();
-  ModuleRootModificationUtil.setModuleSdk(fixture.getModule(),sdk);
-  edt(new Runnable(){
+  final Project project=myFixture.getProject();
+  ModuleRootModificationUtil.setModuleSdk(myFixture.getModule(),sdk);
+  UsefulTestCase.edt(new Runnable(){
     @Override public void run(){
       ApplicationManager.getApplication().runWriteAction(new Runnable(){
         @Override public void run(){
@@ -14,15 +14,24 @@
 );
   final SdkModificator modificator=sdk.getSdkModificator();
   modificator.removeRoots(OrderRootType.CLASSES);
-  for (  String path : PythonSdkType.getSysPathsFromScript(sdk.getHomePath())) {
+  for (  final String path : PythonSdkType.getSysPathsFromScript(sdk.getHomePath())) {
     PythonSdkType.addSdkRoot(modificator,path);
   }
-  final File tempDir=FileUtil.createTempDirectory(getTestName(false),null);
+  if (!addSkeletons) {
+    UsefulTestCase.edt(new Runnable(){
+      @Override public void run(){
+        modificator.commitChanges();
+      }
+    }
+);
+    return;
+  }
+  final File tempDir=FileUtil.createTempDirectory(getClass().getName(),null);
   final File skeletonsDir=new File(tempDir,PythonSdkType.SKELETON_DIR_NAME);
   FileUtil.createDirectory(skeletonsDir);
   final String skeletonsPath=skeletonsDir.toString();
   PythonSdkType.addSdkRoot(modificator,skeletonsPath);
-  edt(new Runnable(){
+  UsefulTestCase.edt(new Runnable(){
     @Override public void run(){
       modificator.commitChanges();
     }
@@ -31,5 +40,5 @@
   final SkeletonVersionChecker checker=new SkeletonVersionChecker(0);
   final PySkeletonRefresher refresher=new PySkeletonRefresher(project,null,sdk,skeletonsPath,null,null);
   final List<String> errors=refresher.regenerateSkeletons(checker,null);
-  assertEmpty(errors);
+  Assert.assertThat("Errors found",errors,Matchers.empty());
 }
