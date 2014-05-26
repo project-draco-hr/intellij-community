@@ -1,0 +1,91 @@
+{
+  int stateIndex=state.index;
+  Conf conf=state.conf;
+  int insnIndex=conf.insnIndex;
+  List<Conf> history=state.history;
+  boolean taken=state.taken;
+  Frame<BasicValue> frame=conf.frame;
+  AbstractInsnNode insnNode=methodNode.instructions.get(insnIndex);
+  List<Conf> nextHistory=dfsTree.loopEnters.contains(insnIndex) ? append(history,conf) : history;
+  boolean hasCompanions=state.hasCompanions;
+  execute(frame,insnNode);
+  boolean notEmptySubResult=subResult != Identity;
+  if (subResult == NPE) {
+    results.put(stateIndex,NPE);
+    computed.put(insnIndex,append(computed.get(insnIndex),state));
+    return;
+  }
+  int opcode=insnNode.getOpcode();
+switch (opcode) {
+case ARETURN:
+case IRETURN:
+case LRETURN:
+case FRETURN:
+case DRETURN:
+case RETURN:
+    if (!hasCompanions) {
+      earlyResult=Return;
+    }
+ else {
+      results.put(stateIndex,Return);
+      computed.put(insnIndex,append(computed.get(insnIndex),state));
+    }
+  return;
+default :
+}
+if (opcode == ATHROW) {
+if (taken) {
+  results.put(stateIndex,NPE);
+}
+ else {
+  results.put(stateIndex,Identity);
+}
+computed.put(insnIndex,append(computed.get(insnIndex),state));
+return;
+}
+if (opcode == IFNONNULL && popValue(frame) instanceof ParamValue) {
+int nextInsnIndex=insnIndex + 1;
+State nextState=new State(++id,new Conf(nextInsnIndex,nextFrame),nextHistory,true,hasCompanions || notEmptySubResult);
+pending.push(new MakeResult<PResult>(state,subResult,Collections.singletonList(nextState.index)));
+pending.push(new ProceedState<PResult>(nextState));
+return;
+}
+if (opcode == IFNULL && popValue(frame) instanceof ParamValue) {
+int nextInsnIndex=methodNode.instructions.indexOf(((JumpInsnNode)insnNode).label);
+State nextState=new State(++id,new Conf(nextInsnIndex,nextFrame),nextHistory,true,hasCompanions || notEmptySubResult);
+pending.push(new MakeResult<PResult>(state,subResult,Collections.singletonList(nextState.index)));
+pending.push(new ProceedState<PResult>(nextState));
+return;
+}
+if (opcode == IFEQ && popValue(frame) == InstanceOfCheckValue) {
+int nextInsnIndex=methodNode.instructions.indexOf(((JumpInsnNode)insnNode).label);
+State nextState=new State(++id,new Conf(nextInsnIndex,nextFrame),nextHistory,true,hasCompanions || notEmptySubResult);
+pending.push(new MakeResult<PResult>(state,subResult,Collections.singletonList(nextState.index)));
+pending.push(new ProceedState<PResult>(nextState));
+return;
+}
+if (opcode == IFNE && popValue(frame) == InstanceOfCheckValue) {
+int nextInsnIndex=insnIndex + 1;
+State nextState=new State(++id,new Conf(nextInsnIndex,nextFrame),nextHistory,true,hasCompanions || notEmptySubResult);
+pending.push(new MakeResult<PResult>(state,subResult,Collections.singletonList(nextState.index)));
+pending.push(new ProceedState<PResult>(nextState));
+return;
+}
+List<Integer> nextInsnIndices=controlFlow.transitions[insnIndex];
+List<State> nextStates=new ArrayList<State>();
+List<Integer> subIndices=new ArrayList<Integer>();
+for (int nextInsnIndex : nextInsnIndices) {
+Frame<BasicValue> nextFrame1=nextFrame;
+if (controlFlow.errorTransitions.contains(new Edge(insnIndex,nextInsnIndex))) {
+  nextFrame1=new Frame<BasicValue>(frame);
+  nextFrame1.clearStack();
+  nextFrame1.push(new BasicValue(Type.getType("java/lang/Throwable")));
+}
+nextStates.add(new State(++id,new Conf(nextInsnIndex,nextFrame1),nextHistory,taken,hasCompanions || notEmptySubResult));
+subIndices.add(id);
+}
+pending.push(new MakeResult<PResult>(state,subResult,subIndices));
+for (State nextState : nextStates) {
+pending.push(new ProceedState<PResult>(nextState));
+}
+}
