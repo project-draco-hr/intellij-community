@@ -1,28 +1,20 @@
 {
-  final List<String> cmdLine=new LinkedList<String>();
   PassReceiver passReceiver=new PassReceiver(myProject,forceAuthorization,myState);
   SocketServer passServer=new SocketServer(passReceiver);
   try {
     int passPort=passServer.start();
-    cmdLine.add("--config");
-    cmdLine.add("extensions.hg4ideapromptextension=" + myVcs.getPromptHooksExtensionFile().getAbsolutePath());
-    cmdLine.add("--config");
-    cmdLine.add("hg4ideapass.port=" + passPort);
+    HgCommandResult result=super.executeInCurrentThread(repo,operation,prepareArguments(arguments,passPort));
+    if (!HgErrorUtil.isAuthorizationError(result)) {
+      passReceiver.saveCredentials();
+    }
+    return result;
   }
  catch (  IOException e) {
     showError(e);
     LOG.info("IOException during preparing command",e);
-    passServer.stop();
     return null;
   }
-  if (arguments != null && arguments.size() != 0) {
-    cmdLine.addAll(arguments);
+ finally {
+    passServer.stop();
   }
-  HgCommandResult result;
-  result=super.executeInCurrentThread(repo,operation,cmdLine);
-  if (!HgErrorUtil.isAuthorizationError(result)) {
-    passReceiver.saveCredentials();
-  }
-  passServer.stop();
-  return result;
 }
