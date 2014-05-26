@@ -1,0 +1,43 @@
+{
+  if (lType == null || rType == null)   return false;
+  if (rType == PsiType.NULL) {
+    return !(lType instanceof PsiPrimitiveType);
+  }
+  PsiManager manager=context.getManager();
+  GlobalSearchScope scope=context.getResolveScope();
+  if (rType instanceof GrTupleType && ((GrTupleType)rType).getComponentTypes().length == 0) {
+    if (lType instanceof PsiArrayType || InheritanceUtil.isInheritor(lType,CommonClassNames.JAVA_UTIL_LIST) || InheritanceUtil.isInheritor(lType,CommonClassNames.JAVA_UTIL_SET)) {
+      return true;
+    }
+  }
+  if (rType instanceof GrTraitType) {
+    if (isAssignableWithoutConversions(lType,((GrTraitType)rType).getExprType(),context))     return true;
+    for (    PsiClassType trait : ((GrTraitType)rType).getTraitTypes()) {
+      if (isAssignableWithoutConversions(lType,trait,context))       return true;
+    }
+    return false;
+  }
+  if (isClassType(rType,GroovyCommonClassNames.GROOVY_LANG_GSTRING) && lType.equalsToText(CommonClassNames.JAVA_LANG_STRING)) {
+    return true;
+  }
+  if (isNumericType(lType) && isNumericType(rType)) {
+    lType=unboxPrimitiveTypeWrapper(lType);
+    if (isClassType(lType,GroovyCommonClassNames.JAVA_MATH_BIG_DECIMAL))     lType=PsiType.DOUBLE;
+    rType=unboxPrimitiveTypeWrapper(rType);
+    if (isClassType(rType,GroovyCommonClassNames.JAVA_MATH_BIG_DECIMAL))     rType=PsiType.DOUBLE;
+  }
+ else {
+    rType=boxPrimitiveType(rType,manager,scope);
+    lType=boxPrimitiveType(lType,manager,scope);
+  }
+  if (rType instanceof GrMapType || rType instanceof GrTupleType) {
+    Boolean result=isAssignableForNativeTypes(lType,(PsiClassType)rType,context);
+    if (result != null && result.booleanValue())     return true;
+  }
+  if (rType instanceof GrClosureType) {
+    if (canMakeClosureRaw(lType)) {
+      rType=((GrClosureType)rType).rawType();
+    }
+  }
+  return TypeConversionUtil.isAssignable(lType,rType);
+}
