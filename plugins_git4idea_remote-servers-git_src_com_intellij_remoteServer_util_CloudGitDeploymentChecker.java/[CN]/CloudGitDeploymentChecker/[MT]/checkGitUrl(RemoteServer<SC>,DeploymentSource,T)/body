@@ -1,0 +1,49 @@
+{
+  if (!(deploymentSource instanceof ModuleDeploymentSource)) {
+    return;
+  }
+  ModuleDeploymentSource moduleSource=(ModuleDeploymentSource)deploymentSource;
+  Module module=moduleSource.getModule();
+  if (module == null) {
+    return;
+  }
+  File contentRootFile=deploymentSource.getFile();
+  if (contentRootFile == null) {
+    return;
+  }
+  final Project project=module.getProject();
+  VirtualFile contentRoot=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(contentRootFile);
+  if (contentRoot == null) {
+    return;
+  }
+  GitRepository repository=GitUtil.getRepositoryManager(project).getRepositoryForRoot(contentRoot);
+  if (repository == null) {
+    return;
+  }
+  String expectedName=settings.getDeploymentSourceName(deploymentSource);
+  List<String> appNames=myDetector.collectApplicationNames(repository);
+  if (appNames.isEmpty() || appNames.contains(expectedName)) {
+    return;
+  }
+  RuntimeConfigurationWarning warning=new RuntimeConfigurationWarning("Cloud Git URL found in repository, but it doesn't match the run configuration");
+  warning.setQuickFix(new Runnable(){
+    @Override public void run(){
+      CloudGitApplication application=new CloudConnectionTask<CloudGitApplication,SC,T,SR>(project,"Searching for application",server){
+        @Override protected CloudGitApplication run(        SR serverRuntime) throws ServerRuntimeException {
+          CloudGitDeploymentRuntime deploymentRuntime=(CloudGitDeploymentRuntime)serverRuntime.createDeploymentRuntime(deploymentSource,settings,project);
+          return deploymentRuntime.findApplication4Repository();
+        }
+      }
+.performSync();
+      if (application == null) {
+        Messages.showErrorDialog(project,"No application matching repository URL(s) found in account",server.getName());
+      }
+ else {
+        settings.setDefaultDeploymentName(false);
+        settings.setDeploymentName(application.getName());
+      }
+    }
+  }
+);
+  throw warning;
+}
