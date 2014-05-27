@@ -1,0 +1,39 @@
+{
+  final PsiExpression[] args=instruction.getArgs();
+  PsiMethod method=instruction.getTargetMethod();
+  boolean varargCall=instruction.isVarArgCall();
+  DfaValue[] argValues;
+  if (method == null || instruction.getContracts().isEmpty()) {
+    argValues=null;
+  }
+ else {
+    int paramCount=method.getParameterList().getParametersCount();
+    if (paramCount == args.length || method.isVarArgs() && args.length >= paramCount - 1) {
+      argValues=new DfaValue[paramCount];
+      if (varargCall) {
+        argValues[paramCount - 1]=DfaUnknownValue.getInstance();
+      }
+    }
+ else {
+      argValues=null;
+    }
+  }
+  for (int i=0; i < args.length; i++) {
+    final DfaValue arg=memState.pop();
+    int paramIndex=args.length - i - 1;
+    if (argValues != null && (paramIndex < args.length - 1 || !varargCall)) {
+      argValues[paramIndex]=arg;
+    }
+    PsiExpression expr=args[paramIndex];
+    Nullness requiredNullability=instruction.getArgRequiredNullability(expr);
+    if (requiredNullability == Nullness.NOT_NULL) {
+      if (!checkNotNullable(memState,arg,NullabilityProblem.passingNullableToNotNullParameter,expr)) {
+        forceNotNull(runner,memState,arg);
+      }
+    }
+ else     if (requiredNullability == Nullness.UNKNOWN) {
+      checkNotNullable(memState,arg,NullabilityProblem.passingNullableArgumentToNonAnnotatedParameter,expr);
+    }
+  }
+  return argValues;
+}
