@@ -1,0 +1,39 @@
+{
+  DfaConstValue.Factory constFactory=factory.getConstFactory();
+  List<DfaMemoryState> falseStates=ContainerUtil.newArrayList();
+  for (int i=0; i < argValues.length; i++) {
+    List<DfaMemoryState> nextStates=ContainerUtil.newArrayList();
+    DfaValue argValue=argValues[i];
+    MethodContract.ValueConstraint constraint=contract.arguments[i];
+    DfaConstValue expectedValue=constraint == NULL_VALUE || constraint == NOT_NULL_VALUE ? constFactory.getNull() : constraint == FALSE_VALUE ? constFactory.getFalse() : constraint == TRUE_VALUE ? constFactory.getTrue() : null;
+    if (expectedValue == null)     continue;
+    boolean invertCondition=constraint == NOT_NULL_VALUE;
+    DfaValue condition=factory.getRelationFactory().createRelation(argValue,expectedValue,EQEQ,invertCondition);
+    if (condition == null) {
+      if (!(argValue instanceof DfaConstValue))       continue;
+      condition=constFactory.createFromValue(argValue == expectedValue,PsiType.BOOLEAN,null);
+    }
+    for (    DfaMemoryState state : states) {
+      boolean unknownVsNull=expectedValue == constFactory.getNull() && argValue instanceof DfaVariableValue && ((DfaMemoryStateImpl)state).getVariableState((DfaVariableValue)argValue).getNullability() == Nullness.UNKNOWN;
+      DfaMemoryState falseCopy=state.createCopy();
+      if (state.applyCondition(condition)) {
+        if (unknownVsNull && !invertCondition) {
+          state.markEphemeral();
+        }
+        nextStates.add(state);
+      }
+      if (falseCopy.applyCondition(condition.createNegated())) {
+        if (unknownVsNull && invertCondition) {
+          falseCopy.markEphemeral();
+        }
+        falseStates.add(falseCopy);
+      }
+    }
+    states=nextStates;
+  }
+  for (  DfaMemoryState state : states) {
+    state.push(getDfaContractReturnValue(contract,instruction,factory));
+    finalStates.add(state);
+  }
+  return falseStates;
+}

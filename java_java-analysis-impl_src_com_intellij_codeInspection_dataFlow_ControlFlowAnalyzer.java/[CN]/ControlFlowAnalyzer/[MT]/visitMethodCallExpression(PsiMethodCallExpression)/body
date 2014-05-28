@@ -1,9 +1,5 @@
 {
   startElement(expression);
-  if (handleContracts(expression,getCallContracts(expression))) {
-    finishElement(expression);
-    return;
-  }
   PsiReferenceExpression methodExpression=expression.getMethodExpression();
   PsiExpression qualifierExpression=methodExpression.getQualifierExpression();
   if (qualifierExpression != null) {
@@ -29,7 +25,17 @@
     }
   }
   addConditionalRuntimeThrow();
-  addInstruction(new MethodCallInstruction(expression,createChainedVariableValue(expression)));
+  List<MethodContract> contracts=getCallContracts(expression);
+  addInstruction(new MethodCallInstruction(expression,createChainedVariableValue(expression),contracts));
+  if (!contracts.isEmpty()) {
+    addInstruction(new DupInstruction());
+    addInstruction(new PushInstruction(myFactory.getConstFactory().getContractFail(),null));
+    addInstruction(new BinopInstruction(JavaTokenType.EQEQ,null,expression.getProject()));
+    ConditionalGotoInstruction ifNotFail=new ConditionalGotoInstruction(null,true,null);
+    addInstruction(ifNotFail);
+    returnCheckingFinally();
+    ifNotFail.setOffset(myCurrentFlow.getInstructionCount());
+  }
   if (!myCatchStack.isEmpty()) {
     addMethodThrows(expression.resolveMethod());
   }
