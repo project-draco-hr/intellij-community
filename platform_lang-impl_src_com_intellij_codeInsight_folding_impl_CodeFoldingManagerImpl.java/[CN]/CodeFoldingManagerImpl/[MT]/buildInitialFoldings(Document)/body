@@ -1,0 +1,29 @@
+{
+  if (myProject.isDisposed()) {
+    return null;
+  }
+  ApplicationManager.getApplication().assertReadAccessAllowed();
+  final PsiFile file=PsiDocumentManager.getInstance(myProject).getPsiFile(document);
+  if (file == null || !file.isValid() || !file.getViewProvider().isPhysical() && !ApplicationManager.getApplication().isUnitTestMode()) {
+    return null;
+  }
+  PsiDocumentManager.getInstance(myProject).commitDocument(document);
+  final FoldingUpdate.FoldingMap foldingMap=FoldingUpdate.getFoldingsFor(myProject,file,document,true);
+  return new CodeFoldingState(){
+    @Override public void setToEditor(    @NotNull final Editor editor){
+      ApplicationManagerEx.getApplicationEx().assertIsDispatchThread();
+      if (myProject.isDisposed() || editor.isDisposed())       return;
+      final FoldingModelEx foldingModel=(FoldingModelEx)editor.getFoldingModel();
+      if (!foldingModel.isFoldingEnabled())       return;
+      if (isFoldingsInitializedInEditor(editor))       return;
+      foldingModel.runBatchFoldingOperationDoNotCollapseCaret(new Runnable(){
+        @Override public void run(){
+          new UpdateFoldRegionsOperation(myProject,editor,file,foldingMap,true,false).run();
+        }
+      }
+);
+      initFolding(editor);
+    }
+  }
+;
+}
