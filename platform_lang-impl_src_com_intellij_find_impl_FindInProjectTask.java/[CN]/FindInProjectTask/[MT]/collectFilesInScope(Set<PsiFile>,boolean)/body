@@ -6,12 +6,13 @@ class EnumContentIterator implements ContentIterator {
     final Set<PsiFile> myFiles=new LinkedHashSet<PsiFile>();
     @Override public boolean processFile(    @NotNull final VirtualFile virtualFile){
       ApplicationManager.getApplication().runReadAction(new Runnable(){
+        final boolean hasTrigrams=hasTrigrams(myFindModel.getStringToFind());
         @Override public void run(){
           ProgressManager.checkCanceled();
           if (virtualFile.isDirectory() || !virtualFile.isValid() || !myFileMask.value(virtualFile)|| globalCustomScope != null && !globalCustomScope.contains(virtualFile)) {
             return;
           }
-          if (skipIndexed && isCoveredByIdIndex(virtualFile) && (fileIndex.isInContent(virtualFile) || fileIndex.isInLibraryClasses(virtualFile) || fileIndex.isInLibrarySource(virtualFile))) {
+          if (skipIndexed && isCoveredByIndex(virtualFile) && (fileIndex.isInContent(virtualFile) || fileIndex.isInLibraryClasses(virtualFile) || fileIndex.isInLibrarySource(virtualFile))) {
             return;
           }
           PsiFile psiFile=myPsiManager.findFile(virtualFile);
@@ -20,6 +21,14 @@ class EnumContentIterator implements ContentIterator {
             if (sourceFile != null)             psiFile=sourceFile;
             myFiles.add(psiFile);
           }
+        }
+        final FileBasedIndexImpl fileBasedIndex=(FileBasedIndexImpl)FileBasedIndex.getInstance();
+        private boolean isCoveredByIndex(        VirtualFile file){
+          FileType fileType=file.getFileType();
+          if (hasTrigrams) {
+            return TrigramIndex.isIndexable(fileType) && fileBasedIndex.isIndexingCandidate(file,TrigramIndex.INDEX_ID);
+          }
+          return IdIndex.isIndexable(fileType) && fileBasedIndex.isIndexingCandidate(file,IdIndex.NAME);
         }
       }
 );
