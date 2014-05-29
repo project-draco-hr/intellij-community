@@ -3,23 +3,25 @@
   if (!isTestMode() && application.isHeadlessEnvironment()) {
     throw new MasterPasswordUnavailableException("The provider is not available in headless environment");
   }
-  if (key.get().get() == null) {
+  final Ref<byte[]> result=Ref.create(key.get().get());
+  if (result.isNull()) {
     if (isPasswordEncrypted()) {
       try {
-        String s=decryptPassword(database.getPasswordInfo());
-        setMasterPassword(s);
+        setMasterPassword(decryptPassword(database.getPasswordInfo()));
+        result.set(key.get().get());
       }
  catch (      PasswordSafeException e) {
       }
     }
-    if (key.get().get() == null) {
+    if (result.isNull()) {
       final Ref<PasswordSafeException> ex=new Ref<PasswordSafeException>();
       if (application.holdsReadLock()) {
         throw new IllegalStateException("Access from read action is not allowed, because it might lead to a deadlock.");
       }
       application.invokeAndWait(new Runnable(){
         public void run(){
-          if (key.get().get() == null) {
+          result.set(key.get().get());
+          if (result.isNull()) {
             try {
               if (isTestMode()) {
                 throw new MasterPasswordUnavailableException("Master password must be specified in test mode.");
@@ -31,6 +33,7 @@
               }
  else {
                 MasterPasswordDialog.askPassword(project,MasterKeyPasswordSafe.this,requestor);
+                result.set(key.get().get());
               }
             }
  catch (            PasswordSafeException e) {
@@ -48,5 +51,5 @@ catch (            Exception e) {
       }
     }
   }
-  return key.get().get();
+  return result.get();
 }
