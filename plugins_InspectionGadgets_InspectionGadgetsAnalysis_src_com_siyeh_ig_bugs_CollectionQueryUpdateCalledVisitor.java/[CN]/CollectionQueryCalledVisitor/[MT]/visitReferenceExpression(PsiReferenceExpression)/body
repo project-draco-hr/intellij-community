@@ -1,0 +1,42 @@
+{
+  super.visitReferenceExpression(expression);
+  final PsiElement parent=ParenthesesUtils.getParentSkipParentheses(expression);
+  if (!(parent instanceof PsiExpressionList)) {
+    return;
+  }
+  final PsiExpressionList expressionList=(PsiExpressionList)parent;
+  final PsiElement grandParent=expressionList.getParent();
+  if (!(grandParent instanceof PsiMethodCallExpression)) {
+    return;
+  }
+  final PsiMethodCallExpression methodCallExpression=(PsiMethodCallExpression)grandParent;
+  final PsiReferenceExpression methodExpression=methodCallExpression.getMethodExpression();
+  final String name=methodExpression.getReferenceName();
+  if (COLLECTIONS_QUERIES.contains(name) || COLLECTIONS_TRANSFORMS.contains(name)) {
+    if (methodCallExpression.getParent() instanceof PsiExpressionStatement) {
+      return;
+    }
+  }
+ else   if ("addAll".equals(name) || "copy".equals(name) || "fill".equals(name)|| "replaceAll".equals(name)) {
+    final PsiExpression[] arguments=expressionList.getExpressions();
+    if (arguments.length < 2 || PsiTreeUtil.isAncestor(arguments[0],expression,false)) {
+      return;
+    }
+  }
+ else {
+    return;
+  }
+  final PsiMethod method=methodCallExpression.resolveMethod();
+  if (method == null) {
+    return;
+  }
+  final PsiClass aClass=method.getContainingClass();
+  if (aClass == null) {
+    return;
+  }
+  final String qualifiedName=aClass.getQualifiedName();
+  if (!"java.util.Collections".equals(qualifiedName)) {
+    return;
+  }
+  checkExpression(expression);
+}
