@@ -1,0 +1,30 @@
+{
+  final PsiExpression expression=(PsiExpression)aClass.getParent();
+  final PsiType psiType=PsiTypesUtil.getExpectedTypeByParent(expression);
+  if (psiType != null) {
+    return psiType;
+  }
+  PsiExpression topExpr=expression;
+  while (topExpr.getParent() instanceof PsiParenthesizedExpression) {
+    topExpr=(PsiExpression)topExpr.getParent();
+  }
+  final PsiElement parent=topExpr.getParent();
+  if (parent instanceof PsiExpressionList) {
+    PsiExpressionList expressionList=(PsiExpressionList)parent;
+    final PsiElement callExpr=expressionList.getParent();
+    if (callExpr instanceof PsiCallExpression) {
+      final JavaResolveResult result=((PsiCallExpression)callExpr).resolveMethodGenerics();
+      if (result instanceof MethodCandidateInfo) {
+        final PsiMethod method=((MethodCandidateInfo)result).getElement();
+        PsiExpression[] expressions=expressionList.getExpressions();
+        int i=ArrayUtilRt.find(expressions,topExpr);
+        if (i < 0)         return null;
+        expressions[i]=null;
+        final PsiParameter[] parameters=method.getParameterList().getParameters();
+        final PsiSubstitutor substitutor=PsiResolveHelper.SERVICE.getInstance(aClass.getProject()).inferTypeArguments(method.getTypeParameters(),parameters,expressions,((MethodCandidateInfo)result).getSiteSubstitutor(),callExpr.getParent(),DefaultParameterTypeInferencePolicy.INSTANCE);
+        return substitutor.substitute(parameters[i].getType());
+      }
+    }
+  }
+  return null;
+}
