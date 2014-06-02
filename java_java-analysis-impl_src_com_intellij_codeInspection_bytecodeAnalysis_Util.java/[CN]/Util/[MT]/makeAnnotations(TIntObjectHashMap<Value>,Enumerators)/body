@@ -1,0 +1,47 @@
+{
+  MostlySingularMultiMap<String,AnnotationData> annotations=new MostlySingularMultiMap<String,AnnotationData>();
+  HashMap<String,StringBuilder> contracts=new HashMap<String,StringBuilder>();
+  TIntObjectIterator<Value> iterator=internalIdSolutions.iterator();
+  for (int i=internalIdSolutions.size(); i-- > 0; ) {
+    iterator.advance();
+    int inKey=iterator.key();
+    Value value=iterator.value();
+    if (value == Value.Top || value == Value.Bot) {
+      continue;
+    }
+    InternalKey key=null;
+    try {
+      String s=enumerators.internalKeyEnumerator.valueOf(inKey);
+      key=readInternalKey(s);
+    }
+ catch (    IOException e) {
+      throw new RuntimeException(e);
+    }
+    if (key != null) {
+      Direction direction=key.dir;
+      String baseAnnKey=key.annotationKey;
+      if (direction instanceof In && value == Value.NotNull) {
+        String annKey=baseAnnKey + " " + ((In)direction).paramIndex;
+        annotations.add(annKey,new AnnotationData("org.jetbrains.annotations.NotNull",""));
+      }
+ else       if (direction instanceof Out && value == Value.NotNull) {
+        annotations.add(baseAnnKey,new AnnotationData("org.jetbrains.annotations.NotNull",""));
+      }
+ else       if (direction instanceof InOut) {
+        StringBuilder sb=contracts.get(baseAnnKey);
+        if (sb == null) {
+          sb=new StringBuilder("\"");
+          contracts.put(baseAnnKey,sb);
+        }
+ else {
+          sb.append(';');
+        }
+        contractElement(sb,calculateArity(baseAnnKey),(InOut)direction,value);
+      }
+    }
+  }
+  for (  Map.Entry<String,StringBuilder> contract : contracts.entrySet()) {
+    annotations.add(contract.getKey(),new AnnotationData("org.jetbrains.annotations.Contract",contract.getValue().append('"').toString()));
+  }
+  return annotations;
+}
