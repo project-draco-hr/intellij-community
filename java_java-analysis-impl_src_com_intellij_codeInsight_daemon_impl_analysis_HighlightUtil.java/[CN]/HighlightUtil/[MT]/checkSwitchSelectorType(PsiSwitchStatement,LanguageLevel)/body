@@ -1,0 +1,32 @@
+{
+  PsiExpression expression=statement.getExpression();
+  if (expression == null)   return null;
+  PsiType type=expression.getType();
+  if (type == null)   return null;
+  SelectorKind kind=getSwitchSelectorKind(type);
+  if (kind == SelectorKind.INT)   return null;
+  LanguageLevel requiredLevel=null;
+  if (kind == SelectorKind.ENUM)   requiredLevel=LanguageLevel.JDK_1_5;
+  if (kind == SelectorKind.STRING)   requiredLevel=LanguageLevel.JDK_1_7;
+  if (kind == null || requiredLevel != null && !level.isAtLeast(requiredLevel)) {
+    boolean is7=level.isAtLeast(LanguageLevel.JDK_1_7);
+    String expected=JavaErrorMessages.message(is7 ? "valid.switch.17.selector.types" : "valid.switch.selector.types");
+    String message=JavaErrorMessages.message("incompatible.types",expected,JavaHighlightUtil.formatType(type));
+    HighlightInfo info=HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(expression).descriptionAndTooltip(message).create();
+    QuickFixAction.registerQuickFixAction(info,QUICK_FIX_FACTORY.createConvertSwitchToIfIntention(statement));
+    if (PsiType.LONG.equals(type) || PsiType.FLOAT.equals(type) || PsiType.DOUBLE.equals(type)) {
+      QuickFixAction.registerQuickFixAction(info,QUICK_FIX_FACTORY.createAddTypeCastFix(PsiType.INT,expression));
+    }
+    if (requiredLevel != null) {
+      QuickFixAction.registerQuickFixAction(info,QUICK_FIX_FACTORY.createIncreaseLanguageLevelFix(requiredLevel));
+    }
+    return info;
+  }
+  PsiClass member=PsiUtil.resolveClassInClassTypeOnly(type);
+  if (member != null && !PsiUtil.isAccessible(member.getProject(),member,expression,null)) {
+    String className=PsiFormatUtil.formatClass(member,PsiFormatUtilBase.SHOW_NAME | PsiFormatUtilBase.SHOW_FQ_NAME);
+    String message=JavaErrorMessages.message("inaccessible.type",className);
+    return HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(expression).descriptionAndTooltip(message).create();
+  }
+  return null;
+}
