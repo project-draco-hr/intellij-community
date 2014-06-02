@@ -1,60 +1,39 @@
 {
   DaemonCodeAnalyzerEx daemonCodeAnalyzer=DaemonCodeAnalyzerEx.getInstanceEx(myProject);
   daemonCodeAnalyzer.getFileStatusMap().markFileUpToDate(myDocument,getId());
-  myDocumentListener=new DocumentListener(){
-    @Override public void beforeDocumentChange(    DocumentEvent event){
+  final long modificationStampBefore=myDocument.getModificationStamp();
+  Update update=new Update(myFile){
+    @Override public void setRejected(){
+      super.setRejected();
+      doFinish(Collections.<HighlightInfo>emptyList());
     }
-    @Override public void documentChanged(    DocumentEvent event){
-      myDocumentChanged=true;
-    }
-  }
-;
-  myDocument.addDocumentListener(myDocumentListener);
-  final Runnable r=new Runnable(){
     @Override public void run(){
-      if (myDocumentChanged || myProject.isDisposed()) {
-        doFinish();
+      if (documentChanged(modificationStampBefore) || myProject.isDisposed()) {
+        doFinish(Collections.<HighlightInfo>emptyList());
         return;
       }
       doAnnotate();
-      ApplicationManager.getApplication().runReadAction(new Runnable(){
+      if (!ApplicationManagerEx.getApplicationEx().tryRunReadAction(new Runnable(){
         @Override public void run(){
-          if (myDocumentChanged || myProject.isDisposed()) {
-            doFinish();
+          if (documentChanged(modificationStampBefore) || myProject.isDisposed()) {
+            doFinish(Collections.<HighlightInfo>emptyList());
             return;
           }
           collectHighlighters();
           ApplicationManager.getApplication().invokeLater(new Runnable(){
             @Override public void run(){
-              if (myDocumentChanged || myProject.isDisposed()) {
-                doFinish();
-                return;
-              }
-              myDocument.removeDocumentListener(myDocumentListener);
-              final List<HighlightInfo> infos=getHighlights();
-              UpdateHighlightersUtil.setHighlightersToEditor(myProject,myDocument,myStartOffset,myEndOffset,infos,getColorsScheme(),getId());
+              List<HighlightInfo> highlights=documentChanged(modificationStampBefore) || myProject.isDisposed() ? Collections.<HighlightInfo>emptyList() : getHighlights();
+              doFinish(highlights);
             }
           }
 ,ModalityState.stateForComponent(myEditor.getComponent()));
         }
       }
-);
+)) {
+        doFinish(Collections.<HighlightInfo>emptyList());
+      }
     }
   }
 ;
-  if (ApplicationManager.getApplication().isUnitTestMode()) {
-    r.run();
-  }
- else {
-    myExternalToolPassFactory.scheduleExternalActivity(new Update(myFile){
-      @Override public void run(){
-        r.run();
-      }
-      @Override public void setRejected(){
-        super.setRejected();
-        doFinish();
-      }
-    }
-);
-  }
+  myExternalToolPassFactory.scheduleExternalActivity(update);
 }

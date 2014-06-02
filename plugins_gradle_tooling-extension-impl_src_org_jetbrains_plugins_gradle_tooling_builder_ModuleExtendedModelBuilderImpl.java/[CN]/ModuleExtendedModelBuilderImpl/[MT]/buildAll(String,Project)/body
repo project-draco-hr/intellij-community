@@ -2,7 +2,8 @@
   final String moduleName=project.getName();
   final String moduleGroup=project.getGroup().toString();
   final String moduleVersion=project.getVersion().toString();
-  final ModuleExtendedModelImpl moduleVersionModel=new ModuleExtendedModelImpl(moduleName,moduleGroup,moduleVersion);
+  final File buildDir=project.getBuildDir();
+  final ModuleExtendedModelImpl moduleVersionModel=new ModuleExtendedModelImpl(moduleName,moduleGroup,moduleVersion,buildDir);
   final List<File> artifacts=new ArrayList<File>();
   for (  Task task : project.getTasks()) {
     if (task instanceof Jar) {
@@ -30,11 +31,21 @@
       }
     }
   }
+  IdeaCompilerOutputImpl compilerOutput=new IdeaCompilerOutputImpl();
   if (project.hasProperty(SOURCE_SETS_PROPERTY)) {
     Object sourceSets=project.property(SOURCE_SETS_PROPERTY);
     if (sourceSets instanceof SourceSetContainer) {
       SourceSetContainer sourceSetContainer=(SourceSetContainer)sourceSets;
       for (      SourceSet sourceSet : sourceSetContainer) {
+        SourceSetOutput output=sourceSet.getOutput();
+        if (SourceSet.TEST_SOURCE_SET_NAME.equals(sourceSet.getName())) {
+          compilerOutput.setTestClassesDir(output.getClassesDir());
+          compilerOutput.setTestResourcesDir(output.getResourcesDir());
+        }
+        if (SourceSet.MAIN_SOURCE_SET_NAME.equals(sourceSet.getName())) {
+          compilerOutput.setMainClassesDir(output.getClassesDir());
+          compilerOutput.setMainResourcesDir(output.getResourcesDir());
+        }
         for (        File javaSrcDir : sourceSet.getAllJava().getSrcDirs()) {
           boolean isTestDir=isTestDir(sourceSet,testClassesDirs);
           addFilePath(isTestDir ? testDirectories : sourceDirectories,javaSrcDir);
@@ -90,5 +101,6 @@
     contentRoot.addExcludeDirectory(excludeDir);
   }
   moduleVersionModel.setContentRoots(Collections.<ExtIdeaContentRoot>singleton(contentRoot));
+  moduleVersionModel.setCompilerOutput(compilerOutput);
   return moduleVersionModel;
 }

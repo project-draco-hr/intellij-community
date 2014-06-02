@@ -1,0 +1,48 @@
+{
+  final PsiNameValuePair[] addedParameters=myAnnotation.getParameterList().getAttributes();
+  final TObjectIntHashMap<String> annotationsOrderMap=getAnnotationsOrderMap();
+  final SortedSet<Pair<String,PsiAnnotationMemberValue>> newParameters=new TreeSet<Pair<String,PsiAnnotationMemberValue>>(new Comparator<Pair<String,PsiAnnotationMemberValue>>(){
+    @Override public int compare(    final Pair<String,PsiAnnotationMemberValue> o1,    final Pair<String,PsiAnnotationMemberValue> o2){
+      return annotationsOrderMap.get(o1.getFirst()) - annotationsOrderMap.get(o2.getFirst());
+    }
+  }
+);
+  final boolean order=isAlreadyAddedOrdered(annotationsOrderMap,addedParameters);
+  if (order) {
+    if (addedParameters.length != 0) {
+      final PsiAnnotationParameterList parameterList=myAnnotation.getParameterList();
+      parameterList.deleteChildRange(addedParameters[0],addedParameters[addedParameters.length - 1]);
+      for (      final PsiNameValuePair addedParameter : addedParameters) {
+        final String name=addedParameter.getName();
+        final PsiAnnotationMemberValue value=addedParameter.getValue();
+        if (name == null || value == null) {
+          LOG.error(String.format("Invalid annotation parameter name = %s, value = %s",name,value));
+          continue;
+        }
+        newParameters.add(Pair.create(name,value));
+      }
+    }
+  }
+  final PsiExpression nullValue=JavaPsiFacade.getElementFactory(myAnnotation.getProject()).createExpressionFromText(PsiKeyword.NULL,null);
+  for (  final String misssedParameter : myMissedElements) {
+    newParameters.add(Pair.<String,PsiAnnotationMemberValue>create(misssedParameter,nullValue));
+  }
+  TemplateBuilderImpl builder=null;
+  for (  final Pair<String,PsiAnnotationMemberValue> newParameter : newParameters) {
+    final PsiAnnotationMemberValue value=myAnnotation.setDeclaredAttributeValue(newParameter.getFirst(),newParameter.getSecond());
+    if (myMissedElements.contains(newParameter.getFirst())) {
+      if (builder == null) {
+        builder=new TemplateBuilderImpl(myAnnotation.getParameterList());
+      }
+      builder.replaceElement(value,new EmptyExpression(),true);
+    }
+  }
+  editor.getCaretModel().moveToOffset(myAnnotation.getParameterList().getTextRange().getStartOffset());
+  final PsiDocumentManager documentManager=PsiDocumentManager.getInstance(project);
+  final Document document=documentManager.getDocument(file);
+  if (document == null) {
+    throw new IllegalStateException();
+  }
+  documentManager.doPostponedOperationsAndUnblockDocument(document);
+  TemplateManager.getInstance(project).startTemplate(editor,builder.buildInlineTemplate(),null);
+}
