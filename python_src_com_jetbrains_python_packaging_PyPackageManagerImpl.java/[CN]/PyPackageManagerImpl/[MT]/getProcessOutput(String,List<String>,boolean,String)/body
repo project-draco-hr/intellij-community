@@ -7,11 +7,33 @@
   if (sdkData instanceof PyRemoteSdkAdditionalDataBase) {
     RemoteSdkCredentials remoteSdkCredentials;
     try {
-      remoteSdkCredentials=((RemoteSdkAdditionalData)sdkData).getRemoteSdkCredentials();
+      remoteSdkCredentials=((RemoteSdkAdditionalData)sdkData).getRemoteSdkCredentials(false);
     }
  catch (    InterruptedException e) {
       LOG.error(e);
       remoteSdkCredentials=null;
+    }
+catch (    final ExecutionException e) {
+      if (e.getCause() instanceof VagrantNotStartedException) {
+        throw new PyExternalProcessException(ERROR_VAGRANT_NOT_LAUNCHED,helperPath,args,"Vagrant instance is down. <a href=\"" + LAUNCH_VAGRANT + "\">Launch vagrant</a>").withHandler(LAUNCH_VAGRANT,new Runnable(){
+          @Override public void run(){
+            final PythonRemoteInterpreterManager manager=PythonRemoteInterpreterManager.getInstance();
+            if (manager != null) {
+              try {
+                manager.runVagrant(((VagrantNotStartedException)e.getCause()).getVagrantFolder());
+                clearCaches();
+              }
+ catch (              ExecutionException e1) {
+                throw new RuntimeException(e1);
+              }
+            }
+          }
+        }
+);
+      }
+ else {
+        throw new PyExternalProcessException(ERROR_REMOTE_ACCESS,helperPath,args,e.getMessage());
+      }
     }
     final PythonRemoteInterpreterManager manager=PythonRemoteInterpreterManager.getInstance();
     if (manager != null && remoteSdkCredentials != null) {
