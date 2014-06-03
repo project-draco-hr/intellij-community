@@ -1,2 +1,82 @@
 {
+  PsiElement parent=element.getParent();
+  PsiElement elementToBuildTemplate;
+  GrVariable[] variables;
+  if (parent instanceof GrVariable && parent.getParent() instanceof GrVariableDeclaration) {
+    variables=((GrVariableDeclaration)parent.getParent()).getVariables();
+    elementToBuildTemplate=parent.getParent();
+  }
+ else   if (parent instanceof GrVariable && parent.getParent() instanceof GrForInClause) {
+    variables=new GrVariable[]{(GrVariable)parent};
+    elementToBuildTemplate=parent.getParent().getParent();
+  }
+ else   if (parent instanceof GrVariableDeclaration) {
+    variables=((GrVariableDeclaration)parent).getVariables();
+    elementToBuildTemplate=parent;
+  }
+ else   if (parent instanceof GrParameter && parent.getParent() instanceof GrParameterList) {
+    variables=new GrVariable[]{(GrVariable)parent};
+    elementToBuildTemplate=parent.getParent().getParent();
+  }
+ else   if (parent instanceof GrVariable) {
+    variables=new GrVariable[]{((GrVariable)parent)};
+    elementToBuildTemplate=parent;
+  }
+ else {
+    return;
+  }
+  ArrayList<TypeConstraint> types=new ArrayList<TypeConstraint>();
+  if (parent.getParent() instanceof GrForInClause) {
+    types.add(SupertypeConstraint.create(PsiUtil.extractIteratedType((GrForInClause)parent.getParent())));
+  }
+ else {
+    for (    GrVariable variable : variables) {
+      GrExpression initializer=variable.getInitializerGroovy();
+      if (initializer != null) {
+        PsiType type=initializer.getType();
+        if (type != null) {
+          types.add(SupertypeConstraint.create(type));
+        }
+      }
+      if (variable instanceof GrParameter) {
+        final PsiParameter parameter=(PsiParameter)variable;
+        final PsiType type=getClosureParameterType(parameter);
+        if (type != null) {
+          types.add(SupertypeConstraint.create(type));
+        }
+      }
+    }
+  }
+  final String originalText=elementToBuildTemplate.getText();
+  final TypeInfo typeInfo=getOrCreateTypeElement(parent,elementToBuildTemplate);
+  final PsiElement replaceElement=typeInfo.elementToReplace;
+  TypeConstraint[] constraints=types.toArray(new TypeConstraint[types.size()]);
+  ChooseTypeExpression chooseTypeExpression=new ChooseTypeExpression(constraints,element.getManager(),replaceElement.getResolveScope());
+  TemplateBuilderImpl builder=new TemplateBuilderImpl(elementToBuildTemplate);
+  builder.replaceElement(replaceElement,chooseTypeExpression);
+  final Document document=editor.getDocument();
+  final RangeMarker rangeMarker=document.createRangeMarker(elementToBuildTemplate.getTextRange());
+  rangeMarker.setGreedyToRight(true);
+  rangeMarker.setGreedyToLeft(true);
+  final PsiElement afterPostprocess=CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(elementToBuildTemplate);
+  final Template template=builder.buildTemplate();
+  TextRange range=afterPostprocess.getTextRange();
+  document.deleteString(range.getStartOffset(),range.getEndOffset());
+  TemplateManager templateManager=TemplateManager.getInstance(project);
+  templateManager.startTemplate(editor,template,new TemplateEditingAdapter(){
+    @Override public void templateFinished(    Template template,    boolean brokenOff){
+      if (brokenOff) {
+        ApplicationManager.getApplication().runWriteAction(new Runnable(){
+          @Override public void run(){
+            if (rangeMarker.isValid()) {
+              document.replaceString(rangeMarker.getStartOffset(),rangeMarker.getEndOffset(),originalText);
+              editor.getCaretModel().moveToOffset(rangeMarker.getStartOffset() + typeInfo.originalOffset);
+            }
+          }
+        }
+);
+      }
+    }
+  }
+);
 }
