@@ -1,0 +1,60 @@
+{
+  final AntBuildMessageView messageView;
+  final GeneralCommandLine commandLine;
+  final Project project=buildFile.getProject();
+  try {
+    FileDocumentManager.getInstance().saveAllDocuments();
+    final AntCommandLineBuilder builder=new AntCommandLineBuilder();
+    builder.setBuildFile(buildFile.getAllOptions(),VfsUtilCore.virtualToIoFile(buildFile.getVirtualFile()));
+    builder.calculateProperties(dataContext,additionalProperties);
+    builder.addTargets(targets);
+    builder.getCommandLine().setCharset(EncodingProjectManager.getInstance(buildFile.getProject()).getDefaultCharset());
+    messageView=prepareMessageView(buildMessageViewToReuse,buildFile,targets);
+    commandLine=CommandLineBuilder.createFromJavaParameters(builder.getCommandLine());
+    messageView.setBuildCommandLine(commandLine.getCommandLineString());
+  }
+ catch (  RunCanceledException e) {
+    e.showMessage(project,AntBundle.message("run.ant.error.dialog.title"));
+    antBuildListener.buildFinished(AntBuildListener.FAILED_TO_RUN,0);
+    return null;
+  }
+catch (  CantRunException e) {
+    ExecutionErrorDialog.show(e,AntBundle.message("cant.run.ant.error.dialog.title"),project);
+    antBuildListener.buildFinished(AntBuildListener.FAILED_TO_RUN,0);
+    return null;
+  }
+catch (  Macro.ExecutionCancelledException e) {
+    antBuildListener.buildFinished(AntBuildListener.ABORTED,0);
+    return null;
+  }
+catch (  Throwable e) {
+    antBuildListener.buildFinished(AntBuildListener.FAILED_TO_RUN,0);
+    LOG.error(e);
+    return null;
+  }
+  final FutureResult<ProcessHandler> future=new FutureResult<ProcessHandler>();
+  new Task.Backgroundable(buildFile.getProject(),AntBundle.message("ant.build.progress.dialog.title"),true){
+    public boolean shouldStartInBackground(){
+      return true;
+    }
+    public void onCancel(){
+      antBuildListener.buildFinished(AntBuildListener.ABORTED,0);
+      future.set(null);
+    }
+    public void run(    @NotNull final ProgressIndicator indicator){
+      try {
+        ProcessHandler handler=runBuild(indicator,messageView,buildFile,antBuildListener,commandLine);
+        future.set(handler);
+        if (waitFor && handler != null) {
+          handler.waitFor();
+        }
+      }
+ catch (      Throwable e) {
+        LOG.error(e);
+        antBuildListener.buildFinished(AntBuildListener.FAILED_TO_RUN,0);
+      }
+    }
+  }
+.queue();
+  return future;
+}
