@@ -1,0 +1,36 @@
+{
+  List<MethodContract> result=ContainerUtil.newArrayList();
+  for (  PsiStatement statement : statements) {
+    if (statement instanceof PsiBlockStatement && ((PsiBlockStatement)statement).getCodeBlock().getStatements().length == 1) {
+      result.addAll(visitStatements(states,((PsiBlockStatement)statement).getCodeBlock().getStatements()));
+    }
+ else     if (statement instanceof PsiIfStatement) {
+      List<MethodContract> conditionResults=visitExpression(states,((PsiIfStatement)statement).getCondition());
+      PsiStatement thenBranch=((PsiIfStatement)statement).getThenBranch();
+      if (thenBranch != null) {
+        result.addAll(visitStatements(antecedentsOf(filterReturning(conditionResults,TRUE_VALUE)),thenBranch));
+      }
+      List<ValueConstraint[]> falseStates=antecedentsOf(filterReturning(conditionResults,FALSE_VALUE));
+      PsiStatement elseBranch=((PsiIfStatement)statement).getElseBranch();
+      if (elseBranch != null) {
+        result.addAll(visitStatements(falseStates,elseBranch));
+      }
+ else       if (alwaysReturns(thenBranch)) {
+        states=falseStates;
+        continue;
+      }
+    }
+ else     if (statement instanceof PsiThrowStatement) {
+      result.addAll(toContracts(states,THROW_EXCEPTION));
+    }
+ else     if (statement instanceof PsiReturnStatement) {
+      result.addAll(visitExpression(states,((PsiReturnStatement)statement).getReturnValue()));
+    }
+ else     if (statement instanceof PsiAssertStatement) {
+      List<MethodContract> conditionResults=visitExpression(states,((PsiAssertStatement)statement).getAssertCondition());
+      result.addAll(toContracts(antecedentsOf(filterReturning(conditionResults,FALSE_VALUE)),THROW_EXCEPTION));
+    }
+    break;
+  }
+  return result;
+}
