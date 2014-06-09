@@ -8,9 +8,11 @@
   if (branchHeadsBeforePull.size() > 1) {
     reportWarning(warnings,HgVcsMessages.message("hg4idea.update.warning.multipleHeadsBeforeUpdate",repoRoot.getPath()));
   }
-  HgCommandExitCode pullResult=pull(repoRoot,indicator);
-  if (pullResult == HgCommandExitCode.ERROR) {
-    return false;
+  if (updateConfiguration.shouldPull()) {
+    HgCommandExitCode pullResult=pull(repoRoot,indicator);
+    if (pullResult == HgCommandExitCode.ERROR) {
+      return false;
+    }
   }
   List<HgRevisionNumber> parentsBeforeUpdate=new HgWorkingCopyRevisionsCommand(project).parents(repoRoot);
   if (parentsBeforeUpdate.size() > 1) {
@@ -20,13 +22,14 @@
   List<HgRevisionNumber> branchHeadsAfterPull=new HgHeadsCommand(project,repoRoot).execute();
   List<HgRevisionNumber> pulledBranchHeads=determinePulledBranchHeads(branchHeadsBeforePull,branchHeadsAfterPull);
   List<HgRevisionNumber> remainingOriginalBranchHeads=determingRemainingOriginalBranchHeads(branchHeadsBeforePull,branchHeadsAfterPull);
-  if (branchHeadsAfterPull.size() > 1) {
-    if (shouldMerge()) {
+  HgUpdateType updateType=updateConfiguration.getUpdateType();
+  if (branchHeadsAfterPull.size() > 1 && updateType != ONLY_UPDATE) {
+    if (updateType == MERGE) {
       abortOnLocalChanges();
       abortOnMultiplePulledHeads(pulledBranchHeads);
       abortOnMultipleLocalHeads(remainingOriginalBranchHeads);
       HgCommandResult mergeResult=doMerge(indicator);
-      if (shouldCommitAfterMerge()) {
+      if (updateConfiguration.shouldCommitAfterMerge()) {
         commitOrWarnAboutConflicts(warnings,mergeResult);
       }
     }
