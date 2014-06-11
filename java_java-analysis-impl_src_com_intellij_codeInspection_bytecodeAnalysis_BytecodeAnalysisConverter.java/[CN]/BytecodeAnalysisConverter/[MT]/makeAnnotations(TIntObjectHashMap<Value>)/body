@@ -1,49 +1,60 @@
 {
-  MostlySingularMultiMap<String,AnnotationData> annotations=new MostlySingularMultiMap<String,AnnotationData>();
-  HashMap<String,StringBuilder> contracts=new HashMap<String,StringBuilder>();
-  TIntObjectIterator<Value> iterator=internalIdSolutions.iterator();
+  final TIntObjectHashMap<AnnotationData> outs=new TIntObjectHashMap<AnnotationData>();
+  final TIntObjectHashMap<AnnotationData> params=new TIntObjectHashMap<AnnotationData>();
+  final TIntObjectHashMap<AnnotationData> contracts=new TIntObjectHashMap<AnnotationData>();
+  TIntObjectHashMap<StringBuilder> contractBuilders=new TIntObjectHashMap<StringBuilder>();
+  TIntObjectIterator<Value> solutionsIterator=internalIdSolutions.iterator();
   for (int i=internalIdSolutions.size(); i-- > 0; ) {
-    iterator.advance();
-    int inKey=iterator.key();
-    Value value=iterator.value();
+    solutionsIterator.advance();
+    int key=solutionsIterator.key();
+    Value value=solutionsIterator.value();
     if (value == Value.Top || value == Value.Bot) {
       continue;
     }
-    InternalKey key;
+    int[] compoundKey=null;
     try {
-      String s=myInternalKeyEnumerator.valueOf(inKey);
-      key=readInternalKey(s);
+      compoundKey=myCompoundKeyEnumerator.valueOf(key);
     }
  catch (    IOException e) {
-      throw new RuntimeException(e);
     }
-    if (key != null) {
-      Direction direction=key.dir;
-      String baseAnnKey=key.annotationKey;
+    if (compoundKey != null) {
+      Direction direction=extractDirection(compoundKey);
       if (direction instanceof In && value == Value.NotNull) {
-        String annKey=baseAnnKey + " " + ((In)direction).paramIndex;
-        annotations.add(annKey,new AnnotationData("org.jetbrains.annotations.NotNull",""));
+        params.put(key,new AnnotationData("org.jetbrains.annotations.NotNull",""));
       }
  else       if (direction instanceof Out && value == Value.NotNull) {
-        annotations.add(baseAnnKey,new AnnotationData("org.jetbrains.annotations.NotNull",""));
+        outs.put(key,new AnnotationData("org.jetbrains.annotations.NotNull",""));
       }
  else       if (direction instanceof InOut) {
-        StringBuilder sb=contracts.get(baseAnnKey);
-        if (sb == null) {
-          sb=new StringBuilder("\"");
-          contracts.put(baseAnnKey,sb);
-        }
+        compoundKey[0]=0;
+        compoundKey[1]=0;
+        compoundKey[2]=0;
+        try {
+          int baseKey=myCompoundKeyEnumerator.enumerate(compoundKey);
+          StringBuilder sb=contractBuilders.get(baseKey);
+          if (sb == null) {
+            sb=new StringBuilder("\"");
+            contractBuilders.put(baseKey,sb);
+          }
  else {
-          sb.append(';');
+            sb.append(';');
+          }
+          int arity=compoundKey[8];
+          contractElement(sb,arity,(InOut)direction,value);
         }
-        contractElement(sb,calculateArity(baseAnnKey),(InOut)direction,value);
+ catch (        IOException e) {
+        }
       }
     }
   }
-  for (  Map.Entry<String,StringBuilder> contract : contracts.entrySet()) {
-    if (!annotations.containsKey(contract.getKey())) {
-      annotations.add(contract.getKey(),new AnnotationData("org.jetbrains.annotations.Contract",contract.getValue().append('"').toString()));
+  TIntObjectIterator<StringBuilder> buildersIterator=contractBuilders.iterator();
+  for (int i=contractBuilders.size(); i-- > 0; ) {
+    buildersIterator.advance();
+    int key=buildersIterator.key();
+    StringBuilder value=buildersIterator.value();
+    if (!outs.contains(key)) {
+      contracts.put(key,new AnnotationData("org.jetbrains.annotations.Contract",value.append('"').toString()));
     }
   }
-  return annotations;
+  return new Annotations(outs,params,contracts);
 }
