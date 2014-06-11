@@ -1,0 +1,50 @@
+{
+  if (!CodeInsightSettings.getInstance().INDENTING_BACKSPACE || " \n\t".indexOf(c) == -1) {
+    return false;
+  }
+  LanguageCodeStyleSettingsProvider codeStyleSettingsProvider=LanguageCodeStyleSettingsProvider.forLanguage(file.getLanguage());
+  if (codeStyleSettingsProvider != null && codeStyleSettingsProvider.isIndentBasedLanguageSemantics()) {
+    return false;
+  }
+  Document document=editor.getDocument();
+  int offset=CharArrayUtil.shiftForward(document.getCharsSequence(),editor.getCaretModel().getOffset()," \t");
+  int beforeWhitespaceOffset=CharArrayUtil.shiftBackward(document.getCharsSequence(),offset - 1," \t") + 1;
+  LogicalPosition logicalPosition=editor.offsetToLogicalPosition(offset);
+  int lineStartOffset=document.getLineStartOffset(logicalPosition.line);
+  if (lineStartOffset < beforeWhitespaceOffset) {
+    if (c == '\n' && beforeWhitespaceOffset < offset) {
+      document.deleteString(beforeWhitespaceOffset,offset);
+      return true;
+    }
+ else {
+      return false;
+    }
+  }
+  CodeStyleFacade codeStyleFacade=CodeStyleFacade.getInstance(editor.getProject());
+  String indent=codeStyleFacade.getLineIndent(document,lineStartOffset);
+  if (indent == null) {
+    return false;
+  }
+  int tabSize=getTabSize(codeStyleFacade,document);
+  int targetColumn=getWidth(indent,tabSize);
+  if (logicalPosition.column == targetColumn) {
+    return false;
+  }
+  if (c == '\n' || logicalPosition.column > targetColumn) {
+    smartReplace(document,lineStartOffset,offset,indent);
+    return true;
+  }
+  if (logicalPosition.line == 0) {
+    return false;
+  }
+  int prevLineStartOffset=document.getLineStartOffset(logicalPosition.line - 1);
+  int prevLineEndOffset=document.getLineEndOffset(logicalPosition.line - 1);
+  int targetOffset=CharArrayUtil.shiftBackward(document.getCharsSequence(),prevLineEndOffset - 1," \t") + 1;
+  if (prevLineStartOffset < targetOffset) {
+    document.deleteString(targetOffset,offset);
+  }
+ else {
+    smartReplace(document,prevLineStartOffset,offset,indent);
+  }
+  return true;
+}
