@@ -1,0 +1,60 @@
+{
+  if (states.isEmpty())   return Collections.emptyList();
+  if (states.size() > 300)   return Collections.emptyList();
+  if (expr instanceof PsiPolyadicExpression) {
+    PsiExpression[] operands=((PsiPolyadicExpression)expr).getOperands();
+    IElementType op=((PsiPolyadicExpression)expr).getOperationTokenType();
+    if (operands.length == 2 && (op == JavaTokenType.EQEQ || op == JavaTokenType.NE)) {
+      return visitEqualityComparison(states,operands[0],operands[1],op == JavaTokenType.EQEQ);
+    }
+    if (op == JavaTokenType.ANDAND || op == JavaTokenType.OROR) {
+      return visitLogicalOperation(operands,op == JavaTokenType.ANDAND,states);
+    }
+  }
+  if (expr instanceof PsiConditionalExpression) {
+    List<MethodContract> conditionResults=visitExpression(states,((PsiConditionalExpression)expr).getCondition());
+    return ContainerUtil.concat(visitExpression(antecedentsOf(filterReturning(conditionResults,TRUE_VALUE)),((PsiConditionalExpression)expr).getThenExpression()),visitExpression(antecedentsOf(filterReturning(conditionResults,FALSE_VALUE)),((PsiConditionalExpression)expr).getElseExpression()));
+  }
+  if (expr instanceof PsiParenthesizedExpression) {
+    return visitExpression(states,((PsiParenthesizedExpression)expr).getExpression());
+  }
+  if (expr instanceof PsiPrefixExpression && ((PsiPrefixExpression)expr).getOperationTokenType() == JavaTokenType.EXCL) {
+    List<MethodContract> result=ContainerUtil.newArrayList();
+    for (    MethodContract contract : visitExpression(states,((PsiPrefixExpression)expr).getOperand())) {
+      if (contract.returnValue == TRUE_VALUE || contract.returnValue == FALSE_VALUE) {
+        result.add(new MethodContract(contract.arguments,negateConstraint(contract.returnValue)));
+      }
+    }
+    return result;
+  }
+  if (expr instanceof PsiInstanceOfExpression) {
+    final int parameter=resolveParameter(((PsiInstanceOfExpression)expr).getOperand());
+    if (parameter >= 0) {
+      return ContainerUtil.map(states,new Function<ValueConstraint[],MethodContract>(){
+        @Override public MethodContract fun(        ValueConstraint[] state){
+          return new MethodContract(withConstraint(state,parameter,NULL_VALUE),FALSE_VALUE);
+        }
+      }
+);
+    }
+  }
+  final ValueConstraint constraint=getLiteralConstraint(expr);
+  if (constraint != null) {
+    return toContracts(states,constraint);
+  }
+  int parameter=resolveParameter(expr);
+  if (parameter >= 0) {
+    List<MethodContract> result=ContainerUtil.newArrayList();
+    for (    ValueConstraint[] state : states) {
+      if (state[parameter] != ANY_VALUE) {
+        result.add(new MethodContract(state,state[parameter]));
+      }
+ else {
+        result.add(new MethodContract(withConstraint(state,parameter,TRUE_VALUE),TRUE_VALUE));
+        result.add(new MethodContract(withConstraint(state,parameter,FALSE_VALUE),FALSE_VALUE));
+      }
+    }
+    return result;
+  }
+  return Collections.emptyList();
+}

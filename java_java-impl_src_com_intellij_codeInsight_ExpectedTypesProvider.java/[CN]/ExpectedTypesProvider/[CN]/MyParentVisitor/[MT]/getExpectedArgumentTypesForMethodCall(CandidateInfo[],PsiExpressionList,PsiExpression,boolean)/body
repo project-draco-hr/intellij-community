@@ -1,2 +1,60 @@
 {
+  if (allCandidates.length == 0) {
+    return ExpectedTypeInfo.EMPTY_ARRAY;
+  }
+  PsiResolveHelper helper=JavaPsiFacade.getInstance(myExpr.getProject()).getResolveHelper();
+  List<CandidateInfo> methodCandidates=new ArrayList<CandidateInfo>();
+  for (  CandidateInfo candidate : allCandidates) {
+    PsiElement element=candidate.getElement();
+    if (element instanceof PsiMethod && helper.isAccessible((PsiMember)element,argumentList,null)) {
+      methodCandidates.add(candidate);
+    }
+  }
+  final PsiExpression[] args=argumentList.getExpressions().clone();
+  final int index=ArrayUtil.indexOf(args,argument);
+  LOG.assertTrue(index >= 0);
+  final PsiExpression[] leftArgs;
+  if (index <= args.length - 1) {
+    leftArgs=new PsiExpression[index];
+    System.arraycopy(args,0,leftArgs,0,index);
+    if (forCompletion) {
+      args[index]=null;
+    }
+  }
+ else {
+    leftArgs=null;
+  }
+  ParameterTypeInferencePolicy policy=forCompletion ? CompletionParameterTypeInferencePolicy.INSTANCE : DefaultParameterTypeInferencePolicy.INSTANCE;
+  Set<ExpectedTypeInfo> array=new LinkedHashSet<ExpectedTypeInfo>();
+  for (  CandidateInfo candidateInfo : methodCandidates) {
+    PsiMethod method=(PsiMethod)candidateInfo.getElement();
+    PsiSubstitutor substitutor;
+    if (candidateInfo instanceof MethodCandidateInfo) {
+      final MethodCandidateInfo info=(MethodCandidateInfo)candidateInfo;
+      substitutor=info.inferTypeArguments(policy,args,true);
+      if (!info.isStaticsScopeCorrect() && method != null && !method.hasModifierProperty(PsiModifier.STATIC))       continue;
+    }
+ else {
+      substitutor=candidateInfo.getSubstitutor();
+    }
+    inferMethodCallArgumentTypes(argument,forCompletion,args,index,method,substitutor,array);
+    if (leftArgs != null && candidateInfo instanceof MethodCandidateInfo) {
+      substitutor=((MethodCandidateInfo)candidateInfo).inferTypeArguments(policy,leftArgs,true);
+      inferMethodCallArgumentTypes(argument,forCompletion,leftArgs,index,method,substitutor,array);
+    }
+  }
+  if (forCompletion && array.isEmpty()) {
+    for (    CandidateInfo candidate : methodCandidates) {
+      PsiMethod method=(PsiMethod)candidate.getElement();
+      PsiSubstitutor substitutor=candidate.getSubstitutor();
+      PsiParameter[] params=method.getParameterList().getParameters();
+      if (params.length <= index)       continue;
+      PsiParameter param=params[index];
+      PsiType paramType=getParameterType(param,substitutor);
+      TailType tailType=getMethodArgumentTailType(argument,index,method,substitutor,params);
+      ExpectedTypeInfoImpl info=createInfoImpl(paramType,ExpectedTypeInfo.TYPE_OR_SUBTYPE,paramType,tailType,method,getPropertyName(param));
+      array.add(info);
+    }
+  }
+  return array.toArray(new ExpectedTypeInfo[array.size()]);
 }

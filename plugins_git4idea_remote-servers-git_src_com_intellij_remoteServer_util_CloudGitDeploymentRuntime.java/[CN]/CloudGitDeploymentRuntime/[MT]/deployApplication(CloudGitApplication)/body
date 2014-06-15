@@ -1,0 +1,71 @@
+{
+  boolean firstDeploy=findRepository() == null;
+  GitRepository repository=findOrCreateRepository();
+  addOrResetGitRemote(application,repository);
+  if (firstDeploy) {
+    add();
+    commit();
+    return;
+  }
+  final LocalChangeList activeChangeList=myChangeListManager.getDefaultChangeList();
+  if (activeChangeList == null) {
+    add();
+    commit();
+    return;
+  }
+  Collection<Change> changes=activeChangeList.getChanges();
+  final List<Change> relevantChanges=new ArrayList<Change>();
+  for (  Change change : changes) {
+    if (isRelevant(change.getBeforeRevision()) || isRelevant(change.getAfterRevision())) {
+      relevantChanges.add(change);
+    }
+  }
+  if (relevantChanges.isEmpty()) {
+    Integer showCommitDialogChoice=runOnEdt(new Computable<Integer>(){
+      @Override public Integer compute(){
+        return Messages.showYesNoCancelDialog(getProject(),"Active changelist does not contain a relevant change.\n" + "Do you want to show commit dialog anyway?\n\n" + "Yes - show commit dialog\n"+ "No - push immediately\n"+ "Cancel - interrupt deploy","Deploy",Messages.getWarningIcon());
+      }
+    }
+);
+    if (showCommitDialogChoice == Messages.YES) {
+      relevantChanges.addAll(changes);
+    }
+ else     if (showCommitDialogChoice == Messages.NO) {
+      pushApplication(application);
+      return;
+    }
+ else {
+      throw new ServerRuntimeException("Deploy interrupted");
+    }
+  }
+  final Semaphore commitSemaphore=new Semaphore();
+  commitSemaphore.down();
+  final Ref<Boolean> commitSucceeded=new Ref<Boolean>(false);
+  Boolean commitStarted=runOnEdt(new Computable<Boolean>(){
+    @Override public Boolean compute(){
+      return CommitChangeListDialog.commitChanges(getProject(),relevantChanges,activeChangeList,ourCommitExecutors,false,COMMIT_MESSAGE,new CommitResultHandler(){
+        @Override public void onSuccess(        @NotNull String commitMessage){
+          commitSucceeded.set(true);
+          commitSemaphore.up();
+        }
+        @Override public void onFailure(){
+          commitSemaphore.up();
+        }
+      }
+);
+    }
+  }
+);
+  if (commitStarted != null && commitStarted) {
+    commitSemaphore.waitFor();
+    if (!commitSucceeded.get()) {
+      repository.update();
+      throw new ServerRuntimeException("Commit failed");
+    }
+  }
+ else {
+    throw new ServerRuntimeException("Deploy interrupted");
+  }
+  repository.update();
+  pushApplication(application);
+}
