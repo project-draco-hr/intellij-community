@@ -1,0 +1,53 @@
+{
+  final Application application=ApplicationManager.getApplication();
+  if (application.isUnitTestMode() || application.isHeadlessEnvironment() || !forceDumbMode && !myDumb && application.isReadAccessAllowed()) {
+    final ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
+    if (indicator != null) {
+      indicator.pushState();
+    }
+    try {
+      HeavyProcessLatch.INSTANCE.processStarted();
+      task.performInDumbMode(indicator != null ? indicator : new EmptyProgressIndicator());
+    }
+  finally {
+      HeavyProcessLatch.INSTANCE.processFinished();
+      if (indicator != null) {
+        indicator.popState();
+      }
+    }
+  }
+  UIUtil.invokeLaterIfNeeded(new DumbAwareRunnable(){
+    @Override public void run(){
+      if (myProject.isDisposed()) {
+        return;
+      }
+      myUpdatesQueue.addLast(task);
+      if (!myDumb) {
+        boolean startSuccess=application.runWriteAction(new Computable<Boolean>(){
+          @Override public Boolean compute(){
+            myDumb=true;
+            try {
+              myPublisher.enteredDumbMode();
+            }
+ catch (            Throwable e) {
+              LOG.error(e);
+            }
+            try {
+              startBackgroundProcess();
+            }
+ catch (            Throwable e) {
+              LOG.error("Failed to start background index update task",e);
+              return false;
+            }
+            return true;
+          }
+        }
+);
+        if (!startSuccess) {
+          updateFinished();
+        }
+      }
+    }
+  }
+);
+}
