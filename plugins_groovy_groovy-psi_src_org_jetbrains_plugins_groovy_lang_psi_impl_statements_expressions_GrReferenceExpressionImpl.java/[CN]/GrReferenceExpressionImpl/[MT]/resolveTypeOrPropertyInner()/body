@@ -4,21 +4,22 @@
   if (name == null || nameElement == null)   return GroovyResolveResult.EMPTY_ARRAY;
   IElementType nameType=nameElement.getNode().getElementType();
   if (nameType == GroovyTokenTypes.kTHIS) {
-    ArrayList<GroovyResolveResult> results=new ArrayList<GroovyResolveResult>();
-    if (GrReferenceResolveUtil.resolveThisExpression(this,results)) {
-      return results.toArray(new GroovyResolveResult[results.size()]);
+    GroovyResolveResult[] results=GrThisReferenceResolver.resolveThisExpression(this);
+    if (results != null) {
+      return results;
     }
   }
  else   if (nameType == GroovyTokenTypes.kSUPER) {
-    ArrayList<GroovyResolveResult> results=new ArrayList<GroovyResolveResult>();
-    if (GrReferenceResolveUtil.resolveSuperExpression(this,results)) {
-      return results.toArray(new GroovyResolveResult[results.size()]);
+    GroovyResolveResult[] results=GrSuperReferenceResolver.resolveSuperExpression(this);
+    if (results != null) {
+      return results;
     }
   }
   EnumSet<ClassHint.ResolveKind> kinds=getParent() instanceof GrReferenceExpression ? ClassHint.RESOLVE_KINDS_CLASS_PACKAGE : ClassHint.RESOLVE_KINDS_CLASS;
   GroovyResolveResult[] classCandidates=null;
+  GrReferenceResolveRunner resolveRunner=new GrReferenceResolveRunner(this);
   ResolverProcessor processor=new PropertyResolverProcessor(name,this);
-  GrReferenceResolveUtil.resolveImpl(processor,this);
+  resolveRunner.resolveImpl(processor);
   final GroovyResolveResult[] fieldCandidates=processor.getCandidates();
   if (hasAt()) {
     return fieldCandidates;
@@ -26,7 +27,7 @@
   boolean canBeClassOrPackage=ResolveUtil.canBeClassOrPackage(this);
   if (canBeClassOrPackage && findClassOrPackageAtFirst()) {
     ResolverProcessor classProcessor=new ClassResolverProcessor(name,this,kinds);
-    GrReferenceResolveUtil.resolveImpl(classProcessor,this);
+    resolveRunner.resolveImpl(classProcessor);
     classCandidates=classProcessor.getCandidates();
     if (classCandidates.length > 0 && containsPackage(classCandidates))     return classCandidates;
   }
@@ -45,8 +46,8 @@
   String[] accessorNames=isLValue ? GroovyPropertyUtils.suggestSettersName(name) : GroovyPropertyUtils.suggestGettersName(name);
   List<GroovyResolveResult> accessorResults=new ArrayList<GroovyResolveResult>();
   for (  String accessorName : accessorNames) {
-    AccessorResolverProcessor accessorResolver=new AccessorResolverProcessor(accessorName,name,this,!isLValue,false,GrReferenceResolveUtil.getQualifierType(this),getTypeArguments());
-    GrReferenceResolveUtil.resolveImpl(accessorResolver,this);
+    AccessorResolverProcessor accessorResolver=new AccessorResolverProcessor(accessorName,name,this,!isLValue,false,PsiImplUtil.getQualifierType(this),getTypeArguments());
+    resolveRunner.resolveImpl(accessorResolver);
     final GroovyResolveResult[] candidates=accessorResolver.getCandidates();
     if (candidates.length == 1 && candidates[0].isStaticsOK() && candidates[0].isAccessible()) {
       return candidates;
@@ -62,7 +63,7 @@
   }
   if (classCandidates == null && canBeClassOrPackage) {
     ResolverProcessor classProcessor=new ClassResolverProcessor(name,this,kinds);
-    GrReferenceResolveUtil.resolveImpl(classProcessor,this);
+    resolveRunner.resolveImpl(classProcessor);
     classCandidates=classProcessor.getCandidates();
   }
   if (classCandidates != null && classCandidates.length > 0)   return classCandidates;

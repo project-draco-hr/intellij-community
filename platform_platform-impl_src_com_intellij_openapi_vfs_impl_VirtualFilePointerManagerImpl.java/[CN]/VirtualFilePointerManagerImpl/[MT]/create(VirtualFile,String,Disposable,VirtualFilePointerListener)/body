@@ -1,27 +1,39 @@
 {
-  String protocol;
+  int protocolEnd;
   VirtualFileSystem fileSystem;
+  String protocol;
   if (file == null) {
-    protocol=VirtualFileManager.extractProtocol(url);
-    fileSystem=protocol == null ? null : myVirtualFileManager.getFileSystem(protocol);
+    protocolEnd=url.indexOf(URLUtil.SCHEME_SEPARATOR);
+    if (protocolEnd == -1) {
+      protocol=null;
+      fileSystem=null;
+    }
+ else {
+      protocol=url.substring(0,protocolEnd);
+      fileSystem=myVirtualFileManager.getFileSystem(protocol);
+    }
   }
  else {
     protocol=null;
     fileSystem=file.getFileSystem();
+    protocolEnd=-1;
   }
   if (fileSystem == TEMP_FILE_SYSTEM) {
     VirtualFile found=file == null ? VirtualFileManager.getInstance().findFileByUrl(url) : file;
     return new IdentityVirtualFilePointer(found,url);
   }
-  if (fileSystem != LOCAL_FILE_SYSTEM && fileSystem != JAR_FILE_SYSTEM) {
+  boolean isJar=fileSystem == JAR_FILE_SYSTEM;
+  if (fileSystem != LOCAL_FILE_SYSTEM && !isJar) {
     VirtualFile found=fileSystem == null ? null : file != null ? file : VirtualFileManager.getInstance().findFileByUrl(url);
     return getOrCreateIdentity(url,found);
   }
   String path;
   if (file == null) {
-    path=VirtualFileManager.extractPath(url);
-    path=cleanupPath(path,protocol);
-    url=VirtualFileManager.constructUrl(protocol,path);
+    path=protocolEnd == -1 ? url : url.substring(protocolEnd + URLUtil.SCHEME_SEPARATOR.length());
+    String cleanPath=cleanupPath(path,isJar);
+    if (cleanPath != path) {
+      url=VirtualFileManager.constructUrl(protocol,path);
+    }
   }
  else {
     path=file.getPath();
