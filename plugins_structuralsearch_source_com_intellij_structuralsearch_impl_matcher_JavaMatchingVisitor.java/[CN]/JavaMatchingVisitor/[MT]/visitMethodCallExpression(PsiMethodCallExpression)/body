@@ -1,0 +1,49 @@
+{
+  final PsiElement element=myMatchingVisitor.getElement();
+  if (!(element instanceof PsiMethodCallExpression)) {
+    myMatchingVisitor.setResult(false);
+    return;
+  }
+  final PsiMethodCallExpression mcall2=(PsiMethodCallExpression)element;
+  final PsiReferenceExpression mcallRef1=mcall.getMethodExpression();
+  final PsiReferenceExpression mcallRef2=mcall2.getMethodExpression();
+  final String mcallname1=mcallRef1.getReferenceName();
+  final String mcallname2=mcallRef2.getReferenceName();
+  final boolean isTypedVar=myMatchingVisitor.getMatchContext().getPattern().isTypedVar(mcallRef1.getReferenceNameElement());
+  if (mcallname1 != null && !mcallname1.equals(mcallname2) && !isTypedVar) {
+    myMatchingVisitor.setResult(false);
+    return;
+  }
+  final PsiExpression qualifier=mcallRef1.getQualifierExpression();
+  final PsiExpression elementQualifier=mcallRef2.getQualifierExpression();
+  if (qualifier != null) {
+    if (elementQualifier != null) {
+      myMatchingVisitor.setResult(myMatchingVisitor.match(qualifier,elementQualifier));
+      if (!myMatchingVisitor.getResult())       return;
+    }
+ else {
+      final PsiMethod method=mcall2.resolveMethod();
+      if (method != null) {
+        if (qualifier instanceof PsiThisExpression) {
+          myMatchingVisitor.setResult(!method.hasModifierProperty(PsiModifier.STATIC));
+          return;
+        }
+      }
+      final MatchingHandler handler=myMatchingVisitor.getMatchContext().getPattern().getHandler(qualifier);
+      matchImplicitQualifier(handler,method,myMatchingVisitor.getMatchContext());
+      if (!myMatchingVisitor.getResult()) {
+        return;
+      }
+    }
+  }
+ else   if (elementQualifier != null) {
+    myMatchingVisitor.setResult(false);
+    return;
+  }
+  myMatchingVisitor.setResult(myMatchingVisitor.matchSons(mcall.getArgumentList(),mcall2.getArgumentList()));
+  if (myMatchingVisitor.getResult() && isTypedVar) {
+    boolean res=myMatchingVisitor.getResult();
+    res&=myMatchingVisitor.handleTypedElement(mcallRef1.getReferenceNameElement(),mcallRef2.getReferenceNameElement());
+    myMatchingVisitor.setResult(res);
+  }
+}
