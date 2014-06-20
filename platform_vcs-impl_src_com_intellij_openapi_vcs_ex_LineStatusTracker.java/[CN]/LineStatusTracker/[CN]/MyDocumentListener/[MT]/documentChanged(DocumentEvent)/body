@@ -4,10 +4,9 @@ synchronized (myLock) {
     if (myReleased)     return;
     if (myBulkUpdate || myAnathemaThrown || BaseLoadState.LOADED != myBaseLoaded)     return;
     try {
-      int upToDateFirstLine;
-      int upToDateLastLine;
-      int linesAfterChange=myDocument.getLineNumber(e.getOffset() + e.getNewLength()) - myDocument.getLineNumber(e.getOffset());
-      int linesShift=linesAfterChange - myLinesBeforeChange;
+      int currentChangedLines=myDocument.getLineNumber(e.getOffset() + e.getNewLength()) - myDocument.getLineNumber(e.getOffset());
+      int linesShift=currentChangedLines - myChangedLines;
+      int upToDateTotalLine=myUpToDateDocument.getLineCount();
       List<Range> rangesBeforeChange=new ArrayList<Range>();
       List<Range> rangesAfterChange=new ArrayList<Range>();
       List<Range> changedRanges=new ArrayList<Range>();
@@ -15,21 +14,18 @@ synchronized (myLock) {
       Range firstChangedRange=ContainerUtil.getFirstItem(changedRanges);
       Range lastChangedRange=ContainerUtil.getLastItem(changedRanges);
       Range lastRangeBefore=ContainerUtil.getLastItem(rangesBeforeChange);
+      Range firstRangeAfter=ContainerUtil.getFirstItem(rangesAfterChange);
       if (firstChangedRange != null && firstChangedRange.getOffset1() < myFirstChangedLine) {
         myFirstChangedLine=firstChangedRange.getOffset1();
       }
       if (lastChangedRange != null && lastChangedRange.getOffset2() > myLastChangedLine) {
         myLastChangedLine=lastChangedRange.getOffset2();
       }
-      upToDateFirstLine=getUpToDateLine(lastRangeBefore,myFirstChangedLine);
-      if (lastChangedRange == null) {
-        upToDateLastLine=getUpToDateLine(lastRangeBefore,myLastChangedLine);
-      }
- else {
-        upToDateLastLine=getUpToDateLine(lastChangedRange,myLastChangedLine);
-      }
-      myLastChangedLine+=linesShift;
-      List<Range> newChangedRanges=getNewChangedRanges(upToDateFirstLine,upToDateLastLine);
+      int currentFirstLine=myFirstChangedLine;
+      int currentLastLine=myLastChangedLine + linesShift;
+      int upToDateFirstLine=getUpToDateLine1(lastRangeBefore,myFirstChangedLine);
+      int upToDateLastLine=getUpToDateLine2(firstRangeAfter,myLastChangedLine,myTotalLines,upToDateTotalLine);
+      List<Range> newChangedRanges=getNewChangedRanges(currentFirstLine,currentLastLine,upToDateFirstLine,upToDateLastLine);
       shiftRanges(rangesAfterChange,linesShift);
       if (!changedRanges.equals(newChangedRanges)) {
         replaceRanges(changedRanges,newChangedRanges);
