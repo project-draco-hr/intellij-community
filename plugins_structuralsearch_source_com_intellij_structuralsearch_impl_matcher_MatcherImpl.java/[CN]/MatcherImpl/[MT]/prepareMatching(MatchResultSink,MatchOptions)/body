@@ -1,0 +1,31 @@
+{
+  CompiledPattern savedPattern=null;
+  if (matchContext.getOptions() == options && matchContext.getPattern() != null && matchContext.getOptions().hashCode() == matchContext.getPattern().getOptionsHashStamp()) {
+    savedPattern=matchContext.getPattern();
+  }
+  matchContext.clear();
+  matchContext.setSink(new MatchConstraintsSink(sink,options.getMaxMatchesCount(),options.isDistinct(),options.isCaseSensitiveMatch()));
+  matchContext.setOptions(options);
+  matchContext.setMatcher(visitor);
+  visitor.setMatchContext(matchContext);
+  CompiledPattern compiledPattern=savedPattern;
+  if (compiledPattern == null) {
+synchronized (getClass()) {
+      final LastMatchData data=com.intellij.reference.SoftReference.dereference(lastMatchData);
+      if (data != null && options == data.lastOptions) {
+        compiledPattern=data.lastPattern;
+      }
+      lastMatchData=null;
+    }
+    if (compiledPattern == null) {
+      compiledPattern=ApplicationManager.getApplication().runReadAction(new Computable<CompiledPattern>(){
+        @Override public CompiledPattern compute(){
+          return PatternCompiler.compilePattern(project,options);
+        }
+      }
+);
+    }
+  }
+  cacheCompiledPattern(options,compiledPattern);
+  return compiledPattern;
+}

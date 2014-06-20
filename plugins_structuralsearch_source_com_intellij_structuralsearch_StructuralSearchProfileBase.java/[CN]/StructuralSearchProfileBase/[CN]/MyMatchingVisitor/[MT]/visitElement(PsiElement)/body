@@ -1,0 +1,40 @@
+{
+  super.visitElement(element);
+  final EquivalenceDescriptorProvider descriptorProvider=EquivalenceDescriptorProvider.getInstance(element);
+  if (descriptorProvider != null) {
+    final EquivalenceDescriptor descriptor1=descriptorProvider.buildDescriptor(element);
+    final EquivalenceDescriptor descriptor2=descriptorProvider.buildDescriptor(myGlobalVisitor.getElement());
+    if (descriptor1 != null && descriptor2 != null) {
+      final boolean result=DuplocatorUtil.match(descriptor1,descriptor2,myGlobalVisitor,Collections.<PsiElementRole>emptySet(),null);
+      myGlobalVisitor.setResult(result);
+      return;
+    }
+  }
+  if (isLiteral(element)) {
+    visitLiteral(element);
+    return;
+  }
+  if (canBePatternVariable(element) && myGlobalVisitor.getMatchContext().getPattern().isRealTypedVar(element) && !shouldIgnoreVarNode(element)) {
+    PsiElement matchedElement=myGlobalVisitor.getElement();
+    PsiElement newElement=SkippingHandler.skipNodeIfNeccessary(matchedElement);
+    while (newElement != matchedElement) {
+      matchedElement=newElement;
+      newElement=SkippingHandler.skipNodeIfNeccessary(matchedElement);
+    }
+    myGlobalVisitor.setResult(myGlobalVisitor.handleTypedElement(element,matchedElement));
+  }
+ else   if (element instanceof LeafElement) {
+    myGlobalVisitor.setResult(element.getText().equals(myGlobalVisitor.getElement().getText()));
+  }
+ else   if (element.getFirstChild() == null && element.getTextLength() == 0) {
+    myGlobalVisitor.setResult(true);
+  }
+ else {
+    PsiElement patternChild=element.getFirstChild();
+    PsiElement matchedChild=myGlobalVisitor.getElement().getFirstChild();
+    FilteringNodeIterator patternIterator=new SsrFilteringNodeIterator(patternChild);
+    FilteringNodeIterator matchedIterator=new SsrFilteringNodeIterator(matchedChild);
+    boolean matched=myGlobalVisitor.matchSequentially(patternIterator,matchedIterator);
+    myGlobalVisitor.setResult(matched);
+  }
+}

@@ -1,0 +1,65 @@
+{
+  final ExportToHTMLSettings settings=ExportToHTMLSettings.getInstance(project);
+  final ProjectData projectData=currentSuite.getCoverageData();
+  ProgressManager.getInstance().run(new Task.Backgroundable(project,"Generating coverage report ..."){
+    final Exception[] myExceptions=new Exception[1];
+    public void run(    @NotNull final ProgressIndicator indicator){
+      try {
+        new SaveHook(tempFile,true,new IdeaClassFinder(project,currentSuite)).save(projectData);
+        final HTMLReportBuilder builder=ReportBuilderFactory.createHTMLReportBuilder();
+        builder.setReportDir(new File(settings.OUTPUT_DIRECTORY));
+        final SourceCodeProvider sourceCodeProvider=new SourceCodeProvider(){
+          public String getSourceCode(          @NotNull final String classname) throws IOException {
+            return ApplicationManager.getApplication().runReadAction(new Computable<String>(){
+              public String compute(){
+                final PsiClass psiClass=ClassUtil.findPsiClassByJVMName(PsiManager.getInstance(project),classname);
+                return psiClass != null ? psiClass.getContainingFile().getText() : "";
+              }
+            }
+);
+          }
+        }
+;
+        builder.generateReport(new IDEACoverageData(projectData,sourceCodeProvider){
+          @NotNull @Override public Collection<ClassInfo> getClasses(){
+            final Collection<ClassInfo> classes=super.getClasses();
+            if (!currentSuite.isTrackTestFolders()) {
+              final JavaPsiFacade psiFacade=JavaPsiFacade.getInstance(project);
+              final GlobalSearchScope productionScope=GlobalSearchScopes.projectProductionScope(project);
+              for (Iterator<ClassInfo> iterator=classes.iterator(); iterator.hasNext(); ) {
+                final ClassInfo aClass=iterator.next();
+                final PsiClass psiClass=ApplicationManager.getApplication().runReadAction(new Computable<PsiClass>(){
+                  public PsiClass compute(){
+                    return psiFacade.findClass(aClass.getFQName(),productionScope);
+                  }
+                }
+);
+                if (psiClass == null) {
+                  iterator.remove();
+                }
+              }
+            }
+            return classes;
+          }
+        }
+);
+      }
+ catch (      IOException e) {
+        LOG.error(e);
+      }
+catch (      ReportGenerationFailedException e) {
+        myExceptions[0]=e;
+      }
+    }
+    @Override public void onSuccess(){
+      if (myExceptions[0] != null) {
+        Messages.showErrorDialog(project,myExceptions[0].getMessage(),CommonBundle.getErrorTitle());
+        return;
+      }
+      if (settings.OPEN_IN_BROWSER) {
+        BrowserUtil.browse(new File(settings.OUTPUT_DIRECTORY,"index.html"));
+      }
+    }
+  }
+);
+}

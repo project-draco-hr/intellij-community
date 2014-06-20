@@ -1,0 +1,29 @@
+{
+  if (patternNode instanceof PsiComment) {
+    return myCommentHandler.match(patternNode,matchedNode,context);
+  }
+  if (!super.match(patternNode,matchedNode,context))   return false;
+  boolean result;
+  PsiDeclarationStatement dcl=(PsiDeclarationStatement)patternNode;
+  if (matchedNode instanceof PsiDeclarationStatement) {
+    result=GlobalMatchingVisitor.continueMatchingSequentially(new SsrFilteringNodeIterator(patternNode.getFirstChild()),new SsrFilteringNodeIterator(matchedNode.getFirstChild()),context);
+  }
+ else {
+    final PsiElement[] declared=dcl.getDeclaredElements();
+    if (declared.length > 0 && ((declared[0] instanceof PsiVariable && matchedNode instanceof PsiVariable) || (declared[0] instanceof PsiClass && matchedNode instanceof PsiClass)) && !(matchedNode.getParent() instanceof PsiDeclarationStatement)) {
+      result=GlobalMatchingVisitor.continueMatchingSequentially(new ArrayBackedNodeIterator(declared),new CountingNodeIterator(declared.length,new SsrFilteringNodeIterator(matchedNode)),context);
+      if (result && declared[0] instanceof PsiVariable && matchedNode instanceof PsiField) {
+        final PsiElement[] children=dcl.getChildren();
+        final PsiElement lastChild=children[children.length - 1];
+        if (lastChild instanceof PsiComment) {
+          final PsiElement[] fieldChildren=matchedNode.getChildren();
+          result=context.getPattern().getHandler(lastChild).match(lastChild,fieldChildren[fieldChildren.length - 1],context);
+        }
+      }
+    }
+ else {
+      result=false;
+    }
+  }
+  return result;
+}
