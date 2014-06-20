@@ -1,0 +1,35 @@
+{
+  final ProjectData data=bundle.getCoverageData();
+  if (data == null)   return;
+  final Module module=ModuleUtil.findModuleForPsiElement(psiClass);
+  if (module != null) {
+    final boolean isInTests=ProjectRootManager.getInstance(module.getProject()).getFileIndex().isInTestSourceContent(psiClass.getContainingFile().getVirtualFile());
+    final CompilerModuleExtension moduleExtension=CompilerModuleExtension.getInstance(module);
+    final VirtualFile outputPath=isInTests ? moduleExtension.getCompilerOutputPathForTests() : moduleExtension.getCompilerOutputPath();
+    if (outputPath != null) {
+      final String qualifiedName=psiClass.getQualifiedName();
+      if (qualifiedName == null)       return;
+      final String packageVMName=StringUtil.getPackageName(qualifiedName).replace('.','/');
+      final File packageRoot=findRelativeFile(packageVMName,outputPath);
+      if (packageRoot != null && packageRoot.exists()) {
+        Map<String,ClassCoverageInfo> toplevelClassCoverage=new HashMap<String,ClassCoverageInfo>();
+        final File[] files=packageRoot.listFiles();
+        if (files != null) {
+          for (          File child : files) {
+            if (isClassFile(child)) {
+              final String childName=getClassName(child);
+              final String classFqVMName=packageVMName.length() > 0 ? packageVMName + "/" + childName : childName;
+              final String toplevelClassSrcFQName=getSourceToplevelFQName(classFqVMName);
+              if (toplevelClassSrcFQName.equals(qualifiedName)) {
+                collectClassCoverageInformation(child,new PackageCoverageInfo(),data,toplevelClassCoverage,classFqVMName.replace("/","."),toplevelClassSrcFQName);
+              }
+            }
+          }
+        }
+        for (        ClassCoverageInfo coverageInfo : toplevelClassCoverage.values()) {
+          annotator.annotateClass(qualifiedName,coverageInfo);
+        }
+      }
+    }
+  }
+}

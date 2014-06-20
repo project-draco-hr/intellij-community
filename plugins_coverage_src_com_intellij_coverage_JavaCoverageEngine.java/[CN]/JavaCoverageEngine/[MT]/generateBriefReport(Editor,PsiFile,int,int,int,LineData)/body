@@ -1,0 +1,103 @@
+{
+  final StringBuffer buf=new StringBuffer();
+  buf.append("Hits: ");
+  if (lineData == null) {
+    buf.append(0);
+    return buf.toString();
+  }
+  buf.append(lineData.getHits()).append("\n");
+  final List<PsiExpression> expressions=new ArrayList<PsiExpression>();
+  final Project project=editor.getProject();
+  for (int offset=startOffset; offset < endOffset; offset++) {
+    PsiElement parent=PsiTreeUtil.getParentOfType(psiFile.findElementAt(offset),PsiStatement.class);
+    PsiElement condition=null;
+    if (parent instanceof PsiIfStatement) {
+      condition=((PsiIfStatement)parent).getCondition();
+    }
+ else     if (parent instanceof PsiSwitchStatement) {
+      condition=((PsiSwitchStatement)parent).getExpression();
+    }
+ else     if (parent instanceof PsiDoWhileStatement) {
+      condition=((PsiDoWhileStatement)parent).getCondition();
+    }
+ else     if (parent instanceof PsiForStatement) {
+      condition=((PsiForStatement)parent).getCondition();
+    }
+ else     if (parent instanceof PsiWhileStatement) {
+      condition=((PsiWhileStatement)parent).getCondition();
+    }
+ else     if (parent instanceof PsiForeachStatement) {
+      condition=((PsiForeachStatement)parent).getIteratedValue();
+    }
+ else     if (parent instanceof PsiAssertStatement) {
+      condition=((PsiAssertStatement)parent).getAssertCondition();
+    }
+    if (condition != null && PsiTreeUtil.isAncestor(condition,psiFile.findElementAt(offset),false)) {
+      try {
+        final ControlFlow controlFlow=ControlFlowFactory.getInstance(project).getControlFlow(parent,AllVariablesControlFlowPolicy.getInstance());
+        for (        Instruction instruction : controlFlow.getInstructions()) {
+          if (instruction instanceof ConditionalBranchingInstruction) {
+            final PsiExpression expression=((ConditionalBranchingInstruction)instruction).expression;
+            if (!expressions.contains(expression)) {
+              expressions.add(expression);
+            }
+          }
+        }
+      }
+ catch (      AnalysisCanceledException e) {
+        return buf.toString();
+      }
+    }
+  }
+  final String indent="    ";
+  try {
+    int idx=0;
+    int hits=0;
+    if (lineData.getJumps() != null) {
+      for (      Object o : lineData.getJumps()) {
+        final JumpData jumpData=(JumpData)o;
+        if (jumpData.getTrueHits() + jumpData.getFalseHits() > 0) {
+          final PsiExpression expression=expressions.get(idx++);
+          final PsiElement parentExpression=expression.getParent();
+          boolean reverse=parentExpression instanceof PsiPolyadicExpression && ((PsiPolyadicExpression)parentExpression).getOperationTokenType() == JavaTokenType.OROR || parentExpression instanceof PsiDoWhileStatement || parentExpression instanceof PsiAssertStatement;
+          buf.append(indent).append(expression.getText()).append("\n");
+          buf.append(indent).append(indent).append("true hits: ").append(reverse ? jumpData.getFalseHits() : jumpData.getTrueHits()).append("\n");
+          buf.append(indent).append(indent).append("false hits: ").append(reverse ? jumpData.getTrueHits() : jumpData.getFalseHits()).append("\n");
+          hits+=jumpData.getTrueHits() + jumpData.getFalseHits();
+        }
+      }
+    }
+    if (lineData.getSwitches() != null) {
+      for (      Object o : lineData.getSwitches()) {
+        final SwitchData switchData=(SwitchData)o;
+        final PsiExpression conditionExpression=expressions.get(idx++);
+        buf.append(indent).append(conditionExpression.getText()).append("\n");
+        int i=0;
+        for (        int key : switchData.getKeys()) {
+          final int switchHits=switchData.getHits()[i++];
+          buf.append(indent).append(indent).append("case ").append(key).append(": ").append(switchHits).append("\n");
+          hits+=switchHits;
+        }
+        int defaultHits=switchData.getDefaultHits();
+        final boolean hasDefaultLabel=hasDefaultLabel(conditionExpression);
+        if (hasDefaultLabel || defaultHits > 0) {
+          if (!hasDefaultLabel) {
+            defaultHits-=hits;
+          }
+          if (hasDefaultLabel || defaultHits > 0) {
+            buf.append(indent).append(indent).append("default: ").append(defaultHits).append("\n");
+            hits+=defaultHits;
+          }
+        }
+      }
+    }
+    if (lineData.getHits() > hits && hits > 0) {
+      buf.append("Unknown outcome: ").append(lineData.getHits() - hits);
+    }
+  }
+ catch (  Exception e) {
+    LOG.info(e);
+    return "Hits: " + lineData.getHits();
+  }
+  return buf.toString();
+}
