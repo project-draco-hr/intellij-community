@@ -1,0 +1,43 @@
+{
+  UsageViewManager manager=UsageViewManager.getInstance(searchContext.getProject());
+  final UsageViewContext context=createUsageViewContext(config);
+  final UsageViewPresentation presentation=new UsageViewPresentation();
+  presentation.setOpenInNewTab(openInNewTab.isSelected());
+  presentation.setScopeText(config.getMatchOptions().getScope().getDisplayName());
+  context.configure(presentation);
+  final FindUsagesProcessPresentation processPresentation=new FindUsagesProcessPresentation(presentation);
+  processPresentation.setShowNotFoundMessage(true);
+  processPresentation.setShowPanelIfOnlyOneUsage(true);
+  processPresentation.setProgressIndicatorFactory(new Factory<ProgressIndicator>(){
+    @Override public ProgressIndicator create(){
+      return new FindProgressIndicator(searchContext.getProject(),presentation.getScopeText()){
+        @Override public void cancel(){
+          context.getCommand().stopAsyncSearch();
+          super.cancel();
+        }
+      }
+;
+    }
+  }
+);
+  PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
+  manager.searchAndShowUsages(new UsageTarget[]{context.getTarget()},new Factory<UsageSearcher>(){
+    @Override public UsageSearcher create(){
+      return new UsageSearcher(){
+        @Override public void generate(        @NotNull final Processor<Usage> processor){
+          context.getCommand().findUsages(processor);
+        }
+      }
+;
+    }
+  }
+,processPresentation,presentation,new UsageViewManager.UsageViewStateListener(){
+    @Override public void usageViewCreated(    @NotNull UsageView usageView){
+      context.setUsageView(usageView);
+      context.configureActions();
+    }
+    @Override public void findingUsagesFinished(    final UsageView usageView){
+    }
+  }
+);
+}
