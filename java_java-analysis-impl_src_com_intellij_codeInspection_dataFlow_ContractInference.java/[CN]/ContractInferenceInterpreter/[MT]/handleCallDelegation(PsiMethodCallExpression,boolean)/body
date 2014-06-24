@@ -1,0 +1,33 @@
+{
+  final PsiMethod targetMethod=expression.resolveMethod();
+  if (targetMethod == null)   return Collections.emptyList();
+  final PsiExpression[] arguments=expression.getArgumentList().getExpressions();
+  return RecursionManager.doPreventingRecursion(myMethod,true,new Computable<List<MethodContract>>(){
+    @Override public List<MethodContract> compute(){
+      List<MethodContract> delegateContracts=ContractInference.inferContracts(targetMethod);
+      return ContainerUtil.mapNotNull(delegateContracts,new NullableFunction<MethodContract,MethodContract>(){
+        @Nullable @Override public MethodContract fun(        MethodContract delegateContract){
+          ValueConstraint[] answer=MethodContract.createConstraintArray(myMethod.getParameterList().getParametersCount());
+          for (int i=0; i < delegateContract.arguments.length; i++) {
+            if (i >= arguments.length)             return null;
+            ValueConstraint argConstraint=delegateContract.arguments[i];
+            if (argConstraint != ANY_VALUE) {
+              int paramIndex=resolveParameter(arguments[i]);
+              if (paramIndex < 0) {
+                if (argConstraint != getLiteralConstraint(arguments[i])) {
+                  return null;
+                }
+              }
+ else {
+                answer=withConstraint(answer,paramIndex,argConstraint);
+              }
+            }
+          }
+          return new MethodContract(answer,negated ? negateConstraint(delegateContract.returnValue) : delegateContract.returnValue);
+        }
+      }
+);
+    }
+  }
+);
+}
