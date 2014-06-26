@@ -1,12 +1,22 @@
 {
+  final FileEditor[] editors=FileEditorManager.getInstance(myProject).getAllEditors(file);
+  if (editors.length == 0)   return null;
   return new ReadTask(){
     private boolean isOutdated(){
-      return myProject.isDisposed() || !file.isValid() || indicator != myCurrentUpdates.get(file);
+      if (myProject.isDisposed() || !file.isValid() || indicator != file.getUserData(CURRENT_UPDATES)) {
+        return true;
+      }
+      for (      FileEditor editor : editors) {
+        if (!editor.isValid()) {
+          return true;
+        }
+      }
+      return false;
     }
     @Override public void computeInReadAction(    @NotNull final ProgressIndicator indicator){
       if (isOutdated())       return;
       final List<Runnable> updates=ContainerUtil.newArrayList();
-      for (      final FileEditor editor : FileEditorManager.getInstance(myProject).getAllEditors(file)) {
+      for (      final FileEditor editor : editors) {
         for (        final Provider<?> provider : Extensions.getExtensions(EXTENSION_POINT_NAME,myProject)) {
           final JComponent component=provider.createNotificationPanel(file,editor);
           updates.add(new Runnable(){
@@ -20,7 +30,7 @@
       UIUtil.invokeLaterIfNeeded(new Runnable(){
         @Override public void run(){
           if (!isOutdated()) {
-            myCurrentUpdates.remove(file);
+            file.putUserData(CURRENT_UPDATES,null);
             for (            Runnable update : updates) {
               update.run();
             }
