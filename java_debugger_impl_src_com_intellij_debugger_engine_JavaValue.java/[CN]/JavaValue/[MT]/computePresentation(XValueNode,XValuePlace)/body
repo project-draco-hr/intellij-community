@@ -1,30 +1,42 @@
 {
   if (myEvaluationContext.getSuspendContext().isResumed())   return;
   myEvaluationContext.getDebugProcess().getManagerThread().schedule(new DebuggerContextCommandImpl(getDebuggerContext()){
+    @Override public Priority getPriority(){
+      return Priority.NORMAL;
+    }
     @Override public void threadAction(){
-      Icon nodeIcon=DebuggerTreeRenderer.getValueIcon(myValueDescriptor);
-      final String[] strings=splitValue(myValueDescriptor.getValueLabel());
-      final String value=StringUtil.notNullize(strings[1]);
-      String type=strings[0];
-      XValuePresentation presentation;
-      if (myValueDescriptor.isString()) {
-        presentation=new TypedStringValuePresentation(StringUtil.unquoteString(value),type);
-      }
- else       if (myValueDescriptor.getLastRenderer() instanceof ToStringRenderer) {
-        presentation=new XRegularValuePresentation(StringUtil.wrapWithDoubleQuote(value),type);
-      }
+      myValueDescriptor.setContext(myEvaluationContext);
+      myValueDescriptor.updateRepresentation(myEvaluationContext,new DescriptorLabelListener(){
+        @Override public void labelChanged(){
+          Icon nodeIcon=DebuggerTreeRenderer.getValueIcon(myValueDescriptor);
+          final String[] strings=splitValue(myValueDescriptor.getValueLabel());
+          final String value=StringUtil.notNullize(strings[1]);
+          String type=strings[0];
+          XValuePresentation presentation;
+          if (myValueDescriptor.isString()) {
+            presentation=new TypedStringValuePresentation(StringUtil.unquoteString(value),type);
+          }
+ else           if (myValueDescriptor.getLastRenderer() instanceof ToStringRenderer) {
+            presentation=new XRegularValuePresentation(StringUtil.wrapWithDoubleQuote(value),type);
+          }
  else {
-        presentation=new XRegularValuePresentation(value,type);
-      }
-      if (value.length() > XValueNode.MAX_VALUE_LENGTH) {
-        node.setFullValueEvaluator(new XFullValueEvaluator(){
-          @Override public void startEvaluation(          @NotNull final XFullValueEvaluationCallback callback){
-            myEvaluationContext.getDebugProcess().getManagerThread().schedule(new DebuggerContextCommandImpl(getDebuggerContext()){
-              @Override public void threadAction(){
-                final String valueAsString=DebuggerUtilsEx.getValueOrErrorAsString(myEvaluationContext,myValueDescriptor.getValue());
-                DebuggerInvocationUtil.invokeLater(getProject(),new Runnable(){
-                  @Override public void run(){
-                    callback.evaluated(valueAsString);
+            presentation=new XRegularValuePresentation(value,type);
+          }
+          if (value.length() > XValueNode.MAX_VALUE_LENGTH) {
+            node.setFullValueEvaluator(new XFullValueEvaluator(){
+              @Override public void startEvaluation(              @NotNull final XFullValueEvaluationCallback callback){
+                myEvaluationContext.getDebugProcess().getManagerThread().schedule(new DebuggerContextCommandImpl(getDebuggerContext()){
+                  @Override public Priority getPriority(){
+                    return Priority.NORMAL;
+                  }
+                  @Override public void threadAction(){
+                    final String valueAsString=DebuggerUtilsEx.getValueOrErrorAsString(myEvaluationContext,myValueDescriptor.getValue());
+                    DebuggerInvocationUtil.invokeLater(getProject(),new Runnable(){
+                      @Override public void run(){
+                        callback.evaluated(valueAsString);
+                      }
+                    }
+);
                   }
                 }
 );
@@ -32,10 +44,10 @@
             }
 );
           }
+          node.setPresentation(nodeIcon,presentation,myValueDescriptor.isExpandable());
         }
-);
       }
-      node.setPresentation(nodeIcon,presentation,myValueDescriptor.isExpandable());
+);
     }
   }
 );
