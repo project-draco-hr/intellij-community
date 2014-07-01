@@ -27,9 +27,38 @@
   }
 );
   myMainPanel.add(ScrollPaneFactory.createScrollPane(myFramesList),BorderLayout.CENTER);
-  myThreadComboBox=new JComboBox();
+  myThreadComboBox=new ComboBox();
   myThreadComboBox.setRenderer(new ThreadComboBoxRenderer(myThreadComboBox));
   myThreadComboBox.addItemListener(new MyItemListener());
+  myThreadComboBox.addPopupMenuListener(new PopupMenuListenerAdapter(){
+    @Override public void popupMenuWillBecomeVisible(    PopupMenuEvent e){
+      XSuspendContext context=mySession.getSuspendContext();
+      if (context != null && !myThreadsCalculated) {
+        myThreadsCalculated=true;
+        myThreadComboBox.addItem(null);
+        context.computeExecutionStacks(new XSuspendContext.XExecutionStackContainer(){
+          @Override public void addExecutionStack(          @NotNull final List<? extends XExecutionStack> executionStacks,          boolean last){
+            ApplicationManager.getApplication().invokeLater(new Runnable(){
+              @Override public void run(){
+                myThreadComboBox.removeItem(null);
+                addExecutionStacks(executionStacks);
+                ComboPopup popup=myThreadComboBox.getPopup();
+                if (popup != null && popup.isVisible()) {
+                  popup.hide();
+                  popup.show();
+                }
+              }
+            }
+);
+          }
+          @Override public void errorOccurred(          @NotNull String errorMessage){
+          }
+        }
+);
+      }
+    }
+  }
+);
   new ComboboxSpeedSearch(myThreadComboBox){
     @Override protected String getElementText(    Object element){
       return ((XExecutionStack)element).getDisplayName();

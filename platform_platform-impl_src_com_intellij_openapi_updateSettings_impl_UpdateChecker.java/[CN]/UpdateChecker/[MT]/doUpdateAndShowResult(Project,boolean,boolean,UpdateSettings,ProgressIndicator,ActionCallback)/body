@@ -1,0 +1,32 @@
+{
+  final CheckForUpdateResult result=checkForUpdates(updateSettings);
+  if (result.getState() == UpdateStrategy.State.LOADED) {
+    UpdateSettings settings=UpdateSettings.getInstance();
+    settings.saveLastCheckedInfo();
+    settings.setKnownChannelIds(result.getAllChannelsIds());
+  }
+ else   if (result.getState() == UpdateStrategy.State.CONNECTION_ERROR) {
+    showErrorMessage(manualCheck,IdeBundle.message("updates.error.connection.failed"));
+    return;
+  }
+  final UpdateChannel updatedChannel=result.getUpdatedChannel();
+  boolean platformUpdate=newChannelReady(result.getChannelToPropose());
+  BuildNumber buildNumber=null;
+  if (updatedChannel != null) {
+    final BuildInfo latestBuild=updatedChannel.getLatestBuild();
+    if (latestBuild != null) {
+      buildNumber=latestBuild.getNumber();
+    }
+  }
+  final Collection<IdeaPluginDescriptor> incompatiblePlugins=buildNumber != null ? new HashSet<IdeaPluginDescriptor>() : null;
+  final Collection<PluginDownloader> updatedPlugins=platformUpdate ? null : updatePlugins(manualCheck,incompatiblePlugins,indicator,buildNumber);
+  ApplicationManager.getApplication().invokeLater(new Runnable(){
+    @Override public void run(){
+      showUpdateResult(project,result,updatedPlugins,incompatiblePlugins,enableLink,manualCheck);
+      if (callback != null) {
+        callback.setDone();
+      }
+    }
+  }
+);
+}
