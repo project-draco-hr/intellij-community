@@ -1,0 +1,56 @@
+{
+  myProject=resourceBundle.getProject();
+  final JPanel splitPanel=new JPanel();
+  myValuesPanel=new JPanel();
+  myStructureViewPanel=new JPanel();
+  JBSplitter splitter=new JBSplitter(false);
+  splitter.setFirstComponent(myStructureViewPanel);
+  splitter.setSecondComponent(myValuesPanel);
+  splitter.setShowDividerControls(true);
+  splitter.setHonorComponentsMinimumSize(true);
+  splitter.setAndLoadSplitterProportionKey(getClass() + ".splitter");
+  splitPanel.setLayout(new BorderLayout());
+  splitPanel.add(splitter,BorderLayout.CENTER);
+  myResourceBundle=resourceBundle;
+  myStructureViewComponent=new ResourceBundleStructureViewComponent(myResourceBundle,this);
+  myStructureViewPanel.setLayout(new BorderLayout());
+  myStructureViewPanel.add(myStructureViewComponent,BorderLayout.CENTER);
+  myStructureViewComponent.getTree().getSelectionModel().addTreeSelectionListener(new TreeSelectionListener(){
+    private String selectedPropertyName;
+    private PropertiesFile selectedPropertiesFile;
+    @Override public void valueChanged(    TreeSelectionEvent e){
+      if (getSelectedPropertyName() == null)       return;
+      if (!Comparing.strEqual(selectedPropertyName,getSelectedPropertyName()) || !Comparing.equal(selectedPropertiesFile,getSelectedPropertiesFile())) {
+        if (e.getOldLeadSelectionPath() != null) {
+          for (          Map.Entry<PropertiesFile,Editor> entry : myEditors.entrySet()) {
+            if (entry.getValue() == mySelectedEditor) {
+              writeEditorPropertyValue(mySelectedEditor,entry.getKey(),selectedPropertyName);
+              break;
+            }
+          }
+        }
+        selectedPropertyName=getSelectedPropertyName();
+        selectedPropertiesFile=getSelectedPropertiesFile();
+        selectionChanged();
+      }
+    }
+  }
+);
+  installPropertiesChangeListeners();
+  myEditors=new THashMap<PropertiesFile,Editor>();
+  myTitledPanels=new THashMap<PropertiesFile,JPanel>();
+  recreateEditorsPanel();
+  TreeElement[] children=myStructureViewComponent.getTreeModel().getRoot().getChildren();
+  if (children.length != 0) {
+    TreeElement child=children[0];
+    String propName=((ResourceBundlePropertyStructureViewElement)child).getValue();
+    setState(new ResourceBundleEditorState(propName));
+  }
+  myDataProviderPanel=new DataProviderPanel(splitPanel);
+  myProject.getMessageBus().connect(myProject).subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER,new FileEditorManagerAdapter(){
+    @Override public void selectionChanged(    @NotNull FileEditorManagerEvent event){
+      onSelectionChanged(event);
+    }
+  }
+);
+}
