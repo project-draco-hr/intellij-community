@@ -1,9 +1,11 @@
 {
   GotoTaskAction.CREATE_NEW_TASK_ACTION.setTaskName(pattern);
   if (!consumer.process(GotoTaskAction.CREATE_NEW_TASK_ACTION))   return false;
-  List<Task> cachedAndLocalTasks=TaskSearchSupport.getLocalAndCachedTasks(TaskManager.getManager(myProject),pattern,everywhere);
-  if (!processTasks(cachedAndLocalTasks,consumer,cancelled))   return false;
-  if (cachedAndLocalTasks.size() >= base.getMaximumListSizeLimit()) {
+  TaskManager taskManager=TaskManager.getManager(myProject);
+  List<Task> allCachedAndLocalTasks=ContainerUtil.concat(taskManager.getCachedIssues(),taskManager.getLocalTasks());
+  List<Task> filteredCachedAndLocalTasks=TaskSearchSupport.getLocalAndCachedTasks(taskManager,pattern,everywhere);
+  if (!processTasks(filteredCachedAndLocalTasks,consumer,cancelled))   return false;
+  if (filteredCachedAndLocalTasks.size() >= base.getMaximumListSizeLimit()) {
     return true;
   }
   FutureTask<List<Task>> future=new FutureTask<List<Task>>(new Callable<List<Task>>(){
@@ -24,8 +26,7 @@
   try {
     List<Task> tasks=future.get();
     myFutureReference.compareAndSet(future,null);
-    tasks.removeAll(TaskManager.getManager(myProject).getLocalTasks());
-    tasks.removeAll(TaskManager.getManager(myProject).getCachedIssues());
+    tasks.removeAll(allCachedAndLocalTasks);
     return processTasks(tasks,consumer,cancelled);
   }
  catch (  InterruptedException interrupted) {
