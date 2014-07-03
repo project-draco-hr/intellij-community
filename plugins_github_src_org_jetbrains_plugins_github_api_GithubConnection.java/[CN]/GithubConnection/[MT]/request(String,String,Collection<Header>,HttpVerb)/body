@@ -11,12 +11,13 @@
     checkStatusCode(response,requestBody);
     HttpEntity entity=response.getEntity();
     if (entity == null) {
-      return new ResponsePage(response.getAllHeaders());
+      return createResponse(response);
     }
     JsonElement ret=parseResponse(entity.getContent());
     if (ret.isJsonNull()) {
-      return new ResponsePage(response.getAllHeaders());
+      return createResponse(response);
     }
+    String newPath=null;
     Header pageHeader=response.getFirstHeader("Link");
     if (pageHeader != null) {
       for (      HeaderElement element : pageHeader.getElements()) {
@@ -27,16 +28,17 @@
           int end=urlString.lastIndexOf('>');
           if (begin == -1 || end == -1) {
             LOG.error("Invalid 'Link' header","{" + pageHeader.toString() + "}");
-            return new ResponsePage(ret,response.getAllHeaders());
+            break;
           }
           String url=urlString.substring(begin + 1,end);
-          String newPath=GithubUrlUtil.removeProtocolPrefix(url);
-          int index=newPath.indexOf('/');
-          return new ResponsePage(ret,newPath.substring(index),response.getAllHeaders());
+          String newUrl=GithubUrlUtil.removeProtocolPrefix(url);
+          int index=newUrl.indexOf('/');
+          newPath=newUrl.substring(index);
+          break;
         }
       }
     }
-    return new ResponsePage(ret,response.getAllHeaders());
+    return createResponse(ret,newPath,response);
   }
  catch (  SSLHandshakeException e) {
     if (e.getCause() instanceof ValidatorException) {
