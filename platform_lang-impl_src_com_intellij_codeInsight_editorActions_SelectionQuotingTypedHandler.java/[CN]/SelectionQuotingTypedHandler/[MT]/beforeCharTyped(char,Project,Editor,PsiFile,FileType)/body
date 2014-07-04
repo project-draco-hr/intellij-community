@@ -1,37 +1,27 @@
 {
-  final Ref<Boolean> caretUpdated=new Ref<Boolean>(Boolean.FALSE);
-  editor.getCaretModel().runForEachCaret(new CaretAction(){
-    @Override public void perform(    Caret caret){
-      TextRange replacedTextRange=caret.getUserData(REPLACED_TEXT_RANGE);
-      caret.putUserData(REPLACED_TEXT_RANGE,null);
-      if (replacedTextRange != null) {
-        Boolean ltrSelectionBoxed=caret.getUserData(LTR_SELECTION);
-        caret.putUserData(LTR_SELECTION,null);
-        boolean ltrSelection=ltrSelectionBoxed == null ? false : ltrSelectionBoxed;
-        if (replacedTextRange.getEndOffset() <= editor.getDocument().getTextLength()) {
-          if (myRestoreStickySelection && editor instanceof EditorEx) {
-            EditorEx editorEx=(EditorEx)editor;
-            editorEx.setStickySelection(false);
-            caret.moveToOffset(ltrSelection ? replacedTextRange.getStartOffset() : replacedTextRange.getEndOffset());
-            editorEx.setStickySelection(true);
-            caret.moveToOffset(ltrSelection ? replacedTextRange.getEndOffset() : replacedTextRange.getStartOffset());
-          }
+  if (myReplacedTextRange != null) {
+    if (myReplacedTextRange.getEndOffset() <= editor.getDocument().getTextLength()) {
+      if (myRestoreStickySelection && editor instanceof EditorEx) {
+        EditorEx editorEx=(EditorEx)editor;
+        CaretModel caretModel=editorEx.getCaretModel();
+        caretModel.moveToOffset(myLtrSelection ? myReplacedTextRange.getStartOffset() : myReplacedTextRange.getEndOffset());
+        editorEx.setStickySelection(true);
+        caretModel.moveToOffset(myLtrSelection ? myReplacedTextRange.getEndOffset() : myReplacedTextRange.getStartOffset());
+      }
  else {
-            if (ltrSelection || editor instanceof EditorWindow) {
-              caret.setSelection(replacedTextRange.getStartOffset(),replacedTextRange.getEndOffset());
-            }
- else {
-              caret.setSelection(replacedTextRange.getEndOffset(),replacedTextRange.getStartOffset());
-            }
-            if (Registry.is("editor.smarterSelectionQuoting")) {
-              caret.moveToOffset(ltrSelection ? replacedTextRange.getEndOffset() : replacedTextRange.getStartOffset());
-            }
-          }
+        if (myLtrSelection || editor instanceof EditorWindow) {
+          editor.getSelectionModel().setSelection(myReplacedTextRange.getStartOffset(),myReplacedTextRange.getEndOffset());
         }
-        caretUpdated.set(Boolean.TRUE);
+ else {
+          editor.getSelectionModel().setSelection(myReplacedTextRange.getEndOffset(),myReplacedTextRange.getStartOffset());
+        }
+        if (Registry.is("editor.smarterSelectionQuoting")) {
+          editor.getCaretModel().moveToOffset(myLtrSelection ? myReplacedTextRange.getEndOffset() : myReplacedTextRange.getStartOffset());
+        }
       }
     }
+    myReplacedTextRange=null;
+    return Result.STOP;
   }
-);
-  return caretUpdated.get() ? Result.STOP : Result.CONTINUE;
+  return Result.CONTINUE;
 }

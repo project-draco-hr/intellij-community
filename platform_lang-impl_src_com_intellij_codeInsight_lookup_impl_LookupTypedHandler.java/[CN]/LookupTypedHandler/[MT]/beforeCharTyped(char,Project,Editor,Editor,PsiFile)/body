@@ -1,33 +1,25 @@
 {
-  final LookupImpl lookup=(LookupImpl)LookupManager.getActiveLookup(editor);
+  final LookupImpl lookup=(LookupImpl)LookupManager.getActiveLookup(originalEditor);
   if (lookup == null) {
-    return Result.CONTINUE;
+    return false;
   }
   if (charTyped == ' ' && ChooseItemAction.hasTemplatePrefix(lookup,TemplateSettings.SPACE_CHAR)) {
-    return Result.CONTINUE;
+    return false;
   }
   final CharFilter.Result result=getLookupAction(charTyped,lookup);
   if (lookup.isLookupDisposed()) {
-    return Result.CONTINUE;
-  }
-  if (!lookup.performGuardedChange(new Runnable(){
-    @Override public void run(){
-      EditorModificationUtil.deleteSelectedText(editor);
-    }
-  }
-)) {
-    return Result.STOP;
+    return false;
   }
   if (result == CharFilter.Result.ADD_TO_PREFIX) {
     Document document=editor.getDocument();
     long modificationStamp=document.getModificationStamp();
     if (!lookup.performGuardedChange(new Runnable(){
       @Override public void run(){
-        EditorModificationUtil.typeInStringAtCaretHonorMultipleCarets(editor,String.valueOf(charTyped),true);
+        EditorModificationUtil.typeInStringAtCaretHonorMultipleCarets(originalEditor,String.valueOf(charTyped),true);
       }
     }
 )) {
-      return Result.STOP;
+      return true;
     }
     lookup.appendPrefix(charTyped);
     if (lookup.isStartCompletionWhenNothingMatches() && lookup.getItems().isEmpty()) {
@@ -44,20 +36,20 @@
     if (completion != null) {
       completion.prefixUpdated();
     }
-    return Result.STOP;
+    return true;
   }
   if (result == CharFilter.Result.SELECT_ITEM_AND_FINISH_LOOKUP && lookup.isFocused()) {
     LookupElement item=lookup.getCurrentItem();
     if (item != null) {
       if (completeTillTypedCharOccurrence(charTyped,lookup,item)) {
-        return Result.STOP;
+        return true;
       }
       FeatureUsageTracker.getInstance().triggerFeatureUsed(CodeCompletionFeatures.EDITING_COMPLETION_FINISH_BY_DOT_ETC);
       lookup.finishLookup(charTyped);
-      return Result.STOP;
+      return true;
     }
   }
   lookup.hide();
   TypedHandler.autoPopupCompletion(editor,charTyped,project,file);
-  return Result.CONTINUE;
+  return false;
 }
