@@ -1,0 +1,37 @@
+{
+  if (node.isFromFuture())   return;
+  final PsiElement source=PyUtil.turnDirIntoInit(node.resolveImportSource());
+  if (source instanceof PyFile) {
+    final PyFile pyFile=(PyFile)source;
+    PyEvaluationResult newlyEvaluatedResult=myContext.getCachedResult(pyFile);
+    if (newlyEvaluatedResult == null) {
+      final PyBlockEvaluator importEvaluator=new PyBlockEvaluator(myVisitedFiles,myContext);
+      importEvaluator.myDeclarationsToTrack.addAll(myDeclarationsToTrack);
+      importEvaluator.evaluate(pyFile);
+      newlyEvaluatedResult=importEvaluator.myEvaluationResult;
+      myContext.cache(pyFile,newlyEvaluatedResult);
+    }
+    if (node.isStarImport()) {
+      myEvaluationResult.myNamespace.putAll(newlyEvaluatedResult.myNamespace);
+      myEvaluationResult.myDeclarations.putAll(newlyEvaluatedResult.myDeclarations);
+    }
+ else {
+      for (      final PyImportElement element : node.getImportElements()) {
+        final String nameOfVarInOurModule=element.getVisibleName();
+        final QualifiedName nameOfVarInExternalModule=element.getImportedQName();
+        if ((nameOfVarInOurModule == null) || (nameOfVarInExternalModule == null)) {
+          continue;
+        }
+        final Object value=newlyEvaluatedResult.myNamespace.get(nameOfVarInExternalModule.toString());
+        myEvaluationResult.myNamespace.put(nameOfVarInOurModule,value);
+        final List<PyExpression> declarations=newlyEvaluatedResult.getDeclarations(nameOfVarInOurModule);
+        if (myEvaluationResult.myDeclarations.containsKey(nameOfVarInOurModule)) {
+          myEvaluationResult.myDeclarations.get(nameOfVarInOurModule).addAll(declarations);
+        }
+ else {
+          myEvaluationResult.myDeclarations.put(nameOfVarInOurModule,declarations);
+        }
+      }
+    }
+  }
+}
