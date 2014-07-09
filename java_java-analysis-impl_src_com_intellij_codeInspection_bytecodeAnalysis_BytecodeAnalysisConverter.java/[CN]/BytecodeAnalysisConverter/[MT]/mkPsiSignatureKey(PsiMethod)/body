@@ -1,0 +1,43 @@
+{
+  final PsiClass psiClass=PsiTreeUtil.getParentOfType(psiMethod,PsiClass.class,false);
+  if (psiClass == null) {
+    LOG.debug("PsiClass was null for " + psiMethod.getName());
+    return -1;
+  }
+  PsiClass outerClass=psiClass.getContainingClass();
+  boolean isInnerClassConstructor=psiMethod.isConstructor() && (outerClass != null) && !psiClass.hasModifierProperty(PsiModifier.STATIC);
+  PsiParameter[] parameters=psiMethod.getParameterList().getParameters();
+  PsiType returnType=psiMethod.getReturnType();
+  final int shift=isInnerClassConstructor ? 1 : 0;
+  final int arity=parameters.length + shift;
+  int[] shortSigKey=new int[3 + arity];
+  if (returnType == null) {
+    shortSigKey[0]=mkPsiTypeKey(PsiType.VOID);
+    shortSigKey[1]=myNamesEnumerator.enumerate("<init>");
+  }
+ else {
+    shortSigKey[0]=mkPsiTypeKey(returnType);
+    shortSigKey[1]=myNamesEnumerator.enumerate(psiMethod.getName());
+  }
+  shortSigKey[2]=arity;
+  if (isInnerClassConstructor) {
+    shortSigKey[3]=mkPsiClassKey(outerClass,0);
+  }
+  for (int i=0; i < parameters.length; i++) {
+    PsiParameter parameter=parameters[i];
+    shortSigKey[3 + i + shift]=mkPsiTypeKey(parameter.getType());
+  }
+  for (  int aShortSigKey : shortSigKey) {
+    if (aShortSigKey == -1) {
+      return -1;
+    }
+  }
+  int[] sigKey=new int[2];
+  int classKey=mkPsiClassKey(psiClass,0);
+  if (classKey == -1) {
+    return -1;
+  }
+  sigKey[0]=classKey;
+  sigKey[1]=myCompoundKeyEnumerator.enumerate(shortSigKey);
+  return myCompoundKeyEnumerator.enumerate(sigKey);
+}
