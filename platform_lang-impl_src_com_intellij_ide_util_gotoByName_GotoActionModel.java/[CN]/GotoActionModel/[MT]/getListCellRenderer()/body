@@ -1,21 +1,35 @@
 {
   return new DefaultListCellRenderer(){
-    @Override public Component getListCellRendererComponent(    @NotNull final JList list,    final Object value,    final int index,    final boolean isSelected,    final boolean cellHasFocus){
+    @Override public Component getListCellRendererComponent(    @NotNull final JList list,    final Object matchedValue,    final int index,    final boolean isSelected,    final boolean cellHasFocus){
       final JPanel panel=new JPanel(new BorderLayout());
       panel.setBorder(IdeBorderFactory.createEmptyBorder(2));
       panel.setOpaque(true);
       Color bg=UIUtil.getListBackground(isSelected);
       panel.setBackground(bg);
+      if (matchedValue instanceof String) {
+        final JBLabel label=new JBLabel((String)matchedValue);
+        label.setIcon(EMPTY_ICON);
+        panel.add(label,BorderLayout.WEST);
+        return panel;
+      }
       Color groupFg=isSelected ? UIUtil.getListSelectionForeground() : UIUtil.getLabelDisabledForeground();
+      Object value=((MatchedValue)matchedValue).value;
+      String pattern=((MatchedValue)matchedValue).pattern;
+      SimpleColoredComponent nameComponent=new SimpleColoredComponent();
+      nameComponent.setBackground(bg);
+      panel.add(nameComponent,BorderLayout.CENTER);
       if (value instanceof ActionWrapper) {
         final ActionWrapper actionWithParentGroup=(ActionWrapper)value;
         final AnAction anAction=actionWithParentGroup.getAction();
         final Presentation templatePresentation=anAction.getTemplatePresentation();
-        final Icon icon=templatePresentation.getIcon();
         final Color fg=defaultActionForeground(isSelected,actionWithParentGroup.getPresentation());
-        final JLabel actionLabel=createActionLabel(anAction,templatePresentation.getText(),fg,bg,icon);
-        panel.add(actionLabel,BorderLayout.WEST);
-        final String groupName=actionWithParentGroup.getGroupName();
+        panel.add(createIconLabel(templatePresentation.getIcon()),BorderLayout.WEST);
+        appendWithColoredMatches(nameComponent,templatePresentation.getText(),pattern,fg,isSelected);
+        final Shortcut shortcut=preferKeyboardShortcut(KeymapManager.getInstance().getActiveKeymap().getShortcuts(getActionId(anAction)));
+        if (shortcut != null) {
+          nameComponent.append(" (" + KeymapUtil.getShortcutText(shortcut) + ")",new SimpleTextAttributes(STYLE_ITALIC,fg));
+        }
+        String groupName=actionWithParentGroup.getAction() instanceof ApplyIntentionAction ? null : actionWithParentGroup.getGroupName();
         if (groupName != null) {
           final JLabel groupLabel=new JLabel(groupName);
           groupLabel.setBackground(bg);
@@ -25,7 +39,9 @@
       }
  else       if (value instanceof OptionDescription) {
         if (!isSelected) {
-          panel.setBackground(UIUtil.isUnderDarcula() ? ColorUtil.brighter(UIUtil.getListBackground(),1) : LightColors.SLIGHTLY_GRAY);
+          Color descriptorBg=UIUtil.isUnderDarcula() ? ColorUtil.brighter(UIUtil.getListBackground(),1) : LightColors.SLIGHTLY_GRAY;
+          panel.setBackground(descriptorBg);
+          nameComponent.setBackground(descriptorBg);
         }
         String hit=((OptionDescription)value).getHit();
         if (hit == null) {
@@ -35,22 +51,26 @@
         hit=StringUtil.first(hit,50,true);
         hit=hit.replace("  "," ");
         final Color fg=UIUtil.getListForeground(isSelected);
-        final JLabel label=new JLabel(hit.trim());
-        label.setIcon(EMPTY_ICON);
-        label.setForeground(fg);
-        label.setBackground(bg);
-        panel.add(label,BorderLayout.WEST);
+        appendWithColoredMatches(nameComponent,hit.trim(),pattern,fg,isSelected);
+        panel.add(new JLabel(EMPTY_ICON),BorderLayout.WEST);
         final JLabel settingsLabel=new JLabel(getGroupName((OptionDescription)value));
         settingsLabel.setForeground(groupFg);
         settingsLabel.setBackground(bg);
         panel.add(settingsLabel,BorderLayout.EAST);
       }
- else       if (value instanceof String) {
-        final JBLabel label=new JBLabel((String)value);
-        label.setIcon(EMPTY_ICON);
-        panel.add(label,BorderLayout.WEST);
-      }
       return panel;
+    }
+    private void appendWithColoredMatches(    SimpleColoredComponent nameComponent,    String name,    String pattern,    Color fg,    boolean selected){
+      final SimpleTextAttributes plain=new SimpleTextAttributes(STYLE_PLAIN,fg);
+      final SimpleTextAttributes highlighted=new SimpleTextAttributes(null,fg,null,STYLE_SEARCH_MATCH);
+      List<TextRange> fragments=ContainerUtil.newArrayList();
+      if (selected) {
+        int matchStart=StringUtil.indexOfIgnoreCase(name,pattern,0);
+        if (matchStart >= 0) {
+          fragments.add(TextRange.from(matchStart,pattern.length()));
+        }
+      }
+      SpeedSearchUtil.appendColoredFragments(nameComponent,name,fragments,plain,highlighted);
     }
   }
 ;
