@@ -1,5 +1,5 @@
 {
-  PsiType[] substitutions=new PsiType[typeParameters.length];
+  PsiType[] substitutions=PsiType.createArray(typeParameters.length);
   @SuppressWarnings("unchecked") Pair<PsiType,ConstraintType>[] constraints=new Pair[typeParameters.length];
   for (int i=0; i < typeParameters.length; i++) {
     if (substitutions[i] != null)     continue;
@@ -36,7 +36,7 @@
               }
               break OtherParameters;
             }
- else             if (currentConstraintType == ConstraintType.SUPERTYPE) {
+ else             if (currentConstraintType == ConstraintType.SUPERTYPE && !JavaVersionService.getInstance().isAtLeast(parent,JavaSdkVersion.JDK_1_7)) {
               if (PsiType.NULL.equals(substitutionFromBounds)) {
                 substitutionFromBounds=currentSubstitution;
               }
@@ -57,37 +57,32 @@
       partialSubstitutor=partialSubstitutor.put(typeParameter,substitution);
     }
   }
-  try {
-    for (int i=0; i < typeParameters.length; i++) {
-      PsiTypeParameter typeParameter=typeParameters[i];
-      PsiType substitution=substitutions[i];
-      if (substitution != null)       continue;
-      Pair<PsiType,ConstraintType> constraint=constraints[i];
-      if (constraint == null) {
-        constraint=inferMethodTypeParameterFromParent(typeParameter,partialSubstitutor,parent,policy);
-      }
- else       if (constraint.getSecond() == ConstraintType.SUBTYPE) {
-        Pair<PsiType,ConstraintType> otherConstraint=inferMethodTypeParameterFromParent(typeParameter,partialSubstitutor,parent,policy);
-        if (otherConstraint != null) {
-          if (otherConstraint.getSecond() == ConstraintType.EQUALS || otherConstraint.getSecond() == ConstraintType.SUPERTYPE) {
-            constraint=otherConstraint;
-          }
+  for (int i=0; i < typeParameters.length; i++) {
+    PsiTypeParameter typeParameter=typeParameters[i];
+    PsiType substitution=substitutions[i];
+    if (substitution != null)     continue;
+    Pair<PsiType,ConstraintType> constraint=constraints[i];
+    if (constraint == null) {
+      constraint=inferMethodTypeParameterFromParent(typeParameter,partialSubstitutor,parent,policy);
+    }
+ else     if (constraint.getSecond() == ConstraintType.SUBTYPE) {
+      Pair<PsiType,ConstraintType> otherConstraint=inferMethodTypeParameterFromParent(typeParameter,partialSubstitutor,parent,policy);
+      if (otherConstraint != null) {
+        if (otherConstraint.getSecond() == ConstraintType.EQUALS || otherConstraint.getSecond() == ConstraintType.SUPERTYPE || compareSubtypes(constraint.getFirst(),otherConstraint.getFirst())) {
+          constraint=otherConstraint;
         }
       }
-      if (constraint != null) {
-        substitution=constraint.getFirst();
-      }
-      if (substitution == null) {
-        PsiElementFactory factory=JavaPsiFacade.getInstance(myManager.getProject()).getElementFactory();
-        return factory.createRawSubstitutor(partialSubstitutor,typeParameters);
-      }
-      if (substitution != PsiType.NULL) {
-        partialSubstitutor=partialSubstitutor.put(typeParameter,substitution);
-      }
     }
-  }
-  finally {
-    GraphInferencePolicy.forget(parent);
+    if (constraint != null) {
+      substitution=constraint.getFirst();
+    }
+    if (substitution == null) {
+      PsiElementFactory factory=JavaPsiFacade.getInstance(myManager.getProject()).getElementFactory();
+      return factory.createRawSubstitutor(partialSubstitutor,typeParameters);
+    }
+    if (substitution != PsiType.NULL) {
+      partialSubstitutor=partialSubstitutor.put(typeParameter,substitution);
+    }
   }
   return partialSubstitutor;
 }

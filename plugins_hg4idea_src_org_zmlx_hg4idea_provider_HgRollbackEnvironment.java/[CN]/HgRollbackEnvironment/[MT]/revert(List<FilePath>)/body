@@ -3,7 +3,20 @@
     final VirtualFile repo=entry.getKey();
     final Collection<FilePath> files=entry.getValue();
     HgRevisionNumber revisionNumber=new HgWorkingCopyRevisionsCommand(project).firstParent(repo);
-    new HgRevertCommand(project).execute(repo,files,revisionNumber,false);
-    new HgResolveCommand(project).markResolved(repo,files);
+    for (    List<String> chunk : VcsFileUtil.chunkPaths(repo,files)) {
+      HgCommandResult revertResult=new HgRevertCommand(project).execute(repo,chunk,revisionNumber,false);
+      if (HgErrorUtil.hasUncommittedChangesConflict(revertResult)) {
+        String message=String.format("<html>Revert failed due to uncommitted merge.<br>" + "Would you like to discard all changes for repository <it><b>%s</b></it>?</html>",repo.getPresentableName());
+        int exitCode=HgUpdateCommand.showDiscardChangesConfirmation(project,message);
+        if (exitCode == Messages.OK) {
+          HgUpdateCommand updateCommand=new HgUpdateCommand(project,repo);
+          updateCommand.setClean(true);
+          updateCommand.setRevision(".");
+          updateCommand.execute();
+        }
+        break;
+      }
+      new HgResolveCommand(project).markResolved(repo,files);
+    }
   }
 }

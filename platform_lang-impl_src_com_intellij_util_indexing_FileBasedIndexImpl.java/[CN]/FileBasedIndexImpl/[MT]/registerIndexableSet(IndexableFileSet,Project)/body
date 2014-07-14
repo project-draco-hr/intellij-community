@@ -1,4 +1,38 @@
 {
   myIndexableSets.add(set);
   myIndexableSetToProjectMap.put(set,project);
+  if (project != null) {
+    ((PsiManagerImpl)PsiManager.getInstance(project)).addTreeChangePreprocessor(new PsiTreeChangePreprocessor(){
+      @Override public void treeChanged(      @NotNull PsiTreeChangeEventImpl event){
+        if (event.isGenericChange() && event.getCode() == PsiTreeChangeEventImpl.PsiEventType.CHILDREN_CHANGED) {
+          PsiFile file=event.getFile();
+          if (file != null) {
+            VirtualFile virtualFile=file.getVirtualFile();
+            Document document=myFileDocumentManager.getDocument(virtualFile);
+            if (document != null && myFileDocumentManager.isDocumentUnsaved(document)) {
+              for (              ID<?,?> psiBackedIndex : myPsiDependentIndices) {
+                myUpToDateIndicesForUnsavedOrTransactedDocuments.remove(psiBackedIndex);
+              }
+            }
+ else {
+              if (virtualFile instanceof VirtualFileWithId) {
+                boolean wasIndexed=false;
+                for (                ID<?,?> psiBackedIndex : myPsiDependentIndices) {
+                  if (isFileIndexed(virtualFile,psiBackedIndex)) {
+                    IndexingStamp.setFileIndexedStateOutdated(virtualFile,psiBackedIndex);
+                    wasIndexed=true;
+                  }
+                }
+                if (wasIndexed) {
+                  myChangedFilesCollector.scheduleForUpdate(virtualFile);
+                  IndexingStamp.flushCache(virtualFile);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+);
+  }
 }

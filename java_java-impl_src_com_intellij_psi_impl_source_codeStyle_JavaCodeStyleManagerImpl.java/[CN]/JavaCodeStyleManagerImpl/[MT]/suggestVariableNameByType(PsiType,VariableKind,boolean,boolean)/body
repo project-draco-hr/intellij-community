@@ -1,0 +1,40 @@
+{
+  String longTypeName=skipIndices ? type.getCanonicalText() : getLongTypeName(type);
+  CodeStyleSettings.TypeToNameMap map=getMapByVariableKind(variableKind);
+  if (map != null && longTypeName != null) {
+    if (type.equals(PsiType.NULL)) {
+      longTypeName=CommonClassNames.JAVA_LANG_OBJECT;
+    }
+    String name=map.nameByType(longTypeName);
+    if (name != null && isIdentifier(name)) {
+      return new String[]{name};
+    }
+  }
+  final Collection<String> suggestions=new LinkedHashSet<String>();
+  final PsiClass psiClass=!skipIndices && type instanceof PsiClassType ? ((PsiClassType)type).resolve() : null;
+  if (!skipIndices) {
+    suggestNamesForCollectionInheritors(type,variableKind,suggestions,correctKeywords);
+    if (psiClass != null && CommonClassNames.JAVA_UTIL_OPTIONAL.equals(psiClass.getQualifiedName()) && ((PsiClassType)type).getParameterCount() == 1) {
+      PsiType optionalContent=((PsiClassType)type).getParameters()[0];
+      Collections.addAll(suggestions,suggestVariableNameByType(optionalContent,variableKind,correctKeywords,false));
+    }
+    suggestNamesFromGenericParameters(type,variableKind,suggestions,correctKeywords);
+  }
+  String typeName=getTypeName(type,!skipIndices);
+  if (typeName != null) {
+    typeName=normalizeTypeName(typeName);
+    ContainerUtil.addAll(suggestions,getSuggestionsByName(typeName,variableKind,type instanceof PsiArrayType,correctKeywords));
+  }
+  if (psiClass != null && psiClass.getContainingClass() != null) {
+    InheritanceUtil.processSupers(psiClass,false,new Processor<PsiClass>(){
+      @Override public boolean process(      PsiClass superClass){
+        if (PsiTreeUtil.isAncestor(superClass,psiClass,true)) {
+          ContainerUtil.addAll(suggestions,getSuggestionsByName(superClass.getName(),variableKind,false,correctKeywords));
+        }
+        return false;
+      }
+    }
+);
+  }
+  return ArrayUtil.toStringArray(suggestions);
+}

@@ -1,45 +1,14 @@
 {
-  Project project=parameters.getProject();
-  final PsiShortNamesCache cache=PsiShortNamesCache.getInstance(project);
-  final ProgressIndicator indicator=ProgressIndicatorProvider.getGlobalProgressIndicator();
   final Set<String> names=new THashSet<String>(10000);
-  cache.processAllClassNames(new Processor<String>(){
-    int i=0;
-    @Override public boolean process(    String s){
-      if (indicator != null && i++ % 512 == 0) {
-        indicator.checkCanceled();
-      }
+  processClassNames(parameters.getProject(),scope,new Consumer<String>(){
+    @Override public void consume(    String s){
       if (parameters.nameMatches(s)) {
         names.add(s);
       }
-      return true;
     }
   }
-,scope,IdFilter.getProjectIdFilter(project,true));
-  if (indicator != null) {
-    indicator.checkCanceled();
-  }
+);
   List<String> sorted=new ArrayList<String>(names);
-  Collections.sort(sorted,new Comparator<String>(){
-    @Override public int compare(    final String o1,    final String o2){
-      return o1.compareToIgnoreCase(o2);
-    }
-  }
-);
-  for (  final String name : sorted) {
-    ProgressIndicatorProvider.checkCanceled();
-    final PsiClass[] classes=ApplicationManager.getApplication().runReadAction(new Computable<PsiClass[]>(){
-      @Override public PsiClass[] compute(){
-        return cache.getClassesByName(name,scope);
-      }
-    }
-);
-    for (    PsiClass psiClass : classes) {
-      ProgressIndicatorProvider.checkCanceled();
-      if (!processor.process(psiClass)) {
-        return false;
-      }
-    }
-  }
-  return true;
+  Collections.sort(sorted,String.CASE_INSENSITIVE_ORDER);
+  return processClassesByNames(parameters.getProject(),scope,sorted,processor);
 }

@@ -4,10 +4,39 @@
   if (homePath == null) {
     throw new PyExternalProcessException(ERROR_INVALID_SDK,helperPath,args,"Cannot find interpreter for SDK");
   }
-  if (sdkData instanceof RemoteSdkData) {
-    final RemoteSdkData remoteSdkData=(RemoteSdkData)sdkData;
+  if (sdkData instanceof PyRemoteSdkAdditionalDataBase) {
+    RemoteSdkCredentials remoteSdkCredentials;
+    try {
+      remoteSdkCredentials=((RemoteSdkAdditionalData)sdkData).getRemoteSdkCredentials(false);
+    }
+ catch (    InterruptedException e) {
+      LOG.error(e);
+      remoteSdkCredentials=null;
+    }
+catch (    final ExecutionException e) {
+      if (e.getCause() instanceof VagrantNotStartedException) {
+        throw new PyExternalProcessException(ERROR_VAGRANT_NOT_LAUNCHED,helperPath,args,"Vagrant instance is down. <a href=\"" + LAUNCH_VAGRANT + "\">Launch vagrant</a>").withHandler(LAUNCH_VAGRANT,new Runnable(){
+          @Override public void run(){
+            final PythonRemoteInterpreterManager manager=PythonRemoteInterpreterManager.getInstance();
+            if (manager != null) {
+              try {
+                manager.runVagrant(((VagrantNotStartedException)e.getCause()).getVagrantFolder());
+                clearCaches();
+              }
+ catch (              ExecutionException e1) {
+                throw new RuntimeException(e1);
+              }
+            }
+          }
+        }
+);
+      }
+ else {
+        throw new PyExternalProcessException(ERROR_REMOTE_ACCESS,helperPath,args,e.getMessage());
+      }
+    }
     final PythonRemoteInterpreterManager manager=PythonRemoteInterpreterManager.getInstance();
-    if (manager != null) {
+    if (manager != null && remoteSdkCredentials != null) {
       final List<String> cmdline=new ArrayList<String>();
       cmdline.add(homePath);
       cmdline.add(RemoteFile.detectSystemByPath(homePath).createRemoteFile(helperPath).getPath());
@@ -19,11 +48,12 @@
 ));
       try {
         if (askForSudo) {
-          askForSudo=!manager.ensureCanWrite(null,remoteSdkData,remoteSdkData.getInterpreterPath());
+          askForSudo=!manager.ensureCanWrite(null,remoteSdkCredentials,remoteSdkCredentials.getInterpreterPath());
         }
         ProcessOutput processOutput;
         do {
-          processOutput=manager.runRemoteProcess(null,remoteSdkData,ArrayUtil.toStringArray(cmdline),workingDir,askForSudo);
+          PathMappingSettings mappings=manager.setupMappings(null,(PyRemoteSdkAdditionalDataBase)sdkData,null);
+          processOutput=manager.runRemoteProcess(null,remoteSdkCredentials,mappings,ArrayUtil.toStringArray(cmdline),workingDir,askForSudo);
           if (askForSudo && processOutput.getStderr().contains("sudo: 3 incorrect password attempts")) {
             continue;
           }

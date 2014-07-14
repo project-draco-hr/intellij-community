@@ -2,7 +2,7 @@
   final PsiClass anInterface=(PsiClass)element.getParent();
   final SearchScope searchScope=anInterface.getUseScope();
   final Query<PsiClass> query=ClassInheritorsSearch.search(anInterface,searchScope,false);
-  final MultiMap<PsiElement,String> conflicts=new MultiMap();
+  final MultiMap<PsiElement,String> conflicts=new MultiMap<PsiElement,String>();
   query.forEach(new Processor<PsiClass>(){
     @Override public boolean process(    PsiClass aClass){
       final PsiReferenceList extendsList=aClass.getExtendsList();
@@ -20,11 +20,19 @@
     }
   }
 );
+  final PsiFunctionalExpression functionalExpression=FunctionalExpressionSearch.search(anInterface,searchScope).findFirst();
+  if (functionalExpression != null) {
+    final String conflictMessage=ClassPresentationUtil.getFunctionalExpressionPresentation(functionalExpression,true) + " will not compile after converting " + RefactoringUIUtil.getDescription(anInterface,false)+ " to a class";
+    conflicts.putValue(functionalExpression,conflictMessage);
+  }
   final boolean conflictsDialogOK;
   if (conflicts.isEmpty()) {
     conflictsDialogOK=true;
   }
  else {
+    if (ApplicationManager.getApplication().isUnitTestMode()) {
+      throw new BaseRefactoringProcessor.ConflictsInTestsException(conflicts.values());
+    }
     final ConflictsDialog conflictsDialog=new ConflictsDialog(anInterface.getProject(),conflicts,new Runnable(){
       @Override public void run(){
         final AccessToken token=WriteAction.start();

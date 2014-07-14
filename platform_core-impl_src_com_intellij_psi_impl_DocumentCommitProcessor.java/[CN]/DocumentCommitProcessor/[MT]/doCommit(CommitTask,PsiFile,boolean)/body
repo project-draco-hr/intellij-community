@@ -1,24 +1,17 @@
 {
   Document document=task.document;
-  if (PsiDocumentManager.getInstance(task.project).isCommitted(document))   return null;
-  final TextBlock textBlock=TextBlock.get(file);
   final long startDocModificationTimeStamp=document.getModificationStamp();
   final FileElement myTreeElementBeingReparsedSoItWontBeCollected=((PsiFileImpl)file).calcTreeElement();
-  final CharSequence chars=document.getCharsSequence();
+  final CharSequence chars=document.getImmutableCharSequence();
+  final CharSequence oldPsiText=myTreeElementBeingReparsedSoItWontBeCollected.getChars();
+  final TextRange changedPsiRange=getChangedPsiRange(file,oldPsiText,chars);
+  if (changedPsiRange == null) {
+    return null;
+  }
   final Boolean data=document.getUserData(BlockSupport.DO_NOT_REPARSE_INCREMENTALLY);
   if (data != null) {
     document.putUserData(BlockSupport.DO_NOT_REPARSE_INCREMENTALLY,null);
     file.putUserData(BlockSupport.DO_NOT_REPARSE_INCREMENTALLY,data);
-  }
-  final String oldPsiText=myTreeElementBeingReparsedSoItWontBeCollected.getText();
-  int commonPrefixLength=StringUtil.commonPrefixLength(oldPsiText,chars);
-  final TextRange changedPsiRange;
-  if (commonPrefixLength == chars.length()) {
-    changedPsiRange=getChangedPsiRange(file,0,0,chars.length());
-  }
- else {
-    int commonSuffixLength=StringUtil.commonSuffixLength(oldPsiText,chars);
-    changedPsiRange=getChangedPsiRange(file,commonPrefixLength,oldPsiText.length() - commonSuffixLength,chars.length());
   }
   BlockSupport blockSupport=BlockSupport.getInstance(file.getProject());
   final DiffLog diffLog=blockSupport.reparseRange(file,changedPsiRange,chars,task.indicator);
@@ -26,23 +19,11 @@
     @Override public boolean process(    Document document){
       ApplicationManager.getApplication().assertWriteAccessAllowed();
       log("Finishing",task,synchronously,document.getModificationStamp(),startDocModificationTimeStamp);
-      if (document.getModificationStamp() != startDocModificationTimeStamp) {
+      if (document.getModificationStamp() != startDocModificationTimeStamp || ((PsiDocumentManagerBase)PsiDocumentManager.getInstance(file.getProject())).getCachedViewProvider(document) != file.getViewProvider()) {
         return false;
       }
-      try {
-        CodeStyleManager.getInstance(file.getProject()).performActionWithFormatterDisabled(new Runnable(){
-          @Override public void run(){
-synchronized (PsiLock.LOCK) {
-              doActualPsiChange(file,diffLog);
-            }
-          }
-        }
-);
-        assertAfterCommit(document,file,oldPsiText,myTreeElementBeingReparsedSoItWontBeCollected);
-      }
-  finally {
-        textBlock.clear();
-      }
+      doActualPsiChange(file,diffLog);
+      assertAfterCommit(document,file,oldPsiText,myTreeElementBeingReparsedSoItWontBeCollected);
       return true;
     }
   }

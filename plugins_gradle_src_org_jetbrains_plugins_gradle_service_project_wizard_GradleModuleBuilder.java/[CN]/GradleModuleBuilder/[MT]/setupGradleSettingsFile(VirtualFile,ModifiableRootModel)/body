@@ -1,0 +1,45 @@
+{
+  VirtualFile file=null;
+  if (myWizardContext.isCreatingNewProject()) {
+    final String moduleDirName=VfsUtilCore.getRelativePath(modelContentRootDir,model.getProject().getBaseDir(),'/');
+    file=getExternalProjectConfigFile(model.getProject().getBasePath(),GradleConstants.SETTINGS_FILE_NAME);
+    if (file == null)     return null;
+    Map<String,String> attributes=ContainerUtil.newHashMap();
+    final String projectName=model.getProject().getName();
+    attributes.put(TEMPLATE_ATTRIBUTE_PROJECT_NAME,projectName);
+    attributes.put(TEMPLATE_ATTRIBUTE_MODULE_DIR_NAME,moduleDirName);
+    attributes.put(TEMPLATE_ATTRIBUTE_MODULE_NAME,model.getModule().getName());
+    saveFile(file,TEMPLATE_GRADLE_SETTINGS,attributes);
+  }
+ else {
+    Map<String,Module> moduleMap=ContainerUtil.newHashMap();
+    for (    Module module : ModuleManager.getInstance(model.getProject()).getModules()) {
+      for (      ContentEntry contentEntry : model.getContentEntries()) {
+        if (contentEntry.getFile() != null) {
+          moduleMap.put(contentEntry.getFile().getPath(),module);
+        }
+      }
+    }
+    VirtualFile virtualFile=modelContentRootDir;
+    Module module=null;
+    while (virtualFile != null && module == null) {
+      module=moduleMap.get(virtualFile.getPath());
+      virtualFile=virtualFile.getParent();
+    }
+    if (module != null) {
+      String rootProjectPath=module.getOptionValue(ExternalSystemConstants.ROOT_PROJECT_PATH_KEY);
+      if (!StringUtil.isEmpty(rootProjectPath)) {
+        VirtualFile rootProjectFile=VfsUtil.findFileByIoFile(new File(rootProjectPath),true);
+        if (rootProjectFile == null)         return null;
+        final String moduleDirName=VfsUtilCore.getRelativePath(modelContentRootDir,rootProjectFile,'/');
+        file=getExternalProjectConfigFile(rootProjectPath,GradleConstants.SETTINGS_FILE_NAME);
+        if (file == null)         return null;
+        Map<String,String> attributes=ContainerUtil.newHashMap();
+        attributes.put(TEMPLATE_ATTRIBUTE_MODULE_DIR_NAME,moduleDirName);
+        attributes.put(TEMPLATE_ATTRIBUTE_MODULE_NAME,model.getModule().getName());
+        appendToFile(file,TEMPLATE_GRADLE_SETTINGS_MERGE,attributes);
+      }
+    }
+  }
+  return file;
+}

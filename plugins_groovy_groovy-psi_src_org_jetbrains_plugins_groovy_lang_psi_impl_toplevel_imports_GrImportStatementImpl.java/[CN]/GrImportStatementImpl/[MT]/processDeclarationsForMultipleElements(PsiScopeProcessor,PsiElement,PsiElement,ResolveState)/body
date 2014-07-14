@@ -1,0 +1,33 @@
+{
+  GrCodeReferenceElement ref=getImportReference();
+  if (ref == null)   return true;
+  if (isStatic()) {
+    final PsiElement resolved=ref.resolve();
+    if (resolved instanceof PsiClass) {
+      state=state.put(ClassHint.RESOLVE_CONTEXT,this);
+      final PsiClass clazz=(PsiClass)resolved;
+      if (!clazz.processDeclarations(new DelegatingScopeProcessor(processor){
+        @Override public boolean execute(        @NotNull PsiElement element,        @NotNull ResolveState state){
+          if (element instanceof PsiMember && ((PsiMember)element).hasModifierProperty(PsiModifier.STATIC)) {
+            return super.execute(element,state);
+          }
+          return true;
+        }
+      }
+,state,lastParent,place))       return false;
+    }
+  }
+ else {
+    if (ResolveUtil.shouldProcessClasses(processor.getHint(ClassHint.KEY))) {
+      String qName=PsiUtil.getQualifiedReferenceText(ref);
+      if (qName != null) {
+        PsiPackage aPackage=JavaPsiFacade.getInstance(getProject()).findPackage(qName);
+        if (aPackage != null && !((GroovyFile)getContainingFile()).getPackageName().equals(aPackage.getQualifiedName())) {
+          state=state.put(ClassHint.RESOLVE_CONTEXT,this);
+          if (!aPackage.processDeclarations(processor,state,lastParent,place))           return false;
+        }
+      }
+    }
+  }
+  return true;
+}

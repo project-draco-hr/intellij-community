@@ -7,7 +7,7 @@
   boolean isDummy=isDummyConstructorCall(methodCall,resolveHelper,list,referenceToMethod);
   if (isDummy)   return null;
   HighlightInfo highlightInfo;
-  PsiSubstitutor substitutor=resolveResult.getSubstitutor();
+  final PsiSubstitutor substitutor=resolveResult.getSubstitutor();
   if (resolved instanceof PsiMethod && resolveResult.isValidResult()) {
     TextRange fixRange=getFixRange(methodCall);
     highlightInfo=HighlightUtil.checkUnhandledExceptions(methodCall,fixRange);
@@ -32,8 +32,18 @@
         String containerName=parent == null ? "" : HighlightMessageUtil.getSymbolName(parent,substitutor);
         String argTypes=buildArgTypesList(list);
         String description=JavaErrorMessages.message("wrong.method.arguments",methodName,containerName,argTypes);
-        String toolTip=parent instanceof PsiClass && !ApplicationManager.getApplication().isUnitTestMode() ? createMismatchedArgumentsHtmlTooltip(candidateInfo,list) : description;
-        highlightInfo=HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(list).description(description).escapedToolTip(toolTip).navigationShift(+1).create();
+        final Ref<PsiElement> elementToHighlight=new Ref<PsiElement>(list);
+        String toolTip;
+        if (parent instanceof PsiClass && !ApplicationManager.getApplication().isUnitTestMode()) {
+          toolTip=buildOneLineMismatchDescription(list,candidateInfo,elementToHighlight);
+          if (toolTip == null) {
+            toolTip=createMismatchedArgumentsHtmlTooltip(candidateInfo,list);
+          }
+        }
+ else {
+          toolTip=description;
+        }
+        highlightInfo=HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(elementToHighlight.get()).description(description).escapedToolTip(toolTip).navigationShift(+1).create();
         if (highlightInfo != null) {
           registerMethodCallIntentions(highlightInfo,methodCall,list,resolveHelper);
         }

@@ -1,0 +1,40 @@
+{
+  if (hasErrorElements(info.getArgumentList()))   return;
+  if (info.getInvokedExpression() instanceof GrReferenceExpression) {
+    final GrReferenceExpression referenceExpression=(GrReferenceExpression)info.getInvokedExpression();
+    GroovyResolveResult resolveResult=info.advancedResolve();
+    GroovyResolveResult[] results=info.multiResolve();
+    PsiElement resolved=resolveResult.getElement();
+    if (resolved == null) {
+      GrExpression qualifier=referenceExpression.getQualifierExpression();
+      if (qualifier == null && GrHighlightUtil.isDeclarationAssignment(referenceExpression))       return;
+    }
+    if (!checkCannotInferArgumentTypes(info))     return;
+    final PsiType type=referenceExpression.getType();
+    if (resolved != null) {
+      if (resolved instanceof PsiMethod && !resolveResult.isInvokedOnProperty()) {
+        checkMethodApplicability(resolveResult,true,info);
+      }
+ else {
+        checkCallApplicability(type,true,info);
+      }
+    }
+ else     if (results.length > 0) {
+      for (      GroovyResolveResult result : results) {
+        PsiElement current=result.getElement();
+        if (current instanceof PsiMethod && !result.isInvokedOnProperty()) {
+          if (!checkMethodApplicability(result,false,info))           return;
+        }
+ else {
+          if (!checkCallApplicability(type,false,info))           return;
+        }
+      }
+      registerError(info.getElementToHighlight(),GroovyBundle.message("method.call.is.ambiguous"));
+    }
+  }
+ else   if (info.getInvokedExpression() != null) {
+    final PsiType type=info.getInvokedExpression().getType();
+    checkCallApplicability(type,true,info);
+  }
+  checkNamedArgumentsType(info);
+}

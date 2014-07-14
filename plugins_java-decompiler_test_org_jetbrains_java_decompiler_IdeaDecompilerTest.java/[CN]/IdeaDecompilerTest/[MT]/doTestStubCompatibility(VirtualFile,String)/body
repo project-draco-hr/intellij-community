@@ -1,0 +1,36 @@
+{
+  final int pathStart=root.getPath().length();
+  final boolean compare=textPath != null && new File(textPath).exists();
+  VfsUtilCore.visitChildrenRecursively(root,new VirtualFileVisitor(){
+    @Override public boolean visitFile(    @NotNull VirtualFile file){
+      if (file.getName().equals("Jps.class"))       return true;
+      if (!file.isDirectory() && file.getFileType() == StdFileTypes.CLASS && !file.getName().contains("$")) {
+        PsiFile clsFile=getPsiManager().findFile(file);
+        assertNotNull(file.getPath(),clsFile);
+        PsiElement mirror=((ClsFileImpl)clsFile).getMirror().copy();
+        if (textPath != null) {
+          collapseCodeBlocks(mirror);
+        }
+        String decompiled=mirror.getText();
+        assertTrue(file.getPath(),decompiled.contains(file.getNameWithoutExtension()));
+        if (textPath != null) {
+          try {
+            File txtFile=new File(textPath,file.getPath().substring(pathStart));
+            if (!compare) {
+              FileUtil.writeToFile(txtFile,decompiled.getBytes("UTF-8"));
+            }
+ else {
+              String expected=FileUtil.loadFile(txtFile,"UTF-8");
+              assertEquals(file.getPath(),expected,decompiled);
+            }
+          }
+ catch (          IOException e) {
+            throw new RuntimeException(e);
+          }
+        }
+      }
+      return true;
+    }
+  }
+);
+}

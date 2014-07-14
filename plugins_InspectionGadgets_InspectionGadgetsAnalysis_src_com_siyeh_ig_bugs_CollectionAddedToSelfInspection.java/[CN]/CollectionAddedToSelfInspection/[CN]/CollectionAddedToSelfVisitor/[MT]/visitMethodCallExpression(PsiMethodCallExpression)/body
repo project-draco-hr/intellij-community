@@ -2,13 +2,10 @@
   super.visitMethodCallExpression(call);
   final PsiReferenceExpression methodExpression=call.getMethodExpression();
   @NonNls final String methodName=methodExpression.getReferenceName();
-  if (!"put".equals(methodName) && !"set".equals(methodName) && !"add".equals(methodName)) {
+  if ("equals".equals(methodName)) {
     return;
   }
   final PsiExpression qualifier=methodExpression.getQualifierExpression();
-  if (qualifier == null) {
-    return;
-  }
   if (!(qualifier instanceof PsiReferenceExpression)) {
     return;
   }
@@ -17,27 +14,27 @@
     return;
   }
   final PsiExpressionList argumentList=call.getArgumentList();
-  boolean hasMatchingArg=false;
-  final PsiExpression[] args=argumentList.getExpressions();
-  for (  PsiExpression arg : args) {
-    if (EquivalenceChecker.expressionsAreEquivalent(qualifier,arg)) {
-      hasMatchingArg=true;
+  PsiExpression selfArgument=null;
+  final PsiExpression[] arguments=argumentList.getExpressions();
+  for (  PsiExpression argument : arguments) {
+    if (EquivalenceChecker.expressionsAreEquivalent(qualifier,argument)) {
+      selfArgument=argument;
     }
   }
-  if (!hasMatchingArg) {
+  if (selfArgument == null) {
     return;
   }
   final PsiType qualifierType=qualifier.getType();
-  if (!(qualifierType instanceof PsiClassType)) {
+  if (!InheritanceUtil.isInheritor(qualifierType,CommonClassNames.JAVA_UTIL_COLLECTION) && !InheritanceUtil.isInheritor(qualifierType,CommonClassNames.JAVA_UTIL_MAP)) {
     return;
   }
-  final PsiClassType classType=(PsiClassType)qualifierType;
-  final PsiClass qualifierClass=classType.resolve();
-  if (qualifierClass == null) {
+  final PsiMethod method=call.resolveMethod();
+  if (method == null) {
     return;
   }
-  if (!InheritanceUtil.isInheritor(qualifierClass,CommonClassNames.JAVA_UTIL_COLLECTION) && !InheritanceUtil.isInheritor(qualifierClass,CommonClassNames.JAVA_UTIL_MAP)) {
+  final PsiClass aClass=method.getContainingClass();
+  if (!CollectionUtils.isCollectionClassOrInterface(aClass)) {
     return;
   }
-  registerError(qualifier);
+  registerError(selfArgument,methodName);
 }

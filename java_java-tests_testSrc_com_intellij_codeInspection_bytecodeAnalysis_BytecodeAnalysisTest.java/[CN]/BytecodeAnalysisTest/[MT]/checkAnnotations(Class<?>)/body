@@ -1,0 +1,31 @@
+{
+  PsiClass psiClass=myJavaPsiFacade.findClass(javaClass.getName(),GlobalSearchScope.moduleWithLibrariesScope(myModule));
+  assertNotNull(psiClass);
+  for (  java.lang.reflect.Method javaMethod : javaClass.getDeclaredMethods()) {
+    PsiMethod psiMethod=psiClass.findMethodsByName(javaMethod.getName(),false)[0];
+    Annotation[][] annotations=javaMethod.getParameterAnnotations();
+    params:     for (int i=0; i < annotations.length; i++) {
+      Annotation[] parameterAnnotations=annotations[i];
+      PsiParameter psiParameter=psiMethod.getParameterList().getParameters()[i];
+      PsiAnnotation inferredAnnotation=myInferredAnnotationsManager.findInferredAnnotation(psiParameter,AnnotationUtil.NOT_NULL);
+      for (      Annotation parameterAnnotation : parameterAnnotations) {
+        if (parameterAnnotation.annotationType() == ExpectNotNull.class) {
+          assertNotNull(javaMethod.toString() + " " + i,inferredAnnotation);
+          continue params;
+        }
+      }
+      assertNull(javaMethod.toString() + " " + i,inferredAnnotation);
+    }
+    ExpectNotNull expectedAnnotation=javaMethod.getAnnotation(ExpectNotNull.class);
+    PsiAnnotation actualAnnotation=myInferredAnnotationsManager.findInferredAnnotation(psiMethod,AnnotationUtil.NOT_NULL);
+    assertEquals(javaMethod.toString(),expectedAnnotation == null,actualAnnotation == null);
+    ExpectContract expectedContract=javaMethod.getAnnotation(ExpectContract.class);
+    PsiAnnotation actualContractAnnotation=myInferredAnnotationsManager.findInferredAnnotation(psiMethod,ORG_JETBRAINS_ANNOTATIONS_CONTRACT);
+    assertEquals(expectedContract == null,actualContractAnnotation == null);
+    if (expectedContract != null) {
+      String expectedContractValue=expectedContract.value();
+      String actualContractValue=AnnotationUtil.getStringAttributeValue(actualContractAnnotation,null);
+      assertEquals(javaMethod.toString(),expectedContractValue,actualContractValue);
+    }
+  }
+}

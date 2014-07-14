@@ -1,0 +1,61 @@
+{
+  visited.add(expression);
+  if (expression instanceof PsiLiteralExpression) {
+    return evaluatePsiLiteralExpression(expression);
+  }
+  if (expression instanceof PsiReferenceExpression) {
+    PsiElement resolve=((PsiReferenceExpression)expression).resolve();
+    if (resolve instanceof PsiVariable) {
+      PsiExpression initializer=((PsiVariable)resolve).getInitializer();
+      if (initializer != null) {
+        Pair<PsiElement,String> expr=evaluateExpression(initializer,visited);
+        if (expr != null)         return expr;
+      }
+    }
+  }
+  if (expression instanceof PsiMethodCallExpression) {
+    final PsiElement element=((PsiMethodCallExpression)expression).getMethodExpression().resolve();
+    if (element instanceof PsiMethod) {
+      PsiCodeBlock body=((PsiMethod)element).getBody();
+      if (body != null) {
+        final Set<PsiExpression> returns=new com.intellij.util.containers.HashSet<PsiExpression>();
+        body.accept(new JavaRecursiveElementVisitor(){
+          @Override public void visitReturnStatement(          PsiReturnStatement statement){
+            PsiExpression returnValue=statement.getReturnValue();
+            if (returnValue != null) {
+              returns.add(returnValue);
+            }
+          }
+        }
+);
+        for (        PsiExpression psiExpression : returns) {
+          Pair<PsiElement,String> pair=evaluateExpression(psiExpression,visited);
+          if (pair != null) {
+            return pair;
+          }
+        }
+      }
+      return evaluateExpression(element,visited);
+    }
+    return null;
+  }
+  Pair<PsiElement,String> constantExpression=evaluateConstantExpression(expression);
+  if (constantExpression != null) {
+    return constantExpression;
+  }
+  if (expression instanceof PsiBinaryExpression) {
+    PsiBinaryExpression binaryExpression=(PsiBinaryExpression)expression;
+    return evaluatePolyadicExpressions(expression,visited,binaryExpression.getLOperand(),binaryExpression.getROperand());
+  }
+  if (expression instanceof PsiPolyadicExpression) {
+    return evaluatePolyadicExpressions(expression,visited,((PsiPolyadicExpression)expression).getOperands());
+  }
+  Collection<? extends PsiElement> elements=DfaUtil.getPossibleInitializationElements(expression);
+  for (  PsiElement element : elements) {
+    if (!visited.contains(element)) {
+      Pair<PsiElement,String> expr=evaluateExpression(element);
+      if (expr != null)       return expr;
+    }
+  }
+  return null;
+}

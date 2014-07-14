@@ -12,10 +12,17 @@
   myAuthTypeLabel.setBorder(BorderFactory.createEmptyBorder(0,10,0,0));
   myAuthTypeComboBox.addItem(AUTH_PASSWORD);
   myAuthTypeComboBox.addItem(AUTH_TOKEN);
+  final Project project=ProjectManager.getInstance().getDefaultProject();
   myTestButton.addActionListener(new ActionListener(){
     @Override public void actionPerformed(    ActionEvent e){
       try {
-        GithubUser user=GithubUtil.checkAuthData(getAuthData());
+        final GithubAuthData auth=getAuthData();
+        GithubUser user=GithubUtil.computeValueInModal(project,"Access to GitHub",new ThrowableConvertor<ProgressIndicator,GithubUser,IOException>(){
+          @NotNull @Override public GithubUser convert(          ProgressIndicator indicator) throws IOException {
+            return GithubUtil.checkAuthData(project,new GithubAuthDataHolder(auth),indicator);
+          }
+        }
+);
         if (GithubAuthData.AuthType.TOKEN.equals(getAuthType())) {
           GithubNotifications.showInfoDialog(myPane,"Success","Connection successful for user " + user.getLogin());
         }
@@ -29,6 +36,27 @@
 catch (      IOException ex) {
         LOG.info(ex);
         GithubNotifications.showErrorDialog(myPane,"Login Failure","Can't login: " + GithubUtil.getErrorTextFromException(ex));
+      }
+    }
+  }
+);
+  myCreateTokenButton.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      try {
+        myPasswordField.setText(GithubUtil.computeValueInModal(project,"Access to GitHub",new ThrowableConvertor<ProgressIndicator,String,IOException>(){
+          @NotNull @Override public String convert(          ProgressIndicator indicator) throws IOException {
+            return GithubUtil.runTaskWithBasicAuthForHost(project,GithubAuthDataHolder.createFromSettings(),indicator,getHost(),new ThrowableConvertor<GithubAuthData,String,IOException>(){
+              @NotNull @Override public String convert(              @NotNull GithubAuthData auth) throws IOException {
+                return GithubApiUtil.getMasterToken(auth,"IntelliJ plugin");
+              }
+            }
+);
+          }
+        }
+));
+      }
+ catch (      IOException ex) {
+        GithubNotifications.showErrorDialog(myPane,"Can't create API token",ex);
       }
     }
   }

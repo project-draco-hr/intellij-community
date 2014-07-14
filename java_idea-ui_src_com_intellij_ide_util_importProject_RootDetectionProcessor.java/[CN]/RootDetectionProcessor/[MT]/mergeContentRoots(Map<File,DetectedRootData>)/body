@@ -1,0 +1,53 @@
+{
+  LOG.debug(rootData.size() + " roots found, merging content roots");
+  boolean hasSourceRoots=false;
+  Set<ModuleType> typesToReplace=new HashSet<ModuleType>();
+  Set<ModuleType> moduleTypes=new HashSet<ModuleType>();
+  for (  DetectedRootData data : rootData.values()) {
+    for (    DetectedProjectRoot root : data.getAllRoots()) {
+      if (root instanceof DetectedContentRoot) {
+        Collections.addAll(typesToReplace,((DetectedContentRoot)root).getTypesToReplace());
+        moduleTypes.add(((DetectedContentRoot)root).getModuleType());
+      }
+ else       if (root instanceof DetectedSourceRoot) {
+        LOG.debug("Source root found: " + root.getDirectory() + ", content roots will be ignored");
+        hasSourceRoots=true;
+        break;
+      }
+    }
+  }
+  moduleTypes.removeAll(typesToReplace);
+  if (hasSourceRoots || moduleTypes.size() <= 1) {
+    Iterator<DetectedRootData> iterator=rootData.values().iterator();
+    DetectedContentRoot firstRoot=null;
+    ProjectStructureDetector firstDetector=null;
+    while (iterator.hasNext()) {
+      DetectedRootData data=iterator.next();
+      for (      DetectedProjectRoot root : data.getAllRoots()) {
+        if (root instanceof DetectedContentRoot) {
+          LOG.debug("Removed detected " + root.getRootTypeName() + " content root: "+ root.getDirectory());
+          Collection<ProjectStructureDetector> detectors=data.removeRoot(root);
+          if ((firstRoot == null || firstDetector == null) && moduleTypes.contains(((DetectedContentRoot)root).getModuleType())) {
+            firstRoot=(DetectedContentRoot)root;
+            firstDetector=ContainerUtil.getFirstItem(detectors);
+          }
+        }
+      }
+      if (data.isEmpty()) {
+        iterator.remove();
+      }
+    }
+    if (!hasSourceRoots && firstRoot != null && firstDetector != null) {
+      DetectedContentRoot baseRoot=new DetectedContentRoot(myBaseDir,firstRoot.getRootTypeName(),firstRoot.getModuleType());
+      DetectedRootData data=rootData.get(myBaseDir);
+      if (data == null) {
+        rootData.put(myBaseDir,new DetectedRootData(firstDetector,baseRoot));
+      }
+ else {
+        data.addRoot(firstDetector,baseRoot);
+      }
+      LOG.debug("Added " + firstRoot.getRootTypeName() + " content root for "+ myBaseDir);
+    }
+  }
+  return new ArrayList<DetectedRootData>(rootData.values());
+}

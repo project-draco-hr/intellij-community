@@ -1,59 +1,51 @@
 {
+  final Set<InferenceVariable> mentionedVars=new HashSet<InferenceVariable>();
+  for (  ConstraintFormula constraint : additionalConstraints) {
+    if (constraint instanceof InputOutputConstraintFormula) {
+      final Set<InferenceVariable> inputVariables=((InputOutputConstraintFormula)constraint).getInputVariables(this);
+      if (inputVariables != null) {
+        mentionedVars.addAll(inputVariables);
+      }
+      final Set<InferenceVariable> outputVariables=((InputOutputConstraintFormula)constraint).getOutputVariables(inputVariables,this);
+      if (outputVariables != null) {
+        mentionedVars.addAll(outputVariables);
+      }
+    }
+  }
+  final Set<InferenceVariable> readyVariables=new LinkedHashSet<InferenceVariable>(myInferenceVariables.values());
+  readyVariables.removeAll(mentionedVars);
+  final PsiSubstitutor siteSubstitutor=resolveBounds(readyVariables,mySiteSubstitutor);
   while (!additionalConstraints.isEmpty()) {
-    final Set<InferenceVariable> outputVariables=new HashSet<InferenceVariable>();
-    for (    ConstraintFormula constraint : additionalConstraints) {
-      if (constraint instanceof InputOutputConstraintFormula) {
-        final Set<InferenceVariable> inputVariables=((InputOutputConstraintFormula)constraint).getInputVariables(this);
-        final Set<InferenceVariable> outputVars=((InputOutputConstraintFormula)constraint).getOutputVariables(inputVariables,this);
-        if (outputVars != null) {
-          outputVariables.addAll(outputVars);
-        }
-      }
-    }
-    Set<ConstraintFormula> subset=new HashSet<ConstraintFormula>();
+    final Set<ConstraintFormula> subset=buildSubset(additionalConstraints);
     final Set<InferenceVariable> varsToResolve=new HashSet<InferenceVariable>();
-    for (    ConstraintFormula constraint : additionalConstraints) {
-      if (constraint instanceof InputOutputConstraintFormula) {
-        final Set<InferenceVariable> inputVariables=((InputOutputConstraintFormula)constraint).getInputVariables(this);
+    for (    ConstraintFormula formula : subset) {
+      if (formula instanceof InputOutputConstraintFormula) {
+        final Set<InferenceVariable> inputVariables=((InputOutputConstraintFormula)formula).getInputVariables(this);
         if (inputVariables != null) {
-          boolean dependsOnOutput=false;
-          for (          InferenceVariable inputVariable : inputVariables) {
-            final Set<InferenceVariable> dependencies=inputVariable.getDependencies(this);
-            dependencies.add(inputVariable);
-            dependencies.retainAll(outputVariables);
-            if (!dependencies.isEmpty()) {
-              dependsOnOutput=true;
-              break;
-            }
-          }
-          if (!dependsOnOutput) {
-            subset.add(constraint);
-            varsToResolve.addAll(inputVariables);
-          }
-        }
- else {
-          subset.add(constraint);
-          Set<InferenceVariable> outputVars=((InputOutputConstraintFormula)constraint).getOutputVariables(null,this);
-          if (outputVars != null) {
-            varsToResolve.addAll(outputVars);
-          }
+          varsToResolve.addAll(inputVariables);
         }
       }
- else {
-        subset.add(constraint);
-      }
     }
-    if (subset.isEmpty()) {
-      subset=Collections.singleton(additionalConstraints.iterator().next());
-    }
-    additionalConstraints.removeAll(subset);
-    myConstraints.addAll(subset);
-    if (!repeatInferencePhases(true)) {
+    PsiSubstitutor substitutor=resolveSubset(varsToResolve,retrieveNonPrimitiveEqualsBounds(getInferenceVariables()).putAll(siteSubstitutor));
+    if (substitutor == null) {
       return false;
     }
-    PsiSubstitutor substitutor=resolveBounds(varsToResolve,mySiteSubstitutor,false);
-    for (    ConstraintFormula additionalConstraint : additionalConstraints) {
-      additionalConstraint.apply(substitutor);
+    if (myContext instanceof PsiCallExpression) {
+      PsiExpressionList argumentList=((PsiCallExpression)myContext).getArgumentList();
+      LOG.assertTrue(argumentList != null);
+      MethodCandidateInfo.updateSubstitutor(argumentList,substitutor);
+    }
+    try {
+      for (      ConstraintFormula additionalConstraint : subset) {
+        additionalConstraint.apply(substitutor,true);
+      }
+      myConstraints.addAll(subset);
+      if (!repeatInferencePhases(true)) {
+        return false;
+      }
+    }
+  finally {
+      LambdaUtil.ourFunctionTypes.set(null);
     }
   }
   return true;

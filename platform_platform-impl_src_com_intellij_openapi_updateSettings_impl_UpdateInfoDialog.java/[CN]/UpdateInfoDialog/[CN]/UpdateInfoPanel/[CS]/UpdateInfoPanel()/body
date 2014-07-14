@@ -1,32 +1,36 @@
 {
   ApplicationInfo appInfo=ApplicationInfo.getInstance();
-  myBuildNumber.setText(appInfo.getBuild().asStringWithoutProductCode() + ")");
-  final String version=appInfo.getFullVersion();
-  myVersionNumber.setText(version);
-  myNewBuildNumber.setText(myLatestBuild.getNumber().asStringWithoutProductCode() + ")");
-  myNewVersionNumber.setText(myLatestBuild.getVersion());
-  myUpdateMessageLabel.setBackground(UIUtil.getLabelBackground());
-  myScrollPane.setBackground(UIUtil.getLabelBackground());
-  myScrollPane.setBorder(BorderFactory.createEmptyBorder(10,0,0,0));
-  if (myLatestBuild.getMessage() != null) {
-    StringBuilder builder=new StringBuilder();
-    builder.append("<html><head>").append(UIUtil.getCssFontDeclaration(UIUtil.getLabelFont())).append("</head><body>").append(StringUtil.formatLinks(myLatestBuild.getMessage())).append("</body></html>");
-    myUpdateMessageLabel.setText(builder.toString());
-    myUpdateMessageLabel.addHyperlinkListener(new BrowserHyperlinkListener());
+  ApplicationNamesInfo appNames=ApplicationNamesInfo.getInstance();
+  String message=myLatestBuild.getMessage();
+  final String fullProductName=appNames.getFullProductName();
+  if (message == null) {
+    message=IdeBundle.message("updates.new.version.available",fullProductName);
+  }
+  final String homePageUrl=myUpdatedChannel.getHomePageUrl();
+  if (!StringUtil.isEmptyOrSpaces(homePageUrl)) {
+    final int idx=message.indexOf(fullProductName);
+    if (idx >= 0) {
+      message=message.substring(0,idx) + "<a href=\'" + homePageUrl+ "\'>"+ fullProductName+ "</a>"+ message.substring(idx + fullProductName.length());
+    }
+  }
+  configureMessageArea(myUpdateMessage,message,null,new BrowserHyperlinkListener());
+  myCurrentVersion.setText(formatVersion(appInfo.getFullVersion(),appInfo.getBuild().asStringWithoutProductCode()));
+  myNewVersion.setText(formatVersion(myLatestBuild.getVersion(),myLatestBuild.getNumber().asStringWithoutProductCode()));
+  if (myPatch != null) {
+    myPatchInfo.setText(myPatch.getSize() + " MB");
   }
  else {
-    myUpdateMessageLabel.setVisible(false);
+    myPatchLabel.setVisible(false);
+    myPatchInfo.setVisible(false);
   }
-  PatchInfo patch=myLatestBuild.findPatchForCurrentBuild();
-  if (patch == null) {
-    myPatchAvailableLabel.setVisible(false);
-    myPatchSizeLabel.setVisible(false);
+  if (myWriteProtected) {
+    message=IdeBundle.message("updates.write.protected",appNames.getProductName(),PathManager.getHomePath());
+    configureMessageArea(myMessageArea,message,JBColor.RED,null);
   }
  else {
-    myPatchSizeLabel.setText(patch.getSize() + "MB");
+    configureMessageArea(myMessageArea);
   }
-  if (SystemInfo.isMac) {
-    myManualCheckLabel.setText("<html><br>To check for new updates manually, use the <b>" + ApplicationNamesInfo.getInstance().getProductName() + " | Check for Updates</b> command.</html>");
+  if (mySubscribtionLicense && myLicenseInfo != null) {
+    configureMessageArea(myLicenseArea,myLicenseInfo,myPaidUpgrade ? JBColor.RED : null,null);
   }
-  LabelTextReplacingUtil.replaceText(myPanel);
 }

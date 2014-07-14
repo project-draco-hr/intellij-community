@@ -1,0 +1,41 @@
+{
+  if (typeParameters.length == 0 || myArgumentTypes == null)   return partialSubstitutor;
+  final GrClosureSignature erasedSignature=GrClosureSignatureUtil.createSignatureWithErasedParameterTypes(method);
+  final GrClosureSignature signature=GrClosureSignatureUtil.createSignature(method,partialSubstitutor);
+  final GrClosureParameter[] params=signature.getParameters();
+  final GrClosureSignatureUtil.ArgInfo<PsiType>[] argInfos=GrClosureSignatureUtil.mapArgTypesToParameters(erasedSignature,argTypes,myPlace,true);
+  if (argInfos == null)   return partialSubstitutor;
+  int max=Math.max(params.length,argTypes.length);
+  PsiType[] parameterTypes=PsiType.createArray(max);
+  PsiType[] argumentTypes=PsiType.createArray(max);
+  int i=0;
+  for (int paramIndex=0; paramIndex < argInfos.length; paramIndex++) {
+    PsiType paramType=params[paramIndex].getType();
+    GrClosureSignatureUtil.ArgInfo<PsiType> argInfo=argInfos[paramIndex];
+    if (argInfo != null) {
+      if (argInfo.isMultiArg) {
+        if (paramType instanceof PsiArrayType)         paramType=((PsiArrayType)paramType).getComponentType();
+      }
+      for (      PsiType type : argInfo.args) {
+        argumentTypes[i]=handleConversion(paramType,type);
+        parameterTypes[i]=paramType;
+        i++;
+      }
+    }
+ else {
+      parameterTypes[i]=paramType;
+      argumentTypes[i]=PsiType.NULL;
+      i++;
+    }
+  }
+  PsiSubstitutor substitutor=myHelper.inferTypeArguments(typeParameters,parameterTypes,argumentTypes,LanguageLevel.JDK_1_7);
+  for (  PsiTypeParameter typeParameter : typeParameters) {
+    if (!substitutor.getSubstitutionMap().containsKey(typeParameter)) {
+      substitutor=inferFromContext(typeParameter,PsiUtil.getSmartReturnType(method),substitutor);
+      if (!substitutor.getSubstitutionMap().containsKey(typeParameter)) {
+        substitutor=substitutor.put(typeParameter,null);
+      }
+    }
+  }
+  return partialSubstitutor.putAll(substitutor);
+}

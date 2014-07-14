@@ -1,0 +1,46 @@
+{
+class ValidatingVisitor extends JavaRecursiveElementWalkingVisitor {
+    private PsiElement myCurrent;
+    @Override public void visitAnnotation(    PsiAnnotation annotation){
+      final PsiJavaCodeReferenceElement nameReferenceElement=annotation.getNameReferenceElement();
+      if (nameReferenceElement == null || !nameReferenceElement.getText().equals(MatchOptions.MODIFIER_ANNOTATION_NAME)) {
+        return;
+      }
+      for (      PsiNameValuePair pair : annotation.getParameterList().getAttributes()) {
+        final PsiAnnotationMemberValue value=pair.getValue();
+        if (value instanceof PsiArrayInitializerMemberValue) {
+          for (          PsiAnnotationMemberValue v : ((PsiArrayInitializerMemberValue)value).getInitializers()) {
+            final String name=StringUtil.stripQuotesAroundValue(v.getText());
+            checkModifier(name);
+          }
+        }
+ else         if (value != null) {
+          final String name=StringUtil.stripQuotesAroundValue(value.getText());
+          checkModifier(name);
+        }
+      }
+    }
+    private void checkModifier(    final String name){
+      if (!MatchOptions.INSTANCE_MODIFIER_NAME.equals(name) && !PsiModifier.PACKAGE_LOCAL.equals(name) && Arrays.binarySearch(JavaMatchingVisitor.MODIFIERS,name) < 0) {
+        throw new MalformedPatternException(SSRBundle.message("invalid.modifier.type",name));
+      }
+    }
+    @Override public void visitErrorElement(    PsiErrorElement element){
+      super.visitErrorElement(element);
+    }
+    public void setCurrent(    PsiElement current){
+      myCurrent=current;
+    }
+  }
+  ValidatingVisitor visitor=new ValidatingVisitor();
+  final CompiledPattern compiledPattern=PatternCompiler.compilePattern(project,options);
+  final int nodeCount=compiledPattern.getNodeCount();
+  final NodeIterator nodes=compiledPattern.getNodes();
+  while (nodes.hasNext()) {
+    final PsiElement current=nodes.current();
+    visitor.setCurrent(nodeCount == 1 && current instanceof PsiExpressionStatement ? current : null);
+    current.accept(visitor);
+    nodes.advance();
+  }
+  nodes.reset();
+}

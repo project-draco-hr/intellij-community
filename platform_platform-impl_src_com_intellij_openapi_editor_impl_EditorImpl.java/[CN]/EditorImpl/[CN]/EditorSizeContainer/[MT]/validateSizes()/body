@@ -8,15 +8,13 @@ synchronized (this) {
       myIsDirty=false;
       return;
     }
-    final CharSequence text=myDocument.getCharsSequence();
+    final CharSequence text=myDocument.getImmutableCharSequence();
     int documentLength=myDocument.getTextLength();
     int x=0;
     boolean lastLineLengthCalculated=false;
-    final int fontSize=myScheme.getEditorFontSize();
-    final String fontName=myScheme.getEditorFontName();
     List<? extends SoftWrap> softWraps=getSoftWrapModel().getRegisteredSoftWraps();
     int softWrapsIndex=-1;
-    FontInfo lastFontInfo=null;
+    CharWidthCache charWidthCache=new CharWidthCache(EditorImpl.this);
     for (int line=0; line < lineCount; line++) {
       if (myLineWidths.getQuick(line) != -1)       continue;
       if (line == lineCount - 1) {
@@ -55,62 +53,54 @@ synchronized (this) {
         break;
       }
       IterationState state=new IterationState(EditorImpl.this,offset,endOffset,false);
-      try {
-        int fontType=state.getMergedAttributes().getFontType();
-        int maxPreviousSoftWrappedWidth=-1;
-        while (offset < documentLength && line < lineCount) {
-          char c=text.charAt(offset);
-          if (offset >= state.getEndOffset()) {
-            state.advance();
-            fontType=state.getMergedAttributes().getFontType();
+      int fontType=state.getMergedAttributes().getFontType();
+      int maxPreviousSoftWrappedWidth=-1;
+      while (offset < documentLength && line < lineCount) {
+        char c=text.charAt(offset);
+        if (offset >= state.getEndOffset()) {
+          state.advance();
+          fontType=state.getMergedAttributes().getFontType();
+        }
+        while (softWrapsIndex < softWraps.size() && line < lineCount) {
+          SoftWrap softWrap=softWraps.get(softWrapsIndex);
+          if (softWrap.getStart() > offset) {
+            break;
           }
-          while (softWrapsIndex < softWraps.size() && line < lineCount) {
-            SoftWrap softWrap=softWraps.get(softWrapsIndex);
-            if (softWrap.getStart() > offset) {
-              break;
-            }
-            softWrapsIndex++;
-            if (softWrap.getStart() == offset) {
-              maxPreviousSoftWrappedWidth=Math.max(maxPreviousSoftWrappedWidth,x);
-              x=softWrap.getIndentInPixels();
-            }
-          }
-          FoldRegion collapsed=state.getCurrentFold();
-          if (collapsed != null) {
-            String placeholder=collapsed.getPlaceholderText();
-            for (int i=0; i < placeholder.length(); i++) {
-              x+=EditorUtil.charWidth(placeholder.charAt(i),fontType,EditorImpl.this);
-            }
-            offset=collapsed.getEndOffset();
-            line=myDocument.getLineNumber(offset);
-          }
- else           if (c == '\t') {
-            x=EditorUtil.nextTabStop(x,EditorImpl.this);
-            offset++;
-          }
- else           if (c == '\n') {
-            int width=Math.max(x,maxPreviousSoftWrappedWidth);
-            myLineWidths.set(line,width);
-            maxCalculatedLine=Math.max(maxCalculatedLine,line);
-            if (line + 1 >= lineCount || myLineWidths.getQuick(line + 1) != -1)             break;
-            offset++;
-            x=0;
-            line++;
-            if (line == lineCount - 1) {
-              lastLineLengthCalculated=true;
-            }
-          }
- else {
-            if (lastFontInfo == null || !lastFontInfo.canDisplay(c)) {
-              lastFontInfo=ComplementaryFontsRegistry.getFontAbleToDisplay(c,fontSize,fontType,fontName);
-            }
-            x+=lastFontInfo.charWidth(c);
-            offset++;
+          softWrapsIndex++;
+          if (softWrap.getStart() == offset) {
+            maxPreviousSoftWrappedWidth=Math.max(maxPreviousSoftWrappedWidth,x);
+            x=softWrap.getIndentInPixels();
           }
         }
-      }
-  finally {
-        state.dispose();
+        FoldRegion collapsed=state.getCurrentFold();
+        if (collapsed != null) {
+          String placeholder=collapsed.getPlaceholderText();
+          for (int i=0; i < placeholder.length(); i++) {
+            x+=charWidthCache.charWidth(placeholder.charAt(i),fontType);
+          }
+          offset=collapsed.getEndOffset();
+          line=myDocument.getLineNumber(offset);
+        }
+ else         if (c == '\t') {
+          x=EditorUtil.nextTabStop(x,EditorImpl.this);
+          offset++;
+        }
+ else         if (c == '\n') {
+          int width=Math.max(x,maxPreviousSoftWrappedWidth);
+          myLineWidths.set(line,width);
+          maxCalculatedLine=Math.max(maxCalculatedLine,line);
+          if (line + 1 >= lineCount || myLineWidths.getQuick(line + 1) != -1)           break;
+          offset++;
+          x=0;
+          line++;
+          if (line == lineCount - 1) {
+            lastLineLengthCalculated=true;
+          }
+        }
+ else {
+          x+=charWidthCache.charWidth(c,fontType);
+          offset++;
+        }
       }
     }
     if (lineCount > 0 && lastLineLengthCalculated) {
@@ -121,8 +111,8 @@ synchronized (this) {
     int endToUse=Math.min(lineCount,myLineWidths.size());
     if (endToUse > 0 && getSoftWrapModel().isSoftWrappingEnabled()) {
       Rectangle visibleArea=getScrollingModel().getVisibleArea();
-      startToUse=yPositionToLogicalLine(visibleArea.getLocation().y);
-      endToUse=Math.min(endToUse,yPositionToLogicalLine(visibleArea.y + visibleArea.height));
+      startToUse=EditorUtil.yPositionToLogicalLine(EditorImpl.this,visibleArea.getLocation());
+      endToUse=Math.min(endToUse,EditorUtil.yPositionToLogicalLine(EditorImpl.this,visibleArea.y + visibleArea.height));
       if (endToUse <= startToUse) {
         endToUse=Math.min(myLineWidths.size(),startToUse + 1);
       }

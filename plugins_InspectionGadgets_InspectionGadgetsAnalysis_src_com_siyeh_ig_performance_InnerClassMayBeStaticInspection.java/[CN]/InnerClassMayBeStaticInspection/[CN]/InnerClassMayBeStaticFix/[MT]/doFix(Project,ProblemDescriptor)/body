@@ -1,2 +1,43 @@
 {
+  final PsiJavaToken classNameToken=(PsiJavaToken)descriptor.getPsiElement();
+  final PsiClass innerClass=(PsiClass)classNameToken.getParent();
+  if (innerClass == null) {
+    return;
+  }
+  final SearchScope useScope=innerClass.getUseScope();
+  final Query<PsiReference> query=ReferencesSearch.search(innerClass,useScope);
+  final Collection<PsiReference> references=query.findAll();
+  final List<PsiElement> elements=new ArrayList(references);
+  for (  PsiReference reference : references) {
+    elements.add(reference.getElement());
+  }
+  elements.add(innerClass);
+  if (!FileModificationService.getInstance().preparePsiElementsForWrite(elements)) {
+    return;
+  }
+  final JavaCodeStyleManager codeStyleManager=JavaCodeStyleManager.getInstance(project);
+  final PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
+  for (  final PsiReference reference : references) {
+    final PsiElement element=reference.getElement();
+    final PsiElement parent=element.getParent();
+    if (!(parent instanceof PsiNewExpression)) {
+      continue;
+    }
+    final PsiNewExpression newExpression=(PsiNewExpression)parent;
+    final PsiJavaCodeReferenceElement classReference=newExpression.getClassReference();
+    if (classReference == null) {
+      continue;
+    }
+    final PsiExpressionList argumentList=newExpression.getArgumentList();
+    if (argumentList == null) {
+      continue;
+    }
+    final PsiExpression expression=factory.createExpressionFromText("new " + classReference.getQualifiedName() + argumentList.getText(),innerClass);
+    codeStyleManager.shortenClassReferences(newExpression.replace(expression));
+  }
+  final PsiModifierList modifiers=innerClass.getModifierList();
+  if (modifiers == null) {
+    return;
+  }
+  modifiers.setModifierProperty(PsiModifier.STATIC,true);
 }

@@ -1,0 +1,53 @@
+{
+  boolean firstDeploy=findRepository() == null;
+  GitRepository repository=findOrCreateRepository();
+  addOrResetGitRemote(application,repository);
+  if (firstDeploy) {
+    add();
+    commit();
+    return;
+  }
+  final LocalChangeList activeChangeList=myChangeListManager.getDefaultChangeList();
+  if (activeChangeList == null) {
+    add();
+    commit();
+    return;
+  }
+  Collection<Change> changes=activeChangeList.getChanges();
+  final List<Change> relevantChanges=new ArrayList<Change>();
+  for (  Change change : changes) {
+    if (isRelevant(change.getBeforeRevision()) || isRelevant(change.getAfterRevision())) {
+      relevantChanges.add(change);
+    }
+  }
+  final Semaphore commitSemaphore=new Semaphore();
+  commitSemaphore.down();
+  final Ref<Boolean> commitSucceeded=new Ref<Boolean>(false);
+  Boolean commitStarted=runOnEdt(new Computable<Boolean>(){
+    @Override public Boolean compute(){
+      return CommitChangeListDialog.commitChanges(getProject(),relevantChanges,activeChangeList,ourCommitExecutors,false,COMMIT_MESSAGE,new CommitResultHandler(){
+        @Override public void onSuccess(        @NotNull String commitMessage){
+          commitSucceeded.set(true);
+          commitSemaphore.up();
+        }
+        @Override public void onFailure(){
+          commitSemaphore.up();
+        }
+      }
+,false);
+    }
+  }
+);
+  if (commitStarted != null && commitStarted) {
+    commitSemaphore.waitFor();
+    if (!commitSucceeded.get()) {
+      repository.update();
+      throw new ServerRuntimeException("Commit failed");
+    }
+  }
+ else {
+    throw new ServerRuntimeException("Deploy interrupted");
+  }
+  repository.update();
+  pushApplication(application);
+}

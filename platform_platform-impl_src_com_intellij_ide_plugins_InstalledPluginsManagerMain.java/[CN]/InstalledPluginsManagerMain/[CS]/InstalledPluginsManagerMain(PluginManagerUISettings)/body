@@ -4,7 +4,7 @@
   myActionsPanel.setLayout(new FlowLayout(FlowLayout.LEFT));
   final JButton jbButton=new JButton("Install JetBrains plugin...");
   jbButton.setMnemonic('j');
-  jbButton.addActionListener(new BrowseRepoListener("JetBrains"));
+  jbButton.addActionListener(new BrowseRepoListener(JETBRAINS_VENDOR));
   myActionsPanel.add(jbButton);
   final JButton button=new JButton("Browse repositories...");
   button.setMnemonic('b');
@@ -14,51 +14,13 @@
   installPluginFromFileSystem.setMnemonic('d');
   installPluginFromFileSystem.addActionListener(new ActionListener(){
     @Override public void actionPerformed(    ActionEvent e){
-      final FileChooserDescriptor descriptor=new FileChooserDescriptor(true,false,true,true,false,false){
-        @Override public boolean isFileSelectable(        VirtualFile file){
-          final String extension=file.getExtension();
-          return Comparing.strEqual(extension,"jar") || Comparing.strEqual(extension,"zip");
+      perform(pluginsModel,new UpdateUI(){
+        @Override public void update(        @NotNull File file,        @NotNull IdeaPluginDescriptorImpl pluginDescriptor) throws IOException {
+          setRequireShutdown(true);
+          select(pluginDescriptor);
         }
       }
-;
-      descriptor.setTitle("Choose Plugin File");
-      descriptor.setDescription("JAR and ZIP archives are accepted");
-      FileChooser.chooseFile(descriptor,null,myActionsPanel,null,new Consumer<VirtualFile>(){
-        @Override public void consume(        @NotNull VirtualFile virtualFile){
-          final File file=VfsUtilCore.virtualToIoFile(virtualFile);
-          try {
-            final IdeaPluginDescriptorImpl pluginDescriptor=PluginDownloader.loadDescriptionFromJar(file);
-            if (pluginDescriptor == null) {
-              Messages.showErrorDialog("Fail to load plugin descriptor from file " + file.getName(),CommonBundle.getErrorTitle());
-              return;
-            }
-            if (PluginManagerCore.isIncompatible(pluginDescriptor)) {
-              Messages.showErrorDialog("Plugin " + pluginDescriptor.getName() + " is incompatible with current installation",CommonBundle.getErrorTitle());
-              return;
-            }
-            final IdeaPluginDescriptor alreadyInstalledPlugin=PluginManager.getPlugin(pluginDescriptor.getPluginId());
-            if (alreadyInstalledPlugin != null) {
-              final File oldFile=alreadyInstalledPlugin.getPath();
-              if (oldFile != null) {
-                StartupActionScriptManager.addActionCommand(new StartupActionScriptManager.DeleteCommand(oldFile));
-              }
-            }
-            if (((InstalledPluginsTableModel)pluginsModel).appendOrUpdateDescriptor(pluginDescriptor)) {
-              PluginDownloader.install(file,file.getName(),false);
-              select(pluginDescriptor);
-              checkInstalledPluginDependencies(pluginDescriptor);
-              setRequireShutdown(true);
-            }
- else {
-              Messages.showInfoMessage(myActionsPanel,"Plugin " + pluginDescriptor.getName() + " was already installed",CommonBundle.getWarningTitle());
-            }
-          }
- catch (          IOException ex) {
-            Messages.showErrorDialog(ex.getMessage(),CommonBundle.getErrorTitle());
-          }
-        }
-      }
-);
+,myActionsPanel);
     }
   }
 );

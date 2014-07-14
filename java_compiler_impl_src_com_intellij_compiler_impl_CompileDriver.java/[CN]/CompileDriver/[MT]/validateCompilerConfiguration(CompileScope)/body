@@ -1,0 +1,84 @@
+{
+  try {
+    final Module[] scopeModules=scope.getAffectedModules();
+    final List<String> modulesWithoutOutputPathSpecified=new ArrayList<String>();
+    final List<String> modulesWithoutJdkAssigned=new ArrayList<String>();
+    final CompilerConfiguration config=CompilerConfiguration.getInstance(myProject);
+    final CompilerManager compilerManager=CompilerManager.getInstance(myProject);
+    for (    final Module module : scopeModules) {
+      if (!compilerManager.isValidationEnabled(module)) {
+        continue;
+      }
+      final boolean hasSources=hasSources(module,JavaSourceRootType.SOURCE);
+      final boolean hasTestSources=hasSources(module,JavaSourceRootType.TEST_SOURCE);
+      if (!hasSources && !hasTestSources) {
+        continue;
+      }
+      final Sdk jdk=ModuleRootManager.getInstance(module).getSdk();
+      if (jdk == null) {
+        modulesWithoutJdkAssigned.add(module.getName());
+      }
+      final String outputPath=getModuleOutputPath(module,false);
+      final String testsOutputPath=getModuleOutputPath(module,true);
+      if (outputPath == null && testsOutputPath == null) {
+        modulesWithoutOutputPathSpecified.add(module.getName());
+      }
+ else {
+        if (outputPath == null) {
+          if (hasSources) {
+            modulesWithoutOutputPathSpecified.add(module.getName());
+          }
+        }
+        if (testsOutputPath == null) {
+          if (hasTestSources) {
+            modulesWithoutOutputPathSpecified.add(module.getName());
+          }
+        }
+      }
+    }
+    if (!modulesWithoutJdkAssigned.isEmpty()) {
+      showNotSpecifiedError("error.jdk.not.specified",modulesWithoutJdkAssigned,ProjectBundle.message("modules.classpath.title"));
+      return false;
+    }
+    if (!modulesWithoutOutputPathSpecified.isEmpty()) {
+      showNotSpecifiedError("error.output.not.specified",modulesWithoutOutputPathSpecified,CommonContentEntriesEditor.NAME);
+      return false;
+    }
+    final List<Chunk<Module>> chunks=ModuleCompilerUtil.getSortedModuleChunks(myProject,Arrays.asList(scopeModules));
+    for (    final Chunk<Module> chunk : chunks) {
+      final Set<Module> chunkModules=chunk.getNodes();
+      if (chunkModules.size() <= 1) {
+        continue;
+      }
+      Sdk jdk=null;
+      LanguageLevel languageLevel=null;
+      for (      final Module module : chunkModules) {
+        final Sdk moduleJdk=ModuleRootManager.getInstance(module).getSdk();
+        if (jdk == null) {
+          jdk=moduleJdk;
+        }
+ else {
+          if (!jdk.equals(moduleJdk)) {
+            showCyclicModulesHaveDifferentJdksError(chunkModules.toArray(new Module[chunkModules.size()]));
+            return false;
+          }
+        }
+        LanguageLevel moduleLanguageLevel=LanguageLevelUtil.getEffectiveLanguageLevel(module);
+        if (languageLevel == null) {
+          languageLevel=moduleLanguageLevel;
+        }
+ else {
+          if (!languageLevel.equals(moduleLanguageLevel)) {
+            showCyclicModulesHaveDifferentLanguageLevel(chunkModules.toArray(new Module[chunkModules.size()]));
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+ catch (  Throwable e) {
+    LOG.info(e);
+    return false;
+  }
+}

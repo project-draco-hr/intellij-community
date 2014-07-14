@@ -1,0 +1,25 @@
+{
+  Editor editor=callback.getEditor();
+  int currentOffset=editor.getCaretModel().getOffset();
+  int startOffset=Math.min(editor.getDocument().getLineStartOffset(editor.getDocument().getLineNumber(currentOffset)),currentOffset);
+  CharSequence documentText=editor.getDocument().getCharsSequence();
+  PsiElement prevVisibleLeaf=callback.getContext();
+  while (prevVisibleLeaf != null) {
+    TextRange textRange=prevVisibleLeaf.getTextRange();
+    if (textRange.getEndOffset() <= startOffset) {
+      break;
+    }
+    IElementType prevType=prevVisibleLeaf.getNode().getElementType();
+    if (prevType == XmlTokenType.XML_TAG_END || prevType == XmlTokenType.XML_EMPTY_ELEMENT_END) {
+      startOffset=textRange.getEndOffset();
+      break;
+    }
+    prevVisibleLeaf=PsiTreeUtil.prevVisibleLeaf(prevVisibleLeaf);
+  }
+  if (startOffset < 0 || currentOffset > documentText.length() || currentOffset < startOffset) {
+    Logger.getInstance(getClass()).error("Error while calculating emmet abbreviation. Offset: " + currentOffset + "; Start: "+ startOffset,AttachmentFactory.createAttachment(editor.getDocument()));
+    return null;
+  }
+  String key=computeKey(documentText.subSequence(startOffset,currentOffset));
+  return !StringUtil.isEmpty(key) && ZenCodingTemplate.checkTemplateKey(key,callback,this) ? key : null;
+}

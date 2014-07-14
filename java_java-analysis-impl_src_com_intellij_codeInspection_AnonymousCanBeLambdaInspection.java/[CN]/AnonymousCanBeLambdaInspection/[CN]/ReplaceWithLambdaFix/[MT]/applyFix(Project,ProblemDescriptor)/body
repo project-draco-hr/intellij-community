@@ -1,7 +1,7 @@
 {
   final PsiElement element=descriptor.getPsiElement();
-  if (element != null) {
-    final PsiAnonymousClass anonymousClass=PsiTreeUtil.getParentOfType(element,PsiAnonymousClass.class);
+  if (element instanceof PsiNewExpression) {
+    final PsiAnonymousClass anonymousClass=((PsiNewExpression)element).getAnonymousClass();
     LOG.assertTrue(anonymousClass != null);
     ChangeContextUtil.encodeContextInfo(anonymousClass,true);
     final PsiElement lambdaContext=anonymousClass.getParent().getParent();
@@ -9,23 +9,41 @@
     final String canonicalText=anonymousClass.getBaseClassType().getCanonicalText();
     final PsiMethod method=anonymousClass.getMethods()[0];
     LOG.assertTrue(method != null);
-    final String lambdaWithTypesDeclared=composeLambdaText(method,lambdaContext,true);
-    final String withoutTypesDeclared=composeLambdaText(method,lambdaContext,false);
-    final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
-    PsiLambdaExpression lambdaExpression=(PsiLambdaExpression)elementFactory.createExpressionFromText(withoutTypesDeclared,anonymousClass);
     final PsiCodeBlock body=method.getBody();
     LOG.assertTrue(body != null);
+    final ForbiddenRefsChecker checker=new ForbiddenRefsChecker(method,anonymousClass);
+    body.accept(checker);
+    PsiResolveHelper helper=PsiResolveHelper.SERVICE.getInstance(body.getProject());
+    final Set<PsiLocalVariable> conflictingLocals=checker.getLocals();
+    for (Iterator<PsiLocalVariable> iterator=conflictingLocals.iterator(); iterator.hasNext(); ) {
+      PsiLocalVariable local=iterator.next();
+      final String localName=local.getName();
+      if (localName == null || helper.resolveReferencedVariable(localName,anonymousClass) == null) {
+        iterator.remove();
+      }
+    }
+    final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
+    giveUniqueNames(project,lambdaContext,elementFactory,body,conflictingLocals.toArray(new PsiVariable[conflictingLocals.size()]));
+    final String lambdaWithTypesDeclared=composeLambdaText(method,true);
+    final String withoutTypesDeclared=composeLambdaText(method,false);
+    PsiLambdaExpression lambdaExpression=(PsiLambdaExpression)elementFactory.createExpressionFromText(withoutTypesDeclared,anonymousClass);
     final PsiStatement[] statements=body.getStatements();
     PsiElement copy=body.copy();
-    if (statements.length == 1 && statements[0] instanceof PsiReturnStatement) {
-      PsiExpression value=((PsiReturnStatement)statements[0]).getReturnValue();
-      if (value != null) {
-        copy=value.copy();
+    if (statements.length == 1) {
+      if (statements[0] instanceof PsiReturnStatement) {
+        PsiExpression value=((PsiReturnStatement)statements[0]).getReturnValue();
+        if (value != null) {
+          copy=value.copy();
+        }
+      }
+ else       if (statements[0] instanceof PsiExpressionStatement) {
+        copy=((PsiExpressionStatement)statements[0]).getExpression().copy();
       }
     }
     PsiElement lambdaBody=lambdaExpression.getBody();
     LOG.assertTrue(lambdaBody != null);
     lambdaBody.replace(copy);
+    giveUniqueNames(project,lambdaContext,elementFactory,lambdaExpression,lambdaExpression.getParameterList().getParameters());
     final PsiNewExpression newExpression=(PsiNewExpression)anonymousClass.getParent();
     lambdaExpression=(PsiLambdaExpression)newExpression.replace(lambdaExpression);
     ChangeContextUtil.decodeContextInfo(lambdaExpression,null,null);

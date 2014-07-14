@@ -19,7 +19,42 @@
     }
   }
 ;
-  JTree tree=new BreakpointsCheckboxTree(myProject,myTreeController);
+  final JTree tree=new BreakpointsCheckboxTree(myProject,myTreeController){
+    @Override protected void onDoubleClick(    CheckedTreeNode node){
+      navigate(false);
+    }
+  }
+;
+  PopupHandler.installPopupHandler(tree,new ActionGroup(){
+    @NotNull @Override public AnAction[] getChildren(    @Nullable AnActionEvent e){
+      ActionGroup group=new ActionGroup("Move to group",true){
+        @NotNull @Override public AnAction[] getChildren(        @Nullable AnActionEvent e){
+          Set<String> groups=getBreakpointManager().getAllGroups();
+          AnAction[] res=new AnAction[groups.size() + 3];
+          int i=0;
+          res[i++]=new MoveToGroupAction(null);
+          for (          String group : groups) {
+            res[i++]=new MoveToGroupAction(group);
+          }
+          res[i++]=new Separator();
+          res[i]=new MoveToGroupAction();
+          return res;
+        }
+      }
+;
+      List<AnAction> res=new ArrayList<AnAction>();
+      res.add(group);
+      Object component=tree.getLastSelectedPathComponent();
+      if (tree.getSelectionCount() == 1 && component instanceof BreakpointsGroupNode && ((BreakpointsGroupNode)component).getGroup() instanceof XBreakpointCustomGroup) {
+        res.add(new SetAsDefaultGroupAction((XBreakpointCustomGroup)((BreakpointsGroupNode)component).getGroup()));
+      }
+      if (tree.getSelectionCount() == 1 && component instanceof BreakpointItemNode) {
+        res.add(new EditDescriptionAction((XBreakpointBase)((BreakpointItemNode)component).getBreakpointItem().getBreakpoint()));
+      }
+      return res.toArray(new AnAction[res.size()]);
+    }
+  }
+,ActionPlaces.UNKNOWN,ActionManager.getInstance());
   new AnAction("BreakpointDialog.GoToSource"){
     @Override public void actionPerformed(    AnActionEvent e){
       navigate(true);
@@ -29,13 +64,16 @@
 .registerCustomShortcutSet(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER,0)),tree);
   new AnAction("BreakpointDialog.ShowSource"){
     @Override public void actionPerformed(    AnActionEvent e){
-      navigate(false);
+      navigate(true);
+      close(OK_EXIT_CODE);
     }
   }
 .registerCustomShortcutSet(ActionManager.getInstance().getAction(IdeActions.ACTION_EDIT_SOURCE).getShortcutSet(),tree);
   final DefaultActionGroup breakpointTypes=new DefaultActionGroup();
-  for (  BreakpointPanelProvider provider : myBreakpointsPanelProviders) {
-    breakpointTypes.addAll(provider.getAddBreakpointActions(myProject));
+  for (  XBreakpointType<?,?> type : XBreakpointUtil.getBreakpointTypes()) {
+    if (type.isAddBreakpointButtonVisible()) {
+      breakpointTypes.addAll(new AddXBreakpointAction(type));
+    }
   }
   ToolbarDecorator decorator=ToolbarDecorator.createDecorator(tree).setAddAction(new AnActionButtonRunnable(){
     @Override public void run(    AnActionButton button){
@@ -73,6 +111,7 @@
     @Override public void breakpointsChanged(){
       collectItems();
       myTreeController.rebuildTree(myBreakpointItems);
+      myDetailController.doUpdateDetailView(true);
     }
   }
 ;

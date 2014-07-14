@@ -1,5 +1,6 @@
 {
   try {
+    ChangeContextUtil.encodeContextInfo(myDestinationClass,true);
     final boolean rebindNeeded2=!myVariableName.equals(myFieldName) || myRebindNeeded;
     final PsiReference[] refs;
     if (rebindNeeded2) {
@@ -16,7 +17,7 @@
       VisibilityUtil.fixVisibility(myOccurences,myField,mySettings.getFieldVisibility());
     }
     myLocal.normalizeDeclaration();
-    PsiDeclarationStatement declarationStatement=(PsiDeclarationStatement)myLocal.getParent();
+    PsiElement declarationStatement=myLocal.getParent();
     final BaseExpressionToFieldHandler.InitializationPlace finalInitializerPlace;
     if (myLocal.getInitializer() == null) {
       finalInitializerPlace=IN_FIELD_DECLARATION;
@@ -30,18 +31,23 @@ case IN_FIELD_DECLARATION:
       declarationStatement.delete();
     break;
 case IN_CURRENT_METHOD:
-  PsiStatement statement=createAssignment(myLocal,myFieldName,factory);
-myAssignmentStatement=(PsiStatement)declarationStatement.replace(statement);
+  PsiExpressionStatement statement=createAssignment(myLocal,myFieldName,factory);
+if (declarationStatement instanceof PsiDeclarationStatement) {
+  declarationStatement.replace(statement);
+}
+ else {
+  myLocal.replace(statement.getExpression());
+}
 break;
 case IN_CONSTRUCTOR:
-myAssignmentStatement=addInitializationToConstructors(myLocal,myField,enclosingConstructor,factory);
+addInitializationToConstructors(myLocal,myField,enclosingConstructor,factory);
 break;
 case IN_SETUP_METHOD:
-myAssignmentStatement=addInitializationToSetUp(myLocal,myField,factory);
+addInitializationToSetUp(myLocal,myField,factory);
 }
 if (enclosingConstructor != null && myInitializerPlace == IN_CONSTRUCTOR) {
 PsiStatement statement=createAssignment(myLocal,myFieldName,factory);
-myAssignmentStatement=(PsiStatement)declarationStatement.replace(statement);
+declarationStatement.replace(statement);
 }
 if (rebindNeeded2) {
 for (final PsiReference reference : refs) {
@@ -49,6 +55,7 @@ if (reference != null) {
 RefactoringUtil.replaceOccurenceWithFieldRef((PsiExpression)reference,myField,myDestinationClass);
 }
 }
+ChangeContextUtil.decodeContextInfo(myDestinationClass,myDestinationClass,null);
 }
 }
  catch (IncorrectOperationException e) {

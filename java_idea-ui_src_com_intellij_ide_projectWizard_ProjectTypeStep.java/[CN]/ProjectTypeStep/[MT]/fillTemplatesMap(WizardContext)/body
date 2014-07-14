@@ -1,0 +1,81 @@
+{
+  List<ModuleBuilder> builders=ModuleBuilder.getAllBuilders();
+  if (context.isCreatingNewProject()) {
+    builders.add(new EmptyModuleBuilder());
+  }
+  Map<String,TemplatesGroup> groupMap=new HashMap<String,TemplatesGroup>();
+  for (  ModuleBuilder builder : builders) {
+    BuilderBasedTemplate template=new BuilderBasedTemplate(builder);
+    if (builder.isTemplate()) {
+      TemplatesGroup group=groupMap.get(builder.getGroupName());
+      if (group == null) {
+        group=new TemplatesGroup(builder);
+      }
+      myTemplatesMap.putValue(group,template);
+    }
+ else {
+      TemplatesGroup group=new TemplatesGroup(builder);
+      groupMap.put(group.getName(),group);
+      myTemplatesMap.put(group,new ArrayList<ProjectTemplate>());
+    }
+  }
+  MultiMap<TemplatesGroup,ProjectTemplate> map=CreateFromTemplateMode.getTemplatesMap(context);
+  myTemplatesMap.putAllValues(map);
+  for (  ProjectCategory category : ProjectCategory.EXTENSION_POINT_NAME.getExtensions()) {
+    TemplatesGroup group=new TemplatesGroup(category);
+    myTemplatesMap.remove(group);
+    myTemplatesMap.put(group,new ArrayList<ProjectTemplate>());
+  }
+  if (context.isCreatingNewProject()) {
+    MultiMap<String,ProjectTemplate> localTemplates=loadLocalTemplates();
+    for (    TemplatesGroup group : myTemplatesMap.keySet()) {
+      myTemplatesMap.putValues(group,localTemplates.get(group.getId()));
+    }
+  }
+  if (PlatformUtils.isIdeaCommunity()) {
+    for (    TemplatesGroup group : myTemplatesMap.keySet()) {
+      if (WebModuleTypeBase.WEB_MODULE.equals(group.getId()) && myTemplatesMap.get(group).isEmpty()) {
+        myTemplatesMap.remove(group);
+        break;
+      }
+    }
+  }
+  List<TemplatesGroup> groups=new ArrayList<TemplatesGroup>(myTemplatesMap.keySet());
+  final MultiMap<ModuleType,TemplatesGroup> moduleTypes=new MultiMap<ModuleType,TemplatesGroup>();
+  for (  TemplatesGroup group : groups) {
+    ModuleType type=getModuleType(group);
+    moduleTypes.putValue(type,group);
+  }
+  Collections.sort(groups,new Comparator<TemplatesGroup>(){
+    @Override public int compare(    TemplatesGroup o1,    TemplatesGroup o2){
+      int i=o2.getWeight() - o1.getWeight();
+      if (i != 0)       return i;
+      int i1=moduleTypes.get(getModuleType(o2)).size() - moduleTypes.get(getModuleType(o1)).size();
+      if (i1 != 0)       return i1;
+      return o1.compareTo(o2);
+    }
+  }
+);
+  Set<String> groupNames=ContainerUtil.map2Set(groups,new Function<TemplatesGroup,String>(){
+    @Override public String fun(    TemplatesGroup group){
+      return group.getParentGroup();
+    }
+  }
+);
+  MultiMap<String,TemplatesGroup> subGroups=new MultiMap<String,TemplatesGroup>();
+  for (ListIterator<TemplatesGroup> iterator=groups.listIterator(); iterator.hasNext(); ) {
+    TemplatesGroup group=iterator.next();
+    String parentGroup=group.getParentGroup();
+    if (parentGroup != null && groupNames.contains(parentGroup) && !group.getName().equals(parentGroup) && groupMap.containsKey(parentGroup)) {
+      subGroups.putValue(parentGroup,group);
+      iterator.remove();
+    }
+  }
+  for (ListIterator<TemplatesGroup> iterator=groups.listIterator(); iterator.hasNext(); ) {
+    TemplatesGroup group=iterator.next();
+    for (    TemplatesGroup subGroup : subGroups.get(group.getName())) {
+      iterator.add(subGroup);
+    }
+  }
+  return groups;
+}

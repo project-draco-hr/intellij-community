@@ -1,0 +1,56 @@
+{
+  myInterpreterList=PyConfigurableInterpreterList.getInstance(myProject);
+  myProjectSdksModel=myInterpreterList.getModel();
+  mySdkModelListener=new MySdkModelListener(this);
+  myProjectSdksModel.addListener(mySdkModelListener);
+  mySdkCombo.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      final Sdk selectedSdk=(Sdk)mySdkCombo.getSelectedItem();
+      myPackagesPanel.updatePackages(selectedSdk != null ? new PyPackageManagementService(myProject,selectedSdk) : null);
+      myPackagesPanel.updateNotifications(selectedSdk);
+    }
+  }
+);
+  myDetailsCallback=new NullableConsumer<Sdk>(){
+    @Override public void consume(    @Nullable Sdk sdk){
+      if (sdk instanceof PyDetectedSdk) {
+        final Sdk addedSdk=SdkConfigurationUtil.setupSdk(myProjectSdksModel.getSdks(),sdk.getHomeDirectory(),PythonSdkType.getInstance(),true,null,null);
+        myAddedSdks.add(addedSdk);
+        myProjectSdksModel.addSdk(addedSdk);
+        myProjectSdksModel.removeSdk(sdk);
+        mySdkCombo.setSelectedItem(addedSdk);
+      }
+ else       if (getSdk() != sdk && sdk != null) {
+        PythonSdkAdditionalData additionalData=(PythonSdkAdditionalData)sdk.getSdkAdditionalData();
+        if (additionalData != null) {
+          final String path=additionalData.getAssociatedProjectPath();
+          if (!myProject.getBasePath().equals(path))           additionalData.setAssociatedProjectPath(null);
+        }
+        updateSdkList(false);
+        mySdkCombo.setSelectedItem(sdk);
+      }
+    }
+  }
+;
+  myDetailsButton.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      PythonSdkDetailsStep.show(myProject,myProjectSdksModel.getSdks(),myModule == null ? new PythonSdkDetailsDialog(myProject,myDetailsCallback) : new PythonSdkDetailsDialog(myModule,myDetailsCallback),myMainPanel,myDetailsButton.getLocationOnScreen(),new NullableConsumer<Sdk>(){
+        @Override public void consume(        Sdk sdk){
+          if (sdk == null)           return;
+          final PySdkService sdkService=PySdkService.getInstance();
+          sdkService.restoreSdk(sdk);
+          if (myProjectSdksModel.findSdk(sdk) == null) {
+            myProjectSdksModel.addSdk(sdk);
+            myAddedSdks.add(sdk);
+          }
+          updateSdkList(false);
+          mySdkCombo.getModel().setSelectedItem(sdk);
+          myPackagesPanel.updatePackages(new PyPackageManagementService(myProject,sdk));
+          myPackagesPanel.updateNotifications(sdk);
+        }
+      }
+);
+    }
+  }
+);
+}

@@ -1,0 +1,39 @@
+{
+  List<MyFoldRegion> foldRegions=new ArrayList<MyFoldRegion>();
+  List<Integer> wrapPositions=new ArrayList<Integer>();
+  int foldInsertPosition=0;
+  int pos=0;
+  int docPos=0;
+  Matcher matcher=Pattern.compile(TAGS_PATTERN).matcher(text);
+  StringBuilder cleanedText=new StringBuilder();
+  while (matcher.find()) {
+    cleanedText.append(text.substring(pos,matcher.start()));
+    docPos+=matcher.start() - pos;
+    pos=matcher.end();
+    if (matcher.group(1) != null) {
+      foldRegions.add(foldInsertPosition++,new MyFoldRegion(docPos,matcher.group(3),matcher.group(2) != null));
+    }
+ else     if (matcher.group(4) != null) {
+      assertTrue("Misplaced closing fold marker tag: " + text,foldInsertPosition > 0);
+      foldRegions.get(--foldInsertPosition).endPos=docPos;
+    }
+ else {
+      wrapPositions.add(docPos);
+    }
+  }
+  assertTrue("Missing closing fold marker tag: " + text,foldInsertPosition == 0);
+  cleanedText.append(text.substring(pos));
+  init(cleanedText.toString(),TestFileType.TEXT);
+  for (  MyFoldRegion region : foldRegions) {
+    FoldRegion r=addFoldRegion(region.startPos,region.endPos,region.placeholder);
+    if (region.collapse) {
+      toggleFoldRegionState(r,false);
+    }
+  }
+  EditorTestUtil.configureSoftWraps(myEditor,wrapWidth);
+  List<Integer> actualWrapPositions=new ArrayList<Integer>();
+  for (  SoftWrap wrap : myEditor.getSoftWrapModel().getSoftWrapsForRange(0,myEditor.getDocument().getTextLength())) {
+    actualWrapPositions.add(wrap.getStart());
+  }
+  assertEquals("Wrong wrap positions",wrapPositions,actualWrapPositions);
+}

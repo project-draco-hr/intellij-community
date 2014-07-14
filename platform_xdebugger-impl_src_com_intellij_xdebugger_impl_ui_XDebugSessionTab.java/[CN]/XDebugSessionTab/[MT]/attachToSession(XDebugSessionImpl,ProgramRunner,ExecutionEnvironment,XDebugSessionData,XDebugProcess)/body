@@ -11,6 +11,12 @@
       if (XWatchesView.DATA_KEY.is(dataId)) {
         return myWatchesView;
       }
+      if (LangDataKeys.CONSOLE_VIEW.is(dataId)) {
+        return session.getConsoleView();
+      }
+      if (XDebugSessionData.DATA_KEY.is(dataId)) {
+        return sessionData;
+      }
       return null;
     }
   }
@@ -24,16 +30,21 @@
     return;
   }
   DefaultActionGroup leftToolbar=new DefaultActionGroup();
-  final Executor executor=DefaultDebugExecutor.getDebugExecutorInstance();
-  if (runner != null && env != null) {
-    RestartAction restartAction=new RestartAction(executor,runner,myRunContentDescriptor,env);
+  final Executor debugExecutor=DefaultDebugExecutor.getDebugExecutorInstance();
+  final Executor executor=environment != null ? environment.getExecutor() : debugExecutor;
+  if (runner != null && environment != null) {
+    RestartAction restartAction=new RestartAction(executor,runner,myRunContentDescriptor,environment);
     leftToolbar.add(restartAction);
     restartAction.registerShortcut(myUi.getComponent());
     List<AnAction> additionalRestartActions=session.getRestartActions();
     leftToolbar.addAll(additionalRestartActions);
     if (!additionalRestartActions.isEmpty())     leftToolbar.addSeparator();
+    leftToolbar.addAll(session.getExtraActions());
   }
   leftToolbar.addAll(getCustomizedActionGroup(XDebuggerActions.TOOL_WINDOW_LEFT_TOOLBAR_GROUP));
+  for (  AnAction action : session.getExtraStopActions()) {
+    leftToolbar.add(action,new Constraints(Anchor.AFTER,IdeActions.ACTION_STOP_PROGRAM));
+  }
   leftToolbar.addSeparator();
   leftToolbar.add(myUi.getOptions().getLayoutActions());
   final AnAction[] commonSettings=myUi.getOptions().getSettingsActionsList();
@@ -61,16 +72,19 @@
   leftToolbar.addSeparator();
   leftToolbar.add(PinToolwindowTabAction.getPinAction());
   leftToolbar.add(new CloseAction(executor,myRunContentDescriptor,getProject()));
-  leftToolbar.add(new ContextHelpAction(executor.getHelpId()));
+  leftToolbar.add(new ContextHelpAction(debugExecutor.getHelpId()));
   DefaultActionGroup topToolbar=new DefaultActionGroup();
   topToolbar.addAll(getCustomizedActionGroup(XDebuggerActions.TOOL_WINDOW_TOP_TOOLBAR_GROUP));
   debugProcess.registerAdditionalActions(leftToolbar,topToolbar);
   myUi.getOptions().setLeftToolbar(leftToolbar,ActionPlaces.DEBUGGER_TOOLBAR);
   myUi.getOptions().setTopToolbar(topToolbar,ActionPlaces.DEBUGGER_TOOLBAR);
-  if (env != null) {
-    final RunProfile runConfiguration=env.getRunProfile();
+  if (environment != null) {
+    final RunProfile runConfiguration=environment.getRunProfile();
     registerFileMatcher(runConfiguration);
     initLogConsoles(runConfiguration,myRunContentDescriptor.getProcessHandler(),myConsole);
   }
+  final DefaultActionGroup focus=new DefaultActionGroup();
+  focus.add(ActionManager.getInstance().getAction(XDebuggerActions.FOCUS_ON_BREAKPOINT));
+  myUi.getOptions().setAdditionalFocusActions(focus);
   rebuildViews();
 }

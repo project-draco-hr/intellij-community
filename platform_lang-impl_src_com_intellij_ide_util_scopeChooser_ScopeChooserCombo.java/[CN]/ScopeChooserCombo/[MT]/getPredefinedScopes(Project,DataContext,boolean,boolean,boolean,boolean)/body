@@ -1,12 +1,12 @@
 {
-  ArrayList<SearchScope> result=new ArrayList<SearchScope>();
+  Collection<SearchScope> result=ContainerUtil.newLinkedHashSet();
   result.add(GlobalSearchScope.projectScope(project));
   if (suggestSearchInLibs) {
     result.add(GlobalSearchScope.allScope(project));
   }
-  if (!PlatformUtils.isCidr() && ModuleUtil.isSupportedRootType(project,JavaSourceRootType.TEST_SOURCE)) {
-    result.add(GlobalSearchScopes.projectProductionScope(project));
-    result.add(GlobalSearchScopes.projectTestScope(project));
+  if (ModuleUtil.isSupportedRootType(project,JavaSourceRootType.TEST_SOURCE)) {
+    result.add(GlobalSearchScopesCore.projectProductionScope(project));
+    result.add(GlobalSearchScopesCore.projectTestScope(project));
   }
   result.add(GlobalSearchScopes.openFilesScope(project));
   if (dataContext != null) {
@@ -20,7 +20,7 @@
         if (module == null) {
           module=LangDataKeys.MODULE.getData(dataContext);
         }
-        if (module != null) {
+        if (module != null && !(ModuleType.get(module) instanceof InternalModuleType)) {
           result.add(module.getModuleScope());
         }
       }
@@ -35,17 +35,21 @@
     if (selectedTextEditor != null) {
       final PsiFile psiFile=PsiDocumentManager.getInstance(project).getPsiFile(selectedTextEditor.getDocument());
       if (psiFile != null) {
-        if (selectedTextEditor.getSelectionModel().hasSelection()) {
-          final PsiElement startElement=psiFile.findElementAt(selectedTextEditor.getSelectionModel().getSelectionStart());
+        SelectionModel selectionModel=selectedTextEditor.getSelectionModel();
+        if (selectionModel.hasSelection()) {
+          int start=selectionModel.getSelectionStart();
+          final PsiElement startElement=psiFile.findElementAt(start);
           if (startElement != null) {
-            final PsiElement endElement=psiFile.findElementAt(selectedTextEditor.getSelectionModel().getSelectionEnd());
+            int end=selectionModel.getSelectionEnd();
+            final PsiElement endElement=psiFile.findElementAt(end);
             if (endElement != null) {
               final PsiElement parent=PsiTreeUtil.findCommonParent(startElement,endElement);
               if (parent != null) {
                 final List<PsiElement> elements=new ArrayList<PsiElement>();
                 final PsiElement[] children=parent.getChildren();
+                TextRange selection=new TextRange(start,end);
                 for (                PsiElement child : children) {
-                  if (!(child instanceof PsiWhiteSpace) && child.getContainingFile() != null) {
+                  if (!(child instanceof PsiWhiteSpace) && child.getContainingFile() != null && selection.contains(child.getTextOffset())) {
                     elements.add(child);
                   }
                 }
@@ -66,26 +70,18 @@
       final Set<Usage> usages=selectedUsageView.getUsages();
       final List<PsiElement> results=new ArrayList<PsiElement>(usages.size());
       if (prevSearchFiles) {
-        final Set<VirtualFile> files=new HashSet<VirtualFile>();
-        for (        Usage usage : usages) {
-          if (usage instanceof PsiElementUsage) {
-            PsiElement psiElement=((PsiElementUsage)usage).getElement();
-            if (psiElement != null && psiElement.isValid()) {
-              PsiFile psiFile=psiElement.getContainingFile();
-              if (psiFile != null) {
-                VirtualFile file=psiFile.getVirtualFile();
-                if (file != null)                 files.add(file);
-              }
-            }
-          }
-        }
+        final Set<VirtualFile> files=collectFiles(usages,true);
         if (!files.isEmpty()) {
           GlobalSearchScope prev=new GlobalSearchScope(project){
-            @Override public String getDisplayName(){
+            private Set<VirtualFile> myFiles=null;
+            @NotNull @Override public String getDisplayName(){
               return IdeBundle.message("scope.files.in.previous.search.result");
             }
-            @Override public boolean contains(            @NotNull VirtualFile file){
-              return files.contains(file);
+            @Override public synchronized boolean contains(            @NotNull VirtualFile file){
+              if (myFiles == null) {
+                myFiles=collectFiles(usages,false);
+              }
+              return myFiles.contains(file);
             }
             @Override public int compare(            @NotNull VirtualFile file1,            @NotNull VirtualFile file2){
               return 0;
@@ -122,7 +118,7 @@
       final Collection<TreeItem<Pair<AbstractUrl,String>>> rootUrls=favoritesManager.getFavoritesListRootUrls(favorite);
       if (rootUrls.isEmpty())       continue;
       result.add(new GlobalSearchScope(project){
-        @Override public String getDisplayName(){
+        @NotNull @Override public String getDisplayName(){
           return "Favorite \'" + favorite + "\'";
         }
         @Override public boolean contains(        @NotNull final VirtualFile file){
@@ -146,12 +142,12 @@
     if (files != null) {
       final List<VirtualFile> openFiles=Arrays.asList(files);
       result.add(new DelegatingGlobalSearchScope(GlobalSearchScope.filesScope(project,openFiles)){
-        @Override public String getDisplayName(){
+        @NotNull @Override public String getDisplayName(){
           return "Selected Files";
         }
       }
 );
     }
   }
-  return result;
+  return ContainerUtil.newArrayList(result);
 }

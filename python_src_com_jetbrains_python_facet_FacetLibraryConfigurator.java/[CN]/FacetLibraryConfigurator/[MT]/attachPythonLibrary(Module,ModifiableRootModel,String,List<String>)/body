@@ -1,0 +1,37 @@
+{
+  final ModifiableModelsProvider modelsProvider=ModifiableModelsProvider.SERVICE.getInstance();
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    public void run(){
+      final ModifiableRootModel model=existingModel != null ? existingModel : modelsProvider.getModuleModifiableModel(module);
+      final LibraryOrderEntry orderEntry=OrderEntryUtil.findLibraryOrderEntry(model,libraryName);
+      if (orderEntry != null) {
+        Library lib=orderEntry.getLibrary();
+        if (lib != null) {
+          if (lib instanceof LibraryImpl && ((LibraryImpl)lib).getKind() == null) {
+            model.removeOrderEntry(orderEntry);
+            ProjectLibraryTable.getInstance(model.getProject()).removeLibrary(lib);
+            createNewLibrary(model);
+            return;
+          }
+          fillLibrary(module.getProject(),lib,paths);
+          if (existingModel == null) {
+            modelsProvider.commitModuleModifiableModel(model);
+          }
+          return;
+        }
+      }
+      createNewLibrary(model);
+    }
+    private void createNewLibrary(    ModifiableRootModel model){
+      final LibraryTableBase.ModifiableModelEx projectLibrariesModel=(LibraryTableBase.ModifiableModelEx)modelsProvider.getLibraryTableModifiableModel(model.getProject());
+      Library lib=projectLibrariesModel.createLibrary(libraryName,PythonLibraryType.getInstance().getKind());
+      fillLibrary(module.getProject(),lib,paths);
+      projectLibrariesModel.commit();
+      model.addLibraryEntry(lib);
+      if (existingModel == null) {
+        modelsProvider.commitModuleModifiableModel(model);
+      }
+    }
+  }
+);
+}

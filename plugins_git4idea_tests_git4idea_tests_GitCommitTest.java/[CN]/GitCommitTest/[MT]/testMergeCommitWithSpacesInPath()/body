@@ -1,0 +1,32 @@
+{
+  final String PATH="dir with spaces/file with spaces.txt";
+  GitTestUtil.createFileStructure(myProjectRoot,PATH);
+  addCommit("created some file structure");
+  git("branch feature");
+  File file=new File(myProjectPath,PATH);
+  assertTrue("File doesn't exist!",file.exists());
+  overwrite(file,"my content");
+  addCommit("modified in master");
+  checkout("feature");
+  overwrite(file,"brother content");
+  addCommit("modified in feature");
+  checkout("master");
+  git("merge feature",true);
+  overwrite(file,"merged content");
+  git("add .");
+  final ChangeListManager changeListManager=ChangeListManager.getInstance(myProject);
+  updateChangeListManager();
+  final LocalChangeList changeList=changeListManager.getDefaultChangeList();
+  changeList.setComment("Commit message");
+  assertTrue(!changeListManager.getChangesIn(myProjectRoot).isEmpty());
+  final AtomicBoolean res=new AtomicBoolean();
+  ApplicationManager.getApplication().invokeAndWait(new Runnable(){
+    @Override public void run(){
+      res.set(changeListManager.commitChangesSynchronouslyWithResult(changeList,new ArrayList<Change>(changeListManager.getChangesIn(myProjectRoot))));
+    }
+  }
+,ModalityState.defaultModalityState());
+  assertTrue(res.get());
+  updateChangeListManager();
+  assertTrue(changeListManager.getChangesIn(myProjectRoot).isEmpty());
+}

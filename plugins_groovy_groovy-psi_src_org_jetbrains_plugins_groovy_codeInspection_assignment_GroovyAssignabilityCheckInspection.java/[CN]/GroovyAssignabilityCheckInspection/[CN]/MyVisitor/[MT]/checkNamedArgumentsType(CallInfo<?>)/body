@@ -1,0 +1,23 @@
+{
+  GroovyPsiElement rawCall=info.getCall();
+  if (!(rawCall instanceof GrCall))   return;
+  GrCall call=(GrCall)rawCall;
+  GrNamedArgument[] namedArguments=PsiUtil.getFirstMapNamedArguments(call);
+  if (namedArguments.length == 0)   return;
+  Map<String,NamedArgumentDescriptor> map=GroovyNamedArgumentProvider.getNamedArgumentsFromAllProviders(call,null,false);
+  if (map == null)   return;
+  for (  GrNamedArgument namedArgument : namedArguments) {
+    String labelName=namedArgument.getLabelName();
+    NamedArgumentDescriptor descriptor=map.get(labelName);
+    if (descriptor == null)     continue;
+    GrExpression namedArgumentExpression=namedArgument.getExpression();
+    if (namedArgumentExpression == null)     continue;
+    if (isNewInstanceInitialingByTuple(namedArgumentExpression))     continue;
+    if (PsiUtil.isRawClassMemberAccess(namedArgumentExpression))     continue;
+    PsiType expressionType=TypesUtil.boxPrimitiveType(namedArgumentExpression.getType(),call.getManager(),call.getResolveScope());
+    if (expressionType == null)     continue;
+    if (!descriptor.checkType(expressionType,call)) {
+      registerError(namedArgumentExpression,"Type of argument '" + labelName + "' can not be '"+ expressionType.getPresentableText()+ "'");
+    }
+  }
+}

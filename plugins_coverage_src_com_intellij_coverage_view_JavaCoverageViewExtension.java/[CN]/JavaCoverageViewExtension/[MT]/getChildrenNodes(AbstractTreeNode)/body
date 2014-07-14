@@ -1,0 +1,41 @@
+{
+  List<AbstractTreeNode> children=new ArrayList<AbstractTreeNode>();
+  if (node instanceof CoverageListNode) {
+    final Object val=node.getValue();
+    if (val instanceof PsiClass)     return Collections.emptyList();
+    if (val instanceof PsiPackage) {
+      if (!myStateBean.myFlattenPackages) {
+        collectSubPackages(children,(PsiPackage)val,mySuitesBundle,myStateBean);
+      }
+      if (ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
+        public Boolean compute(){
+          return isInCoverageScope((PsiPackage)val,mySuitesBundle);
+        }
+      }
+)) {
+        final PsiClass[] classes=ApplicationManager.getApplication().runReadAction(new Computable<PsiClass[]>(){
+          public PsiClass[] compute(){
+            return ((PsiPackage)val).getClasses(mySuitesBundle.getSearchScope(node.getProject()));
+          }
+        }
+);
+        for (        PsiClass aClass : classes) {
+          if (!(node instanceof CoverageListRootNode) && getClassCoverageInfo(aClass) == null)           continue;
+          children.add(new CoverageListNode(myProject,aClass,mySuitesBundle,myStateBean));
+        }
+      }
+    }
+    if (node instanceof CoverageListRootNode) {
+      for (      CoverageSuite suite : mySuitesBundle.getSuites()) {
+        final List<PsiClass> classes=((JavaCoverageSuite)suite).getCurrentSuiteClasses(myProject);
+        for (        PsiClass aClass : classes) {
+          children.add(new CoverageListNode(myProject,aClass,mySuitesBundle,myStateBean));
+        }
+      }
+    }
+    for (    AbstractTreeNode childNode : children) {
+      childNode.setParent(node);
+    }
+  }
+  return children;
+}

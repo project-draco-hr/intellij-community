@@ -1,0 +1,57 @@
+{
+  BuildScriptClasspathModelImpl buildScriptClasspath=cache.get(project.getPath());
+  if (buildScriptClasspath != null)   return buildScriptClasspath;
+  buildScriptClasspath=new BuildScriptClasspathModelImpl();
+  final File gradleHomeDir=project.getGradle().getGradleHomeDir();
+  buildScriptClasspath.setGradleHomeDir(gradleHomeDir);
+  buildScriptClasspath.setGradleVersion(GradleVersion.current().getVersion());
+  final IdeaPlugin ideaPlugin=project.getPlugins().getPlugin(IdeaPlugin.class);
+  if (ideaPlugin != null) {
+    Project parent=project.getParent();
+    if (parent != null) {
+      BuildScriptClasspathModelImpl parentBuildScriptClasspath=(BuildScriptClasspathModelImpl)buildAll(modelName,parent);
+      if (parentBuildScriptClasspath != null) {
+        for (        ClasspathEntryModel classpathEntryModel : parentBuildScriptClasspath.getClasspath()) {
+          buildScriptClasspath.add(classpathEntryModel);
+        }
+      }
+    }
+    Configuration classpathConfiguration=project.getBuildscript().getConfigurations().findByName(CLASSPATH_CONFIGURATION_NAME);
+    if (classpathConfiguration == null)     return null;
+    final Configuration configuration;
+    final IdeaModule ideaModule=ideaPlugin.getModel().getModule();
+    final ConfigurationContainer configurations=ideaModule.getProject().getConfigurations();
+    if (classpathConfiguration.getState() == Configuration.State.UNRESOLVED) {
+      configuration=classpathConfiguration;
+      configurations.add(configuration);
+    }
+ else {
+      configuration=configurations.maybeCreate(UUID.randomUUID().toString());
+      configuration.getDependencies().addAll(classpathConfiguration.getAllDependencies());
+      configuration.getArtifacts().addAll(classpathConfiguration.getAllArtifacts());
+    }
+    Collection<Configuration> plusConfigurations=Collections.singletonList(configuration);
+    final Map<String,Map<String,Collection<Configuration>>> scopes=new HashMap<String,Map<String,Collection<Configuration>>>(ideaModule.getScopes());
+    Map<String,Map<String,Collection<Configuration>>> buildScriptScope=new HashMap<String,Map<String,Collection<Configuration>>>();
+    Map<String,Collection<Configuration>> plusConfiguration=new HashMap<String,Collection<Configuration>>();
+    plusConfiguration.put(PLUS_CONFIGURATION,plusConfigurations);
+    if (scopes.get(COMPILE_SCOPE) != null) {
+      plusConfiguration.put(MINUS_CONFIGURATION,scopes.get(COMPILE_SCOPE).get(PLUS_CONFIGURATION));
+    }
+    buildScriptScope.put(COMPILE_SCOPE,plusConfiguration);
+    ideaModule.setScopes(buildScriptScope);
+    final Set<Dependency> buildScriptDependencies=ideaModule.resolveDependencies();
+    for (    Dependency dependency : buildScriptDependencies) {
+      if (dependency instanceof ModuleLibrary) {
+        ModuleLibrary moduleLibrary=(ModuleLibrary)dependency;
+        if (COMPILE_SCOPE.equals(moduleLibrary.getScope())) {
+          buildScriptClasspath.add(new ClasspathEntryModelImpl(convert(moduleLibrary.getClasses()),convert(moduleLibrary.getSources()),convert(moduleLibrary.getJavadoc())));
+        }
+      }
+    }
+    ideaModule.setScopes(scopes);
+    configurations.remove(configuration);
+  }
+  cache.put(project.getPath(),buildScriptClasspath);
+  return buildScriptClasspath;
+}

@@ -1,0 +1,58 @@
+{
+  replacementVarsMap=new HashMap<String,ScriptSupport>();
+  this.options=options;
+  String _replacement=options.getReplacement();
+  FileType fileType=options.getMatchOptions().getFileType();
+  final Template template=TemplateManager.getInstance(project).createTemplate("","",_replacement);
+  final int segmentsCount=template.getSegmentsCount();
+  replacement=template.getTemplateText();
+  for (int i=0; i < segmentsCount; ++i) {
+    final int offset=template.getSegmentOffset(i);
+    final String name=template.getSegmentName(i);
+    final ParameterInfo info=new ParameterInfo();
+    info.setStartIndex(offset);
+    info.setName(name);
+    info.setReplacementVariable(options.getVariableDefinition(name) != null);
+    int pos;
+    for (pos=offset - 1; pos >= 0 && pos < replacement.length() && Character.isWhitespace(replacement.charAt(pos)); ) {
+      --pos;
+    }
+    if (pos >= 0) {
+      if (replacement.charAt(pos) == ',') {
+        info.setHasCommaBefore(true);
+      }
+      info.setBeforeDelimiterPos(pos);
+    }
+    for (pos=offset; pos < replacement.length() && Character.isWhitespace(replacement.charAt(pos)); ) {
+      ++pos;
+    }
+    if (pos < replacement.length()) {
+      final char ch=replacement.charAt(pos);
+      if (ch == ';') {
+        info.setStatementContext(true);
+      }
+ else       if (ch == ',' || ch == ')') {
+        info.setParameterContext(true);
+        info.setHasCommaAfter(ch == ',');
+      }
+      info.setAfterDelimiterPos(pos);
+    }
+    if (parameterizations == null) {
+      parameterizations=new ArrayList<ParameterInfo>();
+    }
+    parameterizations.add(info);
+  }
+  final StructuralSearchProfile profile=parameterizations != null ? StructuralSearchUtil.getProfileByFileType(fileType) : null;
+  if (profile != null) {
+    try {
+      final PsiElement[] elements=MatcherImplUtil.createTreeFromText(_replacement,PatternTreeContext.Block,fileType,options.getMatchOptions().getDialect(),options.getMatchOptions().getPatternContext(),project,false);
+      if (elements.length > 0) {
+        final PsiElement patternNode=elements[0].getParent();
+        profile.provideAdditionalReplaceOptions(patternNode,options,this);
+      }
+    }
+ catch (    IncorrectOperationException e) {
+      throw new MalformedPatternException();
+    }
+  }
+}

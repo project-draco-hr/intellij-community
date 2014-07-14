@@ -1,5 +1,7 @@
 {
   VirtualFile baseDir=virtualFile;
+  boolean dummyProject=false;
+  String dummyProjectName=null;
   if (!baseDir.isDirectory()) {
     baseDir=virtualFile.getParent();
     while (baseDir != null) {
@@ -9,7 +11,18 @@
       baseDir=baseDir.getParent();
     }
     if (baseDir == null) {
-      baseDir=virtualFile.getParent();
+      if (Registry.is("ide.open.file.in.temp.project.dir")) {
+        try {
+          dummyProjectName=virtualFile.getName();
+          File directory=FileUtil.createTempDirectory(dummyProjectName,null,true);
+          baseDir=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(directory);
+          dummyProject=true;
+        }
+ catch (        IOException ex) {
+          LOG.error(ex);
+        }
+      }
+      if (baseDir == null)       baseDir=virtualFile.getParent();
     }
   }
   final File projectDir=new File(FileUtil.toSystemDependentName(baseDir.getPath()),Project.DIRECTORY_STORE_FOLDER);
@@ -66,11 +79,24 @@
     projectDir.mkdirs();
   }
   if (project == null) {
-    project=projectManager.newProject(projectDir.getParentFile().getName(),projectDir.getParent(),true,false);
+    String projectName=dummyProject ? dummyProjectName : projectDir.getParentFile().getName();
+    project=projectManager.newProject(projectName,projectDir.getParent(),true,dummyProject);
   }
   if (project == null)   return null;
   ProjectBaseDirectory.getInstance(project).setBaseDir(baseDir);
-  final Module module=runConfigurators ? runDirectoryProjectConfigurators(baseDir,project) : null;
+  final Module module=runConfigurators ? runDirectoryProjectConfigurators(baseDir,project) : ModuleManager.getInstance(project).getModules()[0];
+  if (runConfigurators && dummyProject) {
+    ApplicationManager.getApplication().runWriteAction(new Runnable(){
+      @Override public void run(){
+        ModifiableRootModel model=ModuleRootManager.getInstance(module).getModifiableModel();
+        ContentEntry[] entries=model.getContentEntries();
+        if (entries.length == 1)         model.removeContentEntry(entries[0]);
+        model.addContentEntry(virtualFile);
+        model.commit();
+      }
+    }
+);
+  }
   openFileFromCommandLine(project,virtualFile,line);
   if (!projectManager.openProject(project)) {
     WelcomeFrame.showIfNoProjectOpened();
@@ -83,7 +109,7 @@
 );
     return project;
   }
-  if (callback != null && runConfigurators) {
+  if (callback != null) {
     callback.projectOpened(project,module);
   }
   return project;

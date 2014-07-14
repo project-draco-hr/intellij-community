@@ -1,17 +1,26 @@
 {
   HttpClient client=getHttpClient(auth.getBasicAuth(),auth.isUseProxy());
-  return GithubSslSupport.getInstance().executeSelfSignedCertificateAwareRequest(client,uri,new ThrowableConvertor<String,HttpMethod,IOException>(){
-    @Override public HttpMethod convert(    String uri) throws IOException {
-      HttpMethod method;
+  HttpMethod method;
 switch (verb) {
 case POST:
-        method=new PostMethod(uri);
-      if (requestBody != null) {
-        ((PostMethod)method).setRequestEntity(new StringRequestEntity(requestBody,"application/json","UTF-8"));
-      }
-    break;
+    method=new PostMethod(uri);
+  if (requestBody != null) {
+    ((PostMethod)method).setRequestEntity(new StringRequestEntity(requestBody,"application/json","UTF-8"));
+  }
+break;
+case PATCH:
+method=new PostMethod(uri){
+@Override public String getName(){
+  return "PATCH";
+}
+}
+;
+if (requestBody != null) {
+((PostMethod)method).setRequestEntity(new StringRequestEntity(requestBody,"application/json","UTF-8"));
+}
+break;
 case GET:
-  method=new GetMethod(uri);
+method=new GetMethod(uri);
 break;
 case DELETE:
 method=new DeleteMethod(uri);
@@ -26,11 +35,22 @@ GithubAuthData.TokenAuth tokenAuth=auth.getTokenAuth();
 if (tokenAuth != null) {
 method.addRequestHeader("Authorization","token " + tokenAuth.getToken());
 }
+GithubAuthData.BasicAuth basicAuth=auth.getBasicAuth();
+if (basicAuth != null && basicAuth.getCode() != null) {
+method.addRequestHeader("X-GitHub-OTP",basicAuth.getCode());
+}
 for (Header header : headers) {
 method.addRequestHeader(header);
 }
+try {
+client.executeMethod(method);
+}
+ catch (SSLHandshakeException e) {
+if (e.getCause() instanceof ValidatorException) {
+LOG.info("Host SSL certificate is not trusted",e);
+throw new GithubOperationCanceledException("Host SSL certificate is not trusted",e);
+}
+throw e;
+}
 return method;
-}
-}
-);
 }

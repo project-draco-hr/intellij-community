@@ -1,0 +1,65 @@
+{
+  myProject=resourceBundle.getProject();
+  final JPanel splitPanel=new JPanel();
+  myValuesPanel=new JPanel();
+  myStructureViewPanel=new JPanel();
+  JBSplitter splitter=new JBSplitter(false);
+  splitter.setFirstComponent(myStructureViewPanel);
+  splitter.setSecondComponent(myValuesPanel);
+  splitter.setShowDividerControls(true);
+  splitter.setHonorComponentsMinimumSize(true);
+  splitter.setAndLoadSplitterProportionKey(getClass() + ".splitter");
+  splitPanel.setLayout(new BorderLayout());
+  splitPanel.add(splitter,BorderLayout.CENTER);
+  myResourceBundle=resourceBundle;
+  myStructureViewComponent=new ResourceBundleStructureViewComponent(myResourceBundle,this);
+  myStructureViewPanel.setLayout(new BorderLayout());
+  myStructureViewPanel.add(myStructureViewComponent,BorderLayout.CENTER);
+  myStructureViewComponent.getTree().getSelectionModel().addTreeSelectionListener(new TreeSelectionListener(){
+    private IProperty selectedProperty;
+    private PropertiesFile selectedPropertiesFile;
+    @Override public void valueChanged(    TreeSelectionEvent e){
+      if (getSelectedProperty() == null)       return;
+      if (!arePropertiesEquivalent(selectedProperty,getSelectedProperty()) || !Comparing.equal(selectedPropertiesFile,getSelectedPropertiesFile())) {
+        if (e.getOldLeadSelectionPath() != null) {
+          for (          Map.Entry<PropertiesFile,Editor> entry : myEditors.entrySet()) {
+            if (entry.getValue() == mySelectedEditor) {
+              writeEditorPropertyValue(mySelectedEditor,entry.getKey(),selectedProperty.getName());
+              break;
+            }
+          }
+        }
+        selectedProperty=getSelectedProperty();
+        selectedPropertiesFile=getSelectedPropertiesFile();
+        selectionChanged();
+      }
+    }
+    private boolean arePropertiesEquivalent(    @Nullable IProperty p1,    @Nullable IProperty p2){
+      if (p1 == p2) {
+        return true;
+      }
+      if (p1 == null || p2 == null) {
+        return false;
+      }
+      return p1.getPsiElement().isEquivalentTo(p2.getPsiElement());
+    }
+  }
+);
+  installPropertiesChangeListeners();
+  myEditors=new THashMap<PropertiesFile,Editor>();
+  myTitledPanels=new THashMap<PropertiesFile,JPanel>();
+  recreateEditorsPanel();
+  TreeElement[] children=myStructureViewComponent.getTreeModel().getRoot().getChildren();
+  if (children.length != 0) {
+    TreeElement child=children[0];
+    String propName=((ResourceBundlePropertyStructureViewElement)child).getValue();
+    setState(new ResourceBundleEditorState(propName));
+  }
+  myDataProviderPanel=new DataProviderPanel(splitPanel);
+  myProject.getMessageBus().connect(myProject).subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER,new FileEditorManagerAdapter(){
+    @Override public void selectionChanged(    @NotNull FileEditorManagerEvent event){
+      onSelectionChanged(event);
+    }
+  }
+);
+}

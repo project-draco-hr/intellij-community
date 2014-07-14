@@ -1,0 +1,54 @@
+{
+  final FileEditor[] editors=FileEditorManager.getInstance(myProject).getAllEditors(file);
+  if (editors.length == 0)   return null;
+  return new ReadTask(){
+    private boolean isOutdated(){
+      if (myProject.isDisposed() || !file.isValid() || indicator != getCurrentProgress(file)) {
+        return true;
+      }
+      for (      FileEditor editor : editors) {
+        if (!editor.isValid()) {
+          return true;
+        }
+      }
+      return false;
+    }
+    @Override public void computeInReadAction(    @NotNull final ProgressIndicator indicator){
+      if (isOutdated())       return;
+      final List<Runnable> updates=ContainerUtil.newArrayList();
+      for (      final FileEditor editor : editors) {
+        for (        final Provider<?> provider : Extensions.getExtensions(EXTENSION_POINT_NAME,myProject)) {
+          final JComponent component=provider.createNotificationPanel(file,editor);
+          updates.add(new Runnable(){
+            @Override public void run(){
+              updateNotification(editor,provider.getKey(),component);
+            }
+          }
+);
+        }
+      }
+      UIUtil.invokeLaterIfNeeded(new Runnable(){
+        @Override public void run(){
+          if (!isOutdated()) {
+            file.putUserData(CURRENT_UPDATES,null);
+            for (            Runnable update : updates) {
+              update.run();
+            }
+          }
+        }
+      }
+);
+    }
+    @Override public void onCanceled(    @NotNull ProgressIndicator _){
+      UIUtil.invokeLaterIfNeeded(new Runnable(){
+        @Override public void run(){
+          if (getCurrentProgress(file) == indicator) {
+            updateNotifications(file);
+          }
+        }
+      }
+);
+    }
+  }
+;
+}

@@ -1,0 +1,34 @@
+{
+  final PsiTypeParameter[] typeParameters=m2.getTypeParameters();
+  final InferenceSession session=new InferenceSession(typeParameters,siteSubstitutor2,m2.getManager(),context);
+  final PsiParameter[] parameters1=m1.getParameterList().getParameters();
+  final PsiParameter[] parameters2=m2.getParameterList().getParameters();
+  if (!varargs) {
+    LOG.assertTrue(parameters1.length == parameters2.length);
+  }
+  final int paramsLength=!varargs ? parameters1.length : parameters1.length - 1;
+  for (int i=0; i < paramsLength; i++) {
+    PsiType sType=getParameterType(parameters1,i,siteSubstitutor2,false);
+    PsiType tType=getParameterType(parameters2,i,siteSubstitutor2,varargs);
+    if (session.isProperType(sType) && session.isProperType(tType)) {
+      if (!TypeConversionUtil.isAssignable(tType,sType)) {
+        return false;
+      }
+      continue;
+    }
+    if (LambdaUtil.isFunctionalType(sType) && LambdaUtil.isFunctionalType(tType) && !relates(sType,tType)) {
+      if (!isFunctionalTypeMoreSpecific(sType,tType,session,args)) {
+        return false;
+      }
+    }
+ else {
+      session.addConstraint(new StrictSubtypingConstraint(tType,sType));
+    }
+  }
+  if (varargs) {
+    PsiType sType=getParameterType(parameters1,paramsLength,siteSubstitutor2,true);
+    PsiType tType=getParameterType(parameters2,paramsLength,siteSubstitutor2,true);
+    session.addConstraint(new StrictSubtypingConstraint(tType,sType));
+  }
+  return session.repeatInferencePhases(true);
+}

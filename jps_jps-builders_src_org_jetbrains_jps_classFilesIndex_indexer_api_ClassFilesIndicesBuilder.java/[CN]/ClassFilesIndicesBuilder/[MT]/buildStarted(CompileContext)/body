@@ -1,0 +1,33 @@
+{
+  super.buildStarted(context);
+  final boolean isEnabled=isEnabled();
+  LOG.info("class files data index " + (isEnabled ? "enabled" : "disabled"));
+  if (!isEnabled) {
+    return;
+  }
+  final Set<String> enabledIndicesBuilders=ContainerUtil.newHashSet(System.getProperty(PROPERTY_NAME).split(";"));
+  final boolean forcedRecompilation=JavaBuilderUtil.isForcedRecompilationAllJavaModules(context);
+  final Iterable<ClassFileIndexerFactory> extensions=JpsServiceManager.getInstance().getExtensions(ClassFileIndexerFactory.class);
+  int newIndicesCount=0;
+  for (  final ClassFileIndexerFactory builder : extensions) {
+    if (enabledIndicesBuilders.contains(builder.getClass().getName())) {
+      final ClassFilesIndexWriter indexWriter=new ClassFilesIndexWriter(builder.create(),context);
+      if (!indexWriter.isEmpty()) {
+        myIndexWriters.add(indexWriter);
+      }
+ else       if (forcedRecompilation) {
+        newIndicesCount++;
+        myIndexWriters.add(indexWriter);
+      }
+ else {
+        indexWriter.close(context);
+      }
+    }
+  }
+  if (forcedRecompilation) {
+    LOG.info(String.format("class files indexing: %d indices, %d new",myIndexWriters.size(),newIndicesCount));
+  }
+ else {
+    LOG.info(String.format("class files indexing: %d indices",myIndexWriters.size()));
+  }
+}

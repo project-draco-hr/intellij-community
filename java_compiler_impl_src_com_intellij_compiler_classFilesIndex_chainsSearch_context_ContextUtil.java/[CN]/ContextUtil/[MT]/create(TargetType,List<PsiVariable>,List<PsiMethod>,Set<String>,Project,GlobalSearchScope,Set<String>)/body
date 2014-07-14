@@ -1,0 +1,51 @@
+{
+  final MultiMap<String,PsiVariable> classQNameToVariable=new MultiMap<String,PsiVariable>();
+  final MultiMap<String,PsiMethod> containingClassGetters=new MultiMap<String,PsiMethod>();
+  final MultiMap<String,ContextRelevantVariableGetter> contextVarsGetters=new MultiMap<String,ContextRelevantVariableGetter>();
+  final Map<String,PsiVariable> stringVars=new HashMap<String,PsiVariable>();
+  for (  final PsiMethod method : contextMethods) {
+    final PsiType returnType=method.getReturnType();
+    if (returnType != null) {
+      final String returnTypeQName=returnType.getCanonicalText();
+      containingClassGetters.putValue(returnTypeQName,method);
+    }
+  }
+  for (  final PsiVariable var : contextVars) {
+    final PsiType type=var.getType();
+    final Set<String> classQNames=new HashSet<String>();
+    if (type instanceof PsiClassType) {
+      if (JAVA_LANG_STRING_SHORT_NAME.equals(((PsiClassType)type).getClassName())) {
+        final String varName=var.getName();
+        if (varName != null) {
+          stringVars.put(ChainCompletionContextStringUtil.sanitizedToLowerCase(varName),var);
+          continue;
+        }
+      }
+      final PsiClass aClass=((PsiClassType)type).resolve();
+      if (aClass != null) {
+        final String classQName=type.getCanonicalText();
+        if (!target.getClassQName().equals(classQName)) {
+          classQNames.add(classQName);
+          classQNames.addAll(resolveSupersNamesRecursively(aClass));
+          for (          final PsiMethod method : aClass.getAllMethods()) {
+            if (method.getParameterList().getParametersCount() == 0 && method.getName().startsWith("get")) {
+              final PsiType returnType=method.getReturnType();
+              if (returnType != null) {
+                final String getterReturnTypeQName=returnType.getCanonicalText();
+                contextVarsGetters.putValue(getterReturnTypeQName,new ContextRelevantVariableGetter(var,method));
+              }
+            }
+          }
+        }
+      }
+    }
+ else {
+      final String classQName=type.getCanonicalText();
+      classQNames.add(classQName);
+    }
+    for (    final String qName : classQNames) {
+      classQNameToVariable.putValue(qName,var);
+    }
+  }
+  return new ChainCompletionContext(target,containingClassQNames,classQNameToVariable,containingClassGetters,contextVarsGetters,stringVars,excludedQNames,project,resolveScope);
+}

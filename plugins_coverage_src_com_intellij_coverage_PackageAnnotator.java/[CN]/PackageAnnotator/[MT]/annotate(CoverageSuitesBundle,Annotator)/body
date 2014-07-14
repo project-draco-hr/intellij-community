@@ -1,0 +1,63 @@
+{
+  final ProjectData data=suite.getCoverageData();
+  if (data == null)   return;
+  final String qualifiedName=myPackage.getQualifiedName();
+  boolean filtered=false;
+  for (  CoverageSuite coverageSuite : suite.getSuites()) {
+    if (((JavaCoverageSuite)coverageSuite).isPackageFiltered(qualifiedName)) {
+      filtered=true;
+      break;
+    }
+  }
+  if (!filtered)   return;
+  final GlobalSearchScope scope=suite.getSearchScope(myProject);
+  final Module[] modules=myCoverageManager.doInReadActionIfProjectOpen(new Computable<Module[]>(){
+    public Module[] compute(){
+      return ModuleManager.getInstance(myProject).getModules();
+    }
+  }
+);
+  if (modules == null)   return;
+  Map<String,PackageCoverageInfo> packageCoverageMap=new HashMap<String,PackageCoverageInfo>();
+  Map<String,PackageCoverageInfo> flattenPackageCoverageMap=new HashMap<String,PackageCoverageInfo>();
+  for (  final Module module : modules) {
+    if (!scope.isSearchInModuleContent(module))     continue;
+    final String rootPackageVMName=qualifiedName.replaceAll("\\.","/");
+    final VirtualFile output=myCoverageManager.doInReadActionIfProjectOpen(new Computable<VirtualFile>(){
+      @Nullable public VirtualFile compute(){
+        return CompilerModuleExtension.getInstance(module).getCompilerOutputPath();
+      }
+    }
+);
+    if (output != null) {
+      File outputRoot=findRelativeFile(rootPackageVMName,output);
+      if (outputRoot.exists()) {
+        collectCoverageInformation(outputRoot,packageCoverageMap,flattenPackageCoverageMap,data,rootPackageVMName,annotator,module,suite.isTrackTestFolders(),false);
+      }
+    }
+    if (suite.isTrackTestFolders()) {
+      final VirtualFile testPackageRoot=myCoverageManager.doInReadActionIfProjectOpen(new Computable<VirtualFile>(){
+        @Nullable public VirtualFile compute(){
+          return CompilerModuleExtension.getInstance(module).getCompilerOutputPathForTests();
+        }
+      }
+);
+      if (testPackageRoot != null) {
+        final File outputRoot=findRelativeFile(rootPackageVMName,testPackageRoot);
+        if (outputRoot.exists()) {
+          collectCoverageInformation(outputRoot,packageCoverageMap,flattenPackageCoverageMap,data,rootPackageVMName,annotator,module,suite.isTrackTestFolders(),true);
+        }
+      }
+    }
+  }
+  for (  Map.Entry<String,PackageCoverageInfo> entry : packageCoverageMap.entrySet()) {
+    final String packageFQName=entry.getKey().replaceAll("/",".");
+    final PackageCoverageInfo info=entry.getValue();
+    annotator.annotatePackage(packageFQName,info);
+  }
+  for (  Map.Entry<String,PackageCoverageInfo> entry : flattenPackageCoverageMap.entrySet()) {
+    final String packageFQName=entry.getKey().replaceAll("/",".");
+    final PackageCoverageInfo info=entry.getValue();
+    annotator.annotatePackage(packageFQName,info,true);
+  }
+}

@@ -1,0 +1,25 @@
+{
+  GrExpression invoked=callExpression.getInvokedExpression();
+  if (invoked instanceof GrReferenceExpression) {
+    GrReferenceExpression refExpr=(GrReferenceExpression)invoked;
+    PsiManager manager=callExpression.getManager();
+    PsiType result=null;
+    for (    GroovyResolveResult resolveResult : resolveResults) {
+      PsiType returnType=calculateReturnTypeInner(callExpression,refExpr,resolveResult);
+      if (returnType == null)       return null;
+      PsiType nonVoid=PsiType.VOID.equals(returnType) ? PsiType.NULL : returnType;
+      PsiType normalized=nonVoid instanceof GrLiteralClassType ? nonVoid : TypesUtil.substituteBoxAndNormalizeType(nonVoid,resolveResult.getSubstitutor(),resolveResult.getSpreadState(),callExpression);
+      LOG.assertTrue(normalized != null,"return type: " + returnType + "; substitutor: "+ resolveResult.getSubstitutor());
+      if (result == null || normalized.isAssignableFrom(result)) {
+        result=normalized;
+      }
+ else       if (!result.isAssignableFrom(normalized)) {
+        result=TypesUtil.getLeastUpperBound(result,normalized,manager);
+      }
+    }
+    return result;
+  }
+ else {
+    return extractReturnTypeFromType(invoked.getType(),false,callExpression);
+  }
+}

@@ -8,34 +8,39 @@
   if (branchHeadsBeforePull.size() > 1) {
     reportWarning(warnings,HgVcsMessages.message("hg4idea.update.warning.multipleHeadsBeforeUpdate",repoRoot.getPath()));
   }
-  if (shouldPull()) {
-    boolean pullResult=pull(repoRoot,indicator);
-    if (!pullResult) {
+  if (updateConfiguration.shouldPull()) {
+    HgCommandExitCode pullResult=pull(repoRoot,indicator);
+    if (pullResult == HgCommandExitCode.ERROR) {
       return false;
     }
   }
-  if (shouldUpdate()) {
-    List<HgRevisionNumber> parentsBeforeUpdate=new HgWorkingCopyRevisionsCommand(project).parents(repoRoot);
-    if (parentsBeforeUpdate.size() > 1) {
-      throw new VcsException(HgVcsMessages.message("hg4idea.update.error.uncommittedMerge",repoRoot.getPath()));
-    }
-    indicator.setText2(HgVcsMessages.message("hg4idea.progress.countingHeads"));
-    List<HgRevisionNumber> branchHeadsAfterPull=new HgHeadsCommand(project,repoRoot).execute();
-    List<HgRevisionNumber> pulledBranchHeads=determinePulledBranchHeads(branchHeadsBeforePull,branchHeadsAfterPull);
-    List<HgRevisionNumber> remainingOriginalBranchHeads=determingRemainingOriginalBranchHeads(branchHeadsBeforePull,branchHeadsAfterPull);
-    if (branchHeadsAfterPull.size() > 1 && shouldMerge()) {
+  List<HgRevisionNumber> parentsBeforeUpdate=new HgWorkingCopyRevisionsCommand(project).parents(repoRoot);
+  if (parentsBeforeUpdate.size() > 1) {
+    throw new VcsException(HgVcsMessages.message("hg4idea.update.error.uncommittedMerge",repoRoot.getPath()));
+  }
+  indicator.setText2(HgVcsMessages.message("hg4idea.progress.countingHeads"));
+  List<HgRevisionNumber> branchHeadsAfterPull=new HgHeadsCommand(project,repoRoot).execute();
+  List<HgRevisionNumber> pulledBranchHeads=determinePulledBranchHeads(branchHeadsBeforePull,branchHeadsAfterPull);
+  List<HgRevisionNumber> remainingOriginalBranchHeads=determingRemainingOriginalBranchHeads(branchHeadsBeforePull,branchHeadsAfterPull);
+  HgUpdateType updateType=updateConfiguration.getUpdateType();
+  if (branchHeadsAfterPull.size() > 1 && updateType != ONLY_UPDATE) {
+    if (updateType == MERGE) {
       abortOnLocalChanges();
       abortOnMultiplePulledHeads(pulledBranchHeads);
       abortOnMultipleLocalHeads(remainingOriginalBranchHeads);
-      HgCommandResult mergeResult=doMerge(updatedFiles,indicator,pulledBranchHeads.get(0));
-      if (shouldCommitAfterMerge()) {
+      HgCommandResult mergeResult=doMerge(indicator);
+      if (updateConfiguration.shouldCommitAfterMerge()) {
         commitOrWarnAboutConflicts(warnings,mergeResult);
       }
     }
  else {
-      update(repoRoot,indicator,updatedFiles,warnings);
+      processRebase(indicator,updatedFiles);
+      return true;
     }
-    resolvePossibleConflicts(updatedFiles);
   }
+ else {
+    update(repoRoot,indicator,updatedFiles,warnings);
+  }
+  resolvePossibleConflicts(updatedFiles);
   return true;
 }

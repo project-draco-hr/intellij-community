@@ -1,0 +1,43 @@
+{
+  PsiElement parent=parameterList.getParent();
+  if (parent instanceof GrClosableBlock) {
+    GrParameter[] parameters=parameterList.getParameters();
+    if (parameters.length > 0) {
+      List<PsiType[]> signatures=ClosureParamsEnhancer.findFittingSignatures((GrClosableBlock)parent);
+      final List<PsiType> paramTypes=ContainerUtil.map(parameters,new Function<GrParameter,PsiType>(){
+        @Override public PsiType fun(        GrParameter parameter){
+          return parameter.getType();
+        }
+      }
+);
+      if (signatures.size() > 1) {
+        PsiType[] fittingSignature=ContainerUtil.find(signatures,new Condition<PsiType[]>(){
+          @Override public boolean value(          PsiType[] types){
+            for (int i=0; i < types.length; i++) {
+              if (!typesAreEqual(types[i],paramTypes.get(i),parameterList)) {
+                return false;
+              }
+            }
+            return true;
+          }
+        }
+);
+        if (fittingSignature == null) {
+          registerError(parameterList,GroovyInspectionBundle.message("no.applicable.signature.found"));
+        }
+      }
+ else       if (signatures.size() == 1) {
+        PsiType[] types=signatures.get(0);
+        for (int i=0; i < types.length; i++) {
+          GrTypeElement typeElement=parameters[i].getTypeElementGroovy();
+          if (typeElement == null)           continue;
+          PsiType expected=types[i];
+          PsiType actual=paramTypes.get(i);
+          if (!typesAreEqual(expected,actual,parameterList)) {
+            registerError(typeElement,GroovyInspectionBundle.message("expected.type.0",expected.getPresentableText()));
+          }
+        }
+      }
+    }
+  }
+}

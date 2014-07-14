@@ -1,21 +1,53 @@
 {
   final String deploymentName=deployment.getName();
-  final DeploymentImpl localDeployment;
+  final DeploymentImpl deploymentImpl;
+  final Map<String,DeploymentImpl> deploymentsMap;
 synchronized (myLocalDeployments) {
-    localDeployment=myLocalDeployments.get(deploymentName);
-    if (localDeployment != null) {
-      localDeployment.changeState(DeploymentStatus.DEPLOYED,DeploymentStatus.UNDEPLOYING,null,null);
+synchronized (myRemoteDeployments) {
+      DeploymentImpl localDeployment=myLocalDeployments.get(deploymentName);
+      if (localDeployment != null) {
+        deploymentImpl=localDeployment;
+        deploymentsMap=myLocalDeployments;
+      }
+ else {
+        DeploymentImpl remoteDeployment=myRemoteDeployments.get(deploymentName);
+        if (remoteDeployment != null) {
+          deploymentImpl=remoteDeployment;
+          deploymentsMap=myRemoteDeployments;
+        }
+ else {
+          deploymentImpl=null;
+          deploymentsMap=null;
+        }
+      }
+      if (deploymentImpl != null) {
+        deploymentImpl.changeState(DeploymentStatus.DEPLOYED,DeploymentStatus.UNDEPLOYING,null,null);
+      }
     }
   }
   myEventDispatcher.queueDeploymentsChanged(this);
-  final LoggingHandlerImpl loggingHandler=myLogManagers.get(deploymentName).getMainLoggingHandler();
-  loggingHandler.printlnSystemMessage("Undeploying '" + deploymentName + "'...");
+  DeploymentLogManagerImpl logManager=myLogManagers.get(deploymentName);
+  final LoggingHandlerImpl loggingHandler=logManager == null ? null : logManager.getMainLoggingHandler();
+  final Consumer<String> logConsumer=new Consumer<String>(){
+    @Override public void consume(    String message){
+      if (loggingHandler == null) {
+        LOG.info(message);
+      }
+ else {
+        loggingHandler.printlnSystemMessage(message);
+      }
+    }
+  }
+;
+  logConsumer.consume("Undeploying '" + deploymentName + "'...");
   runtime.undeploy(new DeploymentRuntime.UndeploymentTaskCallback(){
     @Override public void succeeded(){
-      loggingHandler.printlnSystemMessage("'" + deploymentName + "' has been undeployed successfully.");
-synchronized (myLocalDeployments) {
-        if (localDeployment != null && localDeployment.changeState(DeploymentStatus.UNDEPLOYING,DeploymentStatus.NOT_DEPLOYED,null,null)) {
-          myLocalDeployments.remove(deploymentName);
+      logConsumer.consume("'" + deploymentName + "' has been undeployed successfully.");
+      if (deploymentImpl != null) {
+synchronized (deploymentsMap) {
+          if (deploymentImpl.changeState(DeploymentStatus.UNDEPLOYING,DeploymentStatus.NOT_DEPLOYED,null,null)) {
+            deploymentsMap.remove(deploymentName);
+          }
         }
       }
       myLogManagers.remove(deploymentName);
@@ -23,10 +55,10 @@ synchronized (myLocalDeployments) {
       computeDeployments(myRuntimeInstance,EmptyRunnable.INSTANCE);
     }
     @Override public void errorOccurred(    @NotNull String errorMessage){
-      loggingHandler.printlnSystemMessage("Failed to undeploy '" + deploymentName + "': "+ errorMessage);
-synchronized (myLocalDeployments) {
-        if (localDeployment != null) {
-          localDeployment.changeState(DeploymentStatus.UNDEPLOYING,DeploymentStatus.DEPLOYED,errorMessage,runtime);
+      logConsumer.consume("Failed to undeploy '" + deploymentName + "': "+ errorMessage);
+      if (deploymentImpl != null) {
+synchronized (deploymentsMap) {
+          deploymentImpl.changeState(DeploymentStatus.UNDEPLOYING,DeploymentStatus.DEPLOYED,errorMessage,runtime);
         }
       }
       myEventDispatcher.queueDeploymentsChanged(ServerConnectionImpl.this);

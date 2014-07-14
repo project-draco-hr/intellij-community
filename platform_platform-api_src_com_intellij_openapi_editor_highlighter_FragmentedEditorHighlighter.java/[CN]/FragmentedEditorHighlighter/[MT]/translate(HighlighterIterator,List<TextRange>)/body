@@ -1,28 +1,34 @@
 {
-  if (iterator.atEnd())   return;
   int offset=0;
-  for (  TextRange range : ranges) {
-    while (range.getStartOffset() > iterator.getStart()) {
+  int index=0;
+  while (!iterator.atEnd() && index < ranges.size()) {
+    TextRange range=ranges.get(index);
+    if (range.getStartOffset() >= iterator.getEnd()) {
       iterator.advance();
-      if (iterator.atEnd())       return;
+      continue;
     }
-    while (range.getEndOffset() >= iterator.getEnd()) {
-      int relativeStart=iterator.getStart() - range.getStartOffset();
+    if (range.getEndOffset() >= iterator.getStart()) {
+      int relativeStart=Math.max(iterator.getStart() - range.getStartOffset(),0);
+      int relativeEnd=Math.min(iterator.getEnd() - range.getStartOffset(),range.getLength() + 1);
       boolean merged=false;
       if (myMergeByTextAttributes && !myPieces.isEmpty()) {
-        final Integer first=myPieces.descendingKeySet().first();
-        final Element element=myPieces.get(first);
-        if (element.getEnd() >= offset + relativeStart && myPieces.get(first).getAttributes().equals(iterator.getTextAttributes())) {
+        Element element=myPieces.get(myPieces.size() - 1);
+        if (element.getEnd() >= offset + relativeStart && Comparing.equal(element.getAttributes(),iterator.getTextAttributes()) && Comparing.equal(element.getElementType(),iterator.getTokenType())) {
           merged=true;
-          myPieces.put(element.getStart(),new Element(element.getStart(),offset + (iterator.getEnd() - range.getStartOffset()),iterator.getTokenType(),iterator.getTextAttributes()));
+          myPieces.add(new Element(element.getStart(),offset + relativeEnd,iterator.getTokenType(),iterator.getTextAttributes()));
         }
       }
       if (!merged) {
-        myPieces.put(offset + relativeStart,new Element(offset + relativeStart,offset + (iterator.getEnd() - range.getStartOffset()),iterator.getTokenType(),iterator.getTextAttributes()));
+        myPieces.add(new Element(offset + relativeStart,offset + relativeEnd,iterator.getTokenType(),iterator.getTextAttributes()));
       }
-      iterator.advance();
-      if (iterator.atEnd())       return;
     }
-    offset+=range.getLength() + 1 + myAdditionalOffset;
+    if (range.getEndOffset() < iterator.getEnd()) {
+      offset+=range.getLength() + 1 + myAdditionalOffset;
+      int lastEnd=myPieces.isEmpty() ? -1 : myPieces.get(myPieces.size() - 1).getEnd();
+      myPieces.add(new Element(Math.max(offset - 1 - myAdditionalOffset,lastEnd),offset,null,TextAttributes.ERASE_MARKER));
+      index++;
+      continue;
+    }
+    iterator.advance();
   }
 }

@@ -1,0 +1,37 @@
+{
+  myCompilingVisitor.setCodeBlockLevel(myCompilingVisitor.getCodeBlockLevel() + 1);
+  MatchingStrategy strategy=null;
+  for (PsiElement el=block.getFirstChild(); el != null; el=el.getNextSibling()) {
+    if (GlobalCompilingVisitor.getFilter().accepts(el)) {
+      if (el instanceof PsiWhiteSpace) {
+        myCompilingVisitor.addLexicalNode(el);
+      }
+    }
+ else {
+      el.accept(this);
+      if (myCompilingVisitor.getCodeBlockLevel() == 1) {
+        MatchingStrategy newstrategy=findStrategy(el);
+        final MatchingHandler matchingHandler=myCompilingVisitor.getContext().getPattern().getHandler(el);
+        myCompilingVisitor.getContext().getPattern().setHandler(el,new TopLevelMatchingHandler(matchingHandler));
+        if (strategy == null || (strategy instanceof JavaDocMatchingStrategy)) {
+          strategy=newstrategy;
+        }
+ else {
+          if (strategy.getClass() != newstrategy.getClass()) {
+            if (!(strategy instanceof CommentMatchingStrategy)) {
+              throw new UnsupportedPatternException(SSRBundle.message("different.strategies.for.top.level.nodes.error.message"));
+            }
+            strategy=newstrategy;
+          }
+        }
+      }
+    }
+  }
+  if (myCompilingVisitor.getCodeBlockLevel() == 1) {
+    if (strategy == null) {
+      strategy=ExprMatchingStrategy.getInstance();
+    }
+    myCompilingVisitor.getContext().getPattern().setStrategy(strategy);
+  }
+  myCompilingVisitor.setCodeBlockLevel(myCompilingVisitor.getCodeBlockLevel() - 1);
+}

@@ -1,36 +1,16 @@
 {
-  PsiCallExpression methodCall=null;
-  if (body instanceof PsiCallExpression) {
-    methodCall=(PsiCallExpression)body;
-  }
- else   if (body instanceof PsiCodeBlock) {
-    final PsiStatement[] statements=((PsiCodeBlock)body).getStatements();
-    if (statements.length == 1) {
-      if (statements[0] instanceof PsiReturnStatement) {
-        final PsiExpression returnValue=((PsiReturnStatement)statements[0]).getReturnValue();
-        if (returnValue instanceof PsiCallExpression) {
-          methodCall=(PsiCallExpression)returnValue;
-        }
-      }
- else       if (statements[0] instanceof PsiExpressionStatement) {
-        final PsiExpression expr=((PsiExpressionStatement)statements[0]).getExpression();
-        if (expr instanceof PsiCallExpression) {
-          methodCall=(PsiCallExpression)expr;
-        }
-      }
-    }
-  }
+  PsiCallExpression methodCall=extractMethodCallFromBlock(body);
+  if (methodCall instanceof PsiNewExpression && ((PsiNewExpression)methodCall).getAnonymousClass() != null)   return null;
   if (methodCall != null) {
     final PsiExpressionList argumentList=methodCall.getArgumentList();
     if (argumentList != null) {
       final PsiExpression[] expressions=argumentList.getExpressions();
-      final PsiMethod psiMethod=methodCall.resolveMethod();
-      final PsiClass containingClass;
+      PsiMethod psiMethod=methodCall.resolveMethod();
+      PsiClass containingClass;
       boolean isConstructor;
       if (psiMethod == null) {
         isConstructor=true;
         if (!(methodCall instanceof PsiNewExpression))         return null;
-        if (((PsiNewExpression)methodCall).getAnonymousClass() != null)         return null;
         final PsiJavaCodeReferenceElement classReference=((PsiNewExpression)methodCall).getClassOrAnonymousClassReference();
         if (classReference == null)         return null;
         containingClass=(PsiClass)classReference.resolve();
@@ -39,8 +19,14 @@
         containingClass=psiMethod.getContainingClass();
         isConstructor=psiMethod.isConstructor();
       }
-      if (containingClass == null)       return null;
       boolean isReceiverType=PsiMethodReferenceUtil.isReceiverType(functionalInterfaceType,containingClass,psiMethod);
+      if (isReceiverType && psiMethod != null) {
+        PsiMethod nonAmbiguousMethod=ensureNonAmbiguousMethod(parameters,psiMethod);
+        if (nonAmbiguousMethod == null)         return null;
+        psiMethod=nonAmbiguousMethod;
+        containingClass=nonAmbiguousMethod.getContainingClass();
+      }
+      if (containingClass == null)       return null;
       final boolean staticOrValidConstructorRef;
       if (isConstructor) {
         staticOrValidConstructorRef=(containingClass.getContainingClass() == null || containingClass.hasModifierProperty(PsiModifier.STATIC));
@@ -83,6 +69,10 @@
             }
             super.visitReferenceExpression(expression);
           }
+          @Override public void visitNewExpression(          PsiNewExpression expression){
+            usedInQualifier.set(true);
+            super.visitNewExpression(expression);
+          }
           @Override public void visitMethodCallExpression(          PsiMethodCallExpression expression){
             usedInQualifier.set(true);
             super.visitMethodCallExpression(expression);
@@ -90,6 +80,9 @@
         }
 );
         if (usedInQualifier.get())         return null;
+      }
+ else       if (containingClass != PsiTreeUtil.getParentOfType(body,PsiClass.class) && containingClass.getName() == null) {
+        return null;
       }
       return methodCall;
     }

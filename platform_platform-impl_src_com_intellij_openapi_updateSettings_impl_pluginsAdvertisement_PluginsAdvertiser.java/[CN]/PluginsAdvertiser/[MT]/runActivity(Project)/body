@@ -8,29 +8,29 @@
     public void run(){
       final Application application=ApplicationManager.getApplication();
       if (application.isUnitTestMode() || application.isHeadlessEnvironment())       return;
-      ProgressManager.getInstance().run(new Task.Backgroundable(project,"Search for non-bundled plugins in plugin repository..."){
+      ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
         private final Set<PluginDownloader> myPlugins=new HashSet<PluginDownloader>();
         private List<IdeaPluginDescriptor> myAllPlugins;
         private Map<Plugin,IdeaPluginDescriptor> myDisabledPlugins=new HashMap<Plugin,IdeaPluginDescriptor>();
-        private boolean myBundledPlugins=false;
-        @Override public void run(        @NotNull ProgressIndicator indicator){
+        private List<String> myBundledPlugin;
+        public void run(){
           try {
-            myAllPlugins=RepositoryHelper.loadPluginsFromRepository(indicator);
+            myAllPlugins=RepositoryHelper.loadPluginsFromRepository(null);
+            if (project.isDisposed())             return;
             if (extensions == null) {
               loadSupportedExtensions(myAllPlugins);
+              if (project.isDisposed())               return;
               EditorNotifications.getInstance(project).updateAllNotifications();
             }
-            int idx=0;
             final Map<String,Plugin> ids=new HashMap<String,Plugin>();
             for (            UnknownFeature feature : unknownFeatures) {
-              indicator.setText("Searching for plugin supporting \'" + feature.getImplementationName() + "\'");
+              ProgressManager.checkCanceled();
               final List<Plugin> pluginId=retrieve(feature);
               if (pluginId != null) {
                 for (                Plugin plugin : pluginId) {
                   ids.put(plugin.myPluginId,plugin);
                 }
               }
-              indicator.setFraction(((double)idx++) / unknownFeatures.size());
             }
             final List<String> disabledPlugins=PluginManagerCore.getDisabledPlugins();
             for (            String id : ids.keySet()) {
@@ -42,19 +42,25 @@
                 }
               }
             }
-            myBundledPlugins=hasBundledNotInstalledPlugin(ids.values());
+            myBundledPlugin=hasBundledPluginToInstall(ids.values());
             for (            IdeaPluginDescriptor loadedPlugin : myAllPlugins) {
               final PluginId pluginId=loadedPlugin.getPluginId();
-              if (ids.containsKey(pluginId.getIdString()) && !disabledPlugins.contains(pluginId.getIdString())) {
+              if (ids.containsKey(pluginId.getIdString()) && !disabledPlugins.contains(pluginId.getIdString()) && !PluginManagerCore.isBrokenPlugin(loadedPlugin)) {
                 myPlugins.add(PluginDownloader.createDownloader(loadedPlugin));
               }
             }
+            ApplicationManager.getApplication().invokeLater(new Runnable(){
+              @Override public void run(){
+                onSuccess();
+              }
+            }
+,ModalityState.NON_MODAL);
           }
  catch (          Exception e) {
             LOG.info(e);
           }
         }
-        @Override public void onSuccess(){
+        private void onSuccess(){
           String message=null;
           if (!myPlugins.isEmpty() || !myDisabledPlugins.isEmpty()) {
             message="Features covered by non-bundled plugins are detected.<br>";
@@ -66,13 +72,12 @@
             }
             message+="<a href=\"ignore\">Ignore All</a>";
           }
- else           if (myBundledPlugins && !PropertiesComponent.getInstance().isTrueValue(IGNORE_ULTIMATE_EDITION)) {
-            message="Features covered by IntelliJ IDEA Ultimate Edition are detected.<br>" + "<a href=\"open\">" + CHECK_ULTIMATE_EDITION_TITLE + "</a><br>"+ "<a href=\"ignoreUltimate\">"+ ULTIMATE_EDITION_SUGGESTION+ "</a>";
+ else           if (myBundledPlugin != null && !PropertiesComponent.getInstance().isTrueValue(IGNORE_ULTIMATE_EDITION)) {
+            message="Features covered by IntelliJ IDEA Ultimate Edition (" + StringUtil.join(myBundledPlugin,", ") + ") are detected.<br>"+ "<a href=\"open\">"+ CHECK_ULTIMATE_EDITION_TITLE+ "</a><br>"+ "<a href=\"ignoreUltimate\">"+ ULTIMATE_EDITION_SUGGESTION+ "</a>";
           }
           if (message != null) {
-            final String displayId="Plugins Suggestion";
             final ConfigurePluginsListener notificationListener=new ConfigurePluginsListener(unknownFeatures,project,myAllPlugins,myPlugins,myDisabledPlugins);
-            new NotificationGroup(displayId,NotificationDisplayType.STICKY_BALLOON,true).createNotification(displayId,message,NotificationType.INFORMATION,notificationListener).notify(project);
+            NOTIFICATION_GROUP.createNotification(DISPLAY_ID,message,NotificationType.INFORMATION,notificationListener).notify(project);
           }
         }
       }

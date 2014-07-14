@@ -4,7 +4,7 @@
   for (  Map.Entry<VirtualFile,Set<HgFile>> entry : repositoriesMap.entrySet()) {
     VirtualFile repo=entry.getKey();
     Set<HgFile> selectedFiles=entry.getValue();
-    HgCommitCommand command=new HgCommitCommand(myProject,repo,preparedComment);
+    HgCommitCommand command=new HgCommitCommand(myProject,repo,preparedComment,myNextCommitAmend);
     if (isMergeCommit(repo)) {
       Set<HgFile> changedFilesNotInCommit=getChangedFilesNotInCommit(repo,selectedFiles);
       boolean partial=!changedFilesNotInCommit.isEmpty();
@@ -17,6 +17,10 @@
         }
         if (!mayCommitEverything(filesNotIncludedString.toString())) {
           return exceptions;
+        }
+        VcsDirtyScopeManager dirtyManager=VcsDirtyScopeManager.getInstance(myProject);
+        for (        HgFile hgFile : changedFilesNotInCommit) {
+          dirtyManager.fileDirty(hgFile.toFilePath());
         }
       }
     }
@@ -35,9 +39,12 @@ catch (    VcsException e) {
   }
   if (myNextCommitIsPushed && exceptions.isEmpty()) {
     final VirtualFile preselectedRepo=repositoriesMap.size() == 1 ? repositoriesMap.keySet().iterator().next() : null;
+    HgRepositoryManager repositoryManager=HgUtil.getRepositoryManager(myProject);
+    final HgRepository repo=preselectedRepo != null ? repositoryManager.getRepositoryForFile(preselectedRepo) : null;
+    final Collection<HgRepository> repositories=repositoryManager.getRepositories();
     UIUtil.invokeLaterIfNeeded(new Runnable(){
       public void run(){
-        new HgPusher(myProject).showDialogAndPush(preselectedRepo);
+        new HgPusher(myProject).showDialogAndPush(repositories,repo);
       }
     }
 );

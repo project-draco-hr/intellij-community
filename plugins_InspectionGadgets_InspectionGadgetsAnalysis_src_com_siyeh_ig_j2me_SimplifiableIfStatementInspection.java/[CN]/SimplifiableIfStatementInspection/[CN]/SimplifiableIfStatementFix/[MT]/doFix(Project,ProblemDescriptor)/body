@@ -1,15 +1,40 @@
 {
   final PsiElement element=descriptor.getPsiElement();
   final PsiIfStatement ifStatement=(PsiIfStatement)element.getParent();
-  final String newStatement=calculateReplacementStatement(ifStatement);
-  if (newStatement == null) {
+  List<PsiComment> before=new ArrayList<PsiComment>();
+  List<PsiComment> after=new ArrayList<PsiComment>();
+  collectComments(ifStatement,true,before,after);
+  final String newStatementText=calculateReplacementStatement(ifStatement);
+  if (newStatementText == null) {
     return;
   }
+  final StringBuilder codeBlockText=new StringBuilder("{\n");
+  for (  PsiComment comment : before) {
+    codeBlockText.append(comment.getText()).append('\n');
+  }
+  codeBlockText.append(newStatementText).append('\n');
+  for (  PsiComment comment : after) {
+    codeBlockText.append(comment.getText()).append('\n');
+  }
+  codeBlockText.append('}');
   if (ifStatement.getElseBranch() == null) {
     final PsiElement nextStatement=PsiTreeUtil.skipSiblingsForward(ifStatement,PsiWhiteSpace.class);
     if (nextStatement != null) {
       nextStatement.delete();
     }
   }
-  replaceStatement(ifStatement,newStatement);
+  final JavaPsiFacade psiFacade=JavaPsiFacade.getInstance(project);
+  final PsiCodeBlock codeBlock=psiFacade.getElementFactory().createCodeBlockFromText(codeBlockText.toString(),ifStatement);
+  final PsiElement parent=ifStatement.getParent();
+  PsiElement child=codeBlock.getFirstBodyElement();
+  final PsiElement end=codeBlock.getLastBodyElement();
+  while (true) {
+    parent.addBefore(child,ifStatement);
+    if (child == end) {
+      break;
+    }
+    child=child.getNextSibling();
+  }
+  ifStatement.delete();
+  CodeStyleManager.getInstance(project).reformat(parent);
 }

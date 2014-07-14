@@ -1,6 +1,22 @@
 {
   try {
     int attemptCount=0;
+    if (bootstrap.group() instanceof NioEventLoop) {
+      while (true) {
+        ChannelFuture future=bootstrap.connect(remoteAddress).awaitUninterruptibly();
+        if (future.isSuccess()) {
+          return future.channel();
+        }
+ else         if (++attemptCount < maxAttemptCount) {
+          Thread.sleep(attemptCount * MIN_START_TIME);
+        }
+ else {
+          @SuppressWarnings("ThrowableResultOfMethodCallIgnored") Throwable cause=future.cause();
+          asyncResult.reject("Cannot connect: " + (cause == null ? "unknown error" : cause.getMessage()));
+          return null;
+        }
+      }
+    }
     Socket socket;
     while (true) {
       try {
@@ -9,20 +25,20 @@
       }
  catch (      IOException e) {
         if (++attemptCount < maxAttemptCount) {
-          Thread.sleep(attemptCount * 100);
+          Thread.sleep(attemptCount * MIN_START_TIME);
         }
  else {
-          asyncResult.reject("cannot connect");
+          asyncResult.reject("Cannot connect: " + e.getMessage());
           return null;
         }
       }
     }
-    OioSocketChannel channel=new OioSocketChannel(bootstrap.group().next(),socket);
+    OioSocketChannel channel=new OioSocketChannel(socket);
     BootstrapUtil.initAndRegister(channel,bootstrap).awaitUninterruptibly();
     return channel;
   }
  catch (  Throwable e) {
-    asyncResult.reject("cannot connect: " + e.getMessage());
+    asyncResult.reject("Cannot connect: " + e.getMessage());
     return null;
   }
 }

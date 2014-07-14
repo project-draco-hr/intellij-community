@@ -31,21 +31,23 @@
     }
   }
 ,this);
-  eventMulticaster.addCaretListener(new CaretListener(){
+  eventMulticaster.addCaretListener(new CaretAdapter(){
     @Override public void caretPositionChanged(    CaretEvent e){
       final Editor editor=e.getEditor();
       if (!editor.getComponent().isShowing() && !application.isUnitTestMode() || !worthBothering(editor.getDocument(),editor.getProject())) {
         return;
       }
-      ApplicationManager.getApplication().invokeLater(new Runnable(){
-        @Override public void run(){
-          if (!editor.getComponent().isShowing() && !application.isUnitTestMode() || myProject.isDisposed()) {
-            return;
+      if (!application.isUnitTestMode()) {
+        ApplicationManager.getApplication().invokeLater(new Runnable(){
+          @Override public void run(){
+            if (!editor.getComponent().isShowing() || myProject.isDisposed()) {
+              return;
+            }
+            myDaemonCodeAnalyzer.hideLastIntentionHint();
           }
-          myDaemonCodeAnalyzer.hideLastIntentionHint();
         }
-      }
 ,ModalityState.current());
+      }
     }
   }
 ,this);
@@ -60,7 +62,7 @@
       }
       myActiveEditors=activeEditors;
       stopDaemon(true,"Active editor change");
-      if (LaterInvocator.isInModalContext()) {
+      if (ApplicationManager.getApplication().isDispatchThread() && LaterInvocator.isInModalContext()) {
         myDaemonCodeAnalyzer.setUpdateByTimerEnabled(true);
       }
       for (      Editor editor : activeEditors) {
@@ -139,12 +141,12 @@
   todoConfiguration.colorSettingsChanged();
   actionManagerEx.addAnActionListener(new MyAnActionListener(),this);
   virtualFileManager.addVirtualFileListener(new VirtualFileAdapter(){
-    @Override public void propertyChanged(    VirtualFilePropertyEvent event){
+    @Override public void propertyChanged(    @NotNull VirtualFilePropertyEvent event){
       String propertyName=event.getPropertyName();
       if (VirtualFile.PROP_NAME.equals(propertyName)) {
         stopDaemonAndRestartAllFiles();
         VirtualFile virtualFile=event.getFile();
-        PsiFile psiFile=((PsiManagerEx)psiManager).getFileManager().getCachedPsiFile(virtualFile);
+        PsiFile psiFile=!virtualFile.isValid() ? null : ((PsiManagerEx)psiManager).getFileManager().getCachedPsiFile(virtualFile);
         if (psiFile != null && !myDaemonCodeAnalyzer.isHighlightingAvailable(psiFile)) {
           Document document=fileDocumentManager.getCachedDocument(virtualFile);
           if (document != null) {

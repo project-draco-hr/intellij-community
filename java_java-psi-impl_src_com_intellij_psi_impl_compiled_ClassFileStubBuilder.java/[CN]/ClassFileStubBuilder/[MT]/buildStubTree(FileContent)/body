@@ -1,21 +1,36 @@
 {
+  VirtualFile file=fileContent.getFile();
+  byte[] content=fileContent.getContent();
   try {
-    VirtualFile file=fileContent.getFile();
+    ClassFileDecompilers.Decompiler decompiler=ClassFileDecompilers.find(file);
+    if (decompiler instanceof Full) {
+      return ((Full)decompiler).getStubBuilder().buildFileStub(fileContent);
+    }
+  }
+ catch (  ClsFormatException e) {
+    LOG.debug(e);
+  }
+  try {
     Project project=fileContent.getProject();
-    byte[] content=fileContent.getContent();
-    final ClsStubBuilderFactory[] factories=Extensions.getExtensions(ClsStubBuilderFactory.EP_NAME);
-    for (    ClsStubBuilderFactory factory : factories) {
+    for (    ClsStubBuilderFactory factory : Extensions.getExtensions(ClsStubBuilderFactory.EP_NAME)) {
       if (!factory.isInnerClass(file) && factory.canBeProcessed(file,content)) {
         PsiFileStub stub=factory.buildFileStub(file,content,project);
         if (stub != null)         return stub;
       }
     }
-    if (!fileContent.getFileName().contains("$")) {
-      LOG.info("No stub built for file " + fileContent);
-    }
-    return null;
   }
  catch (  ClsFormatException e) {
-    return null;
+    LOG.debug(e);
   }
+  try {
+    PsiFileStub<?> stub=ClsFileImpl.buildFileStub(file,content);
+    if (stub == null && !fileContent.getFileName().contains("$")) {
+      LOG.info("No stub built for file " + fileContent);
+    }
+    return stub;
+  }
+ catch (  ClsFormatException e) {
+    LOG.debug(e);
+  }
+  return null;
 }

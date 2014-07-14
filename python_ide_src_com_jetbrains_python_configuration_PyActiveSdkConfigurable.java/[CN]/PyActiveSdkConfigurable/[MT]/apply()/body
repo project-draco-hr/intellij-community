@@ -1,25 +1,34 @@
 {
-  final Sdk selectedSdk=myProjectSdksModel.findSdk((Sdk)mySdkCombo.getSelectedItem());
-  if (myModule == null) {
-    final ProjectRootManager rootManager=ProjectRootManager.getInstance(myProject);
-    ApplicationManager.getApplication().runWriteAction(new Runnable(){
-      @Override public void run(){
-        rootManager.setProjectSdk(selectedSdk);
+  final Sdk item=(Sdk)mySdkCombo.getSelectedItem();
+  Sdk newSdk=item;
+  if (item instanceof PyDetectedSdk) {
+    VirtualFile sdkHome=ApplicationManager.getApplication().runWriteAction(new Computable<VirtualFile>(){
+      @Override public VirtualFile compute(){
+        return LocalFileSystem.getInstance().refreshAndFindFileByPath(item.getName());
       }
     }
 );
+    newSdk=SdkConfigurationUtil.setupSdk(ProjectJdkTable.getInstance().getAllJdks(),sdkHome,PythonSdkType.getInstance(),true,null,null);
+    if (newSdk != null) {
+      myProjectSdksModel.addSdk(newSdk);
+      mySdkCombo.setSelectedItem(newSdk);
+      myProjectSdksModel.apply();
+    }
+    PySdkService.getInstance().solidifySdk(item);
   }
  else {
-    ModuleRootModificationUtil.setModuleSdk(myModule,selectedSdk);
-  }
-  final Sdk prevSdk=ProjectRootManager.getInstance(myProject).getProjectSdk();
-  ApplicationManager.getApplication().runWriteAction(new Runnable(){
-    @Override public void run(){
-      ProjectRootManager.getInstance(myProject).setProjectSdk(selectedSdk);
+    final Sdk sdk=myProjectSdksModel.findSdk(item);
+    if (item != null && sdk == null) {
+      myProjectSdksModel.addSdk(item);
+      myProjectSdksModel.apply(null,true);
+      mySdkCombo.setSelectedItem(item);
+    }
+ else     if (!myAddedSdks.isEmpty()) {
+      myProjectSdksModel.apply();
     }
   }
-);
-  myProjectSdksModel.setProjectSdk(selectedSdk);
+  final Sdk prevSdk=ProjectRootManager.getInstance(myProject).getProjectSdk();
+  final Sdk selectedSdk=setSdk(newSdk);
   if (prevSdk != null && selectedSdk != null) {
     final PythonSdkFlavor flavor1=PythonSdkFlavor.getFlavor(selectedSdk);
     final PythonSdkFlavor flavor2=PythonSdkFlavor.getFlavor(prevSdk);

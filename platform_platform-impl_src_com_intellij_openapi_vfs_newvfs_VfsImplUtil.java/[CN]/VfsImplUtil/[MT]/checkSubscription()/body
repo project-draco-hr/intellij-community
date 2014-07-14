@@ -1,0 +1,38 @@
+{
+  if (ourSubscribed.getAndSet(true))   return;
+  MessageBus bus=ApplicationManager.getApplication().getMessageBus();
+  bus.connect().subscribe(VirtualFileManager.VFS_CHANGES,new BulkFileListener.Adapter(){
+    @Override public void after(    @NotNull List<? extends VFileEvent> events){
+      Map<String,VirtualFile> rootsToRefresh=null;
+synchronized (ourLock) {
+        String[] rootPaths=ArrayUtil.toStringArray(ourHandlers.keySet());
+        for (        VFileEvent event : events) {
+          if (!(event.getFileSystem() instanceof LocalFileSystem))           continue;
+          String path=event.getPath();
+          for (int i=0; i < rootPaths.length; i++) {
+            String rootPath=rootPaths[i];
+            if (rootPath == null)             continue;
+            ArchiveFileSystem vfs=ourHandlers.get(rootPath).first;
+            String localPath=vfs.extractLocalPath(rootPath);
+            if (FileUtil.startsWith(localPath,path)) {
+              ourHandlers.remove(rootPath);
+              NewVirtualFile root=ManagingFS.getInstance().findRoot(rootPath,vfs);
+              if (root != null) {
+                root.markDirtyRecursively();
+                if (rootsToRefresh == null)                 rootsToRefresh=ContainerUtil.newHashMap();
+                rootsToRefresh.put(localPath,root);
+              }
+              rootPaths[i]=null;
+            }
+          }
+        }
+      }
+      if (rootsToRefresh != null) {
+        ZipFileCache.reset(rootsToRefresh.keySet());
+        boolean async=!ApplicationManager.getApplication().isUnitTestMode();
+        RefreshQueue.getInstance().refresh(async,true,null,rootsToRefresh.values());
+      }
+    }
+  }
+);
+}

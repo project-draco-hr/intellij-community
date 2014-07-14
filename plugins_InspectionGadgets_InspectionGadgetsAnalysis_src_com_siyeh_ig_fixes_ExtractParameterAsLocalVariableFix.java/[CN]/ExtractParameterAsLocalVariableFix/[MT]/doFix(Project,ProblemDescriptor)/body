@@ -1,5 +1,13 @@
 {
-  final PsiReferenceExpression parameterReference=(PsiReferenceExpression)descriptor.getPsiElement();
+  final PsiElement element=descriptor.getPsiElement();
+  if (!(element instanceof PsiExpression)) {
+    return;
+  }
+  final PsiExpression expression=ParenthesesUtils.stripParentheses((PsiExpression)element);
+  if (!(expression instanceof PsiReferenceExpression)) {
+    return;
+  }
+  final PsiReferenceExpression parameterReference=(PsiReferenceExpression)expression;
   final PsiElement target=parameterReference.resolve();
   if (!(target instanceof PsiParameter)) {
     return;
@@ -26,6 +34,10 @@
       body=forBody;
     }
   }
+ else   if (declarationScope instanceof PsiLambdaExpression) {
+    final PsiLambdaExpression lambdaExpression=(PsiLambdaExpression)declarationScope;
+    body=lambdaExpression.getBody();
+  }
  else {
     return;
   }
@@ -42,11 +54,11 @@
   if (reference == null) {
     return;
   }
-  final PsiElement element=reference.getElement();
-  if (!(element instanceof PsiReferenceExpression)) {
+  final PsiElement referenceElement=reference.getElement();
+  if (!(referenceElement instanceof PsiReferenceExpression)) {
     return;
   }
-  final PsiReferenceExpression firstReference=(PsiReferenceExpression)element;
+  final PsiReferenceExpression firstReference=(PsiReferenceExpression)referenceElement;
   final PsiElement[] children=body.getChildren();
   final int startIndex;
   final int endIndex;
@@ -64,20 +76,21 @@
     final PsiElement child=children[i];
     newDeclarationCreated|=replaceVariableName(child,firstReference,variableName,parameterName,buffer);
   }
+  if (body instanceof PsiExpression) {
+    buffer.insert(0,"return ");
+    buffer.append(';');
+  }
   final String replacementText;
   if (newDeclarationCreated) {
     replacementText="{" + buffer + '}';
   }
  else {
-    final PsiType type=parameterReference.getType();
-    if (type == null) {
-      return;
-    }
+    final PsiType type=parameter.getType();
     final String className=type.getCanonicalText();
     replacementText='{' + className + ' '+ variableName+ " = "+ parameterName+ ';'+ buffer+ '}';
   }
   final PsiElementFactory elementFactory=JavaPsiFacade.getInstance(project).getElementFactory();
-  final PsiCodeBlock block=elementFactory.createCodeBlockFromText(replacementText,null);
+  final PsiCodeBlock block=elementFactory.createCodeBlockFromText(replacementText,declarationScope);
   body.replace(block);
   codeStyleManager.reformat(declarationScope);
 }

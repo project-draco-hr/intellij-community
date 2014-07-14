@@ -1,0 +1,45 @@
+{
+  final List<String> errorOutput=new ArrayList<String>();
+  final List<String> output=new ArrayList<String>();
+  final AtomicInteger exitCode=new AtomicInteger();
+  final AtomicBoolean startFailed=new AtomicBoolean();
+  final AtomicReference<Throwable> exception=new AtomicReference<Throwable>();
+  int authAttempt=0;
+  boolean authFailed;
+  boolean success;
+  do {
+    errorOutput.clear();
+    output.clear();
+    exitCode.set(0);
+    startFailed.set(false);
+    exception.set(null);
+    GitLineHandler handler=handlerConstructor.compute();
+    handler.addLineListener(new GitLineHandlerListener(){
+      @Override public void onLineAvailable(      String line,      Key outputType){
+        if (isError(line)) {
+          errorOutput.add(line);
+        }
+ else {
+          output.add(line);
+        }
+      }
+      @Override public void processTerminated(      int code){
+        exitCode.set(code);
+      }
+      @Override public void startFailed(      Throwable t){
+        startFailed.set(true);
+        errorOutput.add("Failed to start Git process");
+        exception.set(t);
+      }
+    }
+);
+    handler.runInCurrentThread(null);
+    authFailed=handler.hasHttpAuthFailed();
+    if (handler instanceof GitLineHandlerPasswordRequestAware && ((GitLineHandlerPasswordRequestAware)handler).hadAuthRequest()) {
+      errorOutput.add("Authentication failed");
+    }
+    success=!startFailed.get() && errorOutput.isEmpty() && (handler.isIgnoredErrorCode(exitCode.get()) || exitCode.get() == 0);
+  }
+ while (authFailed && authAttempt++ < 2);
+  return new GitCommandResult(success,exitCode.get(),errorOutput,output,null);
+}

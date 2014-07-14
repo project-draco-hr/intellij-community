@@ -1,6 +1,6 @@
 {
   PsiNameValuePair pair=PsiTreeUtil.getParentOfType(insertedElement,PsiNameValuePair.class);
-  PsiAnnotationParameterList parameterList=(PsiAnnotationParameterList)pair.getParent();
+  PsiAnnotationParameterList parameterList=(PsiAnnotationParameterList)ObjectUtils.assertNotNull(pair).getParent();
   PsiAnnotation anno=(PsiAnnotation)parameterList.getParent();
   boolean showClasses=psiElement().afterLeaf("(").accepts(insertedElement);
   PsiClass annoClass=null;
@@ -24,18 +24,32 @@
   if (annoClass != null) {
     final PsiNameValuePair[] existingPairs=parameterList.getAttributes();
     methods:     for (    PsiMethod method : annoClass.getMethods()) {
+      if (!(method instanceof PsiAnnotationMethod))       continue;
       final String attrName=method.getName();
-      for (      PsiNameValuePair apair : existingPairs) {
-        if (Comparing.equal(apair.getName(),attrName))         continue methods;
+      for (      PsiNameValuePair existingAttr : existingPairs) {
+        if (PsiTreeUtil.isAncestor(existingAttr,insertedElement,false))         break;
+        if (Comparing.equal(existingAttr.getName(),attrName) || PsiAnnotation.DEFAULT_REFERENCED_METHOD_NAME.equals(attrName) && existingAttr.getName() == null)         continue methods;
       }
-      result.addElement(new LookupItem<PsiMethod>(method,attrName).setInsertHandler(new InsertHandler<LookupElement>(){
+      LookupElementBuilder element=LookupElementBuilder.createWithIcon(method).withInsertHandler(new InsertHandler<LookupElement>(){
         @Override public void handleInsert(        InsertionContext context,        LookupElement item){
           final Editor editor=context.getEditor();
           TailType.EQ.processTail(editor,editor.getCaretModel().getOffset());
           context.setAddCompletionChar(false);
+          context.commitDocument();
+          PsiAnnotationParameterList paramList=PsiTreeUtil.findElementOfClassAtOffset(context.getFile(),context.getStartOffset(),PsiAnnotationParameterList.class,false);
+          if (paramList != null && paramList.getAttributes().length > 0 && paramList.getAttributes()[0].getName() == null) {
+            int valueOffset=paramList.getAttributes()[0].getTextRange().getStartOffset();
+            context.getDocument().insertString(valueOffset,PsiAnnotation.DEFAULT_REFERENCED_METHOD_NAME);
+            TailType.EQ.processTail(editor,valueOffset + PsiAnnotation.DEFAULT_REFERENCED_METHOD_NAME.length());
+          }
         }
       }
-));
+);
+      PsiAnnotationMemberValue defaultValue=((PsiAnnotationMethod)method).getDefaultValue();
+      if (defaultValue != null) {
+        element=element.withTailText(" default " + defaultValue.getText(),true);
+      }
+      result.addElement(element);
     }
   }
 }

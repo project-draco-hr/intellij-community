@@ -1,0 +1,78 @@
+{
+  try {
+    final StackFrameDescriptorImpl stackDescriptor=myDescriptor;
+    final StackFrameProxyImpl frame=getStackFrameProxy();
+    final EvaluationContextImpl evaluationContext=debuggerContext.createEvaluationContext();
+    if (!debuggerContext.isEvaluationPossible()) {
+      node.setErrorMessage(MessageDescriptor.EVALUATION_NOT_POSSIBLE.getLabel());
+    }
+    final Location location=frame.location();
+    LOG.assertTrue(location != null);
+    final ObjectReference thisObjectReference=frame.thisObject();
+    if (thisObjectReference != null) {
+      ValueDescriptorImpl thisDescriptor=myNodeManager.getThisDescriptor(stackDescriptor,thisObjectReference);
+      children.add(JavaValue.create(thisDescriptor,evaluationContext,myNodeManager));
+    }
+ else {
+      StaticDescriptorImpl staticDecriptor=myNodeManager.getStaticDescriptor(stackDescriptor,location.method().declaringType());
+      if (staticDecriptor.isExpandable()) {
+        children.addTopGroup(new JavaStaticGroup(staticDecriptor,evaluationContext,myNodeManager));
+      }
+    }
+    DebugProcessImpl debugProcess=debuggerContext.getDebugProcess();
+    if (debugProcess == null) {
+      return;
+    }
+    final Pair<Method,Value> methodValuePair=debugProcess.getLastExecutedMethod();
+    if (methodValuePair != null) {
+      ValueDescriptorImpl returnValueDescriptor=myNodeManager.getMethodReturnValueDescriptor(stackDescriptor,methodValuePair.getFirst(),methodValuePair.getSecond());
+      children.add(JavaValue.create(returnValueDescriptor,evaluationContext,myNodeManager));
+    }
+    for (    Pair<Breakpoint,Event> pair : DebuggerUtilsEx.getEventDescriptors(debuggerContext.getSuspendContext())) {
+      final Event debugEvent=pair.getSecond();
+      if (debugEvent instanceof ExceptionEvent) {
+        final ObjectReference exception=((ExceptionEvent)debugEvent).exception();
+        if (exception != null) {
+          final ValueDescriptorImpl exceptionDescriptor=myNodeManager.getThrownExceptionObjectDescriptor(stackDescriptor,exception);
+          children.add(JavaValue.create(exceptionDescriptor,evaluationContext,myNodeManager));
+        }
+      }
+    }
+    final ClassRenderer classRenderer=NodeRendererSettings.getInstance().getClassRenderer();
+    if (classRenderer.SHOW_VAL_FIELDS_AS_LOCAL_VARIABLES) {
+      if (thisObjectReference != null && debugProcess.getVirtualMachineProxy().canGetSyntheticAttribute()) {
+        final ReferenceType thisRefType=thisObjectReference.referenceType();
+        if (thisRefType instanceof ClassType && thisRefType.equals(location.declaringType()) && thisRefType.name().contains("$")) {
+          final ClassType clsType=(ClassType)thisRefType;
+          final VirtualMachineProxyImpl vm=debugProcess.getVirtualMachineProxy();
+          for (          Field field : clsType.fields()) {
+            if ((!vm.canGetSyntheticAttribute() || field.isSynthetic()) && StringUtil.startsWith(field.name(),FieldDescriptorImpl.OUTER_LOCAL_VAR_FIELD_PREFIX)) {
+              final FieldDescriptorImpl fieldDescriptor=myNodeManager.getFieldDescriptor(stackDescriptor,thisObjectReference,field);
+              children.add(JavaValue.create(fieldDescriptor,evaluationContext,myNodeManager));
+            }
+          }
+        }
+      }
+    }
+    try {
+      buildVariables(debuggerContext,evaluationContext,children,node);
+    }
+ catch (    EvaluateException e) {
+      node.setErrorMessage(e.getMessage());
+    }
+  }
+ catch (  EvaluateException e) {
+    node.setErrorMessage(e.getMessage());
+  }
+catch (  InvalidStackFrameException e) {
+    LOG.info(e);
+  }
+catch (  InternalException e) {
+    if (e.errorCode() == 35) {
+      node.setErrorMessage(DebuggerBundle.message("error.corrupt.debug.info",e.getMessage()));
+    }
+ else {
+      throw e;
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  if (module == null) {
+    return Collections.emptySet();
+  }
+  final Set<File> classFiles=new HashSet<File>();
+  final VirtualFile outputpath=CompilerModuleExtension.getInstance(module).getCompilerOutputPath();
+  final VirtualFile testOutputpath=CompilerModuleExtension.getInstance(module).getCompilerOutputPathForTests();
+  for (  JavaCoverageEngineExtension extension : Extensions.getExtensions(JavaCoverageEngineExtension.EP_NAME)) {
+    if (extension.collectOutputFiles(srcFile,outputpath,testOutputpath,suite,classFiles))     return classFiles;
+  }
+  final String packageFQName=getPackageName(srcFile);
+  final String packageVmName=packageFQName.replace('.','/');
+  final List<File> children=new ArrayList<File>();
+  final File vDir=outputpath == null ? null : packageVmName.length() > 0 ? new File(outputpath.getPath() + File.separator + packageVmName) : VfsUtilCore.virtualToIoFile(outputpath);
+  if (vDir != null && vDir.exists()) {
+    Collections.addAll(children,vDir.listFiles());
+  }
+  if (suite.isTrackTestFolders()) {
+    final File testDir=testOutputpath == null ? null : packageVmName.length() > 0 ? new File(testOutputpath.getPath() + File.separator + packageVmName) : VfsUtilCore.virtualToIoFile(testOutputpath);
+    if (testDir != null && testDir.exists()) {
+      Collections.addAll(children,testDir.listFiles());
+    }
+  }
+  final PsiClass[] classes=ApplicationManager.getApplication().runReadAction(new Computable<PsiClass[]>(){
+    public PsiClass[] compute(){
+      return ((PsiClassOwner)srcFile).getClasses();
+    }
+  }
+);
+  for (  final PsiClass psiClass : classes) {
+    final String className=ApplicationManager.getApplication().runReadAction(new Computable<String>(){
+      public String compute(){
+        return psiClass.getName();
+      }
+    }
+);
+    for (    File child : children) {
+      if (FileUtilRt.extensionEquals(child.getName(),StdFileTypes.CLASS.getDefaultExtension())) {
+        final String childName=FileUtil.getNameWithoutExtension(child);
+        if (childName.equals(className) || childName.startsWith(className) && childName.charAt(className.length()) == '$') {
+          classFiles.add(child);
+        }
+      }
+    }
+  }
+  return classFiles;
+}

@@ -1,31 +1,43 @@
 {
   myRepositoryManager.waitUntilInitialized();
+  if (myProject.isDisposed()) {
+    return Collections.emptyList();
+  }
   HgRepository repository=myRepositoryManager.getRepositoryForRoot(root);
   if (repository == null) {
     LOG.error("Repository not found for root " + root);
     return Collections.emptyList();
   }
   repository.update();
-  Collection<HgNameWithHashInfo> branches=repository.getBranches();
+  Map<String,Set<Hash>> branches=repository.getBranches();
+  Set<String> openedBranchNames=repository.getOpenedBranches();
   Collection<HgNameWithHashInfo> bookmarks=repository.getBookmarks();
   Collection<HgNameWithHashInfo> tags=repository.getTags();
   Collection<HgNameWithHashInfo> localTags=repository.getLocalTags();
   Collection<VcsRef> refs=new ArrayList<VcsRef>(branches.size() + bookmarks.size());
-  for (  HgNameWithHashInfo branchInfo : branches) {
-    refs.add(myVcsObjectsFactory.createRef(myVcsObjectsFactory.createHash(branchInfo.getHash()),branchInfo.getName(),HgRefManager.BRANCH,root));
+  for (  Map.Entry<String,Set<Hash>> entry : branches.entrySet()) {
+    String branchName=entry.getKey();
+    boolean opened=openedBranchNames.contains(branchName);
+    for (    Hash hash : entry.getValue()) {
+      refs.add(myVcsObjectsFactory.createRef(hash,branchName,opened ? HgRefManager.BRANCH : HgRefManager.CLOSED_BRANCH,root));
+    }
   }
   for (  HgNameWithHashInfo bookmarkInfo : bookmarks) {
-    refs.add(myVcsObjectsFactory.createRef(myVcsObjectsFactory.createHash(bookmarkInfo.getHash()),bookmarkInfo.getName(),HgRefManager.BOOKMARK,root));
+    refs.add(myVcsObjectsFactory.createRef(bookmarkInfo.getHash(),bookmarkInfo.getName(),HgRefManager.BOOKMARK,root));
   }
   String currentRevision=repository.getCurrentRevision();
   if (currentRevision != null) {
-    refs.add(myVcsObjectsFactory.createRef(myVcsObjectsFactory.createHash(currentRevision),"HEAD",HgRefManager.HEAD,root));
+    refs.add(myVcsObjectsFactory.createRef(myVcsObjectsFactory.createHash(currentRevision),HEAD_REFERENCE,HgRefManager.HEAD,root));
+  }
+  String tipRevision=repository.getTipRevision();
+  if (tipRevision != null) {
+    refs.add(myVcsObjectsFactory.createRef(myVcsObjectsFactory.createHash(tipRevision),TIP_REFERENCE,HgRefManager.TIP,root));
   }
   for (  HgNameWithHashInfo tagInfo : tags) {
-    refs.add(myVcsObjectsFactory.createRef(myVcsObjectsFactory.createHash(tagInfo.getHash()),tagInfo.getName(),HgRefManager.TAG,root));
+    refs.add(myVcsObjectsFactory.createRef(tagInfo.getHash(),tagInfo.getName(),HgRefManager.TAG,root));
   }
   for (  HgNameWithHashInfo localTagInfo : localTags) {
-    refs.add(myVcsObjectsFactory.createRef(myVcsObjectsFactory.createHash(localTagInfo.getHash()),localTagInfo.getName(),HgRefManager.LOCAL_TAG,root));
+    refs.add(myVcsObjectsFactory.createRef(localTagInfo.getHash(),localTagInfo.getName(),HgRefManager.LOCAL_TAG,root));
   }
   return refs;
 }

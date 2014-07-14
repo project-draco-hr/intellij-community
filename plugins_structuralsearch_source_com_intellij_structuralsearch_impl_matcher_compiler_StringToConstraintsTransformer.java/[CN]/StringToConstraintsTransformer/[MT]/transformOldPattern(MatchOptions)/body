@@ -1,0 +1,149 @@
+{
+  final String pattern=options.getSearchPattern();
+  final StringBuilder buf=new StringBuilder();
+  StringBuilder miscBuffer=null;
+  int anonymousTypedVarsCount=0;
+  for (int index=0; index < pattern.length(); ++index) {
+    char ch=pattern.charAt(index);
+    if (ch == '\'') {
+      final int length=pattern.length();
+      if (index + 1 < length && pattern.charAt(index + 1) == '\'') {
+        index++;
+      }
+ else       if (index + 2 < length && pattern.charAt(index + 2) == '\'') {
+        buf.append(ch);
+        buf.append(pattern.charAt(++index));
+        ch=pattern.charAt(++index);
+      }
+ else       if (index + 3 < length && pattern.charAt(index + 1) == '\\' && pattern.charAt(index + 3) == '\'') {
+        buf.append(ch);
+        buf.append(pattern.charAt(++index));
+        buf.append(pattern.charAt(++index));
+        ch=pattern.charAt(++index);
+      }
+ else       if (index + 7 < length && pattern.charAt(index + 1) == '\\' && pattern.charAt(index + 2) == 'u' && pattern.charAt(index + 7) == '\'') {
+        buf.append(ch);
+        buf.append(pattern.charAt(++index));
+        buf.append(pattern.charAt(++index));
+        buf.append(pattern.charAt(++index));
+        buf.append(pattern.charAt(++index));
+        buf.append(pattern.charAt(++index));
+        buf.append(pattern.charAt(++index));
+        ch=pattern.charAt(++index);
+      }
+ else {
+        buf.append("$");
+        if (miscBuffer == null)         miscBuffer=new StringBuilder();
+ else         miscBuffer.setLength(0);
+        for (++index; index < length && Character.isJavaIdentifierPart(ch=pattern.charAt(index)); ++index) {
+          miscBuffer.append(ch);
+          buf.append(ch);
+        }
+        boolean anonymous=false;
+        if (miscBuffer.length() == 0)         throw new MalformedPatternException(SSRBundle.message("error.expected.character"));
+        if (miscBuffer.charAt(0) == '_') {
+          anonymous=true;
+          if (miscBuffer.length() == 1) {
+            anonymousTypedVarsCount++;
+            miscBuffer.append(anonymousTypedVarsCount);
+            buf.append(anonymousTypedVarsCount);
+          }
+ else {
+            buf.deleteCharAt(buf.length() - miscBuffer.length());
+            miscBuffer.deleteCharAt(0);
+          }
+        }
+        buf.append("$");
+        String typedVar=miscBuffer.toString();
+        int minOccurs=1;
+        int maxOccurs=1;
+        boolean greedy=true;
+        MatchVariableConstraint constraint=options.getVariableConstraint(typedVar);
+        boolean constraintCreated=false;
+        if (constraint == null) {
+          constraint=new MatchVariableConstraint();
+          constraint.setName(typedVar);
+          constraintCreated=true;
+        }
+        if (index < length) {
+          char possibleQuantifier=pattern.charAt(index);
+          if (possibleQuantifier == '+') {
+            maxOccurs=Integer.MAX_VALUE;
+            ++index;
+          }
+ else           if (possibleQuantifier == '?') {
+            minOccurs=0;
+            ++index;
+          }
+ else           if (possibleQuantifier == '*') {
+            minOccurs=0;
+            maxOccurs=Integer.MAX_VALUE;
+            ++index;
+          }
+ else           if (possibleQuantifier == '{') {
+            ++index;
+            minOccurs=0;
+            while (index < length && (ch=pattern.charAt(index)) >= '0' && ch <= '9') {
+              minOccurs*=10;
+              minOccurs+=(ch - '0');
+              if (minOccurs < 0)               throw new MalformedPatternException(SSRBundle.message("error.overflow"));
+              ++index;
+            }
+            if (ch == ',') {
+              ++index;
+              maxOccurs=0;
+              while (index < length && (ch=pattern.charAt(index)) >= '0' && ch <= '9') {
+                maxOccurs*=10;
+                maxOccurs+=(ch - '0');
+                if (maxOccurs < 0)                 throw new MalformedPatternException(SSRBundle.message("error.overflow"));
+                ++index;
+              }
+            }
+ else {
+              maxOccurs=Integer.MAX_VALUE;
+            }
+            if (ch != '}') {
+              if (maxOccurs == Integer.MAX_VALUE)               throw new MalformedPatternException(SSRBundle.message("error.expected.brace1"));
+ else               throw new MalformedPatternException(SSRBundle.message("error.expected.brace2"));
+            }
+            ++index;
+          }
+          if (index < length) {
+            ch=pattern.charAt(index);
+            if (ch == '?') {
+              greedy=false;
+              ++index;
+            }
+          }
+        }
+        if (constraintCreated) {
+          constraint.setMinCount(minOccurs);
+          constraint.setMaxCount(maxOccurs);
+          constraint.setGreedy(greedy);
+          constraint.setPartOfSearchResults(!anonymous);
+        }
+        if (index < length && pattern.charAt(index) == ':') {
+          ++index;
+          if (index >= length)           throw new MalformedPatternException(SSRBundle.message("error.expected.condition",':'));
+          ch=pattern.charAt(index);
+          if (ch == ':') {
+            buf.append(ch);
+          }
+ else {
+            index=eatTypedVarCondition(index,pattern,miscBuffer,constraint);
+          }
+        }
+        if (constraintCreated) {
+          if (constraint.getWithinConstraint().length() > 0) {
+            constraint.setName(Configuration.CONTEXT_VAR_NAME);
+          }
+          options.addVariableConstraint(constraint);
+        }
+        if (index == length)         break;
+        ch=pattern.charAt(index);
+      }
+    }
+    buf.append(ch);
+  }
+  options.setSearchPattern(buf.toString());
+}

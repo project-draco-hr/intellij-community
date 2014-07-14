@@ -1,0 +1,31 @@
+{
+  if (allAccessAllowed(myProject))   return Collections.emptyList();
+  List<VirtualFile> deniedFiles=new SmartList<VirtualFile>();
+  Map<VirtualFile,AccessStatus> statuses=getRegisteredFiles(myProject);
+  for (  VirtualFile each : files) {
+    if (statuses.get(each) == AccessStatus.ALLOWED)     continue;
+    if (!(each.getFileSystem() instanceof LocalFileSystem))     continue;
+    if (isProjectFile(each)) {
+      statuses.remove(each);
+      continue;
+    }
+    statuses.put(each,AccessStatus.REQUESTED);
+    deniedFiles.add(each);
+  }
+  if (deniedFiles.isEmpty())   return Collections.emptyList();
+  final int savedEventCount=IdeEventQueue.getInstance().getEventCount();
+  UnlockOption unlockOption=askToUnlock(deniedFiles);
+  IdeEventQueue.getInstance().setEventCount(savedEventCount);
+  if (unlockOption == null)   return deniedFiles;
+switch (unlockOption) {
+case UNLOCK:
+    for (    VirtualFile eachAllowed : deniedFiles) {
+      statuses.put(eachAllowed,AccessStatus.ALLOWED);
+    }
+  break;
+case UNLOCK_ALL:
+myProject.putUserData(ALL_ACCESS_ALLOWED,Boolean.TRUE);
+break;
+}
+return Collections.emptyList();
+}

@@ -1,56 +1,13 @@
 {
-  if (!isValid(object))   return new ArrayList<Object>();
-  final List<Object> result=new ArrayList<Object>();
-  final Object rootElement=size() > 1 ? getElement(1) : null;
-  if (!(object instanceof Project) && rootElement instanceof Module && ((Module)rootElement).isDisposed())   return result;
-  if (object instanceof Project) {
-    ContainerUtil.addAll(result,getProjectChildren((Project)object));
-  }
- else   if (object instanceof Module) {
-    ContainerUtil.addAll(result,getModuleChildren((Module)object));
-  }
- else   if (object instanceof PsiDirectoryContainer) {
-    final PsiDirectoryContainer psiPackage=(PsiDirectoryContainer)object;
-    final PsiDirectory[] psiDirectories=ApplicationManager.getApplication().runReadAction(new Computable<PsiDirectory[]>(){
-      @Override public PsiDirectory[] compute(){
-        return rootElement instanceof Module ? psiPackage.getDirectories(GlobalSearchScope.moduleScope((Module)rootElement)) : psiPackage.getDirectories();
-      }
-    }
-);
-    for (    final PsiDirectory psiDirectory : psiDirectories) {
-      ApplicationManager.getApplication().runReadAction(new Runnable(){
-        @Override public void run(){
-          getDirectoryChildren(psiDirectory,rootElement,result);
-        }
-      }
-);
+  final List<Object> result=ContainerUtil.newArrayList();
+  Processor<Object> processor=new Processor<Object>(){
+    @Override public boolean process(    Object o){
+      ContainerUtil.addIfNotNull(result,o instanceof PsiElement ? normalize((PsiElement)o) : o);
+      return true;
     }
   }
- else   if (object instanceof PsiDirectory) {
-    ApplicationManager.getApplication().runReadAction(new Runnable(){
-      @Override public void run(){
-        getDirectoryChildren((PsiDirectory)object,rootElement,result);
-      }
-    }
-);
-  }
- else   if (object instanceof PsiFileSystemItem) {
-    ApplicationManager.getApplication().runReadAction(new Runnable(){
-      @Override public void run(){
-        ((PsiFileSystemItem)object).processChildren(new PsiFileSystemItemProcessor(){
-          @Override public boolean acceptItem(          String name,          boolean isDirectory){
-            return true;
-          }
-          @Override public boolean execute(          @NotNull PsiFileSystemItem element){
-            result.add(element);
-            return true;
-          }
-        }
-);
-      }
-    }
-);
-  }
+;
+  processChildren(object,processor);
   Collections.sort(result,new SiblingsComparator());
   return result;
 }

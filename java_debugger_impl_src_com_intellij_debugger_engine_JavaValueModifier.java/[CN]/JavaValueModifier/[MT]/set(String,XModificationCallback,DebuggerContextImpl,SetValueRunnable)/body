@@ -1,0 +1,38 @@
+{
+  final ProgressWindowWithNotification progressWindow=new ProgressWindowWithNotification(true,debuggerContext.getProject());
+  final EvaluationContextImpl evaluationContext=myJavaValue.getEvaluationContext();
+  SuspendContextCommandImpl askSetAction=new DebuggerContextCommandImpl(debuggerContext){
+    public Priority getPriority(){
+      return Priority.HIGH;
+    }
+    public void threadAction(){
+      ExpressionEvaluator evaluator=null;
+      try {
+        evaluator=DebuggerInvocationUtil.commitAndRunReadAction(evaluationContext.getProject(),new com.intellij.debugger.EvaluatingComputable<ExpressionEvaluator>(){
+          public ExpressionEvaluator compute() throws EvaluateException {
+            return EvaluatorBuilderImpl.build(new TextWithImportsImpl(CodeFragmentKind.EXPRESSION,expression),ContextUtil.getContextElement(evaluationContext),ContextUtil.getSourcePosition(evaluationContext));
+          }
+        }
+);
+        setValue(expression,evaluator,evaluationContext,new SetValueRunnable(){
+          public void setValue(          EvaluationContextImpl evaluationContext,          Value newValue) throws ClassNotLoadedException, InvalidTypeException, EvaluateException, IncompatibleThreadStateException {
+            if (!progressWindow.isCanceled()) {
+              setValueRunnable.setValue(evaluationContext,newValue);
+            }
+          }
+          public ReferenceType loadClass(          EvaluationContextImpl evaluationContext,          String className) throws InvocationException, ClassNotLoadedException, EvaluateException, IncompatibleThreadStateException, InvalidTypeException {
+            return setValueRunnable.loadClass(evaluationContext,className);
+          }
+        }
+);
+        callback.valueModified();
+      }
+ catch (      EvaluateException e) {
+        callback.errorOccurred(e.getMessage());
+      }
+    }
+  }
+;
+  progressWindow.setTitle(DebuggerBundle.message("title.evaluating"));
+  debuggerContext.getDebugProcess().getManagerThread().startProgress(askSetAction,progressWindow);
+}

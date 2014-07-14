@@ -1,0 +1,52 @@
+{
+  final Refreshable refreshablePanel=context.getRefreshableDialog();
+  if (refreshablePanel != null)   refreshablePanel.saveState();
+  final int[] refreshedParents=new int[]{0};
+  final Collection<VirtualFile> createdCvsIgnoreFiles=new ArrayList<VirtualFile>();
+  for (  final VirtualFile parent : parentToSelectedChildren.keySet()) {
+    final Runnable runnable=new Runnable(){
+      public void run(){
+        try {
+          final VirtualFile cvsIgnoreFile=CvsVfsUtil.refreshAndfFindChild(parent,CvsUtil.CVS_IGNORE_FILE);
+          if (cvsIgnoreFile == null) {
+            final String path=parent.getPath() + "/" + CvsUtil.CVS_IGNORE_FILE;
+            LOG.error(String.valueOf(CvsVfsUtil.findFileByPath(path)) + " " + parent.getPath()+ " "+ new File(VfsUtil.virtualToIoFile(parent),CvsUtil.CVS_IGNORE_FILE).isFile());
+            return;
+          }
+          if (!CvsUtil.fileIsUnderCvs(cvsIgnoreFile) && !ChangeListManager.getInstance(context.getProject()).isIgnoredFile(cvsIgnoreFile) && !CvsEntriesManager.getInstance().fileIsIgnored(cvsIgnoreFile)) {
+            createdCvsIgnoreFiles.add(cvsIgnoreFile);
+          }
+          final Collection<VirtualFile> filesToUpdateStatus=parentToSelectedChildren.get(parent);
+          for (          final VirtualFile file : filesToUpdateStatus) {
+            FileStatusManager.getInstance(context.getProject()).fileStatusChanged(file);
+            VcsDirtyScopeManager.getInstance(context.getProject()).fileDirty(file);
+          }
+        }
+  finally {
+          refreshedParents[0]++;
+          if (refreshedParents[0] == parentToSelectedChildren.size()) {
+            if (createdCvsIgnoreFiles.isEmpty()) {
+              refreshPanel(context);
+            }
+ else {
+              addCvsIgnoreFilesToCvsAndRefreshPanel();
+            }
+          }
+        }
+      }
+      private void addCvsIgnoreFilesToCvsAndRefreshPanel(){
+        createAddFilesAction().actionPerformed(createContext(createdCvsIgnoreFiles,context));
+      }
+      private AddFileOrDirectoryAction createAddFilesAction(){
+        return new AddFileOrDirectoryAction(CvsBundle.message("adding.cvsignore.files.to.cvs.action.name"),Options.ON_FILE_ADDING){
+          protected void onActionPerformed(          CvsContext context,          CvsTabbedWindow tabbedWindow,          boolean successfully,          CvsHandler handler){
+            refreshPanel(context);
+          }
+        }
+;
+      }
+    }
+;
+    parent.refresh(true,true,runnable);
+  }
+}

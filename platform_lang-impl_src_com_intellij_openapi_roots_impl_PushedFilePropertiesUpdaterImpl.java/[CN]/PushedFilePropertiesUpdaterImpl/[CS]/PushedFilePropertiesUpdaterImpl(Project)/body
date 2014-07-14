@@ -1,0 +1,46 @@
+{
+  myProject=project;
+  myPushers=Extensions.getExtensions(FilePropertyPusher.EP_NAME);
+  myFilePushers=ContainerUtil.findAllAsArray(myPushers,new Condition<FilePropertyPusher>(){
+    @Override public boolean value(    FilePropertyPusher pusher){
+      return !pusher.pushDirectoriesOnly();
+    }
+  }
+);
+  myConnection=project.getMessageBus().connect();
+  StartupManager.getInstance(project).registerPreStartupActivity(new Runnable(){
+    @Override public void run(){
+      myConnection.subscribe(ProjectTopics.PROJECT_ROOTS,new ModuleRootAdapter(){
+        @Override public void rootsChanged(        final ModuleRootEvent event){
+          for (          FilePropertyPusher pusher : myPushers) {
+            pusher.afterRootsChanged(project);
+          }
+        }
+      }
+);
+      myConnection.subscribe(VirtualFileManager.VFS_CHANGES,new BulkVirtualFileListenerAdapter(new VirtualFileAdapter(){
+        @Override public void fileCreated(        @NotNull final VirtualFileEvent event){
+          final VirtualFile file=event.getFile();
+          final FilePropertyPusher[] pushers=file.isDirectory() ? myPushers : myFilePushers;
+          if (!event.isFromRefresh() || !file.isDirectory()) {
+            doPushRecursively(file,pushers,ProjectRootManager.getInstance(myProject).getFileIndex());
+          }
+ else {
+            schedulePushRecursively(file,pushers);
+          }
+        }
+        @Override public void fileMoved(        @NotNull final VirtualFileMoveEvent event){
+          final VirtualFile file=event.getFile();
+          final FilePropertyPusher[] pushers=file.isDirectory() ? myPushers : myFilePushers;
+          if (pushers.length == 0)           return;
+          for (          FilePropertyPusher pusher : pushers) {
+            file.putUserData(pusher.getFileDataKey(),null);
+          }
+          doPushRecursively(file,pushers,ProjectRootManager.getInstance(myProject).getFileIndex());
+        }
+      }
+));
+    }
+  }
+);
+}

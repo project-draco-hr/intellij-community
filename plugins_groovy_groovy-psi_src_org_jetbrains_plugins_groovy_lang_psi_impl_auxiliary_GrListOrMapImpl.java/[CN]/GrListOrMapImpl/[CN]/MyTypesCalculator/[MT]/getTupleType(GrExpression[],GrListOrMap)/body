@@ -1,0 +1,37 @@
+{
+  final JavaPsiFacade facade=JavaPsiFacade.getInstance(listOrMap.getProject());
+  GlobalSearchScope scope=listOrMap.getResolveScope();
+  if (initializers.length == 0) {
+    PsiType lType=PsiImplUtil.inferExpectedTypeForDiamond(listOrMap);
+    if (lType instanceof PsiClassType && InheritanceUtil.isInheritor(lType,CommonClassNames.JAVA_UTIL_LIST)) {
+      PsiClass arrayList=facade.findClass(CommonClassNames.JAVA_UTIL_ARRAY_LIST,scope);
+      if (arrayList == null)       arrayList=facade.findClass(CommonClassNames.JAVA_UTIL_LIST,scope);
+      if (arrayList != null) {
+        PsiSubstitutor arrayListSubstitutor=PsiSubstitutor.EMPTY.put(arrayList.getTypeParameters()[0],com.intellij.psi.util.PsiUtil.substituteTypeParameter(lType,CommonClassNames.JAVA_UTIL_LIST,0,false));
+        return facade.getElementFactory().createType(arrayList,arrayListSubstitutor);
+      }
+    }
+  }
+  return new GrTupleType(scope,facade){
+    @NotNull @Override protected PsiType[] inferComponents(){
+      return ContainerUtil.map(initializers,new Function<GrExpression,PsiType>(){
+        @Override public PsiType fun(        final GrExpression expression){
+          return RecursionManager.doPreventingRecursion(expression,false,new Computable<PsiType>(){
+            @Override public PsiType compute(){
+              return expression.getType();
+            }
+          }
+);
+        }
+      }
+,new PsiType[initializers.length]);
+    }
+    @Override public boolean isValid(){
+      for (      GrExpression initializer : initializers) {
+        if (!initializer.isValid())         return false;
+      }
+      return true;
+    }
+  }
+;
+}

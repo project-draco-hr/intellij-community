@@ -1,0 +1,30 @@
+{
+  LOG.assertTrue(aClass.isValid());
+  ApplicationManager.getApplication().assertReadAccessAllowed();
+  Collection<CandidateInfo> candidates=GroovyOverrideImplementExploreUtil.getMethodsToOverrideImplement(aClass,toImplement);
+  Collection<CandidateInfo> secondary=toImplement || aClass.isInterface() ? ContainerUtil.<CandidateInfo>newArrayList() : GroovyOverrideImplementExploreUtil.getMethodsToOverrideImplement(aClass,true);
+  if (toImplement) {
+    for (Iterator<CandidateInfo> iterator=candidates.iterator(); iterator.hasNext(); ) {
+      CandidateInfo candidate=iterator.next();
+      PsiElement element=candidate.getElement();
+      if (element instanceof GrMethod) {
+        GrMethod method=(GrMethod)element;
+        if (GrTraitUtil.isTrait(method.getContainingClass()) && !GrTraitUtil.isMethodAbstract(method)) {
+          iterator.remove();
+          secondary.add(candidate);
+        }
+      }
+    }
+  }
+  final MemberChooser<PsiMethodMember> chooser=OverrideImplementUtil.showOverrideImplementChooser(editor,aClass,toImplement,candidates,secondary);
+  if (chooser == null)   return;
+  final List<PsiMethodMember> selectedElements=chooser.getSelectedElements();
+  if (selectedElements == null || selectedElements.isEmpty())   return;
+  LOG.assertTrue(aClass.isValid());
+  new WriteCommandAction(project,aClass.getContainingFile()){
+    @Override protected void run(    @NotNull Result result) throws Throwable {
+      OverrideImplementUtil.overrideOrImplementMethodsInRightPlace(editor,aClass,selectedElements,chooser.isCopyJavadoc(),chooser.isInsertOverrideAnnotation());
+    }
+  }
+.execute();
+}

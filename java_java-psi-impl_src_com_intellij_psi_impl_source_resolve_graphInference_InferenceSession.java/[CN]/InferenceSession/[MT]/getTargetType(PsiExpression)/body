@@ -1,63 +1,40 @@
 {
+  PsiType targetType=PsiTypesUtil.getExpectedTypeByParent(context);
+  if (targetType != null) {
+    return targetType;
+  }
   final PsiElement parent=PsiUtil.skipParenthesizedExprUp(context.getParent());
   if (parent instanceof PsiExpressionList) {
-    final PsiElement gParent=parent.getParent();
+    PsiElement gParent=parent.getParent();
+    if (gParent instanceof PsiAnonymousClass) {
+      gParent=gParent.getParent();
+    }
     if (gParent instanceof PsiCallExpression) {
       final PsiExpressionList argumentList=((PsiCallExpression)gParent).getArgumentList();
       if (argumentList != null) {
-        final Pair<PsiMethod,PsiSubstitutor> pair=MethodCandidateInfo.getCurrentMethod(argumentList);
-        final JavaResolveResult resolveResult;
-        if (pair == null) {
-          final MethodCandidatesProcessor processor=new MethodCandidatesProcessor(gParent,context.getContainingFile()){
-            @Override protected PsiType[] getExpressionTypes(            PsiExpressionList argumentList){
-              if (argumentList != null) {
-                final PsiExpression[] expressions=argumentList.getExpressions();
-                final int idx=LambdaUtil.getLambdaIdx(argumentList,context);
-                final PsiType[] types=new PsiType[expressions.length];
-                for (int i=0; i < expressions.length; i++) {
-                  if (i != idx) {
-                    types[i]=expressions[i].getType();
-                  }
- else {
-                    types[i]=PsiType.NULL;
-                  }
-                }
-                return types;
-              }
- else {
-                return null;
-              }
-            }
-          }
-;
-          try {
-            PsiScopesUtil.setupAndRunProcessor(processor,(PsiCallExpression)gParent,false);
-          }
- catch (          MethodProcessorSetupFailedException e) {
-            return null;
-          }
-          final JavaResolveResult[] results=processor.getResult();
-          for (          JavaResolveResult result : results) {
-            final PsiType type=getTypeByMethod(context,argumentList,null,result,result.getElement());
-            if (type != null) {
-              return type;
-            }
-          }
-          return null;
+        final MethodCandidateInfo.CurrentCandidateProperties properties=MethodCandidateInfo.getCurrentMethod(argumentList);
+        if (properties != null && properties.isApplicabilityCheck()) {
+          return getTypeByMethod(context,argumentList,properties.getMethod(),properties.isVarargs(),properties.getSubstitutor());
         }
-        return getTypeByMethod(context,argumentList,pair,null,pair.first);
+        final JavaResolveResult result=((PsiCallExpression)gParent).resolveMethodGenerics();
+        final boolean varargs=properties != null && properties.isVarargs() || result instanceof MethodCandidateInfo && ((MethodCandidateInfo)result).isVarargs();
+        return getTypeByMethod(context,argumentList,result.getElement(),varargs,PsiResolveHelper.ourGraphGuard.doPreventingRecursion(argumentList.getParent(),false,new Computable<PsiSubstitutor>(){
+          @Override public PsiSubstitutor compute(){
+            return result.getSubstitutor();
+          }
+        }
+));
       }
     }
   }
  else   if (parent instanceof PsiConditionalExpression) {
-    PsiType targetType=PsiTypesUtil.getExpectedTypeByParent((PsiExpression)parent);
-    if (targetType == null) {
-      targetType=getTargetType((PsiExpression)parent);
-    }
-    return targetType;
+    return getTargetType((PsiExpression)parent);
   }
  else   if (parent instanceof PsiLambdaExpression) {
-    return LambdaUtil.getFunctionalInterfaceReturnType(((PsiLambdaExpression)parent).getFunctionalInterfaceType());
+    return getTargetTypeByContainingLambda((PsiLambdaExpression)parent);
+  }
+ else   if (parent instanceof PsiReturnStatement) {
+    return getTargetTypeByContainingLambda(PsiTreeUtil.getParentOfType(parent,PsiLambdaExpression.class));
   }
   return null;
 }

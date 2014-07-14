@@ -3,35 +3,35 @@
   List<VcsRef> localBranches=ContainerUtil.newArrayList();
   List<VcsRef> trackedBranches=ContainerUtil.newArrayList();
   MultiMap<GitRemote,VcsRef> remoteRefGroups=MultiMap.create();
-  for (  VcsRef ref : refs) {
-    if (ref.getType() == HEAD) {
-      simpleGroups.add(new SingletonRefGroup(ref));
+  MultiMap<VirtualFile,VcsRef> refsByRoot=groupRefsByRoot(refs);
+  for (  Map.Entry<VirtualFile,Collection<VcsRef>> entry : refsByRoot.entrySet()) {
+    VirtualFile root=entry.getKey();
+    Collection<VcsRef> refsInRoot=entry.getValue();
+    GitRepository repository=myRepositoryManager.getRepositoryForRoot(root);
+    if (repository == null) {
+      LOG.warn("No repository for root: " + root);
+      continue;
     }
- else {
-      GitRepository repository=myRepositoryManager.getRepositoryForRoot(ref.getRoot());
-      if (repository == null) {
-        LOG.warn("No repository for root: " + ref.getRoot());
+    Set<String> locals=getLocalBranches(repository);
+    Set<String> tracked=getTrackedRemoteBranches(repository);
+    Map<String,GitRemote> nonTracked=getNonTrackedRemoteBranches(repository);
+    for (    VcsRef ref : refsInRoot) {
+      if (ref.getType() == HEAD) {
+        simpleGroups.add(new SingletonRefGroup(ref));
         continue;
       }
-      Collection<GitBranchTrackInfo> trackInfos=repository.getBranchTrackInfos();
-      GitBranchesCollection branches=repository.getBranches();
-      GitLocalBranch localBranch=findBranchByName(ref,branches.getLocalBranches());
-      if (localBranch != null) {
+      String refName=ref.getName();
+      if (locals.contains(refName)) {
         localBranches.add(ref);
       }
+ else       if (tracked.contains(refName)) {
+        trackedBranches.add(ref);
+      }
+ else       if (nonTracked.containsKey(refName)) {
+        remoteRefGroups.putValue(nonTracked.get(refName),ref);
+      }
  else {
-        GitRemoteBranch remoteBranch=findBranchByName(ref,branches.getRemoteBranches());
-        if (remoteBranch != null) {
-          if (isTracked(trackInfos,remoteBranch)) {
-            trackedBranches.add(ref);
-          }
- else {
-            remoteRefGroups.putValue(remoteBranch.getRemote(),ref);
-          }
-        }
- else {
-          LOG.warn("Didn't find ref neither in local nor in remote branches: " + ref);
-        }
+        LOG.warn("Didn't find ref neither in local nor in remote branches: " + ref);
       }
     }
   }

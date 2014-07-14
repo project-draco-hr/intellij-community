@@ -1,4 +1,7 @@
 {
+  if (SystemProperties.getBooleanProperty("idea.no.system.path.space.monitoring",false)) {
+    return;
+  }
   final File file=new File(PathManager.getSystemPath());
   final AtomicBoolean reported=new AtomicBoolean();
   final ThreadLocal<Future<Long>> ourFreeSpaceCalculation=new ThreadLocal<Future<Long>>();
@@ -16,12 +19,12 @@
           }
 ));
         }
-        if (!future.isDone()) {
+        if (!future.isDone() || future.isCancelled()) {
           JobScheduler.getScheduler().schedule(this,1,TimeUnit.SECONDS);
           return;
         }
         try {
-          final long fileUsableSpace=future.isCancelled() ? 0 : future.get();
+          final long fileUsableSpace=future.get();
           final long timeout=Math.max(5,(fileUsableSpace - LOW_DISK_SPACE_THRESHOLD) / MAX_WRITE_SPEED_IN_BPS);
           ourFreeSpaceCalculation.set(null);
           if (fileUsableSpace < LOW_DISK_SPACE_THRESHOLD) {
@@ -42,7 +45,7 @@
                   restart(timeout);
                 }
  else {
-                  new NotificationGroup("System",NotificationDisplayType.STICKY_BALLOON,false).createNotification(message,file.getPath(),NotificationType.ERROR,null).whenExpired(new Runnable(){
+                  GROUP.createNotification(message,file.getPath(),NotificationType.ERROR,null).whenExpired(new Runnable(){
                     @Override public void run(){
                       reported.compareAndSet(true,false);
                       restart(timeout);

@@ -12,7 +12,7 @@
     PsiDocumentManager.getInstance(myProject).commitAllDocuments();
     RefactoringListenerManagerImpl listenerManager=(RefactoringListenerManagerImpl)RefactoringListenerManager.getInstance(myProject);
     myTransaction=listenerManager.startTransaction();
-    final Map<RefactoringHelper,Object> preparedData=new HashMap<RefactoringHelper,Object>();
+    final Map<RefactoringHelper,Object> preparedData=new LinkedHashMap<RefactoringHelper,Object>();
     final Runnable prepareHelpersRunnable=new Runnable(){
       @Override public void run(){
         for (        RefactoringHelper helper : Extensions.getExtensions(RefactoringHelper.EP_NAME)) {
@@ -24,7 +24,33 @@
     ProgressManager.getInstance().runProcessWithProgressSynchronously(prepareHelpersRunnable,"Prepare ...",false,myProject);
     ApplicationManager.getApplication().runWriteAction(new Runnable(){
       @Override public void run(){
-        performRefactoring(writableUsageInfos);
+        final String refactoringId=getRefactoringId();
+        if (refactoringId != null) {
+          RefactoringEventData data=getBeforeData();
+          if (data != null) {
+            data.addUsages(usageInfoSet);
+          }
+          myProject.getMessageBus().syncPublisher(RefactoringEventListener.REFACTORING_EVENT_TOPIC).refactoringStarted(refactoringId,data);
+        }
+        try {
+          if (refactoringId != null) {
+            UndoableAction action=new BasicUndoableAction(){
+              @Override public void undo(){
+                myProject.getMessageBus().syncPublisher(RefactoringEventListener.REFACTORING_EVENT_TOPIC).undoRefactoring(refactoringId);
+              }
+              @Override public void redo(){
+              }
+            }
+;
+            UndoManager.getInstance(myProject).undoableActionPerformed(action);
+          }
+          performRefactoring(writableUsageInfos);
+        }
+  finally {
+          if (refactoringId != null) {
+            myProject.getMessageBus().syncPublisher(RefactoringEventListener.REFACTORING_EVENT_TOPIC).refactoringDone(refactoringId,getAfterData(writableUsageInfos));
+          }
+        }
       }
     }
 );

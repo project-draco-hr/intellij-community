@@ -1,0 +1,26 @@
+{
+  final Map<PyGenericType,PyType> substitutions=new LinkedHashMap<PyGenericType,PyType>();
+  final Set<PyGenericType> generics=new LinkedHashSet<PyGenericType>();
+  final PyType qualifierType=receiver != null ? context.getType(receiver) : null;
+  collectGenerics(qualifierType,context,generics,new HashSet<PyType>());
+  for (  PyGenericType t : generics) {
+    substitutions.put(t,t);
+  }
+  if (qualifierType != null) {
+    final PyResolveContext resolveContext=PyResolveContext.noImplicits().withTypeEvalContext(context);
+    final List<? extends RatedResolveResult> results=qualifierType.resolveMember(PyNames.INIT,null,AccessDirection.READ,resolveContext);
+    if (results != null && !results.isEmpty()) {
+      final PsiElement init=results.get(0).getElement();
+      if (init instanceof PyTypedElement) {
+        final PyType initType=context.getType((PyTypedElement)init);
+        if (initType instanceof PyCallableType) {
+          final PyType initReturnType=((PyCallableType)initType).getReturnType(context);
+          if (initReturnType != null) {
+            match(initReturnType,qualifierType,context,substitutions);
+          }
+        }
+      }
+    }
+  }
+  return substitutions;
+}

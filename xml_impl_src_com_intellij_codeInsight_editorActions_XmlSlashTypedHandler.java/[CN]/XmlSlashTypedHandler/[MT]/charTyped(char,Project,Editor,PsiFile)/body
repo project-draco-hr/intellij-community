@@ -2,6 +2,7 @@
   if ((editedFile.getLanguage() instanceof XMLLanguage || editedFile.getViewProvider().getBaseLanguage() instanceof XMLLanguage) && c == '/') {
     PsiDocumentManager.getInstance(project).commitAllDocuments();
     PsiFile file=PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument());
+    if (file == null)     return Result.CONTINUE;
     FileViewProvider provider=file.getViewProvider();
     final int offset=editor.getCaretModel().getOffset();
     PsiElement element=provider.findElementAt(offset - 1,XMLLanguage.class);
@@ -10,10 +11,25 @@
     ASTNode prevLeaf=element.getNode();
     if (prevLeaf == null)     return Result.CONTINUE;
     final String prevLeafText=prevLeaf.getText();
-    if ("</".equals(prevLeafText) && prevLeaf.getElementType() == XML_END_TAG_START) {
+    if ("</".equals(prevLeafText) && prevLeaf.getElementType() == XmlTokenType.XML_END_TAG_START) {
       XmlTag tag=PsiTreeUtil.getParentOfType(element,XmlTag.class);
       if (tag != null && StringUtil.isNotEmpty(tag.getName()) && TreeUtil.findSibling(prevLeaf,XmlTokenType.XML_NAME) == null) {
-        EditorModificationUtil.insertStringAtCaret(editor,tag.getName() + ">");
+        if (provider instanceof MultiplePsiFilesPerDocumentFileViewProvider) {
+          PsiElement element1=SingleRootFileViewProvider.findElementAt(file,offset - 1);
+          if (element1 != null && element1.getText().startsWith("</")) {
+            XmlTag tag1=PsiTreeUtil.getParentOfType(element1,XmlTag.class);
+            if (shouldReplace(tag,tag1)) {
+              tag=tag1;
+            }
+ else {
+              tag1=PsiTreeUtil.getPrevSiblingOfType(element1.getParent(),XmlTag.class);
+              if (shouldReplace(tag,tag1)) {
+                tag=tag1;
+              }
+            }
+          }
+        }
+        EditorModificationUtil.insertStringAtCaret(editor,tag.getName() + ">",false);
         return Result.STOP;
       }
     }
@@ -21,7 +37,7 @@
     while ((prevLeaf=TreeUtil.prevLeaf(prevLeaf)) != null && prevLeaf.getElementType() == XmlTokenType.XML_WHITE_SPACE)     ;
     if (prevLeaf instanceof OuterLanguageElement) {
       element=file.getViewProvider().findElementAt(offset - 1,file.getLanguage());
-      prevLeaf=element.getNode();
+      prevLeaf=element != null ? element.getNode() : null;
       while ((prevLeaf=TreeUtil.prevLeaf(prevLeaf)) != null && prevLeaf.getElementType() == XmlTokenType.XML_WHITE_SPACE)       ;
     }
     if (prevLeaf == null)     return Result.CONTINUE;
@@ -36,7 +52,7 @@
     if (XmlUtil.getTokenOfType(tag,XmlTokenType.XML_TAG_END) != null)     return Result.CONTINUE;
     if (XmlUtil.getTokenOfType(tag,XmlTokenType.XML_EMPTY_ELEMENT_END) != null)     return Result.CONTINUE;
     if (PsiTreeUtil.getParentOfType(element,XmlAttributeValue.class) != null)     return Result.CONTINUE;
-    EditorModificationUtil.insertStringAtCaret(editor,">");
+    EditorModificationUtil.insertStringAtCaret(editor,">",false);
     return Result.STOP;
   }
   return Result.CONTINUE;

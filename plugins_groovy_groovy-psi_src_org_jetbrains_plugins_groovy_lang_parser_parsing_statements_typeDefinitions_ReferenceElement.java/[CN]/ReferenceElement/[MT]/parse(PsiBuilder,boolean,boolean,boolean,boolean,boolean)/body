@@ -1,0 +1,52 @@
+{
+  PsiBuilder.Marker internalTypeMarker=builder.mark();
+  String lastIdentifier=builder.getTokenText();
+  if (!ParserUtils.getToken(builder,TokenSets.CODE_REFERENCE_ELEMENT_NAME_TOKENS)) {
+    internalTypeMarker.rollbackTo();
+    return ReferenceElementResult.FAIL;
+  }
+  boolean hasTypeArguments=false;
+  if (parseTypeArgs && TypeArguments.parseTypeArguments(builder,expressionPossible,allowDiamond)) {
+    hasTypeArguments=true;
+  }
+  internalTypeMarker.done(GroovyElementTypes.REFERENCE_ELEMENT);
+  internalTypeMarker=internalTypeMarker.precede();
+  boolean hasDots=builder.getTokenType() == GroovyTokenTypes.mDOT;
+  while (builder.getTokenType() == GroovyTokenTypes.mDOT) {
+    if ((ParserUtils.lookAhead(builder,GroovyTokenTypes.mDOT,GroovyTokenTypes.mSTAR) || ParserUtils.lookAhead(builder,GroovyTokenTypes.mDOT,GroovyTokenTypes.mNLS,GroovyTokenTypes.mSTAR)) && lineFeedAllowed) {
+      internalTypeMarker.drop();
+      return ReferenceElementResult.PATH_REF;
+    }
+    ParserUtils.getToken(builder,GroovyTokenTypes.mDOT);
+    if (lineFeedAllowed) {
+      ParserUtils.getToken(builder,GroovyTokenTypes.mNLS);
+    }
+    lastIdentifier=builder.getTokenText();
+    if (!ParserUtils.getToken(builder,TokenSets.CODE_REFERENCE_ELEMENT_NAME_TOKENS)) {
+      if (TokenSets.REFERENCE_NAME_PREFIXES.contains(builder.getTokenType())) {
+        internalTypeMarker.rollbackTo();
+        return ReferenceElementResult.FAIL;
+      }
+      builder.error(GroovyBundle.message("identifier.expected"));
+      internalTypeMarker.done(GroovyElementTypes.REFERENCE_ELEMENT);
+      return ReferenceElementResult.PATH_REF;
+    }
+    if (parseTypeArgs && TypeArguments.parseTypeArguments(builder,expressionPossible,allowDiamond)) {
+      hasTypeArguments=true;
+    }
+    internalTypeMarker.done(GroovyElementTypes.REFERENCE_ELEMENT);
+    internalTypeMarker=internalTypeMarker.precede();
+  }
+  if (lastIdentifier == null) {
+    return ReferenceElementResult.FAIL;
+  }
+  char firstChar=lastIdentifier.charAt(0);
+  if (checkUpperCase) {
+    if (!Character.isUpperCase(firstChar) || DUMMY_IDENTIFIER.equals(lastIdentifier)) {
+      internalTypeMarker.rollbackTo();
+      return ReferenceElementResult.FAIL;
+    }
+  }
+  internalTypeMarker.drop();
+  return hasTypeArguments ? ReferenceElementResult.REF_WITH_TYPE_PARAMS : hasDots ? ReferenceElementResult.PATH_REF : ReferenceElementResult.IDENTIFIER;
+}

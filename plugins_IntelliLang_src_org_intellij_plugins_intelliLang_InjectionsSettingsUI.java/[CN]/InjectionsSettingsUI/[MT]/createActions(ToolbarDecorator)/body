@@ -1,0 +1,181 @@
+{
+  final Consumer<BaseInjection> consumer=new Consumer<BaseInjection>(){
+    public void consume(    final BaseInjection injection){
+      addInjection(injection);
+    }
+  }
+;
+  final Factory<BaseInjection> producer=new NullableFactory<BaseInjection>(){
+    public BaseInjection create(){
+      final InjInfo info=getSelectedInjection();
+      return info == null ? null : info.injection;
+    }
+  }
+;
+  for (  LanguageInjectionSupport support : InjectorUtils.getActiveInjectionSupports()) {
+    ContainerUtil.addAll(myAddActions,support.createAddActions(myProject,consumer));
+    final AnAction action=support.createEditAction(myProject,producer);
+    myEditActions.put(support.getId(),action == null ? AbstractLanguageInjectionSupport.createDefaultEditAction(myProject,producer) : action);
+    mySupports.put(support.getId(),support);
+  }
+  Collections.sort(myAddActions,new Comparator<AnAction>(){
+    public int compare(    final AnAction o1,    final AnAction o2){
+      return Comparing.compare(o1.getTemplatePresentation().getText(),o2.getTemplatePresentation().getText());
+    }
+  }
+);
+  decorator.disableUpDownActions();
+  decorator.setAddActionUpdater(new AnActionButtonUpdater(){
+    @Override public boolean isEnabled(    AnActionEvent e){
+      return !myAddActions.isEmpty();
+    }
+  }
+);
+  decorator.setAddAction(new AnActionButtonRunnable(){
+    @Override public void run(    AnActionButton button){
+      performAdd(button);
+    }
+  }
+);
+  decorator.setRemoveActionUpdater(new AnActionButtonUpdater(){
+    @Override public boolean isEnabled(    AnActionEvent e){
+      boolean enabled=false;
+      for (      InjInfo info : getSelectedInjections()) {
+        if (!info.bundled) {
+          enabled=true;
+          break;
+        }
+      }
+      return enabled;
+    }
+  }
+);
+  decorator.setRemoveAction(new AnActionButtonRunnable(){
+    @Override public void run(    AnActionButton button){
+      performRemove();
+    }
+  }
+);
+  decorator.setEditActionUpdater(new AnActionButtonUpdater(){
+    @Override public boolean isEnabled(    AnActionEvent e){
+      AnAction edit=getEditAction();
+      if (edit != null)       edit.update(e);
+      return edit != null && edit.getTemplatePresentation().isEnabled();
+    }
+  }
+);
+  decorator.setEditAction(new AnActionButtonRunnable(){
+    @Override public void run(    AnActionButton button){
+      performEditAction();
+    }
+  }
+);
+  decorator.addExtraAction(new DumbAwareActionButton("Duplicate","Duplicate",PlatformIcons.COPY_ICON){
+    @Override public boolean isEnabled(){
+      return getEditAction() != null;
+    }
+    @Override public void actionPerformed(    AnActionEvent e){
+      final InjInfo injection=getSelectedInjection();
+      if (injection != null) {
+        addInjection(injection.injection.copy());
+      }
+    }
+  }
+);
+  decorator.addExtraAction(new DumbAwareActionButton("Enable Selected Injections","Enable Selected Injections",PlatformIcons.SELECT_ALL_ICON){
+    @Override public void actionPerformed(    final AnActionEvent e){
+      performSelectedInjectionsEnabled(true);
+    }
+  }
+);
+  decorator.addExtraAction(new DumbAwareActionButton("Disable Selected Injections","Disable Selected Injections",PlatformIcons.UNSELECT_ALL_ICON){
+    @Override public void actionPerformed(    final AnActionEvent e){
+      performSelectedInjectionsEnabled(false);
+    }
+  }
+);
+  new DumbAwareAction("Toggle"){
+    @Override public void update(    AnActionEvent e){
+      SpeedSearchSupply supply=SpeedSearchSupply.getSupply(myInjectionsTable);
+      e.getPresentation().setEnabled(supply == null || !supply.isPopupActive());
+    }
+    @Override public void actionPerformed(    final AnActionEvent e){
+      performToggleAction();
+    }
+  }
+.registerCustomShortcutSet(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE,0)),myInjectionsTable);
+  if (myInfos.length > 1) {
+    AnActionButton shareAction=new DumbAwareActionButton("Make Global",null,PlatformIcons.IMPORT_ICON){
+{
+        addCustomUpdater(new AnActionButtonUpdater(){
+          @Override public boolean isEnabled(          AnActionEvent e){
+            CfgInfo cfg=getTargetCfgInfo(getSelectedInjections());
+            e.getPresentation().setText(cfg == getDefaultCfgInfo() ? "Make Global" : "Move to Project");
+            return cfg != null;
+          }
+        }
+);
+      }
+      @Override public void actionPerformed(      final AnActionEvent e){
+        final List<InjInfo> injections=getSelectedInjections();
+        final CfgInfo cfg=getTargetCfgInfo(injections);
+        if (cfg == null)         return;
+        for (        InjInfo info : injections) {
+          if (info.cfgInfo == cfg)           continue;
+          if (info.bundled)           continue;
+          info.cfgInfo.injectionInfos.remove(info);
+          cfg.addInjection(info.injection);
+        }
+        final int[] selectedRows=myInjectionsTable.getSelectedRows();
+        myInjectionsTable.getListTableModel().setItems(getInjInfoList(myInfos));
+        TableUtil.selectRows(myInjectionsTable,selectedRows);
+      }
+      @Nullable private CfgInfo getTargetCfgInfo(      final List<InjInfo> injections){
+        CfgInfo cfg=null;
+        for (        InjInfo info : injections) {
+          if (info.bundled) {
+            continue;
+          }
+          if (cfg == null)           cfg=info.cfgInfo;
+ else           if (cfg != info.cfgInfo)           return info.cfgInfo;
+        }
+        if (cfg == null)         return null;
+        for (        CfgInfo info : myInfos) {
+          if (info != cfg)           return info;
+        }
+        throw new AssertionError();
+      }
+    }
+;
+    shareAction.setShortcut(new CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE,InputEvent.SHIFT_DOWN_MASK)));
+    decorator.addExtraAction(shareAction);
+  }
+  decorator.addExtraAction(new DumbAwareActionButton("Import","Import",AllIcons.Actions.Install){
+    @Override public void actionPerformed(    final AnActionEvent e){
+      doImportAction(e.getDataContext());
+      updateCountLabel();
+    }
+  }
+);
+  decorator.addExtraAction(new DumbAwareActionButton("Export","Export",AllIcons.Actions.Export){
+    @Override public void actionPerformed(    final AnActionEvent e){
+      final List<BaseInjection> injections=getInjectionList(getSelectedInjections());
+      final VirtualFileWrapper wrapper=FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Export Selected Injections to File...","","xml"),myProject).save(null,null);
+      if (wrapper == null)       return;
+      final Configuration configuration=new Configuration();
+      configuration.setInjections(injections);
+      final Document document=new Document(configuration.getState());
+      try {
+        JDOMUtil.writeDocument(document,wrapper.getFile(),"\n");
+      }
+ catch (      IOException ex) {
+        final String msg=ex.getLocalizedMessage();
+        Messages.showErrorDialog(myProject,msg != null && msg.length() > 0 ? msg : ex.toString(),"Export Failed");
+      }
+    }
+    @Override public boolean isEnabled(){
+      return !getSelectedInjections().isEmpty();
+    }
+  }
+);
+}

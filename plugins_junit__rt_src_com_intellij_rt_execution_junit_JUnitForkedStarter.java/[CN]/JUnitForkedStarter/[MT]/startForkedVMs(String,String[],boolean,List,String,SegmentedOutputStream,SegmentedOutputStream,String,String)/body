@@ -1,0 +1,82 @@
+{
+  final List parameters=new ArrayList();
+  final BufferedReader bufferedReader=new BufferedReader(new FileReader(path));
+  try {
+    String line;
+    while ((line=bufferedReader.readLine()) != null) {
+      parameters.add(line);
+    }
+  }
+  finally {
+    bufferedReader.close();
+  }
+  IdeaTestRunner testRunner=(IdeaTestRunner)JUnitStarter.getAgentClass(isJUnit4).newInstance();
+  testRunner.setStreams(out,err,0);
+  final Object description=testRunner.getTestToStart(args,params);
+  if (description == null)   return -1;
+  TreeSender.sendTree(testRunner,description,true);
+  long time=System.currentTimeMillis();
+  int result=0;
+  if (workingDirsPath == null || new File(workingDirsPath).length() == 0) {
+    final List children=testRunner.getChildTests(description);
+    final boolean forkTillMethod=forkMode.equalsIgnoreCase("method");
+    result=processChildren(isJUnit4,listeners,out,err,parameters,testRunner,children,0,forkTillMethod,null);
+  }
+ else {
+    final BufferedReader perDirReader=new BufferedReader(new FileReader(workingDirsPath));
+    try {
+      final String packageName=perDirReader.readLine();
+      String workingDir;
+      while ((workingDir=perDirReader.readLine()) != null) {
+        try {
+          File tempFile=File.createTempFile("idea_junit",".tmp");
+          tempFile.deleteOnExit();
+          final FileOutputStream writer=new FileOutputStream(tempFile);
+          List classNames=new ArrayList();
+          try {
+            final int classNamesSize=Integer.parseInt(perDirReader.readLine());
+            writer.write((packageName + ", working directory: \'" + workingDir+ "\'\n").getBytes("UTF-8"));
+            for (int i=0; i < classNamesSize; i++) {
+              String className=perDirReader.readLine();
+              if (className == null) {
+                System.err.println("Class name is expected. Working dir: " + workingDir);
+                return -1;
+              }
+              classNames.add(className);
+              writer.write((className + "\n").getBytes("UTF-8"));
+            }
+          }
+  finally {
+            writer.close();
+          }
+          final Object rootDescriptor=findByClassName(testRunner,(String)classNames.get(0),description);
+          final int childResult;
+          final File dir=new File(workingDir);
+          if (forkMode.equals("none")) {
+            childResult=runChild(isJUnit4,listeners,out,err,parameters,"@" + tempFile.getAbsolutePath(),dir,String.valueOf(testRunner.getRegistry().getKnownObject(rootDescriptor) - 1));
+          }
+ else {
+            final List children=new ArrayList(testRunner.getChildTests(description));
+            for (Iterator iterator=children.iterator(); iterator.hasNext(); ) {
+              if (!classNames.contains(testRunner.getTestClassName(iterator.next()))) {
+                iterator.remove();
+              }
+            }
+            final boolean forkTillMethod=forkMode.equalsIgnoreCase("method");
+            childResult=processChildren(isJUnit4,listeners,out,err,parameters,testRunner,children,result,forkTillMethod,dir);
+          }
+          result=Math.min(childResult,result);
+        }
+ catch (        Exception e) {
+          e.printStackTrace();
+        }
+      }
+    }
+  finally {
+      perDirReader.close();
+    }
+  }
+  time=System.currentTimeMillis() - time;
+  new TimeSender(testRunner.getRegistry()).printHeader(time);
+  return result;
+}

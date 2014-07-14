@@ -1,0 +1,32 @@
+{
+  final UsageTarget[] targets=UsageTarget.EMPTY_ARRAY;
+  final Ref<Usage[]> convertUsagesRef=new Ref<Usage[]>();
+  if (!ProgressManager.getInstance().runProcessWithProgressSynchronously(new Runnable(){
+    @Override public void run(){
+      ApplicationManager.getApplication().runReadAction(new Runnable(){
+        @Override public void run(){
+          convertUsagesRef.set(UsageInfo2UsageAdapter.convert(usageInfos));
+        }
+      }
+);
+    }
+  }
+,"Preprocess usages",true,project))   return;
+  if (convertUsagesRef.isNull())   return;
+  final Usage[] usages=convertUsagesRef.get();
+  final UsageViewPresentation presentation=new UsageViewPresentation();
+  presentation.setTabText("Infer Nullity Preview");
+  presentation.setShowReadOnlyStatusAsRed(true);
+  presentation.setShowCancelButton(true);
+  presentation.setUsagesString(RefactoringBundle.message("usageView.usagesText"));
+  final UsageView usageView=UsageViewManager.getInstance(project).showUsages(targets,usages,presentation,rerunFactory(project,scope));
+  final Runnable refactoringRunnable=applyRunnable(project,new Computable<UsageInfo[]>(){
+    @Override public UsageInfo[] compute(){
+      final Set<UsageInfo> infos=UsageViewUtil.getNotExcludedUsageInfos(usageView);
+      return infos.toArray(new UsageInfo[infos.size()]);
+    }
+  }
+);
+  String canNotMakeString="Cannot perform operation.\nThere were changes in code after usages have been found.\nPlease perform operation search again.";
+  usageView.addPerformOperationAction(refactoringRunnable,INFER_NULLITY_ANNOTATIONS,canNotMakeString,INFER_NULLITY_ANNOTATIONS,false);
+}

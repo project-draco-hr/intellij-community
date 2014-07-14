@@ -1,13 +1,19 @@
 {
+  ExternalSystemTaskState currentTaskState=getState();
+  if (currentTaskState.isStopped())   return true;
   ExternalSystemProgressNotificationManager progressManager=ServiceManager.getService(ExternalSystemProgressNotificationManager.class);
   for (  ExternalSystemTaskNotificationListener listener : listeners) {
     progressManager.addNotificationListener(getId(),listener);
   }
+  if (!compareAndSetState(currentTaskState,ExternalSystemTaskState.CANCELING))   return false;
+  boolean result=false;
   try {
-    doCancel();
+    result=doCancel();
+    setState(result ? ExternalSystemTaskState.CANCELED : ExternalSystemTaskState.CANCELLATION_FAILED);
+    return result;
   }
  catch (  Throwable e) {
-    setState(ExternalSystemTaskState.FAILED);
+    setState(ExternalSystemTaskState.CANCELLATION_FAILED);
     myError.set(e);
     LOG.warn(e);
   }
@@ -16,4 +22,5 @@
       progressManager.removeNotificationListener(listener);
     }
   }
+  return result;
 }

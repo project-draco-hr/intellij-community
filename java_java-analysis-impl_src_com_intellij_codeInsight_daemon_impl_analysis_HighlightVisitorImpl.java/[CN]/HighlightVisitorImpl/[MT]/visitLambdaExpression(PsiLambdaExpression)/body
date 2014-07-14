@@ -1,5 +1,5 @@
 {
-  myHolder.add(HighlightUtil.checkLambdaFeature(expression,myLanguageLevel,myFile));
+  myHolder.add(checkFeature(expression,Feature.LAMBDA_EXPRESSIONS));
   if (!myHolder.hasErrorResults()) {
     if (LambdaUtil.isValidLambdaContext(expression.getParent())) {
       final PsiType functionalInterfaceType=expression.getFunctionalInterfaceType();
@@ -25,35 +25,13 @@
               final PsiMethod interfaceMethod=LambdaUtil.getFunctionalInterfaceMethod(resolveResult);
               if (interfaceMethod != null) {
                 final PsiParameter[] parameters=interfaceMethod.getParameterList().getParameters();
-                final PsiParameter[] lambdaParameters=expression.getParameterList().getParameters();
-                final String incompatibleTypesMessage="Incompatible parameter types in lambda expression";
-                if (lambdaParameters.length != parameters.length) {
-                  HighlightInfo result=HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(expression).descriptionAndTooltip(incompatibleTypesMessage).create();
+                PsiElement incompatibleElt=LambdaHighlightingUtil.checkParametersCompatible(expression,parameters,LambdaUtil.getSubstitutor(interfaceMethod,resolveResult));
+                if (incompatibleElt != null) {
+                  final String incompatibleTypesMessage="Incompatible parameter types in lambda expression";
+                  HighlightInfo result=HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(incompatibleElt).descriptionAndTooltip(incompatibleTypesMessage).create();
                   myHolder.add(result);
                 }
  else {
-                  final PsiSubstitutor substitutor=LambdaUtil.getSubstitutor(interfaceMethod,resolveResult);
-                  if (expression.hasFormalParameterTypes()) {
-                    for (int i=0; i < lambdaParameters.length; i++) {
-                      if (!Comparing.equal(lambdaParameters[i].getType(),substitutor.substitute(parameters[i].getType()))) {
-                        HighlightInfo result=HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(lambdaParameters[i]).descriptionAndTooltip(incompatibleTypesMessage).create();
-                        myHolder.add(result);
-                        break;
-                      }
-                    }
-                  }
- else {
-                    for (int i=0; i < lambdaParameters.length; i++) {
-                      PsiParameter lambdaParameter=lambdaParameters[i];
-                      if (!TypeConversionUtil.isAssignable(lambdaParameter.getType(),GenericsUtil.eliminateWildcards(substitutor.substitute(parameters[i].getType())))) {
-                        HighlightInfo result=HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(lambdaParameter).descriptionAndTooltip(incompatibleTypesMessage).create();
-                        myHolder.add(result);
-                        break;
-                      }
-                    }
-                  }
-                }
-                if (!myHolder.hasErrorResults()) {
                   final PsiClass samClass=resolveResult.getElement();
                   if (!PsiUtil.isAccessible(myFile.getProject(),samClass,expression,null)) {
                     myHolder.add(HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(expression).descriptionAndTooltip(HighlightUtil.buildProblemWithAccessDescription(expression,resolveResult)).create());

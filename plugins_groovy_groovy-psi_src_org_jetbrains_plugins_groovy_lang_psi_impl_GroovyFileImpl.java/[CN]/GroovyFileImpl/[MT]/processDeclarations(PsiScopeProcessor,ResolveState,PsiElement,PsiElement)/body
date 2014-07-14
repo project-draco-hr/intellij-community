@@ -1,0 +1,60 @@
+{
+  ClassHint classHint=processor.getHint(ClassHint.KEY);
+  if (myContext != null) {
+    if (ResolveUtil.shouldProcessProperties(classHint)) {
+      if (!processChildrenScopes(processor,state,lastParent,place))       return false;
+    }
+    return true;
+  }
+  boolean processClasses=ResolveUtil.shouldProcessClasses(classHint);
+  GroovyScriptClass scriptClass=getScriptClass();
+  if (scriptClass != null && scriptClass.getName() != null) {
+    if (!(lastParent instanceof GrTypeDefinition)) {
+      if (!scriptClass.processDeclarations(processor,state,lastParent,place))       return false;
+    }
+    if (processClasses) {
+      if (!ResolveUtil.processElement(processor,scriptClass,state))       return false;
+    }
+  }
+  if (processClasses) {
+    for (    GrTypeDefinition definition : getTypeDefinitions()) {
+      if (!ResolveUtil.processElement(processor,definition,state))       return false;
+    }
+  }
+  if (ResolveUtil.shouldProcessProperties(classHint)) {
+    if (!processChildrenScopes(processor,state,lastParent,place))     return false;
+  }
+  GrImportStatement[] importStatements=getImportStatements();
+  if (!processImports(processor,state,lastParent,place,importStatements,false))   return false;
+  if (!processDeclarationsInPackage(processor,state,lastParent,place))   return false;
+  if (!processImports(processor,state,lastParent,place,importStatements,true))   return false;
+  if (!GroovyImportHelper.processImplicitImports(processor,state,lastParent,place,this))   return false;
+  if (ResolveUtil.shouldProcessPackages(classHint)) {
+    NameHint nameHint=processor.getHint(NameHint.KEY);
+    String expectedName=nameHint != null ? nameHint.getName(state) : null;
+    final JavaPsiFacade facade=JavaPsiFacade.getInstance(getProject());
+    if (expectedName != null) {
+      final PsiPackage pkg=facade.findPackage(expectedName);
+      if (pkg != null && !processor.execute(pkg,state)) {
+        return false;
+      }
+    }
+ else {
+      PsiPackage defaultPackage=facade.findPackage("");
+      if (defaultPackage != null) {
+        for (        PsiPackage subPackage : defaultPackage.getSubPackages(getResolveScope())) {
+          if (!ResolveUtil.processElement(processor,subPackage,state))           return false;
+        }
+      }
+    }
+  }
+  if (ResolveUtil.shouldProcessProperties(classHint)) {
+    if (lastParent != null && !(lastParent instanceof GrTypeDefinition) && scriptClass != null) {
+      if (!ResolveUtil.processElement(processor,getSyntheticArgsParameter(),state))       return false;
+    }
+    if (isInScriptBody(lastParent,place)) {
+      if (!processBindings(processor,state,place))       return false;
+    }
+  }
+  return true;
+}

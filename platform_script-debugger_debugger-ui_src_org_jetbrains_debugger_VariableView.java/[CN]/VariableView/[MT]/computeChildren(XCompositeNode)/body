@@ -1,0 +1,55 @@
+{
+  node.setAlreadySorted(true);
+  if (!(value instanceof ObjectValue)) {
+    node.addChildren(XValueChildrenList.EMPTY,true);
+    return;
+  }
+  List<Variable> list=remainingChildren;
+  if (list != null) {
+    int to=Math.min(remainingChildrenOffset + XCompositeNode.MAX_CHILDREN_TO_SHOW,list.size());
+    boolean isLast=to == list.size();
+    node.addChildren(Variables.createVariablesList(list,remainingChildrenOffset,to,this),isLast);
+    if (!isLast) {
+      node.tooManyChildren(list.size() - to);
+      remainingChildrenOffset+=XCompositeNode.MAX_CHILDREN_TO_SHOW;
+    }
+    return;
+  }
+  final ObjectValue objectValue=(ObjectValue)value;
+  final boolean hasNamedProperties=objectValue.hasProperties() != ThreeState.NO;
+  boolean hasIndexedProperties=objectValue.hasIndexedProperties() != ThreeState.NO;
+  ActionCallback.Chunk chunk=new ActionCallback.Chunk();
+  ActionCallback additionalProperties=getViewSupport().computeAdditionalObjectProperties(objectValue,variable,this,node);
+  if (additionalProperties != null) {
+    chunk.add(additionalProperties);
+  }
+  if (hasIndexedProperties) {
+    chunk.add(computeIndexedProperties((ArrayValue)objectValue,node,!hasNamedProperties && additionalProperties == null));
+  }
+  if (hasNamedProperties) {
+    final ActionCallback namedPropertiesCallback;
+    if (additionalProperties == null || additionalProperties.isProcessed()) {
+      namedPropertiesCallback=computeNamedProperties(objectValue,node,!hasIndexedProperties && additionalProperties == null);
+    }
+ else {
+      namedPropertiesCallback=new ActionCallback();
+      additionalProperties.doWhenDone(new Runnable(){
+        @Override public void run(){
+          computeNamedProperties(objectValue,node,true).notify(namedPropertiesCallback);
+        }
+      }
+).notifyWhenRejected(namedPropertiesCallback);
+    }
+    chunk.add(namedPropertiesCallback);
+  }
+  if (hasIndexedProperties == hasNamedProperties || additionalProperties != null) {
+    chunk.create().doWhenProcessed(new Runnable(){
+      @Override public void run(){
+        if (!node.isObsolete()) {
+          node.addChildren(XValueChildrenList.EMPTY,true);
+        }
+      }
+    }
+);
+  }
+}
