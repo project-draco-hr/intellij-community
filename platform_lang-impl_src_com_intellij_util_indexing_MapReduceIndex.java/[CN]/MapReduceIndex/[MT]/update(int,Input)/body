@@ -16,7 +16,9 @@
             havePersistentData=true;
             if (DebugAssertions.EXTRA_SANITY_CHECKS) {
               boolean sameValueForSavedIndexedResultAndCurrentOne=myIndexer.map(content).equals(data);
-              DebugAssertions.assertTrue(sameValueForSavedIndexedResultAndCurrentOne,"Unexpected difference in indexing of %s by index %s",fileContent.getFile(),myIndexId);
+              if (!sameValueForSavedIndexedResultAndCurrentOne) {
+                DebugAssertions.error("Unexpected difference in indexing of %s by index %s, file type %s, charset %s\nprevious indexed info %s",fileContent.getFile(),myIndexId,fileContent.getFileType(),((FileContentImpl)fileContent).getCharset(),myIndexingTrace.get(hashId));
+              }
             }
           }
         }
@@ -34,14 +36,25 @@
   }
   if (data == null)   data=content != null ? myIndexer.map(content) : Collections.<Key,Value>emptyMap();
   if (hashId != null && !havePersistentData) {
-    savePersistentData(data,hashId,skippedReadingPersistentDataButMayHaveIt);
+    boolean saved=savePersistentData(data,hashId,skippedReadingPersistentDataButMayHaveIt);
+    if (DebugAssertions.EXTRA_SANITY_CHECKS) {
+      if (saved) {
+        FileContent fileContent=(FileContent)content;
+        try {
+          myIndexingTrace.put(hashId,((FileContentImpl)fileContent).getCharset() + "," + fileContent.getFileType()+ ","+ fileContent.getFile().getPath()+ ","+ ExceptionUtil.getThrowableText(new Throwable()));
+        }
+ catch (        IOException ex) {
+          LOG.error(ex);
+        }
+      }
+    }
   }
   ProgressManager.checkCanceled();
   final NotNullComputable<Collection<Key>> oldKeysGetter;
   final int savedInputId;
-  if (myHasSnapshotMapping && weProcessPhysicalContent) {
+  if (myHasSnapshotMapping) {
     try {
-      oldKeysGetter=new NotNullComputable<Collection<Key>>(){
+      final NotNullComputable<Collection<Key>> keysForGivenInputId=new NotNullComputable<Collection<Key>>(){
         @NotNull @Override public Collection<Key> compute(){
           try {
             Integer currentHashId=myInputsSnapshotMapping.get(inputId);
@@ -61,10 +74,31 @@
         }
       }
 ;
-      if (content instanceof FileContent) {
-        savedInputId=getHashOfContent((FileContent)content);
+      if (weProcessPhysicalContent) {
+        if (content instanceof FileContent) {
+          savedInputId=getHashOfContent((FileContent)content);
+        }
+ else {
+          savedInputId=NULL_MAPPING;
+        }
+        oldKeysGetter=keysForGivenInputId;
       }
  else {
+        oldKeysGetter=new NotNullComputable<Collection<Key>>(){
+          @NotNull @Override public Collection<Key> compute(){
+            try {
+              Collection<Key> oldKeys=myInputsIndex.get(inputId);
+              if (oldKeys == null) {
+                return keysForGivenInputId.compute();
+              }
+              return oldKeys;
+            }
+ catch (            IOException e) {
+              throw new RuntimeException(e);
+            }
+          }
+        }
+;
         savedInputId=NULL_MAPPING;
       }
     }
