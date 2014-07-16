@@ -1,0 +1,36 @@
+{
+  GlobalSearchScope librariesScope=ProjectScope.getLibrariesScope(myProject);
+  TLongHashSet queued=new TLongHashSet();
+  LongStack queue=new LongStack();
+  for (int i=0; i < keys.size(); i++) {
+    long key=keys.get(i);
+    queue.push(key);
+    queued.add(key);
+    queue.push(-key);
+    queued.add(-key);
+  }
+  FileBasedIndex index=FileBasedIndex.getInstance();
+  while (!queue.empty()) {
+    List<IdEquation> equations=index.getValues(BytecodeAnalysisIndex.NAME,queue.pop(),librariesScope);
+    for (    IdEquation equation : equations) {
+      IdResult rhs=equation.rhs;
+      solver.addEquation(equation);
+      if (rhs instanceof IdPending) {
+        IdPending intIdPending=(IdPending)rhs;
+        for (        IntIdComponent component : intIdPending.delta) {
+          for (          long depKey : component.ids) {
+            if (!queued.contains(depKey)) {
+              queue.push(depKey);
+              queued.add(depKey);
+            }
+            long swapped=-depKey;
+            if (!queued.contains(swapped)) {
+              queue.push(swapped);
+              queued.add(swapped);
+            }
+          }
+        }
+      }
+    }
+  }
+}
