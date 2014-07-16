@@ -11,10 +11,27 @@
           super.prepareAnalysis(psiBlock,initialStates);
           shouldCheck=psiBlock == body;
         }
+        private boolean isCallExposingNonInitializedFields(        Instruction instruction){
+          if (!(instruction instanceof MethodCallInstruction) || ((MethodCallInstruction)instruction).getMethodType() != MethodCallInstruction.MethodType.REGULAR_METHOD_CALL) {
+            return false;
+          }
+          PsiCallExpression call=((MethodCallInstruction)instruction).getCallExpression();
+          if (call == null)           return false;
+          if (call instanceof PsiMethodCallExpression && DfaValueFactory.isEffectivelyUnqualified(((PsiMethodCallExpression)call).getMethodExpression())) {
+            return true;
+          }
+          PsiExpressionList argumentList=call.getArgumentList();
+          if (argumentList != null) {
+            for (            PsiExpression expression : argumentList.getExpressions()) {
+              if (expression instanceof PsiThisExpression)               return true;
+            }
+          }
+          return false;
+        }
         @Override protected DfaInstructionState[] acceptInstruction(        InstructionVisitor visitor,        DfaInstructionState instructionState){
           if (shouldCheck) {
             Instruction instruction=instructionState.getInstruction();
-            if (instruction instanceof ReturnInstruction && !((ReturnInstruction)instruction).isViaException()) {
+            if (isCallExposingNonInitializedFields(instruction) || instruction instanceof ReturnInstruction && !((ReturnInstruction)instruction).isViaException()) {
               for (              PsiField field : containingClass.getFields()) {
                 if (!instructionState.getMemoryState().isNotNull(getFactory().getVarFactory().createVariableValue(field,false))) {
                   map.put(field,false);
@@ -23,6 +40,7 @@
                   map.put(field,true);
                 }
               }
+              return DfaInstructionState.EMPTY_ARRAY;
             }
           }
           return super.acceptInstruction(visitor,instructionState);
