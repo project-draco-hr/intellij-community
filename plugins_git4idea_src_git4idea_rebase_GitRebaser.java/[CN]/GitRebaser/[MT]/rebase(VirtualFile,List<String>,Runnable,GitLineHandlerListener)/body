@@ -15,23 +15,29 @@
   rebaseTask.setProgressAnalyzer(new GitStandardProgressAnalyzer());
   final AtomicReference<GitUpdateResult> updateResult=new AtomicReference<GitUpdateResult>();
   final AtomicBoolean failure=new AtomicBoolean();
-  rebaseTask.executeInBackground(true,new GitTaskResultHandlerAdapter(){
-    @Override protected void onSuccess(){
-      updateResult.set(GitUpdateResult.SUCCESS);
-    }
-    @Override protected void onCancel(){
-      if (onCancel != null) {
-        onCancel.run();
+  try {
+    GitUtil.workingTreeChangeStarted(myProject);
+    rebaseTask.executeInBackground(true,new GitTaskResultHandlerAdapter(){
+      @Override protected void onSuccess(){
+        updateResult.set(GitUpdateResult.SUCCESS);
       }
-      updateResult.set(GitUpdateResult.CANCEL);
+      @Override protected void onCancel(){
+        if (onCancel != null) {
+          onCancel.run();
+        }
+        updateResult.set(GitUpdateResult.CANCEL);
+      }
+      @Override protected void onFailure(){
+        failure.set(true);
+      }
     }
-    @Override protected void onFailure(){
-      failure.set(true);
+);
+    if (failure.get()) {
+      updateResult.set(handleRebaseFailure(rebaseHandler,root,rebaseConflictDetector,untrackedFilesDetector));
     }
   }
-);
-  if (failure.get()) {
-    updateResult.set(handleRebaseFailure(root,rebaseHandler,rebaseConflictDetector,untrackedFilesDetector));
+  finally {
+    GitUtil.workingTreeChangeFinished(myProject);
   }
   return updateResult.get();
 }

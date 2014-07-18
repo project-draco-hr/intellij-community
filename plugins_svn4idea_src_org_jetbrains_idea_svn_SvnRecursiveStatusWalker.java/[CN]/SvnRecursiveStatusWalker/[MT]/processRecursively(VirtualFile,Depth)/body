@@ -1,0 +1,55 @@
+{
+  if (Depth.EMPTY.equals(prevDepth))   return;
+  if (myPartner.isIgnoredIdeaLevel(vFile)) {
+    myReceiver.processIgnored(vFile);
+    return;
+  }
+  final Depth newDepth=Depth.INFINITY.equals(prevDepth) ? Depth.INFINITY : Depth.EMPTY;
+  final File ioFile=new File(vFile.getPath());
+  final Processor<File> processor;
+  final Processor<File> directoryFilter;
+  final Ref<File> lastIgnored=new Ref<File>();
+  final Processor<File> checkDirProcessor=new Processor<File>(){
+    @Override public boolean process(    File file){
+      final FilePathImpl path=new FilePathImpl(file,true);
+      path.refresh();
+      path.hardRefresh();
+      VirtualFile vf=path.getVirtualFile();
+      if (vf != null && myPartner.isIgnoredIdeaLevel(vf)) {
+        lastIgnored.set(file);
+        myReceiver.processIgnored(vf);
+        return true;
+      }
+      if (file.isDirectory() && new File(file,SVNFileUtil.getAdminDirectoryName()).exists()) {
+        final MyItem childItem=createItem(path,newDepth,true);
+        myQueue.add(childItem);
+      }
+ else       if (vf != null) {
+        myReceiver.processUnversioned(vf);
+      }
+      return true;
+    }
+  }
+;
+  if (Depth.EMPTY.equals(newDepth)) {
+    directoryFilter=Processor.TRUE;
+    processor=new Processor<File>(){
+      @Override public boolean process(      File file){
+        if (!FileUtil.filesEqual(ioFile,file))         return true;
+        if (!FileUtil.filesEqual(ioFile,file.getParentFile()))         return false;
+        return checkDirProcessor.process(file);
+      }
+    }
+;
+  }
+ else {
+    directoryFilter=new Processor<File>(){
+      @Override public boolean process(      File file){
+        return !Comparing.equal(lastIgnored,file) && (myQueue.isEmpty() || !FileUtil.filesEqual(myQueue.getLast().getPath().getIOFile(),file));
+      }
+    }
+;
+    processor=checkDirProcessor;
+  }
+  FileUtil.processFilesRecursively(ioFile,processor,directoryFilter);
+}

@@ -1,10 +1,15 @@
 {
+  if (paths == null || paths.length == 0) {
+    return;
+  }
+  final TreePath path=paths[0];
   if (path == null)   return;
-  final InspectionConfigTreeNode node=(InspectionConfigTreeNode)path.getLastPathComponent();
-  final Descriptor descriptor=node.getDescriptor();
-  if (descriptor != null) {
-    final String description=descriptor.loadDescription();
-    if (description != null) {
+  final List<InspectionConfigTreeNode> nodes=InspectionsAggregationUtil.getInspectionsNodes(paths);
+  if (!nodes.isEmpty()) {
+    final InspectionConfigTreeNode singleNode=nodes.size() == 1 ? ContainerUtil.getFirstItem(nodes) : null;
+    if (singleNode != null && singleNode.getDefaultDescriptor().loadDescription() != null) {
+      final Descriptor defaultDescriptor=singleNode.getDefaultDescriptor();
+      final String description=defaultDescriptor.loadDescription();
       try {
         final HintHint hintHint=new HintHint(myBrowser,new Point(0,0));
         hintHint.setFont(myBrowser.getFont());
@@ -18,7 +23,7 @@
         }
       }
 catch (      Throwable t) {
-        LOG.error("Failed to load description for: " + descriptor.getToolWrapper().getTool().getClass() + "; description: "+ description,t);
+        LOG.error("Failed to load description for: " + defaultDescriptor.getToolWrapper().getTool().getClass() + "; description: "+ description,t);
       }
     }
  else {
@@ -29,29 +34,93 @@ catch (      Throwable t) {
       }
     }
     myOptionsPanel.removeAll();
-    final NamedScope scope=node.getScope(myProjectProfileManager.getProject());
-    if (scope != null || node.isInspectionNode()) {
-      final HighlightDisplayKey key=descriptor.getKey();
-      final LevelChooserAction chooser=new LevelChooserAction(((SeverityProvider)mySelectedProfile.getProfileManager()).getOwnSeverityRegistrar()){
+    final Project project=myProjectProfileManager.getProject();
+    final JPanel severityPanel=new JPanel(new GridBagLayout());
+    final double severityPanelWeightY;
+    final JPanel configPanelAnchor=new JPanel(new GridLayout());
+    configPanelAnchor.setBorder(IdeBorderFactory.createTitledBorder("Options",false,new Insets(0,0,0,0)));
+    final Set<String> scopesNames=new THashSet<String>();
+    for (    final InspectionConfigTreeNode node : nodes) {
+      final List<ScopeToolState> nonDefaultTools=mySelectedProfile.getNonDefaultTools(node.getDefaultDescriptor().getKey().toString(),project);
+      for (      final ScopeToolState tool : nonDefaultTools) {
+        scopesNames.add(tool.getScopeName());
+      }
+    }
+    if (scopesNames.isEmpty()) {
+      final LevelChooserAction severityLevelChooser=new LevelChooserAction(mySelectedProfile){
         @Override protected void onChosen(        final HighlightSeverity severity){
           final HighlightDisplayLevel level=HighlightDisplayLevel.find(severity);
-          final Project project=myProjectProfileManager.getProject();
-          final boolean toUpdate=mySelectedProfile.getErrorLevel(key,scope,project) != level;
-          mySelectedProfile.setErrorLevel(key,level,node.isInspectionNode() || node.isByDefault() ? -1 : node.getParent().getIndex(node),project);
-          if (toUpdate)           node.dropCache();
+          for (          final InspectionConfigTreeNode node : nodes) {
+            final HighlightDisplayKey key=node.getDefaultDescriptor().getKey();
+            final NamedScope scope=node.getDefaultDescriptor().getScope();
+            final boolean toUpdate=mySelectedProfile.getErrorLevel(key,scope,project) != level;
+            mySelectedProfile.setErrorLevel(key,level,-1,project);
+            if (toUpdate)             node.dropCache();
+          }
         }
       }
 ;
-      chooser.setChosen(mySelectedProfile.getErrorLevel(key,scope,myProjectProfileManager.getProject()).getSeverity());
-      final JPanel withSeverity=new JPanel(new GridBagLayout());
-      withSeverity.add(new JLabel(InspectionsBundle.message("inspection.severity")),new GridBagConstraints(0,0,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.NONE,new Insets(0,0,10,10),0,0));
-      withSeverity.add(chooser.createCustomComponent(chooser.getTemplatePresentation()),new GridBagConstraints(1,0,1,1,1.0,0,GridBagConstraints.WEST,GridBagConstraints.NONE,new Insets(0,0,10,0),0,0));
-      final JComponent comp=descriptor.getState().getAdditionalConfigPanel();
-      withSeverity.add(comp,new GridBagConstraints(0,1,2,1,1.0,1.0,GridBagConstraints.NORTHWEST,GridBagConstraints.BOTH,new Insets(0,0,0,0),0,0));
-      myOptionsPanel.add(withSeverity,BorderLayout.CENTER);
+      final HighlightSeverity severity=ScopesAndSeveritiesTable.getSeverity(ContainerUtil.map(nodes,new Function<InspectionConfigTreeNode,ScopeToolState>(){
+        @Override public ScopeToolState fun(        InspectionConfigTreeNode node){
+          return node.getDefaultDescriptor().getState();
+        }
+      }
+));
+      severityLevelChooser.setChosen(severity);
+      final ScopesChooser scopesChooser=new ScopesChooser(ContainerUtil.map(nodes,new Function<InspectionConfigTreeNode,Descriptor>(){
+        @Override public Descriptor fun(        final InspectionConfigTreeNode node){
+          return node.getDefaultDescriptor();
+        }
+      }
+),mySelectedProfile,project){
+        @Override protected void onScopeAdded(){
+          updateOptionsAndDescriptionPanel();
+        }
+      }
+;
+      severityPanel.add(new JLabel(InspectionsBundle.message("inspection.severity")),new GridBagConstraints(0,0,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.VERTICAL,new Insets(10,0,10,10),0,0));
+      severityPanel.add(severityLevelChooser.createCustomComponent(severityLevelChooser.getTemplatePresentation()),new GridBagConstraints(1,0,1,1,1.0,0,GridBagConstraints.WEST,GridBagConstraints.VERTICAL,new Insets(10,0,10,0),0,0));
+      severityPanel.add(scopesChooser.createCustomComponent(scopesChooser.getTemplatePresentation()),new GridBagConstraints(2,0,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.VERTICAL,new Insets(10,0,10,0),0,0));
+      severityPanelWeightY=0.0;
+      if (singleNode != null) {
+        setConfigPanel(configPanelAnchor,mySelectedProfile.getToolDefaultState(singleNode.getDefaultDescriptor().getKey().toString(),project));
+      }
     }
+ else {
+      if (singleNode != null) {
+        for (        final Descriptor descriptor : singleNode.getDescriptors().getNonDefaultDescriptors()) {
+          descriptor.loadConfig();
+        }
+      }
+      final JTable scopesAndScopesAndSeveritiesTable=new ScopesAndSeveritiesTable(new ScopesAndSeveritiesTable.TableSettings(nodes,mySelectedProfile,myTreeTable,project){
+        @Override protected void onScopeChosen(        @NotNull final ScopeToolState state){
+          setConfigPanel(configPanelAnchor,state);
+          configPanelAnchor.revalidate();
+          configPanelAnchor.repaint();
+        }
+        @Override protected void onChange(){
+          myTreeTable.getTree().updateUI();
+        }
+        @Override protected void onScopeAdded(){
+        }
+        @Override protected void onScopeRemoved(        final int scopesCount){
+          if (scopesCount == 1) {
+            updateOptionsAndDescriptionPanel();
+          }
+        }
+      }
+);
+      final ToolbarDecorator wrappedTable=ToolbarDecorator.createDecorator(scopesAndScopesAndSeveritiesTable);
+      final JPanel panel=wrappedTable.createPanel();
+      severityPanel.add(new JBLabel("Scopes & Severities"),new GridBagConstraints(0,0,1,1,0,0,GridBagConstraints.NORTHWEST,GridBagConstraints.NONE,new Insets(5,0,2,10),0,0));
+      severityPanel.add(new JBLabel("Add scope to change its settings",UIUtil.ComponentStyle.SMALL),new GridBagConstraints(1,0,1,1,1.0,0,GridBagConstraints.NORTHEAST,GridBagConstraints.NONE,new Insets(5,0,2,0),0,0));
+      severityPanel.add(panel,new GridBagConstraints(0,1,2,1,0,1.0,GridBagConstraints.NORTHWEST,GridBagConstraints.BOTH,new Insets(0,0,0,0),0,0));
+      severityPanelWeightY=0.3;
+    }
+    myOptionsPanel.add(severityPanel,new GridBagConstraints(0,0,1,1,1.0,severityPanelWeightY,GridBagConstraints.WEST,GridBagConstraints.BOTH,new Insets(0,0,0,0),0,0));
+    myOptionsPanel.add(configPanelAnchor,new GridBagConstraints(0,1,1,1,1.0,1.0,GridBagConstraints.WEST,GridBagConstraints.BOTH,new Insets(0,0,0,0),0,0));
     myOptionsPanel.revalidate();
-    GuiUtils.enableChildren(myOptionsPanel,node.isChecked());
+    GuiUtils.enableChildren(myOptionsPanel,isThoughOneNodeEnabled(nodes));
   }
  else {
     initOptionsAndDescriptionPanel();

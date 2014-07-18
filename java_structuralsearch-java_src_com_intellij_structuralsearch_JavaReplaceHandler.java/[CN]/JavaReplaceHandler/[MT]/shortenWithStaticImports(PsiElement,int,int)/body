@@ -1,0 +1,46 @@
+{
+  final int elementOffset=affectedElement.getTextOffset();
+  final int finalStartOffset=startOffset + elementOffset;
+  final int finalEndOffset=endOffset + elementOffset;
+  final List<PsiReferenceExpression> references=new ArrayList<PsiReferenceExpression>();
+  final JavaRecursiveElementVisitor collector=new JavaRecursiveElementVisitor(){
+    @Override public void visitReferenceExpression(    PsiReferenceExpression expression){
+      final int offset=expression.getTextOffset();
+      if (offset > finalEndOffset) {
+        return;
+      }
+      super.visitReferenceExpression(expression);
+      if (offset + expression.getTextLength() < finalStartOffset)       if (expression.getQualifierExpression() == null) {
+        return;
+      }
+      references.add(expression);
+    }
+  }
+;
+  affectedElement.accept(collector);
+  for (  PsiReferenceExpression expression : references) {
+    final PsiElement target=expression.resolve();
+    if (!(target instanceof PsiMember)) {
+      continue;
+    }
+    final PsiMember member=(PsiMember)target;
+    final PsiClass containingClass=member.getContainingClass();
+    if (containingClass == null) {
+      continue;
+    }
+    final String className=containingClass.getQualifiedName();
+    if (className == null) {
+      continue;
+    }
+    final String name=member.getName();
+    if (name == null) {
+      continue;
+    }
+    if (ImportUtils.addStaticImport(className,name,expression)) {
+      final PsiExpression qualifierExpression=expression.getQualifierExpression();
+      if (qualifierExpression != null) {
+        qualifierExpression.delete();
+      }
+    }
+  }
+}

@@ -30,9 +30,11 @@
   if (expr instanceof PsiInstanceOfExpression) {
     final int parameter=resolveParameter(((PsiInstanceOfExpression)expr).getOperand());
     if (parameter >= 0) {
-      return ContainerUtil.map(states,new Function<ValueConstraint[],MethodContract>(){
+      return ContainerUtil.mapNotNull(states,new Function<ValueConstraint[],MethodContract>(){
         @Override public MethodContract fun(        ValueConstraint[] state){
-          return new MethodContract(withConstraint(state,parameter,NULL_VALUE),FALSE_VALUE);
+          ValueConstraint paramConstraint=NULL_VALUE;
+          ValueConstraint returnValue=FALSE_VALUE;
+          return contractWithConstraint(state,parameter,paramConstraint,returnValue);
         }
       }
 );
@@ -42,16 +44,16 @@
   if (constraint != null) {
     return toContracts(states,constraint);
   }
-  int parameter=resolveParameter(expr);
-  if (parameter >= 0) {
+  int paramIndex=resolveParameter(expr);
+  if (paramIndex >= 0) {
     List<MethodContract> result=ContainerUtil.newArrayList();
     for (    ValueConstraint[] state : states) {
-      if (state[parameter] != ANY_VALUE) {
-        result.add(new MethodContract(state,state[parameter]));
+      if (state[paramIndex] != ANY_VALUE) {
+        result.add(new MethodContract(state,state[paramIndex]));
       }
- else {
-        result.add(new MethodContract(withConstraint(state,parameter,TRUE_VALUE),TRUE_VALUE));
-        result.add(new MethodContract(withConstraint(state,parameter,FALSE_VALUE),FALSE_VALUE));
+ else       if (textMatches(myMethod.getParameterList().getParameters()[paramIndex].getTypeElement(),PsiKeyword.BOOLEAN)) {
+        ContainerUtil.addIfNotNull(result,contractWithConstraint(state,paramIndex,TRUE_VALUE,TRUE_VALUE));
+        ContainerUtil.addIfNotNull(result,contractWithConstraint(state,paramIndex,FALSE_VALUE,FALSE_VALUE));
       }
     }
     return result;
