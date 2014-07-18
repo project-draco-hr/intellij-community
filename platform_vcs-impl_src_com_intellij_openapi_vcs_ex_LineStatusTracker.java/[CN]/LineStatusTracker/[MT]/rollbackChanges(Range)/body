@@ -1,19 +1,36 @@
 {
   myApplication.assertWriteAccessAllowed();
 synchronized (myLock) {
-    TextRange currentTextRange=getCurrentTextRangeWithMagic(range);
-    int offset1=currentTextRange.getStartOffset();
-    int offset2=Math.min(currentTextRange.getEndOffset() + 1,myDocument.getTextLength());
-    if (range.getType() == Range.INSERTED) {
-      myDocument.replaceString(offset1,offset2,"");
+    if (range.getType() == Range.MODIFIED) {
+      TextRange currentTextRange=getCurrentTextRange(range);
+      int offset1=currentTextRange.getStartOffset();
+      int offset2=currentTextRange.getEndOffset();
+      CharSequence upToDateContent=getUpToDateContent(range);
+      myDocument.replaceString(offset1,offset2,upToDateContent);
+    }
+ else     if (range.getType() == Range.INSERTED) {
+      TextRange currentTextRange=getCurrentTextRange(range);
+      int offset1=currentTextRange.getStartOffset();
+      int offset2=currentTextRange.getEndOffset();
+      if (offset1 > 0) {
+        offset1--;
+      }
+ else       if (offset2 < myDocument.getTextLength()) {
+        offset2++;
+      }
+      myDocument.deleteString(offset1,offset2);
     }
  else     if (range.getType() == Range.DELETED) {
-      String upToDateContent=getUpToDateContentWithMagic(range);
-      myDocument.insertString(offset1,upToDateContent);
+      CharSequence content=getUpToDateContent(range);
+      if (range.getOffset2() == getLineCount(myDocument)) {
+        myDocument.insertString(myDocument.getTextLength(),"\n" + content);
+      }
+ else {
+        myDocument.insertString(myDocument.getLineStartOffset(range.getOffset2()),content + "\n");
+      }
     }
  else {
-      String upToDateContent=getUpToDateContentWithMagic(range);
-      myDocument.replaceString(offset1,offset2,upToDateContent);
+      throw new IllegalArgumentException("Unknown range type: " + range.getType());
     }
   }
 }
