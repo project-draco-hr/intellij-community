@@ -7,7 +7,7 @@
     final Object value=pair.second.getValue();
     PsiVariable constant=pair.second.getConstant();
     final String presentableName=constant != null ? constant.getName() : String.valueOf(value);
-    final String exprText=getConstantValueText(value,constant);
+    final String exprText=String.valueOf(value);
     if (presentableName == null || exprText == null) {
       continue;
     }
@@ -24,16 +24,12 @@
         }
         PsiElement problemElement=descriptor.getPsiElement();
         if (problemElement == null)         return;
+        PsiMethodCallExpression call=problemElement.getParent() instanceof PsiExpressionList && problemElement.getParent().getParent() instanceof PsiMethodCallExpression ? (PsiMethodCallExpression)problemElement.getParent().getParent() : null;
+        PsiMethod targetMethod=call == null ? null : call.resolveMethod();
         JavaPsiFacade facade=JavaPsiFacade.getInstance(project);
-        PsiElement newElement=problemElement.replace(facade.getElementFactory().createExpressionFromText(exprText,null));
-        newElement=JavaCodeStyleManager.getInstance(project).shortenClassReferences(newElement);
-        if (newElement instanceof PsiJavaCodeReferenceElement) {
-          PsiJavaCodeReferenceElement ref=(PsiJavaCodeReferenceElement)newElement;
-          PsiElement target=ref.resolve();
-          String shortName=ref.getReferenceName();
-          if (target != null && shortName != null && ref.isQualified() && facade.getResolveHelper().resolveReferencedVariable(shortName,newElement) == target) {
-            newElement.replace(facade.getElementFactory().createExpressionFromText(shortName,null));
-          }
+        problemElement.replace(facade.getElementFactory().createExpressionFromText(exprText,null));
+        if (targetMethod != null) {
+          ExtractMethodUtil.addCastsToEnsureResolveTarget(targetMethod,call);
         }
       }
     }
