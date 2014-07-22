@@ -1,10 +1,34 @@
 {
-  return findNearestComment(context,new NullableFunction<PsiComment,BaseInjection>(){
-    @Nullable @Override public BaseInjection fun(    PsiComment comment){
-      if (causeRef != null)       causeRef.set(comment);
-      String text=ElementManipulators.getValueText(comment).trim();
-      return detectInjectionFromText(supportId,text);
+  PsiElement target=CompletionUtil.getOriginalOrSelf(context);
+  PsiFile file=target.getContainingFile();
+  TreeMap<TextRange,BaseInjection> map=getInjectionMap(file);
+  Map.Entry<TextRange,BaseInjection> entry=map == null ? null : map.lowerEntry(target.getTextRange());
+  if (entry == null)   return null;
+  PsiComment psiComment=PsiTreeUtil.findElementOfClassAtOffset(file,entry.getKey().getStartOffset(),PsiComment.class,false);
+  if (psiComment == null)   return null;
+  TextRange r0=psiComment.getTextRange();
+  PsiElement commonParent=PsiTreeUtil.findCommonParent(psiComment,target);
+  int h1=0, h2=0;
+  PsiElement e1=psiComment, e2=target;
+  for (PsiElement e=e1; e != commonParent; e1=e, e=e.getParent(), h1++)   ;
+  for (PsiElement e=e2; e != commonParent; e2=e, e=e.getParent(), h2++)   ;
+  int off1=r0.getEndOffset();
+  int off2=e2.getTextRange().getStartOffset();
+  if (off2 - off1 > 120)   return null;
+  if (off2 - off1 > 2) {
+    for (PsiElement e=e1; e != e2; e=e.getNextSibling()) {
+      if (!isWhitespaceCommentOrBlank(e))       return null;
+    }
+    Producer<PsiElement> producer=prevWalker(PsiTreeUtil.getDeepestLast(e1),e1);
+    PsiElement e;
+    while ((e=producer.produce()) != null && e != psiComment) {
+      if (e instanceof PsiLanguageInjectionHost && !StringUtil.isEmptyOrSpaces(e.getText())) {
+        return null;
+      }
     }
   }
-);
+  if (causeRef != null) {
+    causeRef.set(psiComment);
+  }
+  return new BaseInjection(supportId).copyFrom(entry.getValue());
 }
