@@ -1,0 +1,37 @@
+{
+  try {
+    VirtualFile windowCopy=answerFile.copy(this,answerFile.getParent(),"window" + window.getIndex() + ".py");
+    final FileDocumentManager documentManager=FileDocumentManager.getInstance();
+    final Document windowDocument=documentManager.getDocument(windowCopy);
+    if (windowDocument != null) {
+      TaskFile windowTaskFile=new TaskFile();
+      TaskFile.copy(answerTaskFile,windowTaskFile);
+      StudyDocumentListener listener=new StudyDocumentListener(project,windowTaskFile);
+      windowDocument.addDocumentListener(listener);
+      int start=window.getRealStartOffset(windowDocument);
+      int end=start + window.getLength();
+      Window userWindow=usersTaskFile.getWindows().get(window.getIndex());
+      int userStart=userWindow.getRealStartOffset(usersDocument);
+      int userEnd=userStart + userWindow.getLength();
+      String text=usersDocument.getText(new TextRange(userStart,userEnd));
+      windowDocument.replaceString(start,end,text);
+      ApplicationManager.getApplication().runWriteAction(new Runnable(){
+        @Override public void run(){
+          documentManager.saveDocument(windowDocument);
+        }
+      }
+);
+      Process smartTestProcess=testRunner.launchTests(project,windowCopy.getNameWithoutExtension());
+      boolean res=testRunner.testsPassed(smartTestProcess);
+      userWindow.setResolveStatus(res);
+      userWindow.setFailed(!res);
+      windowCopy.delete(this);
+    }
+  }
+ catch (  IOException e) {
+    LOG.error(e);
+  }
+catch (  ExecutionException e) {
+    e.printStackTrace();
+  }
+}
