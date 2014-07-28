@@ -21,10 +21,10 @@
     state.clearVariants(true,frame.variantCount);
     addVariantInner(state,initialPos,frame.name);
   }
+  int lastErrorPos=getLastVariantPos(state,initialPos);
   if (!state.suppressErrors && eatMore != null) {
     state.suppressErrors=true;
     final boolean eatMoreFlagOnce=!builder_.eof() && eatMore.parse(builder_,frame.level + 1);
-    final int lastErrorPos=getLastVariantPos(state,initialPos);
     boolean eatMoreFlag=eatMoreFlagOnce || !result && frame.position == initialPos && lastErrorPos > frame.position;
     PsiBuilderImpl.ProductionMarker latestDoneMarker=(pinned || result) && (state.altMode || elementType != null) && eatMoreFlagOnce ? (PsiBuilderImpl.ProductionMarker)builder_.getLatestDoneMarker() : null;
     PsiBuilder.Marker extensionMarker=null;
@@ -54,7 +54,7 @@
       errorReported=reportError(builder_,state,frame,true,true);
       parseAsTree(state,builder_,frame.level + 1,DUMMY_BLOCK,true,TOKEN_ADVANCER,eatMore);
     }
- else     if (eatMoreFlagOnce || (!result && frame.position != builder_.rawTokenIndex())) {
+ else     if (eatMoreFlagOnce || (!result && frame.position != builder_.rawTokenIndex()) || frame.errorReportedAt > initialPos) {
       errorReported=reportError(builder_,state,frame,true,false);
     }
     if (extensionMarker != null) {
@@ -68,8 +68,11 @@
     }
   }
  else   if (!result && pinned && frame.errorReportedAt < 0) {
-    if (getLastVariantPos(state,initialPos) == initialPos) {
+    if (lastErrorPos == initialPos) {
       reportError(builder_,state,frame,false,false);
+    }
+ else     if (lastErrorPos > initialPos) {
+      frame.errorReportedAt=lastErrorPos;
     }
   }
   Frame prevFrame=willFail && eatMore == null ? null : state.frameStack.peekLast();
