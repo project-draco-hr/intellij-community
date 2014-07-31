@@ -5,10 +5,19 @@
   try {
     for (    Map.Entry<GitRepository,VcsFullCommitDetails> entry : myCommits.entrySet()) {
       GitRepository repository=entry.getKey();
-      VcsFullCommitDetails target=entry.getValue();
-      results.put(repository,myGit.reset(repository,myMode,target.getId().asString()));
+      VirtualFile root=repository.getRoot();
+      String target=entry.getValue().getId().asString();
+      GitLocalChangesWouldBeOverwrittenDetector detector=new GitLocalChangesWouldBeOverwrittenDetector(root,RESET);
+      GitCommandResult result=myGit.reset(repository,myMode,target,detector);
+      if (!result.success() && detector.wasMessageDetected()) {
+        GitCommandResult smartResult=proposeSmartReset(detector,repository,target);
+        if (smartResult != null) {
+          result=smartResult;
+        }
+      }
+      results.put(repository,result);
       repository.update();
-      VfsUtil.markDirtyAndRefresh(true,true,false,repository.getRoot());
+      VfsUtil.markDirtyAndRefresh(true,true,false,root);
     }
   }
   finally {
