@@ -1,0 +1,87 @@
+{
+  final String decodedPath=URLUtil.unescapePercentSequences(UriUtil.trimParameters(request.uri()));
+  int offset;
+  boolean emptyPath;
+  boolean isCustomHost=projectName != null;
+  if (isCustomHost) {
+    offset=0;
+    emptyPath=decodedPath.isEmpty();
+  }
+ else {
+    offset=decodedPath.indexOf('/',1);
+    projectName=decodedPath.substring(1,offset == -1 ? decodedPath.length() : offset);
+    emptyPath=offset == -1;
+  }
+  Project project=findProject(projectName,isCustomHost);
+  if (project == null) {
+    return false;
+  }
+  if (emptyPath) {
+    if (!SystemInfoRt.isFileSystemCaseSensitive) {
+      projectName=project.getName();
+    }
+    redirectToDirectory(request,channel,projectName);
+    return true;
+  }
+  final String path=FileUtil.toCanonicalPath(decodedPath.substring(offset + 1),'/');
+  LOG.assertTrue(path != null);
+  PathToFileManager pathToFileManager=PathToFileManager.getInstance(project);
+  VirtualFile result=pathToFileManager.pathToFileCache.getIfPresent(path);
+  boolean indexUsed=false;
+  if (result == null || !result.isValid()) {
+    result=pathToFileManager.findByRelativePath(project,path);
+    if (result == null) {
+      if (path.isEmpty()) {
+        sendStatus(HttpResponseStatus.NOT_FOUND,channel,"Index file doesn't exist.",request);
+        return true;
+      }
+ else {
+        return false;
+      }
+    }
+ else     if (result.isDirectory()) {
+      if (!endsWithSlash(decodedPath)) {
+        redirectToDirectory(request,channel,isCustomHost ? path : (projectName + '/' + path));
+        return true;
+      }
+      result=findIndexFile(result);
+      if (result == null) {
+        sendStatus(HttpResponseStatus.NOT_FOUND,channel,"Index file doesn't exist.",request);
+        return true;
+      }
+      indexUsed=true;
+    }
+    pathToFileManager.pathToFileCache.put(path,result);
+  }
+ else   if (!path.endsWith(result.getName())) {
+    if (endsWithSlash(decodedPath)) {
+      indexUsed=true;
+    }
+ else {
+      if (path.endsWith(result.getParent().getName())) {
+        redirectToDirectory(request,channel,isCustomHost ? path : (projectName + '/' + path));
+        return true;
+      }
+    }
+  }
+  StringBuilder canonicalRequestPath=new StringBuilder();
+  canonicalRequestPath.append('/');
+  if (!isCustomHost) {
+    canonicalRequestPath.append(projectName).append('/');
+  }
+  canonicalRequestPath.append(path);
+  if (indexUsed) {
+    canonicalRequestPath.append('/').append(result.getName());
+  }
+  for (  FileHandler fileHandler : FileHandler.EP_NAME.getExtensions()) {
+    try {
+      if (fileHandler.process(result,canonicalRequestPath.toString(),project,request,channel)) {
+        return true;
+      }
+    }
+ catch (    Throwable e) {
+      LOG.error(e);
+    }
+  }
+  return false;
+}

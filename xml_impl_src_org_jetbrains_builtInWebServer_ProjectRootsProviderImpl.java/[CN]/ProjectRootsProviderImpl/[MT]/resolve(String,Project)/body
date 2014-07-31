@@ -1,0 +1,45 @@
+{
+  PairFunction<String,VirtualFile,VirtualFile> resolver;
+  if (PlatformUtils.isIntelliJ()) {
+    int index=path.indexOf('/');
+    if (index > 0 && !path.regionMatches(!SystemInfo.isFileSystemCaseSensitive,0,project.getName(),0,index)) {
+      String moduleName=path.substring(0,index);
+      AccessToken token=ReadAction.start();
+      Module module;
+      try {
+        module=ModuleManager.getInstance(project).findModuleByName(moduleName);
+      }
+  finally {
+        token.finish();
+      }
+      if (module != null && !module.isDisposed()) {
+        path=path.substring(index + 1);
+        resolver=PathToFileManager.getInstance(project).getResolver(path);
+        ModuleRootManager moduleRootManager=ModuleRootManager.getInstance(module);
+        Couple<VirtualFile> result=resolve(path,moduleRootManager.getSourceRoots(),resolver);
+        if (result == null) {
+          result=resolve(path,moduleRootManager.getContentRoots(),resolver);
+        }
+        if (result != null) {
+          return Pair.create(result.first,Pair.create(result.second,module.getName()));
+        }
+      }
+    }
+  }
+  Module[] modules;
+  AccessToken token=ReadAction.start();
+  try {
+    modules=ModuleManager.getInstance(project).getModules();
+  }
+  finally {
+    token.finish();
+  }
+  resolver=PathToFileManager.getInstance(project).getResolver(path);
+  Pair<VirtualFile,Pair<VirtualFile,String>> result=findByRelativePath(project,path,modules,true,resolver);
+  if (result == null) {
+    return findByRelativePath(project,path,modules,false,resolver);
+  }
+ else {
+    return result;
+  }
+}
