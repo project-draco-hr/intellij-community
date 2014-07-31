@@ -1,0 +1,30 @@
+{
+  if ("RenamingCopyFilter".equals(filter.filterType)) {
+    final Matcher matcher=(Matcher)filter.getProperties().get("matcher");
+    final String replacement=(String)filter.getProperties().get("replacement");
+    if (matcher == null || replacement == null)     return original;
+    matcher.reset(myOutputFileRef.get().getName());
+    if (matcher.find()) {
+      final String newFileName=matcher.replaceFirst(replacement);
+      myOutputFileRef.set(new File(myOutputFileRef.get().getParentFile(),newFileName));
+    }
+    return original;
+  }
+  try {
+    Class<?> clazz=Class.forName(filter.filterType);
+    if (!FilterReader.class.isAssignableFrom(clazz)) {
+      myContext.processMessage(new CompilerMessage(GradleResourcesBuilder.BUILDER_NAME,BuildMessage.Kind.WARNING,String.format("Error - Invalid filter specification for %s. It should extend java.io.FilterReader.",filter.filterType),null));
+    }
+    Constructor constructor=clazz.getConstructor(Reader.class);
+    FilterReader result=(FilterReader)constructor.newInstance(original);
+    final Map<Object,Object> properties=filter.getProperties();
+    if (!properties.isEmpty()) {
+      ConfigureUtil.configureByMap(properties,result);
+    }
+    return result;
+  }
+ catch (  Throwable th) {
+    myContext.processMessage(new CompilerMessage(GradleResourcesBuilder.BUILDER_NAME,BuildMessage.Kind.WARNING,String.format("Error - Failed to apply filter(%s): %s",filter.filterType,th.getMessage()),null));
+  }
+  return original;
+}
