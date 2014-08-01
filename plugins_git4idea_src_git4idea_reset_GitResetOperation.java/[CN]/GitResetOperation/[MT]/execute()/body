@@ -1,0 +1,27 @@
+{
+  saveAllDocuments();
+  GitUtil.workingTreeChangeStarted(myProject);
+  Map<GitRepository,GitCommandResult> results=ContainerUtil.newHashMap();
+  try {
+    for (    Map.Entry<GitRepository,VcsFullCommitDetails> entry : myCommits.entrySet()) {
+      GitRepository repository=entry.getKey();
+      VirtualFile root=repository.getRoot();
+      String target=entry.getValue().getId().asString();
+      GitLocalChangesWouldBeOverwrittenDetector detector=new GitLocalChangesWouldBeOverwrittenDetector(root,RESET);
+      GitCommandResult result=myGit.reset(repository,myMode,target,detector);
+      if (!result.success() && detector.wasMessageDetected()) {
+        GitCommandResult smartResult=proposeSmartReset(detector,repository,target);
+        if (smartResult != null) {
+          result=smartResult;
+        }
+      }
+      results.put(repository,result);
+      repository.update();
+      VfsUtil.markDirtyAndRefresh(true,true,false,root);
+    }
+  }
+  finally {
+    GitUtil.workingTreeChangeFinished(myProject);
+  }
+  notifyResult(results);
+}
