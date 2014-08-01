@@ -1,9 +1,5 @@
 {
-  if (CodeInsightSettings.getInstance().SMART_BACKSPACE != CodeInsightSettings.AUTOINDENT || !StringUtil.isWhiteSpace(c)) {
-    return false;
-  }
-  LanguageCodeStyleSettingsProvider codeStyleSettingsProvider=LanguageCodeStyleSettingsProvider.forLanguage(file.getLanguage());
-  if (codeStyleSettingsProvider != null && codeStyleSettingsProvider.isIndentBasedLanguageSemantics()) {
+  if (!isApplicable) {
     return false;
   }
   Project project=file.getProject();
@@ -11,13 +7,19 @@
   CaretModel caretModel=editor.getCaretModel();
   int caretOffset=caretModel.getOffset();
   int offset=CharArrayUtil.shiftForward(document.getCharsSequence(),caretOffset," \t");
-  int offsetInPsi=getOffsetInPsi(document,file,offset);
   int beforeWhitespaceOffset=CharArrayUtil.shiftBackward(document.getCharsSequence(),offset - 1," \t") + 1;
   LogicalPosition logicalPosition=caretOffset < offset ? editor.offsetToLogicalPosition(offset) : caretModel.getLogicalPosition();
   int lineStartOffset=document.getLineStartOffset(logicalPosition.line);
   if (lineStartOffset < beforeWhitespaceOffset) {
     if (caretWasAtLineStart && beforeWhitespaceOffset <= offset) {
-      String spacing=getSpacing(file,offsetInPsi);
+      String spacing;
+      if (precalculatedSpacing == null) {
+        PsiDocumentManager.getInstance(project).commitDocument(document);
+        spacing=getSpacing(file,offset);
+      }
+ else {
+        spacing=precalculatedSpacing;
+      }
       if (beforeWhitespaceOffset < offset || !spacing.isEmpty()) {
         document.replaceString(beforeWhitespaceOffset,offset,spacing);
         caretModel.moveToOffset(beforeWhitespaceOffset + spacing.length());
@@ -26,8 +28,9 @@
     }
     return false;
   }
+  PsiDocumentManager.getInstance(project).commitDocument(document);
   CodeStyleFacade codeStyleFacade=CodeStyleFacade.getInstance(project);
-  String indent=codeStyleFacade.getLineIndent(document,offsetInPsi);
+  String indent=codeStyleFacade.getLineIndent(document,offset);
   if (indent == null) {
     return false;
   }
@@ -52,7 +55,7 @@
   int prevLineEndOffset=document.getLineEndOffset(logicalPosition.line - 1);
   int targetOffset=CharArrayUtil.shiftBackward(document.getCharsSequence(),prevLineEndOffset - 1," \t") + 1;
   if (prevLineStartOffset < targetOffset) {
-    String spacing=getSpacing(file,offsetInPsi);
+    String spacing=getSpacing(file,offset);
     document.replaceString(targetOffset,offset,spacing);
     caretModel.moveToOffset(targetOffset + spacing.length());
   }
