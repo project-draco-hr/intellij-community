@@ -1,19 +1,26 @@
 {
   final StopWatch sw=StopWatch.start("read full log from VCS");
-  final Collection<List<? extends TimedVcsCommit>> commits=ContainerUtil.newArrayList();
+  final Collection<List<? extends GraphCommit<Integer>>> logs=ContainerUtil.newArrayList();
   new ProviderIterator(){
     @Override void each(    @NotNull VirtualFile root,    @NotNull VcsLogProvider provider) throws VcsException {
-      commits.add(provider.readAllHashes(root,new Consumer<VcsUser>(){
+      final List<GraphCommit<Integer>> graphCommits=ContainerUtil.newArrayList();
+      provider.readAllHashes(root,new Consumer<VcsUser>(){
         @Override public void consume(        @NotNull VcsUser user){
           myUserRegistry.addUser(user);
         }
       }
-));
+,new Consumer<TimedVcsCommit>(){
+        @Override public void consume(        TimedVcsCommit commit){
+          graphCommits.add(compactCommit(commit,myHashMap));
+        }
+      }
+);
+      logs.add(graphCommits);
       sw.rootCompleted(root);
     }
   }
 .iterate(myProviders);
   myUserRegistry.flush();
   sw.report();
-  return commits;
+  return logs;
 }
