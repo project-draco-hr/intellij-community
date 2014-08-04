@@ -1,0 +1,59 @@
+{
+  try {
+    int upToDateTotalLines=getLineCount(myUpToDateDocument);
+    int currentChangedLines=currentLastChangedLine - currentFirstChangedLine;
+    int myChangedLines=myLastChangedLine - myFirstChangedLine;
+    int linesShift=currentChangedLines - myChangedLines;
+    List<Range> rangesBeforeChange=new ArrayList<Range>();
+    List<Range> rangesAfterChange=new ArrayList<Range>();
+    List<Range> changedRanges=new ArrayList<Range>();
+    sortRanges(myRanges,myFirstChangedLine,myLastChangedLine,rangesBeforeChange,changedRanges,rangesAfterChange);
+    Range firstChangedRange=ContainerUtil.getFirstItem(changedRanges);
+    Range lastChangedRange=ContainerUtil.getLastItem(changedRanges);
+    Range lastRangeBefore=ContainerUtil.getLastItem(rangesBeforeChange);
+    Range firstRangeAfter=ContainerUtil.getFirstItem(rangesAfterChange);
+    if (firstChangedRange != null && firstChangedRange.getOffset1() < myFirstChangedLine) {
+      myFirstChangedLine=firstChangedRange.getOffset1();
+    }
+    if (lastChangedRange != null && lastChangedRange.getOffset2() > myLastChangedLine) {
+      myLastChangedLine=lastChangedRange.getOffset2() - 1;
+    }
+    currentFirstChangedLine=myFirstChangedLine;
+    currentLastChangedLine=myLastChangedLine + linesShift;
+    int upToDateFirstLine=getUpToDateLine1(lastRangeBefore,myFirstChangedLine);
+    int upToDateLastLine=getUpToDateLine2(firstRangeAfter,myLastChangedLine,myTotalLines,upToDateTotalLines);
+    List<Range> newChangedRanges=getNewChangedRanges(currentFirstChangedLine,currentLastChangedLine,upToDateFirstLine,upToDateLastLine);
+    shiftRanges(rangesAfterChange,linesShift);
+    if (!changedRanges.equals(newChangedRanges)) {
+      replaceRanges(changedRanges,newChangedRanges);
+      myRanges=new ArrayList<Range>(rangesBeforeChange.size() + newChangedRanges.size() + rangesAfterChange.size());
+      myRanges.addAll(rangesBeforeChange);
+      myRanges.addAll(newChangedRanges);
+      myRanges.addAll(rangesAfterChange);
+      for (      Range range : myRanges) {
+        if (!range.hasHighlighter())         range.setHighlighter(createHighlighter(range));
+      }
+      if (myRanges.isEmpty() && myVirtualFile != null) {
+        SwingUtilities.invokeLater(new Runnable(){
+          @Override public void run(){
+            FileDocumentManager.getInstance().saveDocument(myDocument);
+            boolean stillEmpty;
+synchronized (myLock) {
+              stillEmpty=myRanges.isEmpty();
+            }
+            if (stillEmpty) {
+              myVcsDirtyScopeManager.fileDirty(myVirtualFile);
+            }
+          }
+        }
+);
+      }
+    }
+  }
+ catch (  ProcessCanceledException ignore) {
+  }
+catch (  FilesTooBigForDiffException e1) {
+    installAnathema();
+    removeHighlightersFromMarkupModel();
+  }
+}
