@@ -1,0 +1,52 @@
+{
+  if (!propertiesComponent.getBoolean(CONFIGURED,false)) {
+    propertiesComponent.setValue(CONFIGURED,"true");
+    recentProjectsManager.loadState(new RecentProjectsManagerBase.State());
+    propertiesComponent.setValue("toolwindow.stripes.buttons.info.shown","true");
+    uiSettings.SHOW_MEMORY_INDICATOR=false;
+    uiSettings.SHOW_DIRECTORY_FOR_NON_UNIQUE_FILENAMES=true;
+    codeInsightSettings.REFORMAT_ON_PASTE=CodeInsightSettings.NO_REFORMAT;
+    EditorSettingsExternalizable.getInstance().setVirtualSpace(false);
+    final CodeStyleSettings settings=CodeStyleSettingsManager.getInstance().getCurrentSettings();
+    settings.ALIGN_MULTILINE_PARAMETERS_IN_CALLS=true;
+    settings.getCommonSettings(PythonLanguage.getInstance()).ALIGN_MULTILINE_PARAMETERS_IN_CALLS=true;
+    UISettings.getInstance().SHOW_DIRECTORY_FOR_NON_UNIQUE_FILENAMES=true;
+    UISettings.getInstance().SHOW_MEMORY_INDICATOR=false;
+    final String ignoredFilesList=fileTypeManager.getIgnoredFilesList();
+    ApplicationManager.getApplication().invokeLater(new Runnable(){
+      @Override public void run(){
+        ApplicationManager.getApplication().runWriteAction(new Runnable(){
+          @Override public void run(){
+            FileTypeManager.getInstance().setIgnoredFilesList(ignoredFilesList + ";*$py.class");
+          }
+        }
+);
+      }
+    }
+);
+    PyCodeInsightSettings.getInstance().SHOW_IMPORT_POPUP=false;
+  }
+  bus.connect().subscribe(AppLifecycleListener.TOPIC,new AppLifecycleListener.Adapter(){
+    @Override public void appFrameCreated(    String[] commandLineArgs,    @NotNull Ref<Boolean> willOpenProject){
+      if (!propertiesComponent.isValueSet(DISPLAYED_PROPERTY)) {
+        GeneralSettings.getInstance().setShowTipsOnStartup(false);
+        showInitialConfigurationDialog();
+        propertiesComponent.setValue(DISPLAYED_PROPERTY,"true");
+      }
+    }
+    @Override public void appStarting(    Project projectFromCommandLine){
+      patchKeymap();
+    }
+  }
+);
+  bus.connect().subscribe(ProjectManager.TOPIC,new ProjectManagerAdapter(){
+    @Override public void projectOpened(    final Project project){
+      if (project.isDefault())       return;
+      if (FileChooserUtil.getLastOpenedFile(project) == null) {
+        FileChooserUtil.setLastOpenedFile(project,VfsUtil.getUserHomeDir());
+      }
+      patchProjectAreaExtensions(project);
+    }
+  }
+);
+}
