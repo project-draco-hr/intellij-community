@@ -1,0 +1,31 @@
+{
+  final CloudModuleBuilder moduleBuilder=getModuleBuilder();
+  RemoteServer<SC> account=(RemoteServer<SC>)moduleBuilder.getAccount();
+  final AC applicationConfiguration=(AC)moduleBuilder.getApplicationConfiguration();
+  DC deploymentConfiguration=createDeploymentConfiguration();
+  if (applicationConfiguration.isExisting()) {
+    deploymentConfiguration.setDefaultDeploymentName(false);
+    deploymentConfiguration.setDeploymentName(applicationConfiguration.getExistingAppName());
+  }
+  final DeployToServerRunConfiguration<SC,DC> runConfiguration=CloudRunConfigurationUtil.createRunConfiguration(account,module,deploymentConfiguration);
+  final ServerType<?> cloudType=account.getType();
+  final Project project=module.getProject();
+  new CloudConnectionTask<Object,SC,DC,SR>(project,CloudBundle.getText("cloud.support",cloudType.getPresentableName()),account){
+    boolean myFirstAttempt=true;
+    @Override protected Object run(    SR serverRuntime) throws ServerRuntimeException {
+      doConfigureModule(applicationConfiguration,runConfiguration,myFirstAttempt,serverRuntime);
+      return null;
+    }
+    @Override protected void runtimeErrorOccurred(    @NotNull String errorMessage){
+      myFirstAttempt=false;
+      new SshKeyChecker().checkServerError(errorMessage,getNotifier(),project,this);
+    }
+    @Override protected void postPerform(    Object result){
+      detectModuleStructure(module,moduleBuilder.getContentEntryPath());
+    }
+    @Override protected boolean shouldStartInBackground(){
+      return false;
+    }
+  }
+.performAsync();
+}
