@@ -4,64 +4,61 @@
       CommandProcessor.getInstance().executeCommand(project,new Runnable(){
         @Override public void run(){
           final Editor selectedEditor=StudyEditor.getSelectedEditor(project);
-          if (selectedEditor == null) {
-            return;
-          }
-          final FileDocumentManager fileDocumentManager=FileDocumentManager.getInstance();
-          final VirtualFile openedFile=fileDocumentManager.getFile(selectedEditor.getDocument());
-          StudyTaskManager taskManager=StudyTaskManager.getInstance(selectedEditor.getProject());
-          final TaskFile selectedTaskFile=taskManager.getTaskFile(openedFile);
-          FileDocumentManager.getInstance().saveAllDocuments();
-          if (!(project != null && project.isOpen())) {
-            return;
-          }
-          String basePath=project.getBasePath();
-          if (basePath == null)           return;
-          if (openedFile == null)           return;
-          final VirtualFile taskDir=openedFile.getParent();
-          Task currentTask=selectedTaskFile.getTask();
-          final StudyTestRunner testRunner=new StudyTestRunner(currentTask,taskDir);
-          Process testProcess=null;
-          try {
-            testProcess=testRunner.launchTests(project,openedFile.getNameWithoutExtension());
-          }
- catch (          ExecutionException e) {
-            LOG.error(e);
-          }
-          if (testProcess != null) {
-            final int testNum=currentTask.getTestNum();
-            final int testPassed=testRunner.getPassedTests(testProcess);
-            if (testPassed == testNum) {
-              currentTask.setStatus(StudyStatus.Solved);
-              StudyUtils.updateStudyToolWindow(project);
-              selectedTaskFile.drawAllWindows(selectedEditor);
-              ProjectView.getInstance(project).refresh();
-              createTestResultPopUp("Congratulations!",JBColor.GREEN,project);
-              return;
-            }
-            final TaskFile taskFileCopy=new TaskFile();
-            final VirtualFile copyWithAnswers=getCopyWithAnswers(taskDir,openedFile,selectedTaskFile,taskFileCopy);
-            for (            final TaskWindow taskWindow : taskFileCopy.getTaskWindows()) {
-              check(project,taskWindow,copyWithAnswers,taskFileCopy,selectedTaskFile,selectedEditor.getDocument(),testRunner);
-            }
-            try {
-              copyWithAnswers.delete(this);
-            }
- catch (            IOException e) {
-              LOG.error(e);
-            }
-            if (testPassed == 0) {
-              String message=testRunner.getRunFailedMessage(testProcess);
-              if (message.length() != 0) {
-                Messages.showErrorDialog(project,message,"Failed to Run");
-                selectedTaskFile.drawAllWindows(selectedEditor);
-                ProjectView.getInstance(project).refresh();
-                return;
+          if (selectedEditor != null) {
+            final FileDocumentManager fileDocumentManager=FileDocumentManager.getInstance();
+            final VirtualFile openedFile=fileDocumentManager.getFile(selectedEditor.getDocument());
+            if (openedFile != null) {
+              StudyTaskManager taskManager=StudyTaskManager.getInstance(project);
+              final TaskFile selectedTaskFile=taskManager.getTaskFile(openedFile);
+              if (selectedTaskFile != null) {
+                FileDocumentManager.getInstance().saveAllDocuments();
+                final VirtualFile taskDir=openedFile.getParent();
+                Task currentTask=selectedTaskFile.getTask();
+                final StudyTestRunner testRunner=new StudyTestRunner(currentTask,taskDir);
+                Process testProcess=null;
+                try {
+                  testProcess=testRunner.launchTests(project,openedFile.getNameWithoutExtension());
+                }
+ catch (                ExecutionException e) {
+                  LOG.error(e);
+                }
+                if (testProcess != null) {
+                  final int testNum=currentTask.getTestNum();
+                  final int testPassed=testRunner.getPassedTests(testProcess);
+                  if (testPassed == testNum) {
+                    currentTask.setStatus(StudyStatus.Solved);
+                    StudyUtils.updateStudyToolWindow(project);
+                    selectedTaskFile.drawAllWindows(selectedEditor);
+                    ProjectView.getInstance(project).refresh();
+                    createTestResultPopUp("Congratulations!",JBColor.GREEN,project);
+                    return;
+                  }
+                  final TaskFile taskFileCopy=new TaskFile();
+                  final VirtualFile copyWithAnswers=getCopyWithAnswers(taskDir,openedFile,selectedTaskFile,taskFileCopy);
+                  for (                  final TaskWindow taskWindow : taskFileCopy.getTaskWindows()) {
+                    check(project,taskWindow,copyWithAnswers,taskFileCopy,selectedTaskFile,selectedEditor.getDocument(),testRunner);
+                  }
+                  try {
+                    copyWithAnswers.delete(this);
+                  }
+ catch (                  IOException e) {
+                    LOG.error(e);
+                  }
+                  if (testPassed == 0) {
+                    String message=testRunner.getRunFailedMessage(testProcess);
+                    if (message.length() != 0) {
+                      Messages.showErrorDialog(project,message,"Failed to Run");
+                      selectedTaskFile.drawAllWindows(selectedEditor);
+                      ProjectView.getInstance(project).refresh();
+                      return;
+                    }
+                  }
+                  selectedTaskFile.drawAllWindows(selectedEditor);
+                  String result=String.format("%d from %d tests failed",testNum - testPassed,testNum);
+                  createTestResultPopUp(result,JBColor.RED,project);
+                }
               }
             }
-            selectedTaskFile.drawAllWindows(selectedEditor);
-            String result=String.format("%d from %d tests failed",testNum - testPassed,testNum);
-            createTestResultPopUp(result,JBColor.RED,project);
           }
         }
       }
