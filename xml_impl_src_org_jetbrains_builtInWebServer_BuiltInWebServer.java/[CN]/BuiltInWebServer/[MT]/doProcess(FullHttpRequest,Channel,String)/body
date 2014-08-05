@@ -20,62 +20,14 @@
     if (!SystemInfoRt.isFileSystemCaseSensitive) {
       projectName=project.getName();
     }
-    redirectToDirectory(request,channel,projectName);
+    PathHandler.redirectToDirectory(request,channel,projectName);
     return true;
   }
   final String path=FileUtil.toCanonicalPath(decodedPath.substring(offset + 1),'/');
   LOG.assertTrue(path != null);
-  PathToFileManager pathToFileManager=PathToFileManager.getInstance(project);
-  VirtualFile result=pathToFileManager.pathToFileCache.getIfPresent(path);
-  boolean indexUsed=false;
-  if (result == null || !result.isValid()) {
-    result=pathToFileManager.findByRelativePath(project,path);
-    if (result == null) {
-      if (path.isEmpty()) {
-        sendStatus(HttpResponseStatus.NOT_FOUND,channel,"Index file doesn't exist.",request);
-        return true;
-      }
- else {
-        return false;
-      }
-    }
- else     if (result.isDirectory()) {
-      if (!endsWithSlash(decodedPath)) {
-        redirectToDirectory(request,channel,isCustomHost ? path : (projectName + '/' + path));
-        return true;
-      }
-      result=findIndexFile(result);
-      if (result == null) {
-        sendStatus(HttpResponseStatus.NOT_FOUND,channel,"Index file doesn't exist.",request);
-        return true;
-      }
-      indexUsed=true;
-    }
-    pathToFileManager.pathToFileCache.put(path,result);
-  }
- else   if (!path.endsWith(result.getName())) {
-    if (endsWithSlash(decodedPath)) {
-      indexUsed=true;
-    }
- else {
-      if (path.endsWith(result.getParent().getName())) {
-        redirectToDirectory(request,channel,isCustomHost ? path : (projectName + '/' + path));
-        return true;
-      }
-    }
-  }
-  StringBuilder canonicalRequestPath=new StringBuilder();
-  canonicalRequestPath.append('/');
-  if (!isCustomHost) {
-    canonicalRequestPath.append(projectName).append('/');
-  }
-  canonicalRequestPath.append(path);
-  if (indexUsed) {
-    canonicalRequestPath.append('/').append(result.getName());
-  }
-  for (  FileHandler fileHandler : FileHandler.EP_NAME.getExtensions()) {
+  for (  PathHandler pathHandler : PathHandler.EP_NAME.getExtensions()) {
     try {
-      if (fileHandler.process(result,canonicalRequestPath,project,request,channel)) {
+      if (pathHandler.process(path,project,request,channel,projectName,decodedPath,isCustomHost)) {
         return true;
       }
     }
