@@ -1,0 +1,35 @@
+{
+  final LocalFileSystem lfs=LocalFileSystem.getInstance();
+  final UrlSerializationHelper helper=new UrlSerializationHelper(SvnVcs.getInstance(myProject));
+  final Set<Pair<VirtualFile,SvnBranchConfigurationNew>> branchPointsToLoad=ContainerUtil.newHashSet();
+  for (  Map.Entry<String,SvnBranchConfiguration> entry : myConfigurationBean.myConfigurationMap.entrySet()) {
+    final SvnBranchConfiguration configuration=entry.getValue();
+    final VirtualFile root=lfs.refreshAndFindFileByIoFile(new File(entry.getKey()));
+    if (root == null) {
+      LOG.info("root not found: " + entry.getKey());
+      continue;
+    }
+    final SvnBranchConfiguration configToConvert;
+    if ((!myConfigurationBean.mySupportsUserInfoFilter) || configuration.isUserinfoInUrl()) {
+      configToConvert=helper.afterDeserialization(entry.getKey(),configuration);
+    }
+ else {
+      configToConvert=configuration;
+    }
+    final SvnBranchConfigurationNew newConfig=new SvnBranchConfigurationNew();
+    newConfig.setTrunkUrl(configToConvert.getTrunkUrl());
+    newConfig.setUserinfoInUrl(configToConvert.isUserinfoInUrl());
+    for (    String branchUrl : configToConvert.getBranchUrls()) {
+      List<SvnBranchItem> stored=getStored(branchUrl);
+      if (stored != null && !stored.isEmpty()) {
+        newConfig.addBranches(branchUrl,new InfoStorage<List<SvnBranchItem>>(stored,InfoReliability.setByUser));
+      }
+ else {
+        branchPointsToLoad.add(Pair.create(root,newConfig));
+        newConfig.addBranches(branchUrl,new InfoStorage<List<SvnBranchItem>>(new ArrayList<SvnBranchItem>(),InfoReliability.empty));
+      }
+    }
+    myBunch.updateForRoot(root,new InfoStorage<SvnBranchConfigurationNew>(newConfig,InfoReliability.setByUser),null);
+  }
+  return branchPointsToLoad;
+}
