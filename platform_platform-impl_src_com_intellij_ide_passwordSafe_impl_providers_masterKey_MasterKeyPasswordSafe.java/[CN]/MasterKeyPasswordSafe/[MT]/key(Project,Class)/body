@@ -1,52 +1,42 @@
 {
-  Application application=ApplicationManager.getApplication();
-  if (!isTestMode() && application.isHeadlessEnvironment()) {
+  Object key=myKey.get().get();
+  if (key instanceof byte[])   return (byte[])key;
+  if (key instanceof PasswordSafeException && ((PasswordSafeException)key).justHappened())   throw (PasswordSafeException)key;
+  if (isPasswordEncrypted()) {
+    try {
+      setMasterPassword(decryptPassword(myDatabase.getPasswordInfo()));
+      key=myKey.get().get();
+      if (key instanceof byte[])       return (byte[])key;
+    }
+ catch (    PasswordSafeException e) {
+    }
+  }
+  if (ApplicationManager.getApplication().isHeadlessEnvironment()) {
     throw new MasterPasswordUnavailableException("The provider is not available in headless environment");
   }
-  final Ref<byte[]> result=Ref.create(key.get().get());
-  if (result.isNull()) {
-    if (isPasswordEncrypted()) {
-      try {
-        setMasterPassword(decryptPassword(database.getPasswordInfo()));
-        result.set(key.get().get());
-      }
- catch (      PasswordSafeException e) {
-      }
-    }
-    if (result.isNull()) {
-      final Ref<PasswordSafeException> ex=new Ref<PasswordSafeException>();
-      application.invokeAndWait(new Runnable(){
-        public void run(){
-          result.set(key.get().get());
-          if (result.isNull()) {
-            try {
-              if (isTestMode()) {
-                throw new MasterPasswordUnavailableException("Master password must be specified in test mode.");
-              }
-              if (database.isEmpty()) {
-                if (!MasterPasswordDialog.resetMasterPasswordDialog(project,MasterKeyPasswordSafe.this,requestor).showAndGet()) {
-                  throw new MasterPasswordUnavailableException("Master password is required to store passwords in the database.");
-                }
-              }
- else {
-                MasterPasswordDialog.askPassword(project,MasterKeyPasswordSafe.this,requestor);
-              }
-              result.set(key.get().get());
-            }
- catch (            PasswordSafeException e) {
-              ex.set(e);
-            }
-catch (            Exception e) {
-              ex.set(new MasterPasswordUnavailableException("The problem with retrieving the password",e));
-            }
-          }
-        }
-      }
-,ModalityState.any());
-      if (ex.get() != null) {
-        throw ex.get();
-      }
+  if (myDatabase.isEmpty()) {
+    if (!MasterPasswordDialog.resetMasterPasswordDialog(project,this,requestor).showAndGet()) {
+      throw new MasterPasswordUnavailableException("Master password is required to store passwords in the database.");
     }
   }
-  return result.get();
+  key=invokeAndWait(new ThrowableComputable<Object,PasswordSafeException>(){
+    @Override public Object compute() throws PasswordSafeException {
+      Object key=myKey.get().get();
+      if (key instanceof byte[] || key instanceof PasswordSafeException && ((PasswordSafeException)key).justHappened()) {
+        return key;
+      }
+      try {
+        MasterPasswordDialog.askPassword(project,MasterKeyPasswordSafe.this,requestor);
+      }
+ catch (      PasswordSafeException e) {
+        myKey.get().set(e);
+        throw e;
+      }
+      return myKey.get().get();
+    }
+  }
+,project == null ? Condition.FALSE : project.getDisposed());
+  if (key instanceof byte[])   return (byte[])key;
+  if (key instanceof PasswordSafeException)   throw (PasswordSafeException)key;
+  throw new AssertionError();
 }
