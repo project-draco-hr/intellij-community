@@ -1,0 +1,29 @@
+{
+  if (ApplicationManager.getApplication().isDispatchThread()) {
+    return computable.compute();
+  }
+  final Ref<Throwable> exRef=Ref.create();
+  final Ref<T> ref=Ref.create();
+synchronized (ourEDTLock) {
+    if (expired.value(null)) {
+      throw new ProcessCanceledException();
+    }
+    ApplicationManager.getApplication().invokeAndWait(new Runnable(){
+      @Override public void run(){
+        if (expired.value(null)) {
+          exRef.set(new ProcessCanceledException());
+          return;
+        }
+        try {
+          ref.set(computable.compute());
+        }
+ catch (        Throwable e) {
+          exRef.set(e);
+        }
+      }
+    }
+,ModalityState.any());
+  }
+  if (!exRef.isNull())   throw (E)exRef.get();
+  return ref.get();
+}

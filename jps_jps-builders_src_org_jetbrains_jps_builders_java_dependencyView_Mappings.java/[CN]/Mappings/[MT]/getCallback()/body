@@ -1,16 +1,18 @@
 {
   return new Callbacks.Backend(){
-    public void associate(    final String classFileName,    final String sourceFileName,    final ClassReader cr){
+    public void associate(    String classFileName,    Collection<String> sources,    ClassReader cr){
 synchronized (myLock) {
         final int classFileNameS=myContext.get(classFileName);
         final Pair<ClassRepr,Set<UsageRepr.Usage>> result=new ClassfileAnalyzer(myContext).analyze(classFileNameS,cr);
         final ClassRepr repr=result.first;
         if (repr != null) {
           final Set<UsageRepr.Usage> localUsages=result.second;
-          final File sourceFile=new File(sourceFileName);
           final int className=repr.name;
-          myClassToSourceFile.put(className,sourceFile);
-          mySourceFileToClasses.put(sourceFile,repr);
+          for (          String sourceFileName : sources) {
+            final File sourceFile=new File(sourceFileName);
+            myClassToSourceFile.put(className,sourceFile);
+            mySourceFileToClasses.put(sourceFile,repr);
+          }
           for (          final int s : repr.getSupers()) {
             myClassToSubclasses.put(s,className);
           }
@@ -22,6 +24,9 @@ synchronized (myLock) {
           }
         }
       }
+    }
+    public void associate(    final String classFileName,    final String sourceFileName,    final ClassReader cr){
+      associate(classFileName,Collections.singleton(sourceFileName),cr);
     }
     @Override public void registerImports(    final String className,    final Collection<String> imports,    Collection<String> staticImports){
       final List<String> allImports=new ArrayList<String>();
@@ -42,13 +47,15 @@ synchronized (myLock) {
         myPostPasses.offer(new Runnable(){
           public void run(){
             final int rootClassName=myContext.get(className.replace(".","/"));
-            final File fileName=myClassToSourceFile.get(rootClassName);
-            final ClassRepr repr=fileName != null ? getReprByName(fileName,rootClassName) : null;
+            final Collection<File> fileNames=myClassToSourceFile.get(rootClassName);
+            final ClassRepr repr=fileNames != null && !fileNames.isEmpty() ? getReprByName(fileNames.iterator().next(),rootClassName) : null;
             for (            final String i : allImports) {
-              final int iname=myContext.get(i.replace(".","/"));
+              final int iname=myContext.get(i.replace('.','/'));
               myClassToClassDependency.put(iname,rootClassName);
               if (repr != null && repr.addUsage(UsageRepr.createClassUsage(myContext,iname))) {
-                mySourceFileToClasses.put(fileName,repr);
+                for (                File fileName : fileNames) {
+                  mySourceFileToClasses.put(fileName,repr);
+                }
               }
             }
           }

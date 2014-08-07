@@ -20,7 +20,7 @@
       if (arrayClass == containingClass) {
         final PsiType componentType=qualifierResolveResult.getSubstitutor().substitute(arrayClass.getTypeParameters()[0]);
         LOG.assertTrue(componentType != null,qualifierResolveResult.getSubstitutor());
-        methods=new PsiMethod[]{factory.createMethodFromText("public " + componentType.createArrayType().getCanonicalText() + " __array__(int i) {return null;}",this)};
+        return factory.createMethodFromText("public " + componentType.createArrayType().getCanonicalText() + " __array__(int i) {return null;}",this);
       }
  else {
         methods=containingClass.getConstructors();
@@ -41,25 +41,39 @@
           final PsiReferenceParameterList parameterList=getParameterList();
           return parameterList != null && parameterList.getTypeParameterElements().length > 0 ? psiMethod : null;
         }
-      }
-      if (containingClass.isPhysical() && containingClass.hasTypeParameters()) {
-        final PsiElement qualifier=getQualifier();
-        if (qualifier instanceof PsiTypeElement) {
-          final PsiJavaCodeReferenceElement referenceElement=((PsiTypeElement)qualifier).getInnermostComponentReferenceElement();
-          if (referenceElement != null) {
-            final PsiReferenceParameterList parameterList=referenceElement.getParameterList();
-            if (parameterList == null || parameterList.getTypeParameterElements().length == 0) {
-              return null;
+ else {
+          final PsiSubstitutor classSubstitutor=TypeConversionUtil.getClassSubstitutor(psiMethod.getContainingClass(),containingClass,PsiSubstitutor.EMPTY);
+          final Set<PsiType> signature=new HashSet<PsiType>(Arrays.asList(psiMethod.getSignature(PsiSubstitutor.EMPTY).getParameterTypes()));
+          signature.add(psiMethod.getReturnType());
+          boolean free=true;
+          for (          PsiType type : signature) {
+            if (classSubstitutor != null) {
+              type=classSubstitutor.substitute(type);
+            }
+            if (type != null && PsiPolyExpressionUtil.mentionsTypeParameters(type,ContainerUtil.newHashSet(containingClass.getTypeParameters()))) {
+              free=false;
+              break;
             }
           }
+          if (free)           return psiMethod;
+        }
+      }
+      if (containingClass.hasTypeParameters()) {
+        final PsiElement qualifier=getQualifier();
+        PsiJavaCodeReferenceElement referenceElement=null;
+        if (qualifier instanceof PsiTypeElement) {
+          referenceElement=((PsiTypeElement)qualifier).getInnermostComponentReferenceElement();
         }
  else         if (qualifier instanceof PsiReferenceExpression) {
           final PsiReferenceExpression expression=(PsiReferenceExpression)qualifier;
           if (qualifierResolveResult.isReferenceTypeQualified()) {
-            final PsiReferenceParameterList parameterList=expression.getParameterList();
-            if (parameterList == null || parameterList.getTypeParameterElements().length == 0) {
-              return null;
-            }
+            referenceElement=expression;
+          }
+        }
+        if (referenceElement != null) {
+          final PsiReferenceParameterList parameterList=referenceElement.getParameterList();
+          if (parameterList == null || parameterList.getTypeParameterElements().length == 0) {
+            return null;
           }
         }
       }
