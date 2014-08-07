@@ -83,9 +83,12 @@ catch (                LimitReachedException e) {
               int argSort=argType.getSort();
               boolean isReferenceArg=argSort == Type.OBJECT || argSort == Type.ARRAY;
               boolean isBooleanArg=Type.BOOLEAN_TYPE.equals(argType);
+              boolean notNullParam=false;
               if (isReferenceArg) {
                 if (leakingParameters[i]) {
-                  parameterEquations.add(new NonNullInAnalysis(new RichControlFlow(graph,dfs),new In(i),stable).analyze());
+                  Equation<Key,Value> notNullParamEquation=new NonNullInAnalysis(new RichControlFlow(graph,dfs),new In(i),stable).analyze();
+                  notNullParam=notNullParamEquation.rhs.equals(new Final<Key,Value>(Value.NotNull));
+                  parameterEquations.add(notNullParamEquation);
                 }
  else {
                   parameterEquations.add(new Equation<Key,Value>(new Key(method,new In(i),stable),new Final<Key,Value>(Value.Top)));
@@ -94,7 +97,12 @@ catch (                LimitReachedException e) {
               if (isReferenceArg && isInterestingResult) {
                 if (leakingParameters[i]) {
                   if (resultOrigins.getValue() != null) {
-                    contractEquations.add(new InOutAnalysis(new RichControlFlow(graph,dfs),new InOut(i,Value.Null),resultOrigins.getValue(),stable).analyze());
+                    if (!notNullParam) {
+                      contractEquations.add(new InOutAnalysis(new RichControlFlow(graph,dfs),new InOut(i,Value.Null),resultOrigins.getValue(),stable).analyze());
+                    }
+ else {
+                      contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),new Final<Key,Value>(Value.Bot)));
+                    }
                     contractEquations.add(new InOutAnalysis(new RichControlFlow(graph,dfs),new InOut(i,Value.NotNull),resultOrigins.getValue(),stable).analyze());
                   }
  else {
