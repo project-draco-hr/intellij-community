@@ -1,0 +1,44 @@
+{
+  int opCode=insn.getOpcode();
+  int shift=opCode == INVOKESTATIC ? 0 : 1;
+switch (opCode) {
+case INVOKESPECIAL:
+case INVOKEINTERFACE:
+case INVOKEVIRTUAL:
+    if (values.get(0) instanceof NParamValue) {
+      dereferenced[((NParamValue)values.get(0)).n]=true;
+    }
+}
+switch (opCode) {
+case INVOKESTATIC:
+case INVOKESPECIAL:
+case INVOKEVIRTUAL:
+case INVOKEINTERFACE:
+  boolean stable=opCode == INVOKESTATIC || opCode == INVOKESPECIAL;
+MethodInsnNode mNode=(MethodInsnNode)insn;
+Method method=new Method(mNode.owner,mNode.name,mNode.desc);
+Type retType=Type.getReturnType(mNode.desc);
+boolean isRefRetType=retType.getSort() == Type.OBJECT || retType.getSort() == Type.ARRAY;
+for (int i=shift; i < values.size(); i++) {
+if (values.get(i) instanceof NParamValue) {
+if (opCode != INVOKEINTERFACE) {
+int n=((NParamValue)values.get(i)).n;
+Set<Key> npKeys=callDerefs[n];
+if (npKeys == null) {
+npKeys=new HashSet<Key>();
+callDerefs[n]=npKeys;
+}
+npKeys.add(new Key(method,new In(i - shift),stable));
+}
+}
+}
+if (shift == 1) {
+values.remove(0);
+}
+return new CombinedCall(retType,method,stable,values);
+case MULTIANEWARRAY:
+return new NotNullValue(super.naryOperation(insn,values).getType());
+default :
+}
+return super.naryOperation(insn,values);
+}
