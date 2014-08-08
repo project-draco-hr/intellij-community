@@ -44,98 +44,114 @@
         }
         if (graph.transitions.length > 0) {
           final DFSTree dfs=cfg.buildDFSTree(graph.transitions);
+          boolean complex=!dfs.back.isEmpty();
+          if (!complex) {
+            for (            int[] transition : graph.transitions) {
+              if (transition != null && transition.length > 1) {
+                complex=true;
+                break;
+              }
+            }
+          }
           boolean reducible=dfs.back.isEmpty() || cfg.reducible(graph,dfs);
-          if (reducible) {
-            final NullableLazyValue<boolean[]> resultOrigins=new NullableLazyValue<boolean[]>(){
-              @Override protected boolean[] compute(){
-                try {
-                  return cfg.resultOrigins(className,methodNode);
-                }
- catch (                AnalyzerException e) {
-                  return null;
-                }
-catch (                LimitReachedException e) {
-                  return null;
-                }
-              }
-            }
-;
-            NotNullLazyValue<Equation<Key,Value>> resultEquation=new NotNullLazyValue<Equation<Key,Value>>(){
-              @NotNull @Override protected Equation<Key,Value> compute(){
-                boolean[] origins=resultOrigins.getValue();
-                if (origins != null) {
+          if (true) {
+            if (reducible) {
+              final NullableLazyValue<boolean[]> resultOrigins=new NullableLazyValue<boolean[]>(){
+                @Override protected boolean[] compute(){
                   try {
-                    return new InOutAnalysis(new RichControlFlow(graph,dfs),new Out(),origins,stable).analyze();
+                    return cfg.resultOrigins(className,methodNode);
                   }
- catch (                  AnalyzerException ignored) {
+ catch (                  AnalyzerException e) {
+                    return null;
+                  }
+catch (                  LimitReachedException e) {
+                    return null;
                   }
                 }
-                return new Equation<Key,Value>(new Key(method,new Out(),stable),new Final<Key,Value>(Value.Top));
               }
-            }
 ;
-            boolean[] leakingParameters=maybeLeakingParameter ? cfg.leakingParameters(className,methodNode) : null;
-            if (isReferenceResult) {
-              contractEquations.add(resultEquation.getValue());
-            }
-            for (int i=0; i < argumentTypes.length; i++) {
-              Type argType=argumentTypes[i];
-              int argSort=argType.getSort();
-              boolean isReferenceArg=argSort == Type.OBJECT || argSort == Type.ARRAY;
-              boolean isBooleanArg=Type.BOOLEAN_TYPE.equals(argType);
-              boolean notNullParam=false;
-              if (isReferenceArg) {
-                if (leakingParameters[i]) {
-                  Equation<Key,Value> notNullParamEquation=new NonNullInAnalysis(new RichControlFlow(graph,dfs),new In(i),stable).analyze();
-                  notNullParam=notNullParamEquation.rhs.equals(new Final<Key,Value>(Value.NotNull));
-                  parameterEquations.add(notNullParamEquation);
-                }
- else {
-                  parameterEquations.add(new Equation<Key,Value>(new Key(method,new In(i),stable),new Final<Key,Value>(Value.Top)));
+              NotNullLazyValue<Equation<Key,Value>> resultEquation=new NotNullLazyValue<Equation<Key,Value>>(){
+                @NotNull @Override protected Equation<Key,Value> compute(){
+                  boolean[] origins=resultOrigins.getValue();
+                  if (origins != null) {
+                    try {
+                      return new InOutAnalysis(new RichControlFlow(graph,dfs),new Out(),origins,stable).analyze();
+                    }
+ catch (                    AnalyzerException ignored) {
+                    }
+                  }
+                  return new Equation<Key,Value>(new Key(method,new Out(),stable),new Final<Key,Value>(Value.Top));
                 }
               }
-              if (isReferenceArg && isInterestingResult) {
-                if (leakingParameters[i]) {
-                  if (resultOrigins.getValue() != null) {
-                    if (!notNullParam) {
-                      contractEquations.add(new InOutAnalysis(new RichControlFlow(graph,dfs),new InOut(i,Value.Null),resultOrigins.getValue(),stable).analyze());
+;
+              boolean[] leakingParameters=maybeLeakingParameter ? (argumentTypes.length < 0 ? cfg.fastLeakingParameters(className,methodNode) : cfg.leakingParameters(className,methodNode)) : null;
+              if (isReferenceResult) {
+                contractEquations.add(resultEquation.getValue());
+              }
+              for (int i=0; i < argumentTypes.length; i++) {
+                Type argType=argumentTypes[i];
+                int argSort=argType.getSort();
+                boolean isReferenceArg=argSort == Type.OBJECT || argSort == Type.ARRAY;
+                boolean isBooleanArg=Type.BOOLEAN_TYPE.equals(argType);
+                boolean notNullParam=false;
+                if (isReferenceArg) {
+                  if (leakingParameters[i]) {
+                    Equation<Key,Value> notNullParamEquation=new NonNullInAnalysis(new RichControlFlow(graph,dfs),new In(i),stable).analyze();
+                    notNullParam=notNullParamEquation.rhs.equals(new Final<Key,Value>(Value.NotNull));
+                    parameterEquations.add(notNullParamEquation);
+                  }
+ else {
+                    parameterEquations.add(new Equation<Key,Value>(new Key(method,new In(i),stable),new Final<Key,Value>(Value.Top)));
+                  }
+                }
+                if (isReferenceArg && isInterestingResult) {
+                  if (leakingParameters[i]) {
+                    if (resultOrigins.getValue() != null) {
+                      if (!notNullParam) {
+                        contractEquations.add(new InOutAnalysis(new RichControlFlow(graph,dfs),new InOut(i,Value.Null),resultOrigins.getValue(),stable).analyze());
+                      }
+ else {
+                        contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),new Final<Key,Value>(Value.Bot)));
+                      }
+                      contractEquations.add(new InOutAnalysis(new RichControlFlow(graph,dfs),new InOut(i,Value.NotNull),resultOrigins.getValue(),stable).analyze());
                     }
  else {
-                      contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),new Final<Key,Value>(Value.Bot)));
+                      contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),new Final<Key,Value>(Value.Top)));
+                      contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.NotNull),stable),new Final<Key,Value>(Value.Top)));
                     }
-                    contractEquations.add(new InOutAnalysis(new RichControlFlow(graph,dfs),new InOut(i,Value.NotNull),resultOrigins.getValue(),stable).analyze());
                   }
  else {
-                    contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),new Final<Key,Value>(Value.Top)));
-                    contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.NotNull),stable),new Final<Key,Value>(Value.Top)));
-                  }
-                }
- else {
-                  contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),resultEquation.getValue().rhs));
-                  contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.NotNull),stable),resultEquation.getValue().rhs));
-                }
-              }
-              if (isBooleanArg && isInterestingResult) {
-                if (leakingParameters[i]) {
-                  if (resultOrigins.getValue() != null) {
-                    contractEquations.add(new InOutAnalysis(new RichControlFlow(graph,dfs),new InOut(i,Value.False),resultOrigins.getValue(),stable).analyze());
-                    contractEquations.add(new InOutAnalysis(new RichControlFlow(graph,dfs),new InOut(i,Value.True),resultOrigins.getValue(),stable).analyze());
-                  }
- else {
-                    contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.False),stable),new Final<Key,Value>(Value.Top)));
-                    contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.True),stable),new Final<Key,Value>(Value.Top)));
+                    contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),resultEquation.getValue().rhs));
+                    contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.NotNull),stable),resultEquation.getValue().rhs));
                   }
                 }
+                if (isBooleanArg && isInterestingResult) {
+                  if (leakingParameters[i]) {
+                    if (resultOrigins.getValue() != null) {
+                      contractEquations.add(new InOutAnalysis(new RichControlFlow(graph,dfs),new InOut(i,Value.False),resultOrigins.getValue(),stable).analyze());
+                      contractEquations.add(new InOutAnalysis(new RichControlFlow(graph,dfs),new InOut(i,Value.True),resultOrigins.getValue(),stable).analyze());
+                    }
  else {
-                  contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.False),stable),resultEquation.getValue().rhs));
-                  contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.True),stable),resultEquation.getValue().rhs));
+                      contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.False),stable),new Final<Key,Value>(Value.Top)));
+                      contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.True),stable),new Final<Key,Value>(Value.Top)));
+                    }
+                  }
+ else {
+                    contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.False),stable),resultEquation.getValue().rhs));
+                    contractEquations.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.True),stable),resultEquation.getValue().rhs));
+                  }
                 }
               }
+              added=true;
             }
-            added=true;
+ else {
+              LOG.debug("CFG for " + method + " is not reducible");
+            }
           }
  else {
-            LOG.debug("CFG for " + method + " is not reducible");
+            CombinedSingleAnalysis analyzer=new CombinedSingleAnalysis(method,graph);
+            analyzer.analyze();
+            added=true;
           }
         }
         if (!added) {
