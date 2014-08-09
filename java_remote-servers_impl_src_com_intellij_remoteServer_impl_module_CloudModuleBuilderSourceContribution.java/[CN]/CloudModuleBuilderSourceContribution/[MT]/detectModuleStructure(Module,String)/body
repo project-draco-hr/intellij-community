@@ -1,0 +1,51 @@
+{
+  final Project project=module.getProject();
+  final CreateFromSourcesMode mode=new CreateFromSourcesMode(){
+    @Override public boolean isAvailable(    WizardContext context){
+      return true;
+    }
+    @Override public void addSteps(    WizardContext context,    ModulesProvider modulesProvider,    StepSequence sequence,    String specific){
+      super.addSteps(context,modulesProvider,sequence,specific);
+      myProjectBuilder.setFileToImport(contentPath);
+    }
+  }
+;
+  final WizardContext context=new WizardContext(project);
+  final StepSequence stepSequence=mode.getSteps(context,DefaultModulesProvider.createForProject(context.getProject()));
+  if (stepSequence == null) {
+    return;
+  }
+  Disposer.register(project,new Disposable(){
+    @Override public void dispose(){
+      for (      ModuleWizardStep step : stepSequence.getAllSteps()) {
+        step.disposeUIResources();
+      }
+    }
+  }
+);
+  ProgressManager.getInstance().run(new Task.Backgroundable(project,CloudBundle.getText("detect.module.structure",getCloudType().getPresentableName()),false){
+    @Override public void run(    @NotNull ProgressIndicator indicator){
+      for (ModuleWizardStep step=ContainerUtil.getFirstItem(stepSequence.getSelectedSteps()); step != null; step=stepSequence.getNextStep(step)) {
+        if (step instanceof AbstractStepWithProgress<?>) {
+          ((AbstractStepWithProgress)step).performStep();
+        }
+ else {
+          step.updateDataModel();
+        }
+      }
+      CloudAccountSelectionEditor.unsetAccountOnContext(context,getCloudType());
+    }
+    @Override public boolean shouldStartInBackground(){
+      return false;
+    }
+    @Override public void onSuccess(){
+      ProjectBuilder moduleBuilder=mode.getModuleBuilder();
+      if (moduleBuilder == null) {
+        return;
+      }
+      moduleBuilder.commit(project);
+      getNotifier().showMessage(CloudBundle.getText("cloud.support.added",getCloudType().getPresentableName()),MessageType.INFO);
+    }
+  }
+);
+}
