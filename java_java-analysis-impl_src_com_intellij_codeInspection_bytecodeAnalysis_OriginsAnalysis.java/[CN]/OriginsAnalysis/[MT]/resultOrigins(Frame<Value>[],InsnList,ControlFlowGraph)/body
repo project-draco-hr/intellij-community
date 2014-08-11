@@ -1,0 +1,67 @@
+{
+  TIntArrayList[] backTransitions=new TIntArrayList[instructions.size()];
+  for (int i=0; i < backTransitions.length; i++) {
+    backTransitions[i]=new TIntArrayList();
+  }
+  LinkedList<ILocation> queue=new LinkedList<ILocation>();
+  HashSet<ILocation> queued=new HashSet<ILocation>();
+  for (int from=0; from < instructions.size(); from++) {
+    for (    int to : graph.transitions[from]) {
+      TIntArrayList froms=backTransitions[to];
+      froms.add(from);
+      int opcode=instructions.get(to).getOpcode();
+      if (opcode >= Opcodes.IRETURN && opcode <= Opcodes.ARETURN) {
+        ILocation sourceLoc=new ILocation(false,from,frames[to].getStackSize() - 1);
+        if (queued.add(sourceLoc)) {
+          queue.push(sourceLoc);
+        }
+      }
+    }
+    if (debug) {
+      System.err.println(from + " " + Arrays.toString(graph.transitions[from]));
+    }
+  }
+  if (debug) {
+    System.err.println("***");
+    for (int i=0; i < backTransitions.length; i++) {
+      System.err.println(i + " " + backTransitions[i]);
+    }
+  }
+  boolean[] result=new boolean[instructions.size()];
+  while (!queue.isEmpty()) {
+    ILocation resultLocation=queue.pop();
+    int insnIndex=resultLocation.insnIndex;
+    AbstractInsnNode insn=instructions.get(insnIndex);
+    int opcode=insn.getOpcode();
+    Location preLocation=traceSource(frames[insnIndex],resultLocation,insn);
+    if (debug) {
+      System.err.println("location");
+      System.err.println(resultLocation);
+      System.err.println(opcode);
+      System.err.println("pre-location");
+      System.err.println(preLocation);
+    }
+    if (preLocation == null) {
+      if (opcode != Opcodes.INVOKEINTERFACE && opcode != Opcodes.GETFIELD && !(opcode >= Opcodes.IALOAD && opcode <= Opcodes.SALOAD)) {
+        result[insnIndex]=true;
+      }
+    }
+ else {
+      TIntArrayList froms=backTransitions[insnIndex];
+      for (int i=0; i < froms.size(); i++) {
+        ILocation preILoc=new ILocation(preLocation.local,froms.getQuick(i),preLocation.slot);
+        if (queued.add(preILoc)) {
+          if (debug) {
+            System.err.println("queuing");
+            System.err.println(preILoc);
+          }
+          queue.push(preILoc);
+        }
+      }
+    }
+  }
+  if (debug) {
+    System.err.println(Arrays.toString(result));
+  }
+  return result;
+}

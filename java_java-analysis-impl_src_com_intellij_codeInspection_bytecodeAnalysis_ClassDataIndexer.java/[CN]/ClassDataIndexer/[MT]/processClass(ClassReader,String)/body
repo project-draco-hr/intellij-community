@@ -34,10 +34,10 @@
       try {
         boolean added=false;
         final ControlFlowGraph graph=cfg.buildControlFlowGraph(className,methodNode);
-        boolean maybeLeakingParameter=false;
+        boolean maybeLeakingParameter=isInterestingResult;
         for (        Type argType : argumentTypes) {
           int argSort=argType.getSort();
-          if (argSort == Type.OBJECT || argSort == Type.ARRAY || (isInterestingResult && Type.BOOLEAN_TYPE.equals(argType))) {
+          if (argSort == Type.OBJECT || argSort == Type.ARRAY) {
             maybeLeakingParameter=true;
             break;
           }
@@ -56,15 +56,15 @@
           boolean reducible=dfs.back.isEmpty() || cfg.reducible(graph,dfs);
           if (true) {
             if (reducible) {
+              final Pair<boolean[],Frame<org.jetbrains.org.objectweb.asm.tree.analysis.Value>[]> pair=maybeLeakingParameter ? (argumentTypes.length < 32 ? cfg.fastLeakingParameters(className,methodNode) : cfg.leakingParameters(className,methodNode)) : null;
+              boolean[] leakingParameters=pair != null ? pair.first : null;
               final NullableLazyValue<boolean[]> resultOrigins=new NullableLazyValue<boolean[]>(){
                 @Override protected boolean[] compute(){
                   try {
-                    return cfg.resultOrigins(className,methodNode);
+                    return OriginsAnalysis.resultOrigins(pair.second,methodNode.instructions,graph);
                   }
  catch (                  AnalyzerException e) {
-                    return null;
-                  }
-catch (                  LimitReachedException e) {
+                    LOG.debug("when processing " + method + " in "+ presentableUrl,e);
                     return null;
                   }
                 }
@@ -84,7 +84,6 @@ catch (                  LimitReachedException e) {
                 }
               }
 ;
-              boolean[] leakingParameters=maybeLeakingParameter ? (argumentTypes.length < 32 ? cfg.fastLeakingParameters(className,methodNode) : cfg.leakingParameters(className,methodNode)) : null;
               if (isReferenceResult) {
                 contractEquations.add(resultEquation.getValue());
               }
