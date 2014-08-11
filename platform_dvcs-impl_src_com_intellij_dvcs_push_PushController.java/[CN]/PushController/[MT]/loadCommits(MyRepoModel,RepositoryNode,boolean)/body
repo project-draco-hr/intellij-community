@@ -1,0 +1,32 @@
+{
+  node.stopLoading();
+  final ProgressIndicator indicator=node.startLoading();
+  final PushSupport support=model.getSupport();
+  final AtomicReference<OutgoingResult> result=new AtomicReference<OutgoingResult>();
+  Task.Backgroundable task=new Task.Backgroundable(myProject,"Loading Commits",true){
+    @Override public void onCancel(){
+      node.stopLoading();
+    }
+    @Override public void onSuccess(){
+      OutgoingResult outgoing=result.get();
+      if (outgoing.hasErrors()) {
+        myPushLog.setChildren(node,ContainerUtil.map(outgoing.getErrors(),new Function<VcsError,DefaultMutableTreeNode>(){
+          @Override public DefaultMutableTreeNode fun(          VcsError error){
+            return new TextWithLinkNode(error);
+          }
+        }
+),model.isSelected());
+      }
+ else {
+        model.setLoadedCommits(outgoing.getCommits());
+        myPushLog.setChildren(node,getPresentationForCommits(PushController.this.myProject,model.getLoadedCommits(),model.getNumberOfShownCommits()),model.isSelected());
+      }
+    }
+    @Override public void run(    @NotNull ProgressIndicator indicator){
+      OutgoingResult outgoing=support.getOutgoingCommitsProvider().getOutgoingCommits(model.getRepository(),model.getSpec(),initial);
+      result.compareAndSet(null,outgoing);
+    }
+  }
+;
+  ProgressManagerImpl.runProcessWithProgressAsynchronously(task,indicator,null,ModalityState.any());
+}
