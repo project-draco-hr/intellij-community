@@ -1,38 +1,41 @@
 {
-  final List<RunContentDescriptor> runningConfigurationsOfTheSameType=new ArrayList<RunContentDescriptor>();
-  final List<RunContentDescriptor> runningIncompatibleConfigurations=new ArrayList<RunContentDescriptor>();
   RunnerAndConfigurationSettings configuration=environment.getRunnerAndConfigurationSettings();
-  if (configuration != null) {
-    runningIncompatibleConfigurations.addAll(getIncompatibleRunningDescriptors(configuration));
+  List<RunContentDescriptor> runningIncompatible;
+  if (configuration == null) {
+    runningIncompatible=Collections.emptyList();
   }
+ else {
+    runningIncompatible=getIncompatibleRunningDescriptors(configuration);
+  }
+  RunContentDescriptor contentToReuse=environment.getContentToReuse();
+  final List<RunContentDescriptor> runningOfTheSameType=new SmartList<RunContentDescriptor>();
   if (configuration != null && configuration.isSingleton()) {
-    runningConfigurationsOfTheSameType.addAll(getRunningDescriptorsOfTheSameConfigType(configuration));
+    runningOfTheSameType.addAll(getRunningDescriptorsOfTheSameConfigType(configuration));
   }
- else   if (environment.getContentToReuse() != null) {
-    runningConfigurationsOfTheSameType.add(environment.getContentToReuse());
+ else   if (isProcessRunning(contentToReuse)) {
+    runningOfTheSameType.add(contentToReuse);
   }
-  final List<RunContentDescriptor> runningConfigurationsToStop=ContainerUtil.concat(runningConfigurationsOfTheSameType,runningIncompatibleConfigurations);
-  if (!runningConfigurationsToStop.isEmpty()) {
+  List<RunContentDescriptor> runningToStop=ContainerUtil.concat(runningOfTheSameType,runningIncompatible);
+  if (!runningToStop.isEmpty()) {
     if (configuration != null) {
-      if (!runningConfigurationsOfTheSameType.isEmpty() && (runningConfigurationsOfTheSameType.size() > 1 || environment.getContentToReuse() == null || runningConfigurationsOfTheSameType.get(0) != environment.getContentToReuse()) && !userApprovesStopForSameTypeConfigurations(environment.getProject(),configuration.getName(),runningConfigurationsOfTheSameType.size())) {
+      if (!runningOfTheSameType.isEmpty() && (runningOfTheSameType.size() > 1 || contentToReuse == null || runningOfTheSameType.get(0) != contentToReuse) && !userApprovesStopForSameTypeConfigurations(environment.getProject(),configuration.getName(),runningOfTheSameType.size())) {
         return;
       }
-      if (!runningIncompatibleConfigurations.isEmpty() && !userApprovesStopForIncompatibleConfigurations(myProject,configuration.getName(),runningIncompatibleConfigurations)) {
+      if (!runningIncompatible.isEmpty() && !userApprovesStopForIncompatibleConfigurations(myProject,configuration.getName(),runningIncompatible)) {
         return;
       }
     }
-    for (    RunContentDescriptor descriptor : runningConfigurationsToStop) {
+    for (    RunContentDescriptor descriptor : runningToStop) {
       stop(descriptor);
     }
   }
-  Runnable runnable=new Runnable(){
-    ProgramRunner runner=environment.getRunner();
+  awaitingTerminationAlarm.addRequest(new Runnable(){
     @Override public void run(){
-      if (runner != null && ExecutorRegistry.getInstance().isStarting(environment)) {
+      if (environment.getRunner() != null && ExecutorRegistry.getInstance().isStarting(environment)) {
         awaitingTerminationAlarm.addRequest(this,100);
         return;
       }
-      for (      RunContentDescriptor descriptor : runningConfigurationsOfTheSameType) {
+      for (      RunContentDescriptor descriptor : runningOfTheSameType) {
         ProcessHandler processHandler=descriptor.getProcessHandler();
         if (processHandler != null && !processHandler.isProcessTerminated()) {
           awaitingTerminationAlarm.addRequest(this,100);
@@ -42,6 +45,5 @@
       start(environment);
     }
   }
-;
-  awaitingTerminationAlarm.addRequest(runnable,50);
+,50);
 }
