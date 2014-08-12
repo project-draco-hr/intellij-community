@@ -1,0 +1,54 @@
+{
+  final Project project=getProject();
+  final Sdk sdk=createTempSdk(sdkHome,SdkCreationType.EMPTY_SDK);
+  setProcessCanTerminate(false);
+  PydevConsoleRunner consoleRunner=PydevConsoleRunner.create(project,sdk,PyConsoleType.PYTHON,getWorkingFolder());
+  before();
+  mySemaphore0=new Semaphore(0);
+  consoleRunner.addConsoleListener(new PydevConsoleRunner.ConsoleListener(){
+    @Override public void handleConsoleInitialized(    LanguageConsoleView consoleView){
+      mySemaphore0.release();
+    }
+  }
+);
+  consoleRunner.run();
+  waitFor(mySemaphore0);
+  mySemaphore=new Semaphore(0);
+  myConsoleView=consoleRunner.getConsoleView();
+  myProcessHandler=(PyConsoleProcessHandler)consoleRunner.getProcessHandler();
+  myExecuteHandler=(PydevConsoleExecuteActionHandler)consoleRunner.getConsoleExecuteActionHandler();
+  myCommunication=consoleRunner.getPydevConsoleCommunication();
+  myCommunication.addCommunicationListener(new ConsoleCommunicationListener(){
+    @Override public void commandExecuted(    boolean more){
+      mySemaphore.release();
+    }
+    @Override public void inputRequested(){
+    }
+  }
+);
+  myProcessHandler.addProcessListener(new ProcessAdapter(){
+    @Override public void processTerminated(    ProcessEvent event){
+      if (event.getExitCode() != 0 && !myProcessCanTerminate) {
+        Assert.fail("Process terminated unexpectedly\n" + output());
+      }
+    }
+  }
+);
+  OutputPrinter myOutputPrinter=null;
+  if (shouldPrintOutput) {
+    myOutputPrinter=new OutputPrinter();
+    myOutputPrinter.start();
+  }
+  waitForOutput("PyDev console");
+  try {
+    testing();
+    after();
+  }
+  finally {
+    setProcessCanTerminate(true);
+    if (myOutputPrinter != null) {
+      myOutputPrinter.stop();
+    }
+    disposeConsole();
+  }
+}
