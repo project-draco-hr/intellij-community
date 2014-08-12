@@ -11,10 +11,11 @@ synchronized (filesToResolve) {
     }
     filesToResolve.clear();
   }
-  final Set<VirtualFile> toProcess=Collections.synchronizedSet(set);
   final ConcurrentIntObjectMap<int[]> fileToForwardIds=new StripedLockIntObjectConcurrentHashMap<int[]>();
-  final int size=countAndMarkUnresolved(set);
-  if (size == 0)   return;
+  Set<VirtualFile> files=countAndMarkUnresolved(set,false);
+  if (files.isEmpty())   return;
+  final int size=files.size();
+  final Set<VirtualFile> toProcess=Collections.synchronizedSet(files);
   log("Started to resolve " + size + " files (was queued "+ queuedSize+ ")");
   indicator.setIndeterminate(false);
   ProgressIndicatorUtils.forceWriteActionPriority(indicator,(Disposable)indicator);
@@ -24,27 +25,18 @@ synchronized (filesToResolve) {
       double fraction=1 - toProcess.size() * 1.0 / size;
       indicator.setFraction(fraction);
       try {
-        VfsUtilCore.visitChildrenRecursively(file,new VirtualFileVisitor(){
-          @Override public boolean visitFile(          @NotNull VirtualFile file){
-            if (!toResolve(file,myProject)) {
-              return true;
-            }
-            int fileId=getAbsId(file);
-            int i=size - toProcess.size();
-            indicator.setText(i + "/" + size+ ": Resolving "+ file.getPresentableUrl());
-            int[] forwardIds=processFile(file,fileId,indicator);
-            if (forwardIds == null) {
-              return false;
-            }
-            toProcess.remove(file);
-            fileToForwardIds.put(fileId,forwardIds);
-            return true;
-          }
-          @Nullable @Override public Iterable<VirtualFile> getChildrenIterable(          @NotNull VirtualFile file){
-            return ((NewVirtualFile)file).iterInDbChildren();
-          }
+        if (file.isDirectory() || !toResolve(file,myProject)) {
+          return true;
         }
-,RuntimeException.class);
+        int fileId=getAbsId(file);
+        int i=size - toProcess.size();
+        indicator.setText(i + "/" + size+ ": Resolving "+ file.getPresentableUrl());
+        int[] forwardIds=processFile(file,fileId,indicator);
+        if (forwardIds == null) {
+          return false;
+        }
+        toProcess.remove(file);
+        fileToForwardIds.put(fileId,forwardIds);
       }
  catch (      RuntimeException e) {
         indicator.checkCanceled();
@@ -55,7 +47,7 @@ synchronized (filesToResolve) {
 ;
   boolean success=true;
   try {
-    success=JobLauncher.getInstance().invokeConcurrentlyUnderProgress(new ArrayList<VirtualFile>(set),indicator,false,false,processor);
+    success=JobLauncher.getInstance().invokeConcurrentlyUnderProgress(new ArrayList<VirtualFile>(files),indicator,false,false,processor);
   }
   finally {
     queue(toProcess,"re-added after fail. success=" + success);
