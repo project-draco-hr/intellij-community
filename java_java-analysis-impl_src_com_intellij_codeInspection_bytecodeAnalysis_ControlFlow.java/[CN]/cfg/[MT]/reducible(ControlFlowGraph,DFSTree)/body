@@ -1,36 +1,50 @@
 {
   int size=cfg.transitions.length;
-  HashSet<Integer>[] cycles=new HashSet[size];
-  HashSet<Integer>[] nonCycles=new HashSet[size];
+  boolean[] loopEnters=dfs.loopEnters;
+  TIntHashSet[] cycleIncomings=new TIntHashSet[size];
+  TIntArrayList[] nonCycleIncomings=new TIntArrayList[size];
   int[] collapsedTo=new int[size];
+  int[] queue=new int[size];
+  int top;
   for (int i=0; i < size; i++) {
-    cycles[i]=new HashSet<Integer>();
-    nonCycles[i]=new HashSet<Integer>();
+    if (loopEnters[i]) {
+      cycleIncomings[i]=new TIntHashSet();
+    }
+    nonCycleIncomings[i]=new TIntArrayList();
     collapsedTo[i]=i;
   }
   for (  Edge edge : dfs.back) {
-    cycles[edge.to].add(edge.from);
+    cycleIncomings[edge.to].add(edge.from);
   }
   for (  Edge edge : dfs.nonBack) {
-    nonCycles[edge.to].add(edge.from);
+    nonCycleIncomings[edge.to].add(edge.from);
   }
   for (int w=size - 1; w >= 0; w--) {
-    HashSet<Integer> p=new HashSet<Integer>(cycles[w]);
-    Queue<Integer> queue=new LinkedList<Integer>(cycles[w]);
-    while (!queue.isEmpty()) {
-      int x=queue.remove();
-      for (      int y : nonCycles[x]) {
-        int y1=collapsedTo[y];
+    top=0;
+    TIntHashSet p=cycleIncomings[w];
+    if (p == null) {
+      continue;
+    }
+    TIntIterator iter=p.iterator();
+    while (iter.hasNext()) {
+      queue[top++]=iter.next();
+    }
+    while (top > 0) {
+      int x=queue[--top];
+      TIntArrayList incoming=nonCycleIncomings[x];
+      for (int i=0; i < incoming.size(); i++) {
+        int y1=collapsedTo[incoming.getQuick(i)];
         if (!dfs.isDescendant(y1,w)) {
           return false;
         }
         if (y1 != w && p.add(y1)) {
-          queue.add(y1);
+          queue[top++]=y1;
         }
       }
     }
-    for (    int x : p) {
-      collapsedTo[x]=w;
+    iter=p.iterator();
+    while (iter.hasNext()) {
+      collapsedTo[iter.next()]=w;
     }
   }
   return true;
