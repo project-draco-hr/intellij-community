@@ -1,0 +1,47 @@
+{
+  final List<RunContentDescriptor> runningConfigurationsOfTheSameType=new ArrayList<RunContentDescriptor>();
+  final List<RunContentDescriptor> runningIncompatibleConfigurations=new ArrayList<RunContentDescriptor>();
+  RunnerAndConfigurationSettings configuration=environment.getRunnerAndConfigurationSettings();
+  if (configuration != null) {
+    runningIncompatibleConfigurations.addAll(getIncompatibleRunningDescriptors(configuration));
+  }
+  if (configuration != null && configuration.isSingleton()) {
+    runningConfigurationsOfTheSameType.addAll(getRunningDescriptorsOfTheSameConfigType(configuration));
+  }
+ else   if (environment.getContentToReuse() != null) {
+    runningConfigurationsOfTheSameType.add(environment.getContentToReuse());
+  }
+  final List<RunContentDescriptor> runningConfigurationsToStop=ContainerUtil.concat(runningConfigurationsOfTheSameType,runningIncompatibleConfigurations);
+  if (!runningConfigurationsToStop.isEmpty()) {
+    if (configuration != null) {
+      if (!runningConfigurationsOfTheSameType.isEmpty() && (runningConfigurationsOfTheSameType.size() > 1 || environment.getContentToReuse() == null || runningConfigurationsOfTheSameType.get(0) != environment.getContentToReuse()) && !userApprovesStopForSameTypeConfigurations(environment.getProject(),configuration.getName(),runningConfigurationsOfTheSameType.size())) {
+        return;
+      }
+      if (!runningIncompatibleConfigurations.isEmpty() && !userApprovesStopForIncompatibleConfigurations(myProject,configuration.getName(),runningIncompatibleConfigurations)) {
+        return;
+      }
+    }
+    for (    RunContentDescriptor descriptor : runningConfigurationsToStop) {
+      stop(descriptor);
+    }
+  }
+  Runnable runnable=new Runnable(){
+    ProgramRunner runner=environment.getRunner();
+    @Override public void run(){
+      if (runner != null && ExecutorRegistry.getInstance().isStarting(environment)) {
+        awaitingTerminationAlarm.addRequest(this,100);
+        return;
+      }
+      for (      RunContentDescriptor descriptor : runningConfigurationsOfTheSameType) {
+        ProcessHandler processHandler=descriptor.getProcessHandler();
+        if (processHandler != null && !processHandler.isProcessTerminated()) {
+          awaitingTerminationAlarm.addRequest(this,100);
+          return;
+        }
+      }
+      start(environment);
+    }
+  }
+;
+  awaitingTerminationAlarm.addRequest(runnable,50);
+}
