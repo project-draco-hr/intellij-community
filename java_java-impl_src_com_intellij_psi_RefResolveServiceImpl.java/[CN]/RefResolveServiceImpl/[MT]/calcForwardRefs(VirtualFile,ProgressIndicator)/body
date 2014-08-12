@@ -1,0 +1,57 @@
+{
+  if (myProject.isDisposed())   throw new ProcessCanceledException();
+  if (fileCount.incrementAndGet() % 100 == 0) {
+    PsiManager.getInstance(myProject).dropResolveCaches();
+synchronized (storage) {
+      storage.flush();
+    }
+    try {
+      log.flush();
+    }
+ catch (    IOException e) {
+      LOG.error(e);
+    }
+  }
+  final TIntHashSet forward=new TIntHashSet();
+  final PsiFile psiFile=ApplicationUtil.tryRunReadAction(new Computable<PsiFile>(){
+    @Override public PsiFile compute(){
+      return PsiManager.getInstance(myProject).findFile(virtualFile);
+    }
+  }
+);
+  final int fileId=getAbsId(virtualFile);
+  if (psiFile != null) {
+    bytesSize.addAndGet(virtualFile.getLength());
+    final Set<PsiElement> resolved=new THashSet<PsiElement>();
+    ApplicationUtil.tryRunReadAction(new Runnable(){
+      @Override public void run(){
+        indicator.checkCanceled();
+        psiFile.accept(new JavaRecursiveElementWalkingVisitor(){
+          @Override public void visitReferenceElement(          PsiJavaCodeReferenceElement reference){
+            indicator.checkCanceled();
+            PsiElement element=reference.resolve();
+            if (element != null) {
+              resolved.add(element);
+            }
+            refCount.incrementAndGet();
+            super.visitReferenceElement(reference);
+          }
+        }
+);
+      }
+    }
+);
+    ApplicationUtil.tryRunReadAction(new Runnable(){
+      @Override public void run(){
+        indicator.checkCanceled();
+        for (        PsiElement element : resolved) {
+          PsiFile file=element.getContainingFile();
+          addIdAndSuperClasses(file,forward);
+        }
+      }
+    }
+);
+  }
+  forward.remove(fileId);
+  return forward;
+}

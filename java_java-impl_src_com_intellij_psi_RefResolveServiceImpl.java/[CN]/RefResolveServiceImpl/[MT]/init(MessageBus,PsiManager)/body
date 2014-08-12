@@ -1,0 +1,53 @@
+{
+  messageBus.connect().subscribe(VirtualFileManager.VFS_CHANGES,new BulkFileListener.Adapter(){
+    @Override public void after(    @NotNull List<? extends VFileEvent> events){
+      fileCount.set(0);
+      List<VirtualFile> files=ContainerUtil.mapNotNull(events,new Function<VFileEvent,VirtualFile>(){
+        @Override public VirtualFile fun(        VFileEvent event){
+          return event.getFile();
+        }
+      }
+);
+      queue(files,"VFS events " + events.size());
+    }
+  }
+);
+  psiManager.addPsiTreeChangeListener(new PsiTreeChangeAdapter(){
+    @Override public void childrenChanged(    @NotNull PsiTreeChangeEvent event){
+      PsiFile file=event.getFile();
+      VirtualFile virtualFile=PsiUtilCore.getVirtualFile(file);
+      if (virtualFile != null) {
+        queue(Collections.singletonList(virtualFile),event);
+      }
+    }
+    @Override public void propertyChanged(    @NotNull PsiTreeChangeEvent event){
+      childrenChanged(event);
+    }
+  }
+);
+  messageBus.connect().subscribe(DumbService.DUMB_MODE,new DumbService.DumbModeListener(){
+    @Override public void enteredDumbMode(){
+      wakeUp();
+    }
+    @Override public void exitDumbMode(){
+      wakeUp();
+    }
+  }
+);
+  myApplication.addApplicationListener(new ApplicationAdapter(){
+    @Override public void writeActionFinished(    Object action){
+      wakeUp();
+    }
+  }
+,this);
+  VirtualFileManager.getInstance().addVirtualFileManagerListener(new VirtualFileManagerListener(){
+    @Override public void beforeRefreshStart(    boolean asynchronous){
+      wakeUp();
+    }
+    @Override public void afterRefreshFinish(    boolean asynchronous){
+      wakeUp();
+    }
+  }
+,this);
+  startThread();
+}
