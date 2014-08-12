@@ -1,0 +1,36 @@
+{
+  runPythonTest(new PyPackagingTestTask(){
+    @Override public void runTestOn(    String sdkHome) throws Exception {
+      final Sdk sdk=createTempSdk(sdkHome,SdkCreationType.EMPTY_SDK);
+      try {
+        final File tempDir=FileUtil.createTempDirectory(getTestName(false),null);
+        final File venvDir=new File(tempDir,"venv");
+        final String venvSdkHome=((PyPackageManagerImpl)PyPackageManager.getInstance(sdk)).createVirtualEnv(venvDir.getPath(),false);
+        final Sdk venvSdk=createTempSdk(venvSdkHome,SdkCreationType.EMPTY_SDK);
+        assertNotNull(venvSdk);
+        final PyPackageManagerImpl manager=(PyPackageManagerImpl)PyPackageManager.getInstance(venvSdk);
+        final List<PyPackage> packages1=manager.getPackages();
+        manager.install(list(PyRequirement.fromString("Markdown<2.2"),new PyRequirement("httplib2")),Collections.<String>emptyList());
+        final List<PyPackage> packages2=manager.getPackages();
+        final PyPackage markdown2=findPackage("Markdown",packages2);
+        assertNotNull(markdown2);
+        assertTrue(markdown2.isInstalled());
+        final PyPackage pip1=findPackage("pip",packages1);
+        assertNotNull(pip1);
+        assertEquals("pip",pip1.getName());
+        assertEquals(PyPackageManagerImpl.PIP_VERSION,pip1.getVersion());
+        manager.uninstall(list(pip1));
+        final List<PyPackage> packages3=manager.getPackages();
+        final PyPackage pip2=findPackage("pip",packages3);
+        assertNull(pip2);
+      }
+ catch (      PyExternalProcessException e) {
+        new RuntimeException(String.format("Error for interpreter '%s': %s",sdk.getHomePath(),e.getMessage()),e);
+      }
+catch (      IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+);
+}
