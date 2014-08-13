@@ -1,25 +1,11 @@
 {
-  if (myExecutionResult == null) {
-    throw new IllegalStateException("Missing ExecutionResult");
-  }
-  ExecutionEnvironment environment=getEnvironment();
-  if (environment == null) {
-    throw new IllegalStateException("Missing ExecutionEnvironment");
-  }
-  final RunProfile profile=environment.getRunProfile();
-  final ExecutionConsole console=myExecutionResult.getExecutionConsole();
-  String runnerType=JAVA_RUNNER;
-  if (console instanceof ExecutionConsoleEx) {
-    final String id=((ExecutionConsoleEx)console).getExecutionConsoleId();
-    if (id != null) {
-      runnerType=JAVA_RUNNER + "." + id;
-    }
-  }
-  myUi=RunnerLayoutUi.Factory.getInstance(getProject()).create(runnerType,getEnvironment().getExecutor().getId(),profile.getName(),this);
-  myUi.getOptions().setMoveToGridActionEnabled(false).setMinimizeActionEnabled(false);
+  final RunProfile profile=getEnvironment().getRunProfile();
   if (ApplicationManager.getApplication().isUnitTestMode()) {
-    return new MyRunContentDescriptor(profile,myExecutionResult,myUi.getComponent(),this);
+    RunContentDescriptor contentDescriptor=new RunContentDescriptor(profile,myExecutionResult,myUi.getComponent());
+    Disposer.register(contentDescriptor,this);
+    return contentDescriptor;
   }
+  final ExecutionConsole console=myExecutionResult.getExecutionConsole();
   if (console != null) {
     if (console instanceof ExecutionConsoleEx) {
       ((ExecutionConsoleEx)console).buildUi(myUi);
@@ -27,13 +13,11 @@
  else {
       buildConsoleUiDefault(myUi,console);
     }
-    if (profile instanceof RunConfigurationBase) {
-      myManager.initLogConsoles((RunConfigurationBase)profile,myExecutionResult.getProcessHandler());
-      OutputFileUtil.attachDumpListener((RunConfigurationBase)profile,myExecutionResult.getProcessHandler(),console);
-    }
+    initLogConsoles(profile,myExecutionResult.getProcessHandler(),console);
   }
-  MyRunContentDescriptor contentDescriptor=new MyRunContentDescriptor(profile,myExecutionResult,myUi.getComponent(),this);
-  myUi.getOptions().setLeftToolbar(createActionToolbar(contentDescriptor,myUi.getComponent()),ActionPlaces.UNKNOWN);
+  RunContentDescriptor contentDescriptor=new RunContentDescriptor(profile,myExecutionResult,myUi.getComponent());
+  Disposer.register(contentDescriptor,this);
+  myUi.getOptions().setLeftToolbar(createActionToolbar(contentDescriptor),ActionPlaces.UNKNOWN);
   if (profile instanceof RunConfigurationBase) {
     if (console instanceof ObservableConsoleView && !ApplicationManager.getApplication().isUnitTestMode()) {
       ((ObservableConsoleView)console).addChangeListener(new ConsoleToFrontListener((RunConfigurationBase)profile,getProject(),getEnvironment().getExecutor(),contentDescriptor,myUi),this);
