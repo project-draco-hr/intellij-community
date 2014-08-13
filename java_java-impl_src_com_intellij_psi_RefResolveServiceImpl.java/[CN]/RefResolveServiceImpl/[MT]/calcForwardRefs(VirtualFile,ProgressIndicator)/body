@@ -1,0 +1,60 @@
+{
+  if (myProject.isDisposed())   throw new ProcessCanceledException();
+  if (fileCount.incrementAndGet() % 100 == 0) {
+    PsiManager.getInstance(myProject).dropResolveCaches();
+synchronized (storage) {
+      storage.flush();
+    }
+    try {
+      log.flush();
+    }
+ catch (    IOException e) {
+      LOG.error(e);
+    }
+  }
+  final TIntHashSet forward=new TIntHashSet();
+  final PsiFile psiFile=ApplicationUtil.tryRunReadAction(new Computable<PsiFile>(){
+    @Override public PsiFile compute(){
+      return PsiManager.getInstance(myProject).findFile(virtualFile);
+    }
+  }
+);
+  final int fileId=getAbsId(virtualFile);
+  if (psiFile != null) {
+    bytesSize.addAndGet(virtualFile.getLength());
+    final Set<PsiElement> resolved=new THashSet<PsiElement>();
+    ApplicationUtil.tryRunReadAction(new Runnable(){
+      @Override public void run(){
+        indicator.checkCanceled();
+        if (psiFile instanceof PsiJavaFile) {
+          psiFile.accept(new JavaRecursiveElementWalkingVisitor(){
+            @Override public void visitReferenceElement(            PsiJavaCodeReferenceElement reference){
+              resolveReference(reference,indicator,resolved);
+              super.visitReferenceElement(reference);
+            }
+          }
+);
+        }
+ else         if (psiFile instanceof XmlFile) {
+          psiFile.accept(new XmlRecursiveElementWalkingVisitor(){
+            @Override public void visitXmlElement(            XmlElement element){
+              for (              PsiReference reference : element.getReferences()) {
+                resolveReference(reference,indicator,resolved);
+              }
+              super.visitXmlElement(element);
+            }
+          }
+);
+        }
+        indicator.checkCanceled();
+        for (        PsiElement element : resolved) {
+          PsiFile file=element.getContainingFile();
+          addIdAndSuperClasses(file,forward);
+        }
+      }
+    }
+);
+  }
+  forward.remove(fileId);
+  return forward;
+}
