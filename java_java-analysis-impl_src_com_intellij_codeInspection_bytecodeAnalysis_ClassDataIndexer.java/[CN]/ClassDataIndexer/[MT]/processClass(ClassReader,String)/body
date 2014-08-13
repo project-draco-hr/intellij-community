@@ -45,8 +45,9 @@
             }
           }
           if (complex) {
-            if (dfs.back.isEmpty() || cfg.reducible(graph,dfs)) {
-              processBranchingMethod(method,methodNode,graph,dfs,argumentTypes,isReferenceResult,isInterestingResult,stable);
+            RichControlFlow richControlFlow=new RichControlFlow(graph,dfs);
+            if (richControlFlow.reducible()) {
+              processBranchingMethod(method,methodNode,richControlFlow,argumentTypes,isReferenceResult,isInterestingResult,stable);
               return;
             }
             LOG.debug(method + ": CFG is not reducible");
@@ -83,7 +84,7 @@ catch (      Throwable e) {
         LOG.debug("Unexpected Error during processing of " + method + " in "+ presentableUrl,e);
       }
     }
-    private void processBranchingMethod(    final Method method,    final MethodNode methodNode,    final ControlFlowGraph graph,    final DFSTree dfs,    Type[] argumentTypes,    boolean isReferenceResult,    boolean isInterestingResult,    final boolean stable) throws AnalyzerException {
+    private void processBranchingMethod(    final Method method,    final MethodNode methodNode,    final RichControlFlow richControlFlow,    Type[] argumentTypes,    boolean isReferenceResult,    boolean isInterestingResult,    final boolean stable) throws AnalyzerException {
       boolean maybeLeakingParameter=isInterestingResult;
       for (      Type argType : argumentTypes) {
         if (ASMUtils.isReferenceType(argType) || (isReferenceResult && ASMUtils.isBooleanType(argType))) {
@@ -93,11 +94,10 @@ catch (      Throwable e) {
       }
       final Pair<boolean[],Frame<org.jetbrains.org.objectweb.asm.tree.analysis.Value>[]> leakingParametersAndFrames=maybeLeakingParameter ? leakingParametersAndFrames(method,methodNode,argumentTypes) : null;
       boolean[] leakingParameters=leakingParametersAndFrames != null ? leakingParametersAndFrames.first : null;
-      final RichControlFlow richControlFlow=new RichControlFlow(graph,dfs);
       final NullableLazyValue<boolean[]> origins=new NullableLazyValue<boolean[]>(){
         @Override protected boolean[] compute(){
           try {
-            return OriginsAnalysis.resultOrigins(leakingParametersAndFrames.second,methodNode.instructions,graph);
+            return OriginsAnalysis.resultOrigins(leakingParametersAndFrames.second,methodNode.instructions,richControlFlow.controlFlow);
           }
  catch (          AnalyzerException e) {
             LOG.debug("when processing " + method + " in "+ presentableUrl,e);
