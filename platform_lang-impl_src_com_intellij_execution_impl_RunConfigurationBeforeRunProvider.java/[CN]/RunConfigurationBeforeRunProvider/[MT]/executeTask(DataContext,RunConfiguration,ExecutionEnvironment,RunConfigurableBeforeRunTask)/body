@@ -5,14 +5,16 @@
   }
   final Executor executor=DefaultRunExecutor.getRunExecutorInstance();
   final String executorId=executor.getId();
-  final ProgramRunner runner=ProgramRunnerUtil.getRunner(executorId,settings);
-  if (runner == null)   return false;
-  final ExecutionEnvironment environment=new ExecutionEnvironment(executor,runner,settings,myProject);
+  ExecutionEnvironmentBuilder builder=ExecutionEnvironmentBuilder.createOrNull(executor,settings);
+  if (builder == null) {
+    return false;
+  }
+  final ExecutionEnvironment environment=builder.build();
   environment.setExecutionId(env.getExecutionId());
   if (!ExecutionTargetManager.canRun(settings,env.getExecutionTarget())) {
     return false;
   }
-  if (!runner.canRun(executorId,environment.getRunProfile())) {
+  if (!environment.getRunner().canRun(executorId,environment.getRunProfile())) {
     return false;
   }
  else {
@@ -20,20 +22,20 @@
     final Ref<Boolean> result=new Ref<Boolean>(false);
     final Disposable disposable=Disposer.newDisposable();
     myProject.getMessageBus().connect(disposable).subscribe(ExecutionManager.EXECUTION_TOPIC,new ExecutionAdapter(){
-      public void processStartScheduled(      final String executorIdLocal,      final ExecutionEnvironment environmentLocal){
+      @Override public void processStartScheduled(      final String executorIdLocal,      final ExecutionEnvironment environmentLocal){
         if (executorId.equals(executorIdLocal) && environment.equals(environmentLocal)) {
           targetDone.down();
         }
       }
-      public void processNotStarted(      final String executorIdLocal,      @NotNull final ExecutionEnvironment environmentLocal){
+      @Override public void processNotStarted(      final String executorIdLocal,      @NotNull final ExecutionEnvironment environmentLocal){
         if (executorId.equals(executorIdLocal) && environment.equals(environmentLocal)) {
           targetDone.up();
         }
       }
-      public void processStarted(      final String executorIdLocal,      @NotNull final ExecutionEnvironment environmentLocal,      @NotNull final ProcessHandler handler){
+      @Override public void processStarted(      final String executorIdLocal,      @NotNull final ExecutionEnvironment environmentLocal,      @NotNull final ProcessHandler handler){
         if (executorId.equals(executorIdLocal) && environment.equals(environmentLocal)) {
           handler.addProcessListener(new ProcessAdapter(){
-            public void processTerminated(            ProcessEvent event){
+            @Override public void processTerminated(            ProcessEvent event){
               result.set(event.getExitCode() == 0);
               targetDone.up();
             }
@@ -47,7 +49,7 @@
       ApplicationManager.getApplication().invokeAndWait(new Runnable(){
         @Override public void run(){
           try {
-            runner.execute(environment);
+            environment.getRunner().execute(environment);
           }
  catch (          ExecutionException e) {
             targetDone.up();
