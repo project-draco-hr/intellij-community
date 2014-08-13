@@ -1,0 +1,28 @@
+{
+  DebugEnvironment environment=new DefaultDebugUIEnvironment(env,state,connection,pollConnection).getEnvironment();
+  final DebuggerSession debuggerSession=DebuggerManagerEx.getInstanceEx(env.getProject()).attachVirtualMachine(environment);
+  if (debuggerSession == null) {
+    return null;
+  }
+  final DebugProcessImpl debugProcess=debuggerSession.getProcess();
+  if (debugProcess.isDetached() || debugProcess.isDetaching()) {
+    debuggerSession.dispose();
+    return null;
+  }
+  if (environment.isRemote()) {
+    debugProcess.putUserData(BatchEvaluator.REMOTE_SESSION_KEY,Boolean.TRUE);
+  }
+  return XDebuggerManager.getInstance(env.getProject()).startSession(env,new XDebugProcessStarter(){
+    @Override @NotNull public XDebugProcess start(    @NotNull XDebugSession session){
+      XDebugSessionImpl sessionImpl=(XDebugSessionImpl)session;
+      ExecutionResult executionResult=debugProcess.getExecutionResult();
+      sessionImpl.addExtraActions(executionResult.getActions());
+      if (executionResult instanceof DefaultExecutionResult) {
+        sessionImpl.addRestartActions(((DefaultExecutionResult)executionResult).getRestartActions());
+        sessionImpl.addExtraStopActions(((DefaultExecutionResult)executionResult).getAdditionalStopActions());
+      }
+      return new JavaDebugProcess(session,debuggerSession);
+    }
+  }
+).getRunContentDescriptor();
+}

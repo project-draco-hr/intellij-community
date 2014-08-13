@@ -11,17 +11,21 @@
         final Project project=method.getProject();
         final PsiElement originalPosition=parameters.getOriginalPosition();
         final JVMElementFactory jvmElementFactory=originalPosition != null ? JVMElementFactories.getFactory(originalPosition.getLanguage(),project) : null;
+        final JavaCodeStyleManager javaCodeStyleManager=JavaCodeStyleManager.getInstance(project);
         if (jvmElementFactory != null) {
           final PsiSubstitutor substitutor=LambdaUtil.getSubstitutor(method,PsiUtil.resolveGenericsClassInType(functionalInterfaceType));
-          final JavaCodeStyleManager codeStyleManager=JavaCodeStyleManager.getInstance(project);
-          params=GenerateMembersUtil.overriddenParameters(params,jvmElementFactory,codeStyleManager,substitutor,originalPosition);
+          params=GenerateMembersUtil.overriddenParameters(params,jvmElementFactory,javaCodeStyleManager,substitutor,originalPosition);
         }
-        final String paramsString=params.length == 1 ? params[0].getName() : "(" + StringUtil.join(params,new Function<PsiParameter,String>(){
+        String paramsString=params.length == 1 ? getParamName(params[0],javaCodeStyleManager,originalPosition) : "(" + StringUtil.join(params,new Function<PsiParameter,String>(){
           @Override public String fun(          PsiParameter parameter){
-            return parameter.getName();
+            return getParamName(parameter,javaCodeStyleManager,originalPosition);
           }
         }
 ,",") + ")";
+        final CodeStyleManager codeStyleManager=CodeStyleManager.getInstance(project);
+        PsiLambdaExpression lambdaExpression=(PsiLambdaExpression)JavaPsiFacade.getElementFactory(project).createExpressionFromText(paramsString + " -> {}",null);
+        lambdaExpression=(PsiLambdaExpression)codeStyleManager.reformat(lambdaExpression);
+        paramsString=lambdaExpression.getParameterList().getText();
         final LookupElementBuilder builder=LookupElementBuilder.create(paramsString).withPresentableText(paramsString + " -> {}").withInsertHandler(new InsertHandler<LookupElement>(){
           @Override public void handleInsert(          InsertionContext context,          LookupElement item){
             final Editor editor=context.getEditor();
