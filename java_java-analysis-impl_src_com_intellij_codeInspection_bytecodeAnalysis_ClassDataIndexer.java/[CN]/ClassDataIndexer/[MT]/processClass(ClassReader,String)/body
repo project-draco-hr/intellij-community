@@ -12,14 +12,21 @@
     @Override public MethodVisitor visitMethod(    int access,    String name,    String desc,    String signature,    String[] exceptions){
       final MethodNode node=new MethodNode(Opcodes.ASM5,access,name,desc,signature,exceptions);
       return new MethodVisitor(Opcodes.ASM5,node){
+        private boolean jsr;
+        @Override public void visitJumpInsn(        int opcode,        Label label){
+          if (opcode == Opcodes.JSR) {
+            jsr=true;
+          }
+          super.visitJumpInsn(opcode,label);
+        }
         @Override public void visitEnd(){
           super.visitEnd();
-          processMethod(node);
+          processMethod(node,jsr);
         }
       }
 ;
     }
-    private void processMethod(    final MethodNode methodNode){
+    private void processMethod(    final MethodNode methodNode,    boolean jsr){
       ProgressManager.checkCanceled();
       final Type[] argumentTypes=Type.getArgumentTypes(methodNode.desc);
       final Type resultType=Type.getReturnType(methodNode.desc);
@@ -32,7 +39,7 @@
       final Method method=new Method(className,methodNode.name,methodNode.desc);
       final boolean stable=stableClass || (methodNode.access & STABLE_FLAGS) != 0 || "<init>".equals(methodNode.name);
       try {
-        final ControlFlowGraph graph=ControlFlowGraph.build(className,methodNode);
+        final ControlFlowGraph graph=ControlFlowGraph.build(className,methodNode,jsr);
         if (graph.transitions.length > 0) {
           final DFSTree dfs=DFSTree.build(graph.transitions,graph.edgeCount);
           boolean complex=!dfs.back.isEmpty();
@@ -47,7 +54,7 @@
           if (complex) {
             RichControlFlow richControlFlow=new RichControlFlow(graph,dfs);
             if (richControlFlow.reducible()) {
-              processBranchingMethod(method,methodNode,richControlFlow,argumentTypes,isReferenceResult,isInterestingResult,stable);
+              processBranchingMethod(method,methodNode,richControlFlow,argumentTypes,isReferenceResult,isInterestingResult,stable,jsr);
               return;
             }
             LOG.debug(method + ": CFG is not reducible");
@@ -66,7 +73,7 @@ catch (      Throwable e) {
         LOG.debug("Unexpected Error during processing of " + method + " in "+ presentableUrl,e);
       }
     }
-    private void processBranchingMethod(    final Method method,    final MethodNode methodNode,    final RichControlFlow richControlFlow,    Type[] argumentTypes,    boolean isReferenceResult,    boolean isInterestingResult,    final boolean stable) throws AnalyzerException {
+    private void processBranchingMethod(    final Method method,    final MethodNode methodNode,    final RichControlFlow richControlFlow,    Type[] argumentTypes,    boolean isReferenceResult,    boolean isInterestingResult,    final boolean stable,    boolean jsr) throws AnalyzerException {
       boolean maybeLeakingParameter=isInterestingResult;
       for (      Type argType : argumentTypes) {
         if (ASMUtils.isReferenceType(argType) || (isReferenceResult && ASMUtils.isBooleanType(argType))) {
@@ -74,7 +81,7 @@ catch (      Throwable e) {
           break;
         }
       }
-      final Pair<boolean[],Frame<org.jetbrains.org.objectweb.asm.tree.analysis.Value>[]> leakingParametersAndFrames=maybeLeakingParameter ? leakingParametersAndFrames(method,methodNode,argumentTypes) : null;
+      final Pair<boolean[],Frame<org.jetbrains.org.objectweb.asm.tree.analysis.Value>[]> leakingParametersAndFrames=maybeLeakingParameter ? leakingParametersAndFrames(method,methodNode,argumentTypes,jsr) : null;
       boolean[] leakingParameters=leakingParametersAndFrames != null ? leakingParametersAndFrames.first : null;
       final NullableLazyValue<boolean[]> origins=new NullableLazyValue<boolean[]>(){
         @Override protected boolean[] compute(){
@@ -199,8 +206,8 @@ catch (      Throwable e) {
         }
       }
     }
-    private Pair<boolean[],Frame<org.jetbrains.org.objectweb.asm.tree.analysis.Value>[]> leakingParametersAndFrames(    Method method,    MethodNode methodNode,    Type[] argumentTypes) throws AnalyzerException {
-      return argumentTypes.length < 32 ? LeakingParametersAnalysis.fastLeakingParameters(method.internalClassName,methodNode) : LeakingParametersAnalysis.leakingParameters(method.internalClassName,methodNode);
+    private Pair<boolean[],Frame<org.jetbrains.org.objectweb.asm.tree.analysis.Value>[]> leakingParametersAndFrames(    Method method,    MethodNode methodNode,    Type[] argumentTypes,    boolean jsr) throws AnalyzerException {
+      return argumentTypes.length < 32 ? LeakingParametersAnalysis.fastLeakingParameters(method.internalClassName,methodNode,jsr) : LeakingParametersAnalysis.leakingParameters(method.internalClassName,methodNode,jsr);
     }
   }
 ,ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
