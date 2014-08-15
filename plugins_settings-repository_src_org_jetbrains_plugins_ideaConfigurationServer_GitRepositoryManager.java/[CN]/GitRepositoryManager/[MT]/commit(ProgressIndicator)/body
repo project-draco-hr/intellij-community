@@ -2,25 +2,31 @@
   return execute(new ThrowableConsumer<ProgressIndicator,Exception>(){
     @Override public void consume(    @NotNull ProgressIndicator indicator) throws Exception {
       IndexDiff index=new IndexDiff(git.getRepository(),Constants.HEAD,new FileTreeIterator(git.getRepository()));
-      if (!index.diff() || (index.getAdded().isEmpty() && index.getChanged().isEmpty() && index.getRemoved().isEmpty())) {
+      boolean changed=index.diff(new JGitProgressMonitor(indicator),ProgressMonitor.UNKNOWN,ProgressMonitor.UNKNOWN,"Commit");
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(indexDiffToString(index));
+      }
+      if (!changed || (index.getAdded().isEmpty() && index.getChanged().isEmpty() && index.getRemoved().isEmpty())) {
         if (index.getModified().isEmpty()) {
-          LOG.debug("skip scheduled commit, nothing to commit");
+          LOG.debug("Skip scheduled commit, nothing to commit");
           return;
         }
-        AddCommand addCommand=git.add();
-        boolean added=false;
+        AddCommand addCommand=null;
         for (        String path : index.getModified()) {
           if (!path.startsWith(IcsUrlBuilder.PROJECTS_DIR_NAME)) {
+            if (addCommand == null) {
+              addCommand=git.add();
+            }
             addCommand.addFilepattern(path);
-            added=true;
           }
         }
-        if (added) {
+        if (addCommand != null) {
           addCommand.call();
         }
       }
       PersonIdent author=new PersonIdent(git.getRepository());
       PersonIdent committer=new PersonIdent(ApplicationInfoEx.getInstanceEx().getFullApplicationName(),author.getEmailAddress());
+      LOG.debug("Commit");
       git.commit().setAuthor(author).setCommitter(committer).setMessage("").call();
     }
   }
