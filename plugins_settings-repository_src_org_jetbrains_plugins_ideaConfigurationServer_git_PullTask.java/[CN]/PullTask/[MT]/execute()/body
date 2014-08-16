@@ -1,0 +1,40 @@
+{
+  JGitProgressMonitor progressMonitor=new JGitProgressMonitor(indicator);
+  FetchResult fetchResult=manager.git.fetch().setRemoveDeletedRefs(true).setProgressMonitor(progressMonitor).setCredentialsProvider(manager.getCredentialsProvider()).call();
+  if (LOG.isDebugEnabled()) {
+    String messages=fetchResult.getMessages();
+    if (!StringUtil.isEmptyOrSpaces(messages)) {
+      LOG.debug(messages);
+    }
+  }
+  Iterator<TrackingRefUpdate> refUpdates=fetchResult.getTrackingRefUpdates().iterator();
+  TrackingRefUpdate refUpdate=refUpdates.hasNext() ? refUpdates.next() : null;
+  if (refUpdate == null || refUpdate.getResult() == RefUpdate.Result.NO_CHANGE || refUpdate.getResult() == RefUpdate.Result.FORCED) {
+    LOG.debug("Nothing to merge");
+    return;
+  }
+  int attemptCount=0;
+  do {
+    MergeCommand mergeCommand=manager.git.merge();
+    Ref ref=getUpstreamBranchRef();
+    if (ref == null) {
+      throw new AssertionError();
+    }
+ else {
+      mergeCommand.include(ref);
+    }
+    MergeResult mergeResult=mergeCommand.setFastForward(MergeCommand.FastForwardMode.FF_ONLY).call();
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(mergeResult.toString());
+    }
+    MergeResult.MergeStatus status=mergeResult.getMergeStatus();
+    if (status.isSuccessful()) {
+      rebase(progressMonitor);
+      return;
+    }
+ else     if (status != MergeResult.MergeStatus.ABORTED) {
+      break;
+    }
+  }
+ while (++attemptCount < 3);
+}
