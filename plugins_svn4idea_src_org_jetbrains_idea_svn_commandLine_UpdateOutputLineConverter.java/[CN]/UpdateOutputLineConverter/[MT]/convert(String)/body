@@ -4,27 +4,25 @@
     return null;
   }
  else   if (line.startsWith(UPDATING)) {
-    myCurrentFile=parseForPath(line);
-    return new ProgressEvent(myCurrentFile,-1,null,null,EventAction.UPDATE_NONE,null,null);
+    myRootsUnderProcessing.push(parseForPath(line));
+    return createEvent(myRootsUnderProcessing.peek(),EventAction.UPDATE_NONE);
   }
  else   if (line.startsWith(RESTORED)) {
-    myCurrentFile=parseForPath(line);
-    return new ProgressEvent(myCurrentFile,-1,null,null,EventAction.RESTORE,null,null);
+    return createEvent(parseForPath(line),EventAction.RESTORE);
   }
  else   if (line.startsWith(SKIPPED)) {
-    myCurrentFile=parseForPath(line);
     final String comment=parseComment(line);
-    return new ProgressEvent(myCurrentFile,-1,null,null,EventAction.SKIP,comment == null ? null : SVNErrorMessage.create(SVNErrorCode.WC_OBSTRUCTED_UPDATE,comment),null);
+    return createEvent(parseForPath(line),-1,EventAction.SKIP,comment == null ? null : SVNErrorMessage.create(SVNErrorCode.WC_OBSTRUCTED_UPDATE,comment));
   }
  else   if (line.startsWith(FETCHING_EXTERNAL)) {
-    myCurrentFile=parseForPath(line);
-    return new ProgressEvent(myCurrentFile,-1,null,null,EventAction.UPDATE_EXTERNAL,null,null);
+    myRootsUnderProcessing.push(parseForPath(line));
+    return createEvent(myRootsUnderProcessing.peek(),EventAction.UPDATE_EXTERNAL);
   }
-  for (int i=0; i < ourCompletePatterns.length; i++) {
-    final Pattern pattern=ourCompletePatterns[i];
+  for (  final Pattern pattern : ourCompletePatterns) {
     final long revision=matchAndGetRevision(pattern,line);
     if (revision != -1) {
-      return new ProgressEvent(myCurrentFile,revision,null,null,EventAction.UPDATE_COMPLETED,null,null);
+      File currentRoot=myRootsUnderProcessing.size() > 0 ? myRootsUnderProcessing.pop() : myBase;
+      return createEvent(currentRoot,revision,EventAction.UPDATE_COMPLETED,null);
     }
   }
   return parseNormalString(line);
