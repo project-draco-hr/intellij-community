@@ -1,5 +1,6 @@
 {
   node.stopLoading();
+  myPushLog.startLoading(node);
   final ProgressIndicator indicator=node.startLoading();
   final PushSupport support=model.getSupport();
   final AtomicReference<OutgoingResult> result=new AtomicReference<OutgoingResult>();
@@ -10,9 +11,21 @@
     @Override public void onSuccess(){
       OutgoingResult outgoing=result.get();
       if (outgoing.hasErrors()) {
+        final CommitLoader loader=new CommitLoader(){
+          @Override public void reloadCommits(){
+            loadCommits(model,node,false);
+          }
+        }
+;
         myPushLog.setChildren(node,ContainerUtil.map(outgoing.getErrors(),new Function<VcsError,DefaultMutableTreeNode>(){
-          @Override public DefaultMutableTreeNode fun(          VcsError error){
-            return new TextWithLinkNode(error);
+          @Override public DefaultMutableTreeNode fun(          final VcsError error){
+            VcsLinkedText errorLinkText=new VcsLinkedText(error.getText(),new VcsLinkListener(){
+              @Override public void hyperlinkActivated(              @NotNull DefaultMutableTreeNode sourceNode){
+                error.handleError(loader);
+              }
+            }
+);
+            return new TextWithLinkNode(errorLinkText);
           }
         }
 ),model.isSelected());
