@@ -2,17 +2,28 @@
   StoredConfig config=git.getRepository().getConfig();
   if (StringUtil.isEmptyOrSpaces(url)) {
     config.unset(ConfigConstants.CONFIG_REMOTE_SECTION,Constants.DEFAULT_REMOTE_NAME,ConfigConstants.CONFIG_KEY_URL);
+    LOG.debug("Unset remote");
+    config.save();
   }
  else {
     config.setString(ConfigConstants.CONFIG_REMOTE_SECTION,Constants.DEFAULT_REMOTE_NAME,ConfigConstants.CONFIG_KEY_URL,url);
-    config.setString(ConfigConstants.CONFIG_REMOTE_SECTION,Constants.DEFAULT_REMOTE_NAME,"fetch","+refs/heads/*:refs/remotes/origin/*");
-    config.setString(ConfigConstants.CONFIG_BRANCH_SECTION,Constants.MASTER,ConfigConstants.CONFIG_KEY_REMOTE,Constants.DEFAULT_REMOTE_NAME);
-    config.setString(ConfigConstants.CONFIG_BRANCH_SECTION,Constants.MASTER,ConfigConstants.CONFIG_KEY_MERGE,"refs/heads/master");
-  }
-  try {
+    LOG.debug("Set remote " + url);
     config.save();
-  }
- catch (  IOException e) {
-    LOG.error(e);
+    ProgressManager.getInstance().runProcessWithProgressSynchronously(new Runnable(){
+      @Override public void run(){
+        ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
+        try {
+          new CommitTask(GitRepositoryManager.this,indicator).run();
+          if (git.getRepository().getRef(Constants.HEAD) == null) {
+            createCommitCommand().setMessage("Initial commit (jgit workaround)").call();
+          }
+          git.branchCreate().setForce(true).setUpstreamMode(CreateBranchCommand.SetupUpstreamMode.SET_UPSTREAM).setName(Constants.MASTER).call();
+        }
+ catch (        Exception e) {
+          LOG.error(e);
+        }
+      }
+    }
+,IcsBundle.message("task.set.upstream.title"),true,null);
   }
 }
