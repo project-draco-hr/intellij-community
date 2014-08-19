@@ -1,0 +1,43 @@
+{
+  WorkingTreeIterator workingTree=treeWalk.getTree(1,WorkingTreeIterator.class);
+  DirCacheIterator dirCacheTree=treeWalk.getTree(0,DirCacheIterator.class);
+  if (dirCacheTree == null && workingTree != null && workingTree.isEntryIgnored()) {
+    return true;
+  }
+  if (workingTree != null) {
+    if (dirCacheTree == null || dirCacheTree.getDirCacheEntry() == null || !dirCacheTree.getDirCacheEntry().isAssumeValid()) {
+      FileMode mode=workingTree.getIndexFileMode(dirCacheTree);
+      DirCacheEntry entry=new DirCacheEntry(path);
+      entry.setFileMode(mode);
+      if (mode == FileMode.GITLINK) {
+        entry.setObjectId(workingTree.getEntryObjectId());
+      }
+ else {
+        entry.setLength(workingTree.getEntryLength());
+        entry.setLastModified(workingTree.getEntryLastModified());
+        ObjectInserter inserter=null;
+        InputStream in=workingTree.openEntryStream();
+        try {
+          inserter=repository.newObjectInserter();
+          entry.setObjectId(inserter.insert(Constants.OBJ_BLOB,workingTree.getEntryContentLength(),in));
+          inserter.flush();
+        }
+  finally {
+          in.close();
+          if (inserter != null) {
+            inserter.release();
+          }
+        }
+      }
+      builder.add(entry);
+    }
+ else {
+      builder.add(dirCacheTree.getDirCacheEntry());
+    }
+  }
+ else   if (dirCacheTree != null) {
+    builder.add(dirCacheTree.getDirCacheEntry());
+  }
+  builder.commit();
+  return false;
+}
