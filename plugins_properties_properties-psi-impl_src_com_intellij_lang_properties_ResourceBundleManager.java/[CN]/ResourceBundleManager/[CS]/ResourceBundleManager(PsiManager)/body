@@ -1,0 +1,64 @@
+{
+  manager.addPsiTreeChangeListener(new PsiTreeChangeAdapter(){
+    @Override public void childMoved(    @NotNull PsiTreeChangeEvent event){
+      final PsiElement child=event.getChild();
+      if (!(child instanceof PsiFile)) {
+        return;
+      }
+      final PropertiesFile propertiesFile=PropertiesImplUtil.getPropertiesFile((PsiFile)child);
+      if (propertiesFile == null) {
+        return;
+      }
+      final String oldParentUrl=getUrl(event.getOldParent());
+      final String newParentUrl=getUrl(event.getNewParent());
+      if (oldParentUrl == null || newParentUrl == null) {
+        return;
+      }
+      final String newUrl=propertiesFile.getVirtualFile().getUrl();
+      final String oldUrl=oldParentUrl + newUrl.substring(newParentUrl.length());
+      if (myState.getDissociatedFiles().remove(oldUrl)) {
+        myState.getDissociatedFiles().add(newUrl);
+      }
+      for (      CustomResourceBundleState customResourceBundleState : myState.getCustomResourceBundles()) {
+        if (customResourceBundleState.getFileUrls().remove(oldUrl)) {
+          customResourceBundleState.getFileUrls().add(newUrl);
+          break;
+        }
+      }
+    }
+    @Nullable private String getUrl(    PsiElement element){
+      return !(element instanceof PsiDirectory) ? null : ((PsiDirectory)element).getVirtualFile().getUrl();
+    }
+    @Override public void childReplaced(    @NotNull PsiTreeChangeEvent event){
+      super.childReplaced(event);
+    }
+    @Override public void beforeChildMovement(    @NotNull PsiTreeChangeEvent event){
+      super.beforeChildMovement(event);
+    }
+    @Override public void propertyChanged(    @NotNull PsiTreeChangeEvent event){
+      super.propertyChanged(event);
+    }
+    @Override public void childRemoved(    @NotNull PsiTreeChangeEvent event){
+      final PsiElement child=event.getChild();
+      if (!(child instanceof PsiFile)) {
+        return;
+      }
+      PropertiesFile file=PropertiesImplUtil.getPropertiesFile((PsiFile)child);
+      if (file == null) {
+        return;
+      }
+      final VirtualFile virtualFile=file.getVirtualFile();
+      final String url=virtualFile.getUrl();
+      myState.getDissociatedFiles().remove(url);
+      for (      CustomResourceBundleState customResourceBundleState : myState.getCustomResourceBundles()) {
+        if (customResourceBundleState.getFileUrls().remove(url)) {
+          if (customResourceBundleState.getFileUrls().size() < 2) {
+            myState.getCustomResourceBundles().remove(customResourceBundleState);
+          }
+          break;
+        }
+      }
+    }
+  }
+);
+}
