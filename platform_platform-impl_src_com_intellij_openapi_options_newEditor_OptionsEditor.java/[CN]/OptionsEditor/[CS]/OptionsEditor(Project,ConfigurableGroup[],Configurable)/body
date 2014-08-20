@@ -1,9 +1,5 @@
 {
-  myProject=project;
-  myGroups=groups;
   myProperties=PropertiesComponent.getInstance(project);
-  myFilter=new Filter();
-  myContext=new OptionsEditorContext(myFilter);
   mySearch=new MySearchField(){
     @Override protected void onTextKeyEvent(    final KeyEvent e){
       if (myTreeView != null) {
@@ -15,59 +11,45 @@
     }
   }
 ;
-  mySearch.getTextEditor().addMouseListener(new MouseAdapter(){
-    @Override public void mousePressed(    MouseEvent e){
-      boolean hasText=mySearch.getText().length() > 0;
-      if (!myContext.isHoldingFilter() && hasText) {
-        myFilter.reenable();
+  myFilter=new SettingsFilter(project,groups,mySearch){
+    @Override Configurable getConfigurable(    SimpleNode node){
+      if (node instanceof OptionsTree.EditorNode) {
+        return ((OptionsTree.EditorNode)node).getConfigurable();
       }
-      if (!isSearchFieldFocused() && hasText) {
-        mySearch.selectText();
-      }
+      return SettingsTreeView.getConfigurable(node);
     }
-  }
-);
-  final KeyListener listener=new KeyListener(){
-    @Override public void keyTyped(    KeyEvent event){
-      myFilterDocumentWasChanged=false;
-      try {
-        mySearch.keyEventToTextField(event);
-      }
-  finally {
-        if (myFilterDocumentWasChanged && !isFilterFieldVisible()) {
-          setFilterFieldVisible(true,false,false);
+    @Override SimpleNode findNode(    Configurable configurable){
+      return myTreeView != null ? myTreeView.findNode(configurable) : myTree.findNodeFor(configurable);
+    }
+    @Override void updateSpotlight(    boolean now){
+      if (!now) {
+        mySpotlightUpdate.queue(new Update(this){
+          @Override public void run(){
+            if (!mySpotlightPainter.updateForCurrentConfigurable()) {
+              updateSpotlight(false);
+            }
+          }
         }
+);
       }
-    }
-    @Override public void keyPressed(    KeyEvent event){
-      keyTyped(event);
-    }
-    @Override public void keyReleased(    KeyEvent event){
-      keyTyped(event);
+ else       if (!mySpotlightPainter.updateForCurrentConfigurable()) {
+        updateSpotlight(false);
+      }
     }
   }
 ;
-  if (Registry.is("ide.file.settings.tree.new")) {
-    myTreeView=new SettingsTreeView(listener,getContext(),groups);
+  if (Registry.is("ide.new.settings.dialog")) {
+    myTreeView=new SettingsTreeView(myFilter,groups);
+    myTreeView.myTree.addKeyListener(myTreeKeyListener);
     myTree=null;
   }
  else {
     myTreeView=null;
-    myTree=new OptionsTree(myProject,groups,getContext()){
-      @Override protected void onTreeKeyEvent(      final KeyEvent e){
-        listener.keyTyped(e);
-      }
-    }
-;
+    myTree=new OptionsTree(myFilter,groups);
+    myTree.addKeyListener(myTreeKeyListener);
   }
   getContext().addColleague(myTreeView != null ? myTreeView : myTree);
   Disposer.register(this,myTreeView != null ? myTreeView : myTree);
-  mySearch.addDocumentListener(new DocumentAdapter(){
-    @Override protected void textChanged(    DocumentEvent e){
-      myFilter.update(e.getType(),true,false);
-    }
-  }
-);
   myLeftSide=new JPanel(new BorderLayout()){
     @Override public Dimension getMinimumSize(){
       Dimension dimension=super.getMinimumSize();
@@ -91,12 +73,7 @@
   getContext().addColleague(colleague);
   mySpotlightUpdate=new MergingUpdateQueue("OptionsSpotlight",200,false,this,this,this);
   if (preselectedConfigurable != null) {
-    if (myTreeView != null) {
-      myTreeView.select(preselectedConfigurable);
-    }
- else {
-      myTree.select(preselectedConfigurable);
-    }
+    selectInTree(preselectedConfigurable);
   }
  else {
     if (myTreeView != null) {
