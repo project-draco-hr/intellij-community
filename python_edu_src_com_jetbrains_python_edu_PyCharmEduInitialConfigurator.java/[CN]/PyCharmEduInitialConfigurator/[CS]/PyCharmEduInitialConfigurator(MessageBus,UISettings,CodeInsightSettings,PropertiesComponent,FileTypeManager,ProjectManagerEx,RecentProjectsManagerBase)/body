@@ -1,5 +1,5 @@
 {
-  if (true) {
+  if (!propertiesComponent.getBoolean(CONFIGURED,false)) {
     propertiesComponent.setValue(CONFIGURED,"true");
     propertiesComponent.setValue("toolwindow.stripes.buttons.info.shown","true");
     UISettings.getInstance().HIDE_TOOL_STRIPES=false;
@@ -7,6 +7,7 @@
     uiSettings.SHOW_DIRECTORY_FOR_NON_UNIQUE_FILENAMES=true;
     uiSettings.SHOW_MAIN_TOOLBAR=false;
     codeInsightSettings.REFORMAT_ON_PASTE=CodeInsightSettings.NO_REFORMAT;
+    Registry.get("ide.new.settings.dialog").setValue(true);
     GeneralSettings.getInstance().setShowTipsOnStartup(false);
     EditorSettingsExternalizable.getInstance().setVirtualSpace(false);
     final CodeStyleSettings settings=CodeStyleSettingsManager.getInstance().getCurrentSettings();
@@ -28,19 +29,24 @@
 );
     PyCodeInsightSettings.getInstance().SHOW_IMPORT_POPUP=true;
   }
-  bus.connect().subscribe(AppLifecycleListener.TOPIC,new AppLifecycleListener.Adapter(){
-    @Override public void appFrameCreated(    String[] commandLineArgs,    @NotNull Ref<Boolean> willOpenProject){
-      if (!propertiesComponent.isValueSet(DISPLAYED_PROPERTY)) {
-        GeneralSettings.getInstance().setShowTipsOnStartup(false);
-        showInitialConfigurationDialog();
-        propertiesComponent.setValue(DISPLAYED_PROPERTY,"true");
+  if (!propertiesComponent.isValueSet(DISPLAYED_PROPERTY)) {
+    bus.connect().subscribe(AppLifecycleListener.TOPIC,new AppLifecycleListener.Adapter(){
+      @Override public void welcomeScreenDisplayed(){
+        ApplicationManager.getApplication().invokeLater(new Runnable(){
+          @Override public void run(){
+            if (!propertiesComponent.isValueSet(DISPLAYED_PROPERTY)) {
+              GeneralSettings.getInstance().setShowTipsOnStartup(false);
+              propertiesComponent.setValue(DISPLAYED_PROPERTY,"true");
+              showInitialConfigurationDialog();
+              patchKeymap();
+            }
+          }
+        }
+);
       }
     }
-    @Override public void appStarting(    Project projectFromCommandLine){
-      patchKeymap();
-    }
-  }
 );
+  }
   bus.connect().subscribe(ProjectManager.TOPIC,new ProjectManagerAdapter(){
     @Override public void projectOpened(    final Project project){
       if (project.isDefault())       return;
@@ -48,6 +54,27 @@
         FileChooserUtil.setLastOpenedFile(project,VfsUtil.getUserHomeDir());
       }
       patchProjectAreaExtensions(project);
+      StartupManager.getInstance(project).runWhenProjectIsInitialized(new DumbAwareRunnable(){
+        @Override public void run(){
+          if (project.isDisposed())           return;
+          ToolWindowManager.getInstance(project).invokeLater(new Runnable(){
+            int count=0;
+            public void run(){
+              if (project.isDisposed())               return;
+              if (count++ < 3) {
+                ToolWindowManager.getInstance(project).invokeLater(this);
+                return;
+              }
+              ToolWindow toolWindow=ToolWindowManager.getInstance(project).getToolWindow("Project");
+              if (toolWindow.getType() != ToolWindowType.SLIDING) {
+                toolWindow.activate(null);
+              }
+            }
+          }
+);
+        }
+      }
+);
     }
   }
 );

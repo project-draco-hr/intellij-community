@@ -6,7 +6,12 @@
   myContext=new OptionsEditorContext(myFilter);
   mySearch=new MySearchField(){
     @Override protected void onTextKeyEvent(    final KeyEvent e){
-      myTree.processTextEvent(e);
+      if (myTreeView != null) {
+        myTreeView.myTree.processKeyEvent(e);
+      }
+ else {
+        myTree.processTextEvent(e);
+      }
     }
   }
 ;
@@ -22,11 +27,11 @@
     }
   }
 );
-  myTree=new OptionsTree(myProject,groups,getContext()){
-    @Override protected void onTreeKeyEvent(    final KeyEvent e){
+  final KeyListener listener=new KeyListener(){
+    @Override public void keyTyped(    KeyEvent event){
       myFilterDocumentWasChanged=false;
       try {
-        mySearch.keyEventToTextField(e);
+        mySearch.keyEventToTextField(event);
       }
   finally {
         if (myFilterDocumentWasChanged && !isFilterFieldVisible()) {
@@ -34,10 +39,29 @@
         }
       }
     }
+    @Override public void keyPressed(    KeyEvent event){
+      keyTyped(event);
+    }
+    @Override public void keyReleased(    KeyEvent event){
+      keyTyped(event);
+    }
   }
 ;
-  getContext().addColleague(myTree);
-  Disposer.register(this,myTree);
+  if (Registry.is("ide.file.settings.tree.new")) {
+    myTreeView=new SettingsTreeView(listener,getContext(),groups);
+    myTree=null;
+  }
+ else {
+    myTreeView=null;
+    myTree=new OptionsTree(myProject,groups,getContext()){
+      @Override protected void onTreeKeyEvent(      final KeyEvent e){
+        listener.keyTyped(e);
+      }
+    }
+;
+  }
+  getContext().addColleague(myTreeView != null ? myTreeView : myTree);
+  Disposer.register(this,myTreeView != null ? myTreeView : myTree);
   mySearch.addDocumentListener(new DocumentAdapter(){
     @Override protected void textChanged(    DocumentEvent e){
       myFilter.update(e.getType(),true,false);
@@ -47,13 +71,14 @@
   myLeftSide=new JPanel(new BorderLayout()){
     @Override public Dimension getMinimumSize(){
       Dimension dimension=super.getMinimumSize();
-      dimension.width=Math.max(myTree.getMinimumSize().width,mySearchWrapper.getPreferredSize().width);
+      JComponent component=myTreeView != null ? myTreeView : myTree;
+      dimension.width=Math.max(component.getMinimumSize().width,mySearchWrapper.getPreferredSize().width);
       return dimension;
     }
   }
 ;
   myLeftSide.add(mySearchWrapper,BorderLayout.NORTH);
-  myLeftSide.add(myTree,BorderLayout.CENTER);
+  myLeftSide.add(myTreeView != null ? myTreeView : myTree,BorderLayout.CENTER);
   setLayout(new BorderLayout());
   myMainSplitter=new Splitter(false);
   myMainSplitter.setFirstComponent(myLeftSide);
@@ -66,10 +91,20 @@
   getContext().addColleague(colleague);
   mySpotlightUpdate=new MergingUpdateQueue("OptionsSpotlight",200,false,this,this,this);
   if (preselectedConfigurable != null) {
-    myTree.select(preselectedConfigurable);
+    if (myTreeView != null) {
+      myTreeView.select(preselectedConfigurable);
+    }
+ else {
+      myTree.select(preselectedConfigurable);
+    }
   }
  else {
-    myTree.selectFirst();
+    if (myTreeView != null) {
+      myTreeView.selectFirst();
+    }
+ else {
+      myTree.selectFirst();
+    }
   }
   Toolkit.getDefaultToolkit().addAWTEventListener(this,AWTEvent.MOUSE_EVENT_MASK | AWTEvent.KEY_EVENT_MASK | AWTEvent.MOUSE_MOTION_EVENT_MASK);
   ActionManager.getInstance().addAnActionListener(new AnActionListener(){
