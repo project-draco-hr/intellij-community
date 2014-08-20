@@ -1,0 +1,44 @@
+{
+  TIntArrayList[] backTransitions=new TIntArrayList[instructions.size()];
+  for (int i=0; i < backTransitions.length; i++) {
+    backTransitions[i]=new TIntArrayList();
+  }
+  LinkedList<InsnLocation> queue=new LinkedList<InsnLocation>();
+  HashSet<InsnLocation> queued=new HashSet<InsnLocation>();
+  for (int from=0; from < instructions.size(); from++) {
+    for (    int to : graph.transitions[from]) {
+      TIntArrayList froms=backTransitions[to];
+      froms.add(from);
+      int opcode=instructions.get(to).getOpcode();
+      if (opcode >= Opcodes.IRETURN && opcode <= Opcodes.ARETURN) {
+        InsnLocation sourceLoc=new InsnLocation(false,from,frames[to].getStackSize() - 1);
+        if (queued.add(sourceLoc)) {
+          queue.push(sourceLoc);
+        }
+      }
+    }
+  }
+  boolean[] result=new boolean[instructions.size()];
+  while (!queue.isEmpty()) {
+    InsnLocation resultLocation=queue.pop();
+    int insnIndex=resultLocation.insnIndex;
+    AbstractInsnNode insn=instructions.get(insnIndex);
+    int opcode=insn.getOpcode();
+    Location preLocation=previousLocation(frames[insnIndex],resultLocation,insn);
+    if (preLocation == null) {
+      if (opcode != Opcodes.INVOKEINTERFACE && opcode != Opcodes.GETFIELD && !(opcode >= Opcodes.IALOAD && opcode <= Opcodes.SALOAD)) {
+        result[insnIndex]=true;
+      }
+    }
+ else {
+      TIntArrayList froms=backTransitions[insnIndex];
+      for (int i=0; i < froms.size(); i++) {
+        InsnLocation preILoc=new InsnLocation(preLocation.local,froms.getQuick(i),preLocation.slot);
+        if (queued.add(preILoc)) {
+          queue.push(preILoc);
+        }
+      }
+    }
+  }
+  return result;
+}
