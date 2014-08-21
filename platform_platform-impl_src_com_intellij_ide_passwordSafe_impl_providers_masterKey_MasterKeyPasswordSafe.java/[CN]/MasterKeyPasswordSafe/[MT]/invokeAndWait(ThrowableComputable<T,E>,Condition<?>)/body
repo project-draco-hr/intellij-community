@@ -1,0 +1,33 @@
+{
+  if (ApplicationManager.getApplication().isDispatchThread()) {
+    return computable.compute();
+  }
+  final AsyncFutureResult<Object> future=AsyncFutureFactory.getInstance().createAsyncFutureResult();
+synchronized (ourEDTLock) {
+    IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(new ExpirableRunnable(){
+      @Override public boolean isExpired(){
+        boolean b=expired.value(null);
+        if (b)         future.setException(new ProcessCanceledException());
+        return b;
+      }
+      @Override public void run(){
+        try {
+          future.set(computable.compute());
+        }
+ catch (        Throwable e) {
+          future.setException(e);
+        }
+      }
+    }
+);
+  }
+  try {
+    return (T)future.get();
+  }
+ catch (  InterruptedException e) {
+    throw new ProcessCanceledException(e);
+  }
+catch (  ExecutionException e) {
+    throw (E)e.getCause();
+  }
+}
