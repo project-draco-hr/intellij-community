@@ -22,6 +22,7 @@
   myShellThread=new Thread(myShellClient);
   myShellThread.start();
   myIOPubClient=new WebSocketClient(getIOPubURI(),draft){
+    private LinkedHashMap<String,String> myOutput=new LinkedHashMap<String,String>();
     @Override public void onOpen(    ServerHandshake handshakeData){
       send(authMessage);
       myIsIOPubOpen=true;
@@ -35,11 +36,22 @@
       final String messageType=header.getMessageType();
       if ("pyout".equals(messageType)) {
         final PyOutContent content=gson.fromJson(msg.getContent(),PyOutContent.class);
-        myListener.onOutput(IpnbConnection.this,parentHeader.getMessageId(),content.getData());
+        myOutput.putAll(content.getData());
       }
  else       if ("pyerr".equals(messageType)) {
         final PyErrContent content=gson.fromJson(msg.getContent(),PyErrContent.class);
-        myListener.onOutput(IpnbConnection.this,parentHeader.getMessageId(),ImmutableMap.of("error",content.getEvalue()));
+        myOutput.putAll(ImmutableMap.of("error",content.getEvalue()));
+      }
+ else       if ("stream".equals(messageType)) {
+        final PyStreamContent content=gson.fromJson(msg.getContent(),PyStreamContent.class);
+        myOutput.putAll(ImmutableMap.of("stream",content.getData()));
+      }
+ else       if ("status".equals(messageType)) {
+        final PyStatusContent content=gson.fromJson(msg.getContent(),PyStatusContent.class);
+        if (content.getExecutionState().equals("idle")) {
+          myListener.onOutput(IpnbConnection.this,parentHeader.getMessageId(),(Map<String,String>)myOutput.clone());
+          myOutput.clear();
+        }
       }
     }
     @Override public void onClose(    int code,    String reason,    boolean remote){
