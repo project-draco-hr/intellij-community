@@ -4,18 +4,20 @@
   Map<VirtualFile,Collection<VcsRef>> currentRefs=myCurrentDataPack.getRefsModel().getAllRefsByRoot();
   try {
     if (permanentGraph != null) {
-      loadLogAndRefs(roots,currentRefs,myRecentCommitCount);
-      List<? extends GraphCommit<Integer>> compoundLog=compound(ContainerUtil.map(myLoadedInfos.values(),new Function<LogAndRefs,List<? extends GraphCommit<Integer>>>(){
-        @Override public List<? extends GraphCommit<Integer>> fun(        LogAndRefs refs){
-          return refs.log;
+      int commitCount=myRecentCommitCount;
+      for (int attempt=0; attempt <= 1; attempt++) {
+        loadLogAndRefs(roots,currentRefs,commitCount);
+        List<? extends GraphCommit<Integer>> compoundLog=compoundLoadedLogs(myLoadedInfos.values());
+        Map<VirtualFile,Collection<VcsRef>> allNewRefs=getAllNewRefs(myLoadedInfos,currentRefs);
+        List<GraphCommit<Integer>> joinedFullLog=join(compoundLog,permanentGraph.getAllCommits(),currentRefs,allNewRefs);
+        if (joinedFullLog == null) {
+          commitCount*=5;
+        }
+ else {
+          return DataPack.build(joinedFullLog,new RefsModel(allNewRefs,myHashMap.asIndexGetter()),myHashMap.asIndexGetter(),myHashMap.asHashGetter(),myProviders,true);
         }
       }
-));
-      Map<VirtualFile,Collection<VcsRef>> allNewRefs=getAllNewRefs(myLoadedInfos,currentRefs);
-      List<GraphCommit<Integer>> joinedFullLog=join(compoundLog,permanentGraph.getAllCommits(),currentRefs,allNewRefs);
-      if (joinedFullLog != null) {
-        return DataPack.build(joinedFullLog,new RefsModel(allNewRefs,myHashMap.asIndexGetter()),myHashMap.asIndexGetter(),myHashMap.asHashGetter(),myProviders,true);
-      }
+      LOG.error("Couldn't join " + commitCount + " recent commits to the log ("+ permanentGraph.getAllCommits().size()+ " commits)",new Attachment("recent_commits",toLogString(myLoadedInfos)));
     }
     Pair<PermanentGraph<Integer>,Map<VirtualFile,Collection<VcsRef>>> fullLogAndRefs=loadFullLog();
     return DataPack.build(fullLogAndRefs.first,myProviders,new RefsModel(fullLogAndRefs.second,myHashMap.asIndexGetter()),true);

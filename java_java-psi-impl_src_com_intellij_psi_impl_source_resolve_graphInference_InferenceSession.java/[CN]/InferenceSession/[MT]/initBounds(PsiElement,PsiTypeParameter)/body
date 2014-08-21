@@ -1,16 +1,19 @@
 {
-  boolean sameMethodCall=false;
+  List<InferenceVariable> result=new ArrayList<InferenceVariable>(typeParameters.length);
   for (  PsiTypeParameter parameter : typeParameters) {
-    if (myInferenceVariables.containsKey(parameter)) {
-      sameMethodCall=true;
-      continue;
-    }
     InferenceVariable variable=new InferenceVariable(context,parameter);
+    result.add(variable);
+    myInferenceSubstitution=myInferenceSubstitution.put(parameter,JavaPsiFacade.getElementFactory(variable.getProject()).createType(variable));
+  }
+  for (  InferenceVariable variable : result) {
+    PsiTypeParameter parameter=variable.getParameter();
     boolean added=false;
     final PsiClassType[] extendsListTypes=parameter.getExtendsListTypes();
     for (    PsiType classType : extendsListTypes) {
-      classType=mySiteSubstitutor.substitute(classType);
-      if (isProperType(classType)) {
+      classType=substituteWithInferenceVariables(mySiteSubstitutor.substitute(classType));
+      HashSet<InferenceVariable> dependencies=new HashSet<InferenceVariable>();
+      collectDependencies(classType,dependencies);
+      if (dependencies.isEmpty() || dependencies.size() == 1 && dependencies.contains(variable)) {
         added=true;
       }
       variable.addBound(classType,InferenceBound.UPPER);
@@ -18,7 +21,7 @@
     if (!added) {
       variable.addBound(PsiType.getJavaLangObject(parameter.getManager(),parameter.getResolveScope()),InferenceBound.UPPER);
     }
-    myInferenceVariables.put(parameter,variable);
   }
-  return sameMethodCall;
+  myInferenceVariables.addAll(result);
+  return result.toArray(new InferenceVariable[result.size()]);
 }
