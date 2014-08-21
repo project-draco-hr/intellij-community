@@ -1,12 +1,64 @@
 {
   XDebuggerTree tree=myDebuggerTreePanel.getTree();
-  tree.setSourcePosition(stackFrame.getSourcePosition());
+  final XSourcePosition position=stackFrame.getSourcePosition();
+  tree.setSourcePosition(position);
   tree.setRoot(new XStackFrameNode(tree,stackFrame),false);
-  tree.getProject().putUserData(XVariablesView.DEBUG_VARIABLES,new HashMap<Pair<VirtualFile,Integer>,Set<XValueNodeImpl>>());
-  tree.getProject().putUserData(XVariablesView.DEBUG_VARIABLES_TIMESTAMPS,new HashMap<VirtualFile,Long>());
+  final Project project=tree.getProject();
+  project.putUserData(XVariablesView.DEBUG_VARIABLES,new HashMap<Pair<VirtualFile,Integer>,Set<XValueNodeImpl>>());
+  project.putUserData(XVariablesView.DEBUG_VARIABLES_TIMESTAMPS,new HashMap<VirtualFile,Long>());
   Object newEqualityObject=stackFrame.getEqualityObject();
   if (myFrameEqualityObject != null && newEqualityObject != null && myFrameEqualityObject.equals(newEqualityObject) && myTreeState != null) {
     disposeTreeRestorer();
     myTreeRestorer=myTreeState.restoreState(tree);
+  }
+  if (position != null && Registry.is("ide.debugger.inline")) {
+    final VirtualFile file=position.getFile();
+    final FileEditor fileEditor=FileEditorManagerEx.getInstanceEx(project).getSelectedEditor(file);
+    if (fileEditor instanceof PsiAwareTextEditorImpl) {
+      final Editor editor=((PsiAwareTextEditorImpl)fileEditor).getEditor();
+      final SelectionListener listener=new SelectionListener(){
+        @Override public void selectionChanged(        SelectionEvent e){
+          final String text=editor.getDocument().getText(e.getNewRange());
+          final XDebuggerEvaluator evaluator=stackFrame.getEvaluator();
+          if (evaluator != null) {
+            evaluator.evaluate(text,new XEvaluationCallbackBase(){
+              @Override public void evaluated(              @NotNull XValue result){
+                result.computePresentation(new XValueNodePresentationConfigurator.ConfigurableXValueNodeImpl(){
+                  @Override public void applyPresentation(                  @Nullable Icon icon,                  @NotNull XValuePresentation valuePresenter,                  boolean hasChildren){
+                    SimpleColoredText text=new SimpleColoredText();
+                    XValueNodeImpl.buildText(valuePresenter,text,false);
+                    SimpleColoredComponent component=HintUtil.createInformationComponent();
+                    text.appendToComponent(component);
+                    HintManager.getInstance().hideAllHints();
+                    HintManager.getInstance().showInformationHint(editor,component);
+                  }
+                  @Override public void setFullValueEvaluator(                  @NotNull XFullValueEvaluator fullValueEvaluator){
+                  }
+                  @Override public boolean isObsolete(){
+                    return true;
+                  }
+                }
+,XValuePlace.TOOLTIP);
+              }
+              @Override public void errorOccurred(              @NotNull String errorMessage){
+                System.out.println(errorMessage);
+              }
+            }
+,position);
+          }
+        }
+      }
+;
+      editor.getSelectionModel().addSelectionListener(listener);
+      Disposer.register(tree,new Disposable(){
+        @Override public void dispose(){
+          final FileEditor fileEditor=FileEditorManagerEx.getInstanceEx(project).getSelectedEditor(file);
+          if (fileEditor instanceof PsiAwareTextEditorImpl) {
+            ((PsiAwareTextEditorImpl)fileEditor).getEditor().getSelectionModel().removeSelectionListener(listener);
+          }
+        }
+      }
+);
+    }
   }
 }
