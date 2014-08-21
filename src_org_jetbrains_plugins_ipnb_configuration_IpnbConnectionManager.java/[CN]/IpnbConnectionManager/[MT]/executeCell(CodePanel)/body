@@ -1,0 +1,41 @@
+{
+  final IpnbFileEditor fileEditor=codePanel.getFileEditor();
+  if (!myKernels.containsKey(fileEditor)) {
+    try {
+      final String url=IpnbSettings.getInstance(myProject).getURL();
+      if (StringUtil.isEmptyOrSpaces(url)) {
+        BalloonBuilder balloonBuilder=JBPopupFactory.getInstance().createHtmlTextBalloonBuilder("Please, specify IPython Notebook URL in Settings->IPython Notebook",null,MessageType.WARNING.getPopupBackground(),null);
+        final Balloon balloon=balloonBuilder.createBalloon();
+        balloon.showInCenterOf(fileEditor.getRunCellButton());
+        return;
+      }
+      final IpnbConnection connection=new IpnbConnection(new URI(url),new IpnbConnectionListenerBase(){
+        @Override public void onOpen(        @NotNull IpnbConnection connection){
+          final String messageId=connection.execute(codePanel.getCell().getSourceAsString());
+          myUpdateMap.put(messageId,codePanel);
+        }
+        @Override public void onOutput(        @NotNull IpnbConnection connection,        @NotNull String parentMessageId,        @NotNull Map<String,String> outputs){
+          if (!myUpdateMap.containsKey(parentMessageId))           return;
+          if (!outputs.containsKey("text/plain") && !outputs.containsKey("error"))           return;
+          final CodePanel cell=myUpdateMap.remove(parentMessageId);
+          cell.updatePanel(outputs);
+        }
+      }
+);
+      myKernels.put(fileEditor,connection);
+    }
+ catch (    IOException e) {
+      LOG.error(e);
+    }
+catch (    URISyntaxException e) {
+      LOG.error(e);
+    }
+  }
+ else {
+    final IpnbConnection connection=myKernels.get(fileEditor);
+    if (connection != null) {
+      final String messageId=connection.execute(codePanel.getCell().getSourceAsString());
+      myUpdateMap.put(messageId,codePanel);
+    }
+  }
+}
