@@ -1,18 +1,30 @@
 {
   if (!IdeaApplication.isLoaded()) {
-    @SuppressWarnings("ThrowableResultOfMethodCallIgnored") StartupAbortedException se=findCause(t);
+    @SuppressWarnings("ThrowableResultOfMethodCallIgnored") StartupAbortedException se=findCause(t,StartupAbortedException.class);
     if (se == null)     se=new StartupAbortedException(t);
-    if (se.logError()) {
+    @SuppressWarnings("ThrowableResultOfMethodCallIgnored") PluginException pe=findCause(t,PluginException.class);
+    PluginId pluginId=pe != null ? pe.getPluginId() : null;
+    if (Logger.isInitialized() && !(t instanceof ProcessCanceledException)) {
       try {
-        if (Logger.isInitialized() && !(t instanceof ProcessCanceledException)) {
-          getLogger().error(t);
-        }
+        getLogger().error(t);
       }
  catch (      Throwable ignore) {
       }
-      Main.showMessage("Start Failed",t);
     }
-    System.exit(se.exitCode());
+    if (pluginId != null && !CORE_PLUGIN_ID.equals(pluginId.getIdString())) {
+      disablePlugin(pluginId.getIdString());
+      StringWriter message=new StringWriter();
+      message.append("Plugin '").append(pluginId.getIdString()).append("' failed to initialize and will be disabled. ");
+      message.append(" Please restart ").append(ApplicationNamesInfo.getInstance().getFullProductName()).append('.');
+      message.append("\n\n");
+      pe.getCause().printStackTrace(new PrintWriter(message));
+      Main.showMessage("Plugin Error",message.toString(),false);
+      System.exit(Main.PLUGIN_ERROR);
+    }
+ else {
+      Main.showMessage("Start Failed",t);
+      System.exit(se.exitCode());
+    }
   }
  else   if (!(t instanceof ProcessCanceledException)) {
     getLogger().error(t);

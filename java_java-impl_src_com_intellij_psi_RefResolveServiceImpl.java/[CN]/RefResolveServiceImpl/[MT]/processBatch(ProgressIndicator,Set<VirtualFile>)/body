@@ -1,0 +1,43 @@
+{
+  final int size=files.size();
+  final ConcurrentIntObjectMap<int[]> fileToForwardIds=new StripedLockIntObjectConcurrentHashMap<int[]>();
+  final Set<VirtualFile> toProcess=Collections.synchronizedSet(files);
+  indicator.setIndeterminate(false);
+  ProgressIndicatorUtils.forceWriteActionPriority(indicator,(Disposable)indicator);
+  long start=System.currentTimeMillis();
+  Processor<VirtualFile> processor=new Processor<VirtualFile>(){
+    @Override public boolean process(    VirtualFile file){
+      double fraction=1 - toProcess.size() * 1.0 / size;
+      indicator.setFraction(fraction);
+      try {
+        if (file.isDirectory() || !toResolve(file,myProject)) {
+          return true;
+        }
+        int fileId=getAbsId(file);
+        int i=size - toProcess.size();
+        indicator.setText(i + "/" + size+ ": Resolving "+ file.getPresentableUrl());
+        int[] forwardIds=processFile(file,fileId,indicator);
+        if (forwardIds == null) {
+          return false;
+        }
+        toProcess.remove(file);
+        fileToForwardIds.put(fileId,forwardIds);
+      }
+ catch (      RuntimeException e) {
+        indicator.checkCanceled();
+      }
+      return true;
+    }
+  }
+;
+  boolean success=true;
+  try {
+    success=JobLauncher.getInstance().invokeConcurrentlyUnderProgress(new ArrayList<VirtualFile>(files),indicator,false,false,processor);
+  }
+  finally {
+    queue(toProcess,"re-added after fail. success=" + success);
+    storeIds(fileToForwardIds);
+    long end=System.currentTimeMillis();
+    log("Resolved batch of " + (size - toProcess.size()) + " from "+ size+ " files in "+ ((end - start) / 1000)+ "sec. (Gap: "+ storage.gap+ ")");
+  }
+}
