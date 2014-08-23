@@ -1,12 +1,33 @@
 {
   LOG.debug("Push");
-  Iterable<PushResult> pushResults=git.push().setProgressMonitor(new JGitProgressMonitor(indicator)).setCredentialsProvider(getCredentialsProvider()).call();
-  for (  PushResult pushResult : pushResults) {
-    if (LOG.isDebugEnabled()) {
-      printMessages(pushResult);
-      for (      RemoteRefUpdate refUpdate : pushResult.getRemoteUpdates()) {
-        LOG.debug(refUpdate.toString());
+  Repository repository=git.getRepository();
+  List<RefSpec> refSpecs=new SmartList<RefSpec>(new RemoteConfig(repository.getConfig(),Constants.DEFAULT_REMOTE_NAME).getPushRefSpecs());
+  if (refSpecs.isEmpty()) {
+    Ref head=repository.getRef(Constants.HEAD);
+    if (head != null && head.isSymbolic())     refSpecs.add(new RefSpec(head.getLeaf().getName()));
+  }
+  JGitProgressMonitor monitor=new JGitProgressMonitor(indicator);
+  for (  Transport transport : Transport.openAll(repository,Constants.DEFAULT_REMOTE_NAME,Transport.Operation.PUSH)) {
+    transport.setCredentialsProvider(getCredentialsProvider());
+    try {
+      PushResult result=transport.push(monitor,transport.findRemoteRefUpdatesFor(refSpecs));
+      if (LOG.isDebugEnabled()) {
+        printMessages(result);
+        for (        RemoteRefUpdate refUpdate : result.getRemoteUpdates()) {
+          LOG.debug(refUpdate.toString());
+        }
       }
+    }
+ catch (    TransportException e) {
+      if (e.getMessage().contains(JGitText.get().notAuthorized)) {
+        throw new AuthenticationException(e.getMessage(),e);
+      }
+ else {
+        throw e;
+      }
+    }
+ finally {
+      transport.close();
     }
   }
 }
