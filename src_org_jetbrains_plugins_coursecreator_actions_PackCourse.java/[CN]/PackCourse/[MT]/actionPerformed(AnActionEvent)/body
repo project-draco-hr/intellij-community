@@ -6,6 +6,12 @@
   final CCProjectService service=CCProjectService.getInstance(project);
   final Course course=service.getCourse();
   if (course == null)   return;
+  generateJson(project);
+  CreateCourseArchiveDialog dlg=new CreateCourseArchiveDialog(project,this);
+  dlg.show();
+  if (dlg.getExitCode() != DialogWrapper.OK_EXIT_CODE) {
+    return;
+  }
   final VirtualFile baseDir=project.getBaseDir();
   final Map<String,Lesson> lessons=course.getLessonsMap();
   List<FileEditor> editorList=new ArrayList<FileEditor>();
@@ -26,7 +32,9 @@
           final int lineStartOffset=document.getLineStartOffset(taskWindow.line);
           final int offset=lineStartOffset + taskWindow.start;
           final FileEditor[] editors=FileEditorManager.getInstance(project).getEditors(file);
-          if (editors.length > 0)           editorList.add(editors[0]);
+          if (editors.length > 0) {
+            editorList.add(editors[0]);
+          }
           CommandProcessor.getInstance().executeCommand(project,new Runnable(){
             @Override public void run(){
               ApplicationManager.getApplication().runWriteAction(new Runnable(){
@@ -44,7 +52,7 @@
     }
   }
   try {
-    File zipFile=new File(project.getBasePath(),course.getName() + ".zip");
+    File zipFile=new File(myLocationDir,myZipName + ".zip");
     ZipOutputStream zos=new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(zipFile)));
     for (    Map.Entry<String,Lesson> entry : lessons.entrySet()) {
       final VirtualFile lessonDir=baseDir.findChild(entry.getKey());
@@ -55,6 +63,7 @@
     ZipUtil.addFileOrDirRecursively(zos,null,new File(baseDir.getPath(),"course.json"),"course.json",null,null);
     ZipUtil.addFileOrDirRecursively(zos,null,new File(baseDir.getPath(),"test_helper.py"),"test_helper.py",null,null);
     zos.close();
+    Messages.showInfoMessage("Course archive was saved to " + zipFile.getPath(),"Course Archive Was Created Successfully");
   }
  catch (  IOException e1) {
     LOG.error(e1);
@@ -62,4 +71,6 @@
   for (  FileEditor fileEditor : editorList) {
     UndoManager.getInstance(project).undo(fileEditor);
   }
+  VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
+  ProjectView.getInstance(project).refresh();
 }
