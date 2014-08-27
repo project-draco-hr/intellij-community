@@ -16,20 +16,31 @@
  else   next=whiteSpace;
   RemoveUnnecessaryBackslashQuickFix.removeBackSlash(next);
   if (whiteSpace != null)   whiteSpace.delete();
-  String commentText=null;
-  if (next != null) {
-    final PsiElement lastChild=next.getLastChild();
-    if (lastChild instanceof PsiComment) {
-      commentText=lastChild.getText();
+  if (next == null) {
+    stringBuilder.append(")");
+    expression.replace(elementGenerator.createFromText(LanguageLevel.forElement(expression),PyExpression.class,stringBuilder.toString()));
+    return;
+  }
+  if (next instanceof PyExpressionStatement) {
+    final PyExpression expr=((PyExpressionStatement)next).getExpression();
+    if (expr instanceof PyBinaryExpression) {
+      addInArguments(stringBuilder,(PyBinaryExpression)expr);
     }
-    final String text=next instanceof PyExpressionStatement ? ((PyExpressionStatement)next).getExpression().getText() : next.getText();
-    stringBuilder.append(text);
-    if (text.endsWith(",") && PyNames.PRINT.equals(expressionText))     stringBuilder.append(" end=' '");
-    next.delete();
+ else     if (expr instanceof PyTupleExpression) {
+      final PyExpression[] elements=((PyTupleExpression)expr).getElements();
+      if (elements.length > 1) {
+        if (elements[0] instanceof PyBinaryExpression) {
+          addInArguments(stringBuilder,(PyBinaryExpression)elements[0]);
+        }
+        stringBuilder.append(", ");
+        stringBuilder.append(elements[1].getText());
+      }
+    }
   }
+ else {
+    stringBuilder.append(next.getText());
+  }
+  next.delete();
   stringBuilder.append(")");
-  if (commentText != null) {
-    stringBuilder.append(commentText);
-  }
   expression.replace(elementGenerator.createFromText(LanguageLevel.forElement(expression),PyExpression.class,stringBuilder.toString()));
 }
