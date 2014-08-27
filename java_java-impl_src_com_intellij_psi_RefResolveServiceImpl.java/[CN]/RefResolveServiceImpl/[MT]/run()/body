@@ -4,8 +4,7 @@
 synchronized (filesToResolve) {
       isEmpty=filesToResolve.isEmpty();
     }
-    Future<?> process=resolveProcess;
-    if (enableVetoes.get() > 0 || isEmpty || process != null && !process.isDone()) {
+    if (enableVetoes.get() > 0 || isEmpty || !resolveProcess.isDone()) {
       try {
         waitForQueue();
       }
@@ -19,22 +18,29 @@ synchronized (filesToResolve) {
     upToDate=false;
     myApplication.invokeLater(new Runnable(){
       @Override public void run(){
-        if (resolveProcess != null && !resolveProcess.isDone())         return;
+        if (!resolveProcess.isDone())         return;
         log("Started to resolve " + files.size() + " files");
         Task.Backgroundable backgroundable=new Task.Backgroundable(myProject,"Resolving files...",true){
           @Override public void run(          @NotNull final ProgressIndicator indicator){
             if (!myApplication.isDisposed()) {
-              processBatch(indicator,files);
+              try {
+                processBatch(indicator,files);
+              }
+ catch (              RuntimeInterruptedException ignore) {
+              }
             }
           }
         }
 ;
+        ProgressIndicator indicator;
         if (files.size() > 1) {
-          resolveProcess=ProgressManagerImpl.runProcessWithProgressAsynchronously(backgroundable);
+          indicator=new BackgroundableProcessIndicator(backgroundable);
         }
  else {
-          resolveProcess=ProgressManagerImpl.runProcessWithProgressAsynchronously(backgroundable,new MyProgress(),null);
+          indicator=new MyProgress();
         }
+        resolveIndicator=indicator;
+        resolveProcess=ProgressManagerImpl.runProcessWithProgressAsynchronously(backgroundable,indicator,null);
       }
     }
 ,myProject.getDisposed());
