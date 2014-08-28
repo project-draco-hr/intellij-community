@@ -4,7 +4,7 @@
 synchronized (filesToResolve) {
       isEmpty=filesToResolve.isEmpty();
     }
-    if (enableVetoes.get() > 0 || isEmpty) {
+    if (enableVetoes.get() > 0 || isEmpty || !resolveProcess.isDone()) {
       try {
         waitForQueue();
       }
@@ -13,42 +13,37 @@ synchronized (filesToResolve) {
       }
       continue;
     }
+    final Set<VirtualFile> files=countFilesToResolve();
+    if (files.isEmpty())     continue;
     upToDate=false;
-    final CountDownLatch batchProcessedLatch=new CountDownLatch(1);
-    ApplicationManager.getApplication().invokeLater(new Runnable(){
+    myApplication.invokeLater(new Runnable(){
       @Override public void run(){
-        final Set<VirtualFile> files=countFilesToResolve();
+        if (!resolveProcess.isDone())         return;
+        log("Started to resolve " + files.size() + " files");
         Task.Backgroundable backgroundable=new Task.Backgroundable(myProject,"Resolving files...",true){
           @Override public void run(          @NotNull final ProgressIndicator indicator){
-            if (ApplicationManager.getApplication().isDisposed())             return;
-            try {
-              processBatch(indicator,files);
-            }
-  finally {
-              batchProcessedLatch.countDown();
+            if (!myApplication.isDisposed()) {
+              try {
+                processBatch(indicator,files);
+              }
+ catch (              RuntimeInterruptedException ignore) {
+              }
             }
           }
         }
 ;
+        ProgressIndicator indicator;
         if (files.size() > 1) {
-          backgroundable.queue();
+          indicator=new BackgroundableProcessIndicator(backgroundable);
         }
  else {
-          ProgressManager.getInstance().runProcessWithProgressAsynchronously(backgroundable,new MyProgress());
+          indicator=new MyProgress();
         }
+        resolveIndicator=indicator;
+        resolveProcess=ProgressManagerImpl.runProcessWithProgressAsynchronously(backgroundable,indicator,null);
       }
     }
 ,myProject.getDisposed());
-    try {
-      batchProcessedLatch.await();
-    }
- catch (    InterruptedException e) {
-      break;
-    }
-synchronized (filesToResolve) {
-      upToDate=filesToResolve.isEmpty();
-      log("upToDate = " + upToDate);
-    }
     flushLog();
   }
 }

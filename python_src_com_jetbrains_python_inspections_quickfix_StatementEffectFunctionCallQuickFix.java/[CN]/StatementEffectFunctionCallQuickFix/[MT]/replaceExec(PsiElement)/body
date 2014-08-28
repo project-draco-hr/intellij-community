@@ -1,0 +1,46 @@
+{
+  final PyElementGenerator elementGenerator=PyElementGenerator.getInstance(expression.getProject());
+  final String expressionText=expression.getText();
+  final StringBuilder stringBuilder=new StringBuilder(expressionText + " (");
+  final PsiElement whiteSpace=expression.getContainingFile().findElementAt(expression.getTextOffset() + expression.getTextLength());
+  PsiElement next=null;
+  if (whiteSpace instanceof PsiWhiteSpace) {
+    final String whiteSpaceText=whiteSpace.getText();
+    if (!whiteSpaceText.contains("\n")) {
+      next=whiteSpace.getNextSibling();
+      while (next instanceof PsiWhiteSpace && whiteSpaceText.contains("\\")) {
+        next=next.getNextSibling();
+      }
+    }
+  }
+ else   next=whiteSpace;
+  RemoveUnnecessaryBackslashQuickFix.removeBackSlash(next);
+  if (whiteSpace != null)   whiteSpace.delete();
+  if (next == null) {
+    stringBuilder.append(")");
+    expression.replace(elementGenerator.createFromText(LanguageLevel.forElement(expression),PyExpression.class,stringBuilder.toString()));
+    return;
+  }
+  if (next instanceof PyExpressionStatement) {
+    final PyExpression expr=((PyExpressionStatement)next).getExpression();
+    if (expr instanceof PyBinaryExpression) {
+      addInArguments(stringBuilder,(PyBinaryExpression)expr);
+    }
+ else     if (expr instanceof PyTupleExpression) {
+      final PyExpression[] elements=((PyTupleExpression)expr).getElements();
+      if (elements.length > 1) {
+        if (elements[0] instanceof PyBinaryExpression) {
+          addInArguments(stringBuilder,(PyBinaryExpression)elements[0]);
+        }
+        stringBuilder.append(", ");
+        stringBuilder.append(elements[1].getText());
+      }
+    }
+  }
+ else {
+    stringBuilder.append(next.getText());
+  }
+  next.delete();
+  stringBuilder.append(")");
+  expression.replace(elementGenerator.createFromText(LanguageLevel.forElement(expression),PyExpression.class,stringBuilder.toString()));
+}
