@@ -3,7 +3,13 @@
   while (!allVars.isEmpty()) {
     final List<InferenceVariable> vars=InferenceVariablesOrder.resolveOrder(allVars,this);
     if (!myIncorporationPhase.hasCaptureConstraints(vars)) {
-      final PsiSubstitutor firstSubstitutor=resolveSubset(vars,substitutor);
+      PsiSubstitutor firstSubstitutor=resolveSubset(vars,substitutor);
+      if (firstSubstitutor != null) {
+        final Set<PsiTypeParameter> parameters=firstSubstitutor.getSubstitutionMap().keySet();
+        if (GenericsUtil.findTypeParameterWithBoundError(parameters.toArray(new PsiTypeParameter[parameters.size()]),firstSubstitutor,myContext,true) != null) {
+          firstSubstitutor=null;
+        }
+      }
       if (firstSubstitutor != null) {
         substitutor=firstSubstitutor;
         allVars.removeAll(vars);
@@ -11,18 +17,20 @@
       }
     }
     final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(getManager().getProject());
-    for (    InferenceVariable var : vars) {
-      final PsiTypeParameter parameter=var.getParameter();
-      final PsiTypeParameter copy=elementFactory.createTypeParameterFromText("z" + parameter.getName(),null);
-      final PsiType lub=getLowerBound(var,substitutor);
-      final PsiType glb=getUpperBound(var,substitutor);
+    final PsiTypeParameter[] freshParameters=createFreshVariables(vars);
+    for (int i=0; i < freshParameters.length; i++) {
+      PsiTypeParameter parameter=freshParameters[i];
+      final InferenceVariable var=vars.get(i);
+      final PsiType lub=getLowerBound(var,PsiSubstitutor.EMPTY);
       if (lub != PsiType.NULL) {
-        if (!TypeConversionUtil.isAssignable(glb,lub)) {
-          return null;
+        for (        PsiClassType upperBoundType : parameter.getExtendsListTypes()) {
+          if (!TypeConversionUtil.isAssignable(upperBoundType,lub)) {
+            return null;
+          }
         }
-        copy.putUserData(LOWER_BOUND,lub);
+        parameter.putUserData(LOWER_BOUND,lub);
       }
-      var.addBound(elementFactory.createType(copy),InferenceBound.EQ);
+      var.addBound(elementFactory.createType(parameter),InferenceBound.EQ);
     }
     myIncorporationPhase.forgetCaptures(vars);
     if (!repeatInferencePhases(true)) {
