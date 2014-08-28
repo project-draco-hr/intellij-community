@@ -1,13 +1,24 @@
 {
   if (myInitialized)   return;
-  final ToolWindowImpl window=(ToolWindowImpl)ToolWindowManager.getInstance(myProject).registerToolWindow(ToolWindowId.PREVIEW,this,ToolWindowAnchor.RIGHT,myProject,false);
-  window.setIcon(AllIcons.Actions.PreviewDetails);
+  myToolWindow=(ToolWindowImpl)ToolWindowManager.getInstance(myProject).registerToolWindow(ToolWindowId.PREVIEW,this,ToolWindowAnchor.RIGHT,myProject,false);
+  myToolWindow.setIcon(AllIcons.Actions.PreviewDetails);
   myEditorsSplitters=new EditorsSplitters(myManager,myDockManager,false){
-    @Override protected void afterFileClosed(    VirtualFile file){
-      window.setTitle(": (empty)");
+    @Override public void updateFileName(    VirtualFile updatedFile){
+      super.updateFileName(updatedFile);
+      if (updatedFile != null && updatedFile.equals(getCurrentFile())) {
+        updateWindowTitle(updatedFile);
+      }
     }
     @Override protected void afterFileOpen(    VirtualFile file){
-      window.setTitle(": " + StringUtil.getShortened(EditorTabbedContainer.calcTabTitle(myProject,file),UISettings.getInstance().EDITOR_TAB_TITLE_LIMIT));
+      if (file.equals(myAwaitingForOpen)) {
+        updateWindowTitle(file);
+        Document document=FileDocumentManager.getInstance().getDocument(file);
+        if (document != null) {
+          myModifiedFile=null;
+          document.addDocumentListener(PreviewPanel.this,myProject);
+        }
+      }
+      myAwaitingForOpen=null;
     }
     @Override public void setTabsPlacement(    int tabPlacement){
       super.setTabsPlacement(UISettings.TABS_NONE);
@@ -17,10 +28,12 @@
     }
   }
 ;
+  myProject.getMessageBus().connect().subscribe(FileEditorManagerListener.Before.FILE_EDITOR_MANAGER,this);
   myEditorsSplitters.createCurrentWindow();
   myWindow=myEditorsSplitters.getCurrentWindow();
+  myWindow.setTabsPlacement(UISettings.TABS_NONE);
   setLayout(new GridLayout(1,1));
   add(myEditorsSplitters);
-  window.setTitleActions(new MoveToEditorTabsAction(),new CloseFileAction());
+  myToolWindow.setTitleActions(new MoveToEditorTabsAction(),new CloseFileAction());
   myInitialized=true;
 }
