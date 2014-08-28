@@ -1,0 +1,94 @@
+{
+  boolean changed=false;
+  for (  Exprent expr : exprent.getAllExprents()) {
+    for (; ; ) {
+      Object[] arr=iterateChildExprent(expr,parent,next,mapVarValues,ssau);
+      Exprent retexpr=(Exprent)arr[0];
+      changed|=(Boolean)arr[1];
+      boolean isReplaceable=(Boolean)arr[2];
+      if (retexpr != null) {
+        if (isReplaceable) {
+          replaceSingleVar(exprent,(VarExprent)expr,retexpr,ssau);
+          expr=retexpr;
+        }
+ else {
+          exprent.replaceExprent(expr,retexpr);
+        }
+        changed=true;
+      }
+      if (!isReplaceable) {
+        break;
+      }
+    }
+  }
+  Exprent dest=isReplaceableVar(exprent,mapVarValues,ssau);
+  if (dest != null) {
+    return new Object[]{dest,true,true};
+  }
+  VarExprent left=null;
+  Exprent right=null;
+  if (exprent.type == Exprent.EXPRENT_ASSIGNMENT) {
+    AssignmentExprent as=(AssignmentExprent)exprent;
+    if (as.getLeft().type == Exprent.EXPRENT_VAR) {
+      left=(VarExprent)as.getLeft();
+      right=as.getRight();
+    }
+  }
+  if (left == null) {
+    return new Object[]{null,changed,false};
+  }
+  boolean isHeadSynchronized=false;
+  if (next == null && parent.type == Exprent.EXPRENT_MONITOR) {
+    MonitorExprent monexpr=(MonitorExprent)parent;
+    if (monexpr.getMontype() == MonitorExprent.MONITOR_ENTER && exprent.equals(monexpr.getValue())) {
+      isHeadSynchronized=true;
+    }
+  }
+  if (!left.isStack() && !isHeadSynchronized) {
+    return new Object[]{null,changed,false};
+  }
+  VarVersionPaar leftpaar=new VarVersionPaar(left);
+  List<VarVersionNode> usedVers=new ArrayList<VarVersionNode>();
+  boolean notdom=getUsedVersions(ssau,leftpaar,usedVers);
+  if (!notdom && usedVers.isEmpty()) {
+    return new Object[]{right,changed,false};
+  }
+  if (!left.isStack()) {
+    return new Object[]{null,changed,false};
+  }
+  int useflags=right.getExprentUse();
+  if ((useflags & Exprent.BOTH_FLAGS) != Exprent.BOTH_FLAGS) {
+    return new Object[]{null,changed,false};
+  }
+  HashMap<Integer,HashSet<VarVersionPaar>> mapVars=getAllVarVersions(leftpaar,right,ssau);
+  if (mapVars.containsKey(leftpaar.var) && notdom) {
+    return new Object[]{null,changed,false};
+  }
+  mapVars.remove(leftpaar.var);
+  HashSet<VarVersionPaar> setAllowedVars=getAllVersions(parent);
+  if (next != null) {
+    setAllowedVars.addAll(getAllVersions(next));
+  }
+  boolean vernotreplaced=false;
+  HashSet<VarVersionPaar> setTempUsedVers=new HashSet<VarVersionPaar>();
+  for (  VarVersionNode usedvar : usedVers) {
+    VarVersionPaar usedver=new VarVersionPaar(usedvar.var,usedvar.version);
+    if (isVersionToBeReplaced(usedver,mapVars,ssau,leftpaar) && (right.type == Exprent.EXPRENT_VAR || setAllowedVars.contains(usedver))) {
+      setTempUsedVers.add(usedver);
+    }
+ else {
+      vernotreplaced=true;
+    }
+  }
+  if (!notdom && !vernotreplaced) {
+    for (    VarVersionPaar usedver : setTempUsedVers) {
+      Exprent copy=right.copy();
+      if (right.type == Exprent.EXPRENT_FIELD && ssau.getMapFieldVars().containsKey(right.id)) {
+        ssau.getMapFieldVars().put(copy.id,ssau.getMapFieldVars().get(right.id));
+      }
+      mapVarValues.put(usedver,copy);
+    }
+    return new Object[]{right,changed,false};
+  }
+  return new Object[]{null,changed,false};
+}

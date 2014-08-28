@@ -1,0 +1,47 @@
+{
+  StructClass cl=wrapper.getClassStruct();
+  for (  StructMethod meth : cl.getMethods()) {
+    String name=meth.getName();
+    int flag=0;
+    if ("values".equals(name)) {
+      flag=1;
+    }
+ else     if ("valueOf".equals(name)) {
+      flag=2;
+    }
+    if (flag > 0) {
+      String[] arr=meth.getDescriptor().split("[()]");
+      String par=arr[1];
+      if ((flag == 1 && par.length() == 0) || flag == 2 && "Ljava/lang/String;".equals(par)) {
+        wrapper.getHideMembers().add(InterpreterUtil.makeUniqueKey(name,meth.getDescriptor()));
+      }
+    }
+  }
+  for (  MethodWrapper meth : wrapper.getMethods()) {
+    if ("<init>".equals(meth.methodStruct.getName())) {
+      Statement firstdata=findFirstData(meth.root);
+      if (firstdata == null || firstdata.getExprents().isEmpty()) {
+        return;
+      }
+      Exprent exprent=firstdata.getExprents().get(0);
+      if (exprent.type == Exprent.EXPRENT_INVOCATION) {
+        InvocationExprent invexpr=(InvocationExprent)exprent;
+        if (isInvocationSuperConstructor(invexpr,meth,wrapper)) {
+          firstdata.getExprents().remove(0);
+        }
+      }
+    }
+  }
+  for (  StructField fd : cl.getFields()) {
+    if ((fd.access_flags & CodeConstants.ACC_ENUM) != 0) {
+      Exprent initializer=wrapper.getStaticFieldInitializers().getWithKey(InterpreterUtil.makeUniqueKey(fd.getName(),fd.getDescriptor()));
+      if (initializer != null && initializer.type == Exprent.EXPRENT_NEW) {
+        NewExprent nexpr=(NewExprent)initializer;
+        if (nexpr.isAnonymous()) {
+          ClassNode child=DecompilerContext.getClassprocessor().getMapRootClasses().get(nexpr.getNewtype().value);
+          hideDummyFieldInConstant(child.wrapper);
+        }
+      }
+    }
+  }
+}

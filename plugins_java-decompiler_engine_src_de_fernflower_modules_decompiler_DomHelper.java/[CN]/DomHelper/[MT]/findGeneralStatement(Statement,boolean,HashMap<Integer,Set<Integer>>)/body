@@ -1,0 +1,119 @@
+{
+  VBStyleCollection<Statement,Integer> stats=stat.getStats();
+  VBStyleCollection<List<Integer>,Integer> vbPost;
+  if (mapExtPost.isEmpty()) {
+    FastExtendedPostdominanceHelper extpost=new FastExtendedPostdominanceHelper();
+    mapExtPost.putAll(extpost.getExtendedPostdominators(stat));
+  }
+  if (forceall) {
+    vbPost=new VBStyleCollection<List<Integer>,Integer>();
+    List<Statement> lstAll=stat.getPostReversePostOrderList();
+    for (    Statement st : lstAll) {
+      Set<Integer> set=mapExtPost.get(st.id);
+      if (set != null) {
+        vbPost.addWithKey(new ArrayList<Integer>(set),st.id);
+      }
+    }
+    Set<Integer> setFirst=mapExtPost.get(stat.getFirst().id);
+    if (setFirst != null) {
+      for (      Integer id : setFirst) {
+        List<Integer> lst=vbPost.getWithKey(id);
+        if (lst == null) {
+          vbPost.addWithKey(lst=new ArrayList<Integer>(),id);
+        }
+        lst.add(id);
+      }
+    }
+  }
+ else {
+    vbPost=calcPostDominators(stat);
+  }
+  for (int k=0; k < vbPost.size(); k++) {
+    Integer headid=vbPost.getKey(k);
+    List<Integer> posts=vbPost.get(k);
+    if (!mapExtPost.containsKey(headid) && !(posts.size() == 1 && posts.get(0).equals(headid))) {
+      continue;
+    }
+    Statement head=stats.getWithKey(headid);
+    Set<Integer> setExtPosts=mapExtPost.get(headid);
+    for (int i=0; i < posts.size(); i++) {
+      Integer postid=posts.get(i);
+      if (!postid.equals(headid) && !setExtPosts.contains(postid)) {
+        continue;
+      }
+      Statement post=stats.getWithKey(postid);
+      if (post == null) {
+        continue;
+      }
+      boolean same=(post == head);
+      HashSet<Statement> setNodes=new HashSet<Statement>();
+      HashSet<Statement> setPreds=new HashSet<Statement>();
+      HashSet<Statement> setHandlers=new HashSet<Statement>();
+      setHandlers.add(head);
+      for (; ; ) {
+        boolean hdfound=false;
+        Iterator<Statement> itHandlers=setHandlers.iterator();
+        while (itHandlers.hasNext()) {
+          Statement handler=itHandlers.next();
+          if (setNodes.contains(handler)) {
+            continue;
+          }
+          boolean addhd=(setNodes.size() == 0);
+          if (!addhd) {
+            List<Statement> hdsupp=handler.getNeighbours(StatEdge.TYPE_EXCEPTION,Statement.DIRECTION_BACKWARD);
+            addhd=(setNodes.containsAll(hdsupp) && (setNodes.size() > hdsupp.size() || setNodes.size() == 1));
+          }
+          if (addhd) {
+            LinkedList<Statement> lstStack=new LinkedList<Statement>();
+            lstStack.add(handler);
+            while (!lstStack.isEmpty()) {
+              Statement st=lstStack.remove(0);
+              if (!(setNodes.contains(st) || (!same && st == post))) {
+                setNodes.add(st);
+                if (st != head) {
+                  setPreds.addAll(st.getNeighbours(StatEdge.TYPE_REGULAR,Statement.DIRECTION_BACKWARD));
+                }
+                lstStack.addAll(st.getNeighbours(StatEdge.TYPE_REGULAR,Statement.DIRECTION_FORWARD));
+                setHandlers.addAll(st.getNeighbours(StatEdge.TYPE_EXCEPTION,Statement.DIRECTION_FORWARD));
+              }
+            }
+            hdfound=true;
+            setHandlers.remove(handler);
+            break;
+          }
+        }
+        if (!hdfound) {
+          break;
+        }
+      }
+      setHandlers.clear();
+      for (      Statement st : setNodes) {
+        setHandlers.addAll(st.getNeighbours(StatEdge.TYPE_EXCEPTION,Statement.DIRECTION_FORWARD));
+      }
+      setHandlers.removeAll(setNodes);
+      boolean excok=true;
+      Iterator<Statement> itt=setHandlers.iterator();
+      while (itt.hasNext()) {
+        Statement handler=itt.next();
+        if (!handler.getNeighbours(StatEdge.TYPE_EXCEPTION,Statement.DIRECTION_BACKWARD).containsAll(setNodes)) {
+          excok=false;
+          break;
+        }
+      }
+      if (excok) {
+        Statement res=null;
+        setPreds.removeAll(setNodes);
+        if (setPreds.size() == 0) {
+          if ((setNodes.size() > 1 || head.getNeighbours(StatEdge.TYPE_REGULAR,Statement.DIRECTION_BACKWARD).contains(head)) && setNodes.size() < stats.size()) {
+            if (checkSynchronizedCompleteness(head,setNodes)) {
+              res=new GeneralStatement(head,setNodes,same ? null : post);
+              stat.collapseNodesToStatement(res);
+              return res;
+            }
+          }
+        }
+      }
+    }
+  }
+  return null;
+}

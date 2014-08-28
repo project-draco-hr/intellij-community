@@ -1,0 +1,60 @@
+{
+  LinkedList<BasicBlock> lstNodes=new LinkedList<BasicBlock>();
+  HashMap<Integer,BasicBlock> mapNewNodes=new HashMap<Integer,BasicBlock>();
+  lstNodes.add(jsr);
+  mapNewNodes.put(jsr.id,jsr);
+  while (!lstNodes.isEmpty()) {
+    BasicBlock node=lstNodes.remove(0);
+    for (int j=0; j < 2; j++) {
+      List<BasicBlock> lst;
+      if (j == 0) {
+        if (node.getLastInstruction().opcode == CodeConstants.opc_ret) {
+          if (node.getSuccs().contains(ret)) {
+            continue;
+          }
+        }
+        lst=node.getSuccs();
+      }
+ else {
+        if (node == jsr) {
+          continue;
+        }
+        lst=node.getSuccExceptions();
+      }
+      for (int i=lst.size() - 1; i >= 0; i--) {
+        BasicBlock child=(BasicBlock)lst.get(i);
+        Integer childid=child.id;
+        if (mapNewNodes.containsKey(childid)) {
+          node.replaceSuccessor(child,(BasicBlock)mapNewNodes.get(childid));
+        }
+ else         if (common_blocks.contains(child)) {
+          BasicBlock copy=(BasicBlock)child.clone();
+          copy.id=++last_id;
+          if (copy.getLastInstruction().opcode == CodeConstants.opc_ret && child.getSuccs().contains(ret)) {
+            copy.addSuccessor(ret);
+            child.removeSuccessor(ret);
+          }
+ else {
+            for (int k=0; k < child.getSuccs().size(); k++) {
+              copy.addSuccessor((BasicBlock)child.getSuccs().get(k));
+            }
+          }
+          for (int k=0; k < child.getSuccExceptions().size(); k++) {
+            copy.addSuccessorException((BasicBlock)child.getSuccExceptions().get(k));
+          }
+          lstNodes.add(copy);
+          mapNewNodes.put(childid,copy);
+          if (last.getPreds().contains(child)) {
+            last.addPredecessor(copy);
+          }
+          node.replaceSuccessor(child,copy);
+          blocks.addWithKey(copy,copy.id);
+        }
+ else {
+          mapNewNodes.put(childid,child);
+        }
+      }
+    }
+  }
+  splitJsrExceptionRanges(common_blocks,mapNewNodes);
+}

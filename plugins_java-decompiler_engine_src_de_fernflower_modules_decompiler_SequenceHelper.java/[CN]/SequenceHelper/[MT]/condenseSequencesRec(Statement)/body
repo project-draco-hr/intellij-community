@@ -1,0 +1,91 @@
+{
+  if (stat.type == Statement.TYPE_SEQUENCE) {
+    List<Statement> lst=new ArrayList<Statement>();
+    lst.addAll(stat.getStats());
+    boolean unfolded=false;
+    for (int i=0; i < lst.size(); i++) {
+      Statement st=lst.get(i);
+      if (st.type == Statement.TYPE_SEQUENCE) {
+        removeEmptyStatements((SequenceStatement)st);
+        if (i == lst.size() - 1 || isSequenceDisbandable(st,lst.get(i + 1))) {
+          Statement first=st.getFirst();
+          for (          StatEdge edge : st.getAllPredecessorEdges()) {
+            st.removePredecessor(edge);
+            edge.getSource().changeEdgeNode(Statement.DIRECTION_FORWARD,edge,first);
+            first.addPredecessor(edge);
+          }
+          Statement last=st.getStats().getLast();
+          if (last.getAllSuccessorEdges().isEmpty() && i < lst.size() - 1) {
+            last.addSuccessor(new StatEdge(StatEdge.TYPE_REGULAR,last,lst.get(i + 1)));
+          }
+ else {
+            for (            StatEdge edge : last.getAllSuccessorEdges()) {
+              if (i == lst.size() - 1) {
+                if (edge.closure == st) {
+                  stat.addLabeledEdge(edge);
+                }
+              }
+ else {
+                edge.getSource().changeEdgeType(Statement.DIRECTION_FORWARD,edge,StatEdge.TYPE_REGULAR);
+                edge.closure.getLabelEdges().remove(edge);
+                edge.closure=null;
+              }
+            }
+          }
+          for (          StatEdge edge : st.getAllSuccessorEdges()) {
+            st.removeSuccessor(edge);
+          }
+          for (          StatEdge edge : new HashSet<StatEdge>(st.getLabelEdges())) {
+            if (edge.getSource() != last) {
+              last.addLabeledEdge(edge);
+            }
+          }
+          lst.remove(i);
+          lst.addAll(i,st.getStats());
+          i--;
+          unfolded=true;
+        }
+      }
+    }
+    if (unfolded) {
+      SequenceStatement sequence=new SequenceStatement(lst);
+      sequence.setAllParent();
+      stat.getParent().replaceStatement(stat,sequence);
+      stat=sequence;
+    }
+  }
+  if (stat.type == Statement.TYPE_SEQUENCE) {
+    removeEmptyStatements((SequenceStatement)stat);
+    if (stat.getStats().size() == 1) {
+      Statement st=stat.getFirst();
+      boolean ok=st.getAllSuccessorEdges().isEmpty();
+      if (!ok) {
+        StatEdge edge=st.getAllSuccessorEdges().get(0);
+        ok=stat.getAllSuccessorEdges().isEmpty();
+        if (!ok) {
+          StatEdge statedge=stat.getAllSuccessorEdges().get(0);
+          ok=(edge.getDestination() == statedge.getDestination());
+          if (ok) {
+            st.removeSuccessor(edge);
+          }
+        }
+      }
+      if (ok) {
+        stat.getParent().replaceStatement(stat,st);
+        stat=st;
+      }
+    }
+  }
+  outer:   for (; ; ) {
+    for (    Statement st : stat.getStats()) {
+      if ((st.getStats().isEmpty() || st.getExprents() != null) && st.type != Statement.TYPE_BASICBLOCK) {
+        destroyAndFlattenStatement(st);
+        continue outer;
+      }
+    }
+    break;
+  }
+  for (int i=0; i < stat.getStats().size(); i++) {
+    condenseSequencesRec(stat.getStats().get(i));
+  }
+}

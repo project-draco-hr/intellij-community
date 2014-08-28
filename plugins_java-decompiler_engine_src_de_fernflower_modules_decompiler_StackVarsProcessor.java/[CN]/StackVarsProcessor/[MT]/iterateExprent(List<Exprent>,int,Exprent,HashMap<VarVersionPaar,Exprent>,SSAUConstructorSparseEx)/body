@@ -1,0 +1,115 @@
+{
+  Exprent exprent=lstExprents.get(index);
+  int changed=0;
+  for (  Exprent expr : exprent.getAllExprents()) {
+    for (; ; ) {
+      Object[] arr=iterateChildExprent(expr,exprent,next,mapVarValues,ssau);
+      Exprent retexpr=(Exprent)arr[0];
+      changed|=(Boolean)arr[1] ? 1 : 0;
+      boolean isReplaceable=(Boolean)arr[2];
+      if (retexpr != null) {
+        if (isReplaceable) {
+          replaceSingleVar(exprent,(VarExprent)expr,retexpr,ssau);
+          expr=retexpr;
+        }
+ else {
+          exprent.replaceExprent(expr,retexpr);
+        }
+        changed=1;
+      }
+      if (!isReplaceable) {
+        break;
+      }
+    }
+  }
+  VarExprent left=null;
+  Exprent right=null;
+  if (exprent.type == Exprent.EXPRENT_ASSIGNMENT) {
+    AssignmentExprent as=(AssignmentExprent)exprent;
+    if (as.getLeft().type == Exprent.EXPRENT_VAR) {
+      left=(VarExprent)as.getLeft();
+      right=as.getRight();
+    }
+  }
+  if (left == null) {
+    return new int[]{-1,changed};
+  }
+  VarVersionPaar leftpaar=new VarVersionPaar(left);
+  List<VarVersionNode> usedVers=new ArrayList<VarVersionNode>();
+  boolean notdom=getUsedVersions(ssau,leftpaar,usedVers);
+  if (!notdom && usedVers.isEmpty()) {
+    if (left.isStack() && (right.type == Exprent.EXPRENT_INVOCATION || right.type == Exprent.EXPRENT_ASSIGNMENT || right.type == Exprent.EXPRENT_NEW)) {
+      if (right.type == Exprent.EXPRENT_NEW) {
+        NewExprent nexpr=(NewExprent)right;
+        if (nexpr.isAnonymous() || nexpr.getNewtype().arraydim > 0 || nexpr.getNewtype().type != CodeConstants.TYPE_OBJECT) {
+          return new int[]{-1,changed};
+        }
+      }
+      lstExprents.set(index,right);
+      return new int[]{index + 1,1};
+    }
+ else     if (right.type == Exprent.EXPRENT_VAR) {
+      lstExprents.remove(index);
+      return new int[]{index,1};
+    }
+ else {
+      return new int[]{-1,changed};
+    }
+  }
+  int useflags=right.getExprentUse();
+  if (!left.isStack() && (right.type != Exprent.EXPRENT_VAR || ((VarExprent)right).isStack())) {
+    return new int[]{-1,changed};
+  }
+  if ((useflags & Exprent.MULTIPLE_USES) == 0 && (notdom || usedVers.size() > 1)) {
+    return new int[]{-1,changed};
+  }
+  HashMap<Integer,HashSet<VarVersionPaar>> mapVars=getAllVarVersions(leftpaar,right,ssau);
+  boolean isSelfReference=mapVars.containsKey(leftpaar.var);
+  if (isSelfReference && notdom) {
+    return new int[]{-1,changed};
+  }
+  HashSet<VarVersionPaar> setNextVars=next == null ? null : getAllVersions(next);
+  if (right.type != Exprent.EXPRENT_CONST && right.type != Exprent.EXPRENT_VAR && setNextVars != null && mapVars.containsKey(leftpaar.var)) {
+    for (    VarVersionNode usedvar : usedVers) {
+      if (!setNextVars.contains(new VarVersionPaar(usedvar.var,usedvar.version))) {
+        return new int[]{-1,changed};
+      }
+    }
+  }
+  mapVars.remove(leftpaar.var);
+  boolean vernotreplaced=false;
+  boolean verreplaced=false;
+  HashSet<VarVersionPaar> setTempUsedVers=new HashSet<VarVersionPaar>();
+  for (  VarVersionNode usedvar : usedVers) {
+    VarVersionPaar usedver=new VarVersionPaar(usedvar.var,usedvar.version);
+    if (isVersionToBeReplaced(usedver,mapVars,ssau,leftpaar) && (right.type == Exprent.EXPRENT_CONST || right.type == Exprent.EXPRENT_VAR || right.type == Exprent.EXPRENT_FIELD || setNextVars == null || setNextVars.contains(usedver))) {
+      setTempUsedVers.add(usedver);
+      verreplaced=true;
+    }
+ else {
+      vernotreplaced=true;
+    }
+  }
+  if (isSelfReference && vernotreplaced) {
+    return new int[]{-1,changed};
+  }
+ else {
+    for (    VarVersionPaar usedver : setTempUsedVers) {
+      Exprent copy=right.copy();
+      if (right.type == Exprent.EXPRENT_FIELD && ssau.getMapFieldVars().containsKey(right.id)) {
+        ssau.getMapFieldVars().put(copy.id,ssau.getMapFieldVars().get(right.id));
+      }
+      mapVarValues.put(usedver,copy);
+    }
+  }
+  if (!notdom && !vernotreplaced) {
+    lstExprents.remove(index);
+    return new int[]{index,1};
+  }
+ else   if (verreplaced) {
+    return new int[]{index + 1,changed};
+  }
+ else {
+    return new int[]{-1,changed};
+  }
+}

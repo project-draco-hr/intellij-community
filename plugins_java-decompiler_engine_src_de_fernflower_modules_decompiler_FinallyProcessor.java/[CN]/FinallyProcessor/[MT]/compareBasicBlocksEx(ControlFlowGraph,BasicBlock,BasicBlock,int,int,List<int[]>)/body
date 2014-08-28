@@ -1,0 +1,59 @@
+{
+  InstructionSequence seqPattern=pattern.getSeq();
+  InstructionSequence seqSample=sample.getSeq();
+  if (type != 0) {
+    seqPattern=seqPattern.clone();
+    if ((type & 1) > 0) {
+      if (finallytype > 0) {
+        seqPattern.removeInstruction(0);
+      }
+    }
+    if ((type & 2) > 0) {
+      if (finallytype == 0 || finallytype == 2) {
+        seqPattern.removeInstruction(seqPattern.length() - 1);
+      }
+      if (finallytype == 2) {
+        seqPattern.removeInstruction(seqPattern.length() - 1);
+      }
+    }
+  }
+  if (seqPattern.length() > seqSample.length()) {
+    return false;
+  }
+  for (int i=0; i < seqPattern.length(); i++) {
+    Instruction instrPattern=seqPattern.getInstr(i);
+    Instruction instrSample=seqSample.getInstr(i);
+    if (!equalInstructions(instrPattern,instrSample,lstStoreVars)) {
+      return false;
+    }
+  }
+  if (seqPattern.length() < seqSample.length()) {
+    SimpleInstructionSequence seq=new SimpleInstructionSequence();
+    for (int i=seqSample.length() - 1; i >= seqPattern.length(); i--) {
+      seq.addInstruction(0,seqSample.getInstr(i),-1);
+      seqSample.removeInstruction(i);
+    }
+    BasicBlock newblock=new BasicBlock(++graph.last_id);
+    newblock.setSeq(seq);
+    List<BasicBlock> lstTemp=new ArrayList<BasicBlock>();
+    lstTemp.addAll(sample.getSuccs());
+    for (    BasicBlock suc : lstTemp) {
+      sample.removeSuccessor(suc);
+      newblock.addSuccessor(suc);
+    }
+    sample.addSuccessor(newblock);
+    graph.getBlocks().addWithKey(newblock,newblock.id);
+    HashSet<BasicBlock> setFinallyExits=graph.getFinallyExits();
+    if (setFinallyExits.contains(sample)) {
+      setFinallyExits.remove(sample);
+      setFinallyExits.add(newblock);
+    }
+    for (int j=0; j < sample.getSuccExceptions().size(); j++) {
+      BasicBlock hd=sample.getSuccExceptions().get(j);
+      newblock.addSuccessorException(hd);
+      ExceptionRangeCFG range=graph.getExceptionRange(hd,sample);
+      range.getProtectedRange().add(newblock);
+    }
+  }
+  return true;
+}

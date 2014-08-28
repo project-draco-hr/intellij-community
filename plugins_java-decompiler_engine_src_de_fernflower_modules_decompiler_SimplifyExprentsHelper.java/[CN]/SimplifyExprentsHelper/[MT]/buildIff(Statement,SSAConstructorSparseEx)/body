@@ -1,0 +1,66 @@
+{
+  if (stat.type == Statement.TYPE_IF && stat.getExprents() == null) {
+    IfStatement stif=(IfStatement)stat;
+    if (stif.iftype == IfStatement.IFTYPE_IFELSE) {
+      Statement ifstat=stif.getIfstat();
+      Statement elsestat=stif.getElsestat();
+      if (ifstat.getExprents() != null && ifstat.getExprents().size() == 1 && elsestat.getExprents() != null && elsestat.getExprents().size() == 1 && ifstat.getAllSuccessorEdges().size() == 1 && elsestat.getAllSuccessorEdges().size() == 1 && ifstat.getAllSuccessorEdges().get(0).getDestination() == elsestat.getAllSuccessorEdges().get(0).getDestination()) {
+        Exprent ifexpr=ifstat.getExprents().get(0);
+        Exprent elseexpr=elsestat.getExprents().get(0);
+        if (ifexpr.type == Exprent.EXPRENT_ASSIGNMENT && elseexpr.type == Exprent.EXPRENT_ASSIGNMENT) {
+          AssignmentExprent ifas=(AssignmentExprent)ifexpr;
+          AssignmentExprent elseas=(AssignmentExprent)elseexpr;
+          if (ifas.getLeft().type == Exprent.EXPRENT_VAR && elseas.getLeft().type == Exprent.EXPRENT_VAR) {
+            VarExprent ifvar=(VarExprent)ifas.getLeft();
+            VarExprent elsevar=(VarExprent)elseas.getLeft();
+            if (ifvar.getIndex() == elsevar.getIndex() && ifvar.isStack()) {
+              boolean found=false;
+              for (              Entry<VarVersionPaar,FastSparseSet<Integer>> ent : ssa.getPhi().entrySet()) {
+                if (ent.getKey().var == ifvar.getIndex()) {
+                  if (ent.getValue().contains(ifvar.getVersion()) && ent.getValue().contains(elsevar.getVersion())) {
+                    found=true;
+                    break;
+                  }
+                }
+              }
+              if (found) {
+                List<Exprent> data=new ArrayList<Exprent>();
+                data.addAll(stif.getFirst().getExprents());
+                data.add(new AssignmentExprent(ifvar,new FunctionExprent(FunctionExprent.FUNCTION_IIF,Arrays.asList(new Exprent[]{((IfExprent)stif.getHeadexprent()).getCondition(),ifas.getRight(),elseas.getRight()}))));
+                stif.setExprents(data);
+                if (stif.getAllSuccessorEdges().isEmpty()) {
+                  StatEdge ifedge=ifstat.getAllSuccessorEdges().get(0);
+                  StatEdge edge=new StatEdge(ifedge.getType(),stif,ifedge.getDestination());
+                  stif.addSuccessor(edge);
+                  if (ifedge.closure != null) {
+                    ifedge.closure.addLabeledEdge(edge);
+                  }
+                }
+                SequenceHelper.destroyAndFlattenStatement(stif);
+                return true;
+              }
+            }
+          }
+        }
+ else         if (ifexpr.type == Exprent.EXPRENT_EXIT && elseexpr.type == Exprent.EXPRENT_EXIT) {
+          ExitExprent ifex=(ExitExprent)ifexpr;
+          ExitExprent elseex=(ExitExprent)elseexpr;
+          if (ifex.getExittype() == elseex.getExittype() && ifex.getValue() != null && elseex.getValue() != null && ifex.getExittype() == ExitExprent.EXIT_RETURN) {
+            if (ifex.getExittype() == ExitExprent.EXIT_THROW && !ifex.getValue().getExprType().equals(elseex.getValue().getExprType())) {
+              return false;
+            }
+            List<Exprent> data=new ArrayList<Exprent>();
+            data.addAll(stif.getFirst().getExprents());
+            data.add(new ExitExprent(ifex.getExittype(),new FunctionExprent(FunctionExprent.FUNCTION_IIF,Arrays.asList(new Exprent[]{((IfExprent)stif.getHeadexprent()).getCondition(),ifex.getValue(),elseex.getValue()})),ifex.getRettype()));
+            stif.setExprents(data);
+            StatEdge retedge=ifstat.getAllSuccessorEdges().get(0);
+            stif.addSuccessor(new StatEdge(StatEdge.TYPE_BREAK,stif,retedge.getDestination(),retedge.closure == stif ? stif.getParent() : retedge.closure));
+            SequenceHelper.destroyAndFlattenStatement(stif);
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}

@@ -1,0 +1,77 @@
+{
+  Statement first=stat.getFirst();
+  while (first.type == Statement.TYPE_SEQUENCE) {
+    first=first.getFirst();
+  }
+  if (first.type == Statement.TYPE_IF) {
+    IfStatement firstif=(IfStatement)first;
+    if (firstif.getFirst().getExprents().isEmpty()) {
+      if (firstif.iftype == IfStatement.IFTYPE_IF) {
+        if (firstif.getIfstat() == null) {
+          StatEdge ifedge=firstif.getIfEdge();
+          if (isDirectPath(stat,ifedge.getDestination())) {
+            stat.setLooptype(DoStatement.LOOP_WHILE);
+            IfExprent ifexpr=(IfExprent)firstif.getHeadexprent().copy();
+            ifexpr.negateIf();
+            stat.setConditionExprent(ifexpr.getCondition());
+            firstif.getFirst().removeSuccessor(ifedge);
+            firstif.removeSuccessor(firstif.getAllSuccessorEdges().get(0));
+            if (stat.getAllSuccessorEdges().isEmpty()) {
+              ifedge.setSource(stat);
+              if (ifedge.closure == stat) {
+                ifedge.closure=stat.getParent();
+              }
+              stat.addSuccessor(ifedge);
+            }
+            if (firstif == stat.getFirst()) {
+              BasicBlockStatement bstat=new BasicBlockStatement(new BasicBlock(DecompilerContext.getCountercontainer().getCounterAndIncrement(CounterContainer.STATEMENT_COUNTER)));
+              bstat.setExprents(new ArrayList<Exprent>());
+              stat.replaceStatement(firstif,bstat);
+            }
+ else {
+              Statement sequence=firstif.getParent();
+              sequence.getStats().removeWithKey(firstif.id);
+              sequence.setFirst(sequence.getStats().get(0));
+            }
+            return true;
+          }
+        }
+ else {
+          StatEdge elseedge=firstif.getAllSuccessorEdges().get(0);
+          if (isDirectPath(stat,elseedge.getDestination())) {
+            stat.setLooptype(DoStatement.LOOP_WHILE);
+            stat.setConditionExprent(((IfExprent)firstif.getHeadexprent().copy()).getCondition());
+            StatEdge ifedge=firstif.getIfEdge();
+            firstif.getFirst().removeSuccessor(ifedge);
+            firstif.removeSuccessor(elseedge);
+            if (stat.getAllSuccessorEdges().isEmpty()) {
+              elseedge.setSource(stat);
+              if (elseedge.closure == stat) {
+                elseedge.closure=stat.getParent();
+              }
+              stat.addSuccessor(elseedge);
+            }
+            if (firstif.getIfstat() == null) {
+              BasicBlockStatement bstat=new BasicBlockStatement(new BasicBlock(DecompilerContext.getCountercontainer().getCounterAndIncrement(CounterContainer.STATEMENT_COUNTER)));
+              bstat.setExprents(new ArrayList<Exprent>());
+              ifedge.setSource(bstat);
+              bstat.addSuccessor(ifedge);
+              stat.replaceStatement(firstif,bstat);
+            }
+ else {
+              first.getParent().replaceStatement(first,firstif.getIfstat());
+              for (              StatEdge prededge : elseedge.getDestination().getPredecessorEdges(StatEdge.TYPE_BREAK)) {
+                if (stat.containsStatementStrict(prededge.closure)) {
+                  stat.addLabeledEdge(prededge);
+                }
+              }
+              LabelHelper.lowClosures(stat);
+            }
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}

@@ -1,0 +1,67 @@
+{
+  Exprent lastDoExprent=null, initDoExprent=null;
+  Statement lastData=null, preData=null;
+  lastData=getLastDirectData(stat.getFirst());
+  if (lastData == null || lastData.getExprents().isEmpty()) {
+    return false;
+  }
+  List<Exprent> lstExpr=lastData.getExprents();
+  lastDoExprent=lstExpr.get(lstExpr.size() - 1);
+  boolean issingle=false;
+  if (lstExpr.size() == 1) {
+    if (lastData.getAllPredecessorEdges().size() > 1) {
+      issingle=true;
+    }
+  }
+  boolean haslast=issingle || (lastDoExprent.type == Exprent.EXPRENT_ASSIGNMENT || lastDoExprent.type == Exprent.EXPRENT_FUNCTION);
+  if (!haslast) {
+    return false;
+  }
+  boolean hasinit=false;
+  Statement current=stat;
+  for (; ; ) {
+    Statement parent=current.getParent();
+    if (parent == null) {
+      break;
+    }
+    if (parent.type == Statement.TYPE_SEQUENCE) {
+      if (current == parent.getFirst()) {
+        current=parent;
+      }
+ else {
+        preData=current.getNeighbours(StatEdge.TYPE_REGULAR,Statement.DIRECTION_BACKWARD).get(0);
+        preData=getLastDirectData(preData);
+        if (preData != null && !preData.getExprents().isEmpty()) {
+          initDoExprent=preData.getExprents().get(preData.getExprents().size() - 1);
+          if (initDoExprent.type == Exprent.EXPRENT_ASSIGNMENT) {
+            hasinit=true;
+          }
+        }
+        break;
+      }
+    }
+ else {
+      break;
+    }
+  }
+  if ((hasinit && haslast) || issingle) {
+    Set<Statement> set=stat.getNeighboursSet(StatEdge.TYPE_CONTINUE,Statement.DIRECTION_BACKWARD);
+    set.remove(lastData);
+    if (!set.isEmpty()) {
+      return false;
+    }
+    stat.setLooptype(DoStatement.LOOP_FOR);
+    if (hasinit) {
+      stat.setInitExprent(preData.getExprents().remove(preData.getExprents().size() - 1));
+    }
+    stat.setIncExprent(lastData.getExprents().remove(lastData.getExprents().size() - 1));
+  }
+  if (lastData.getExprents().isEmpty()) {
+    List<StatEdge> lst=lastData.getAllSuccessorEdges();
+    if (!lst.isEmpty()) {
+      lastData.removeSuccessor(lst.get(0));
+    }
+    removeLastEmptyStatement(stat,lastData);
+  }
+  return true;
+}

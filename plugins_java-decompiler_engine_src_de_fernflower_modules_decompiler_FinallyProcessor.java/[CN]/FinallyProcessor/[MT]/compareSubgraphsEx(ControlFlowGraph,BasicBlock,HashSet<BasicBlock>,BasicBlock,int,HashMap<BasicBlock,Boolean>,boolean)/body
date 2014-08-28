@@ -1,0 +1,85 @@
+{
+class BlockStackEntry {
+    public BasicBlock blockCatch;
+    public BasicBlock blockSample;
+    public List<int[]> lstStoreVars;
+    public BlockStackEntry(    BasicBlock blockCatch,    BasicBlock blockSample,    List<int[]> lstStoreVars){
+      this.blockCatch=blockCatch;
+      this.blockSample=blockSample;
+      this.lstStoreVars=new ArrayList<int[]>(lstStoreVars);
+    }
+  }
+  List<BlockStackEntry> stack=new LinkedList<BlockStackEntry>();
+  HashSet<BasicBlock> setSample=new HashSet<BasicBlock>();
+  HashMap<String,BasicBlock[]> mapNext=new HashMap<String,BasicBlock[]>();
+  stack.add(new BlockStackEntry(startCatch,startSample,new ArrayList<int[]>()));
+  while (!stack.isEmpty()) {
+    BlockStackEntry entry=stack.remove(0);
+    BasicBlock blockCatch=entry.blockCatch;
+    BasicBlock blockSample=entry.blockSample;
+    boolean isFirstBlock=!skippedFirst && blockCatch == startCatch;
+    boolean isLastBlock=mapLast.containsKey(blockCatch);
+    boolean isTrueLastBlock=isLastBlock && mapLast.get(blockCatch);
+    if (!compareBasicBlocksEx(graph,blockCatch,blockSample,(isFirstBlock ? 1 : 0) | (isTrueLastBlock ? 2 : 0),finallytype,entry.lstStoreVars)) {
+      return null;
+    }
+    if (blockSample.getSuccs().size() != blockCatch.getSuccs().size()) {
+      return null;
+    }
+    setSample.add(blockSample);
+    for (int i=0; i < blockCatch.getSuccs().size(); i++) {
+      BasicBlock sucCatch=blockCatch.getSuccs().get(i);
+      BasicBlock sucSample=blockSample.getSuccs().get(i);
+      if (catchBlocks.contains(sucCatch) && !setSample.contains(sucSample)) {
+        stack.add(new BlockStackEntry(sucCatch,sucSample,entry.lstStoreVars));
+      }
+    }
+    if (isLastBlock && blockSample.getSeq().isEmpty()) {
+      ;
+    }
+ else {
+      if (blockCatch.getSuccExceptions().size() == blockSample.getSuccExceptions().size()) {
+        for (int i=0; i < blockCatch.getSuccExceptions().size(); i++) {
+          BasicBlock sucCatch=blockCatch.getSuccExceptions().get(i);
+          BasicBlock sucSample=blockSample.getSuccExceptions().get(i);
+          String excCatch=graph.getExceptionRange(sucCatch,blockCatch).getUniqueExceptionsString();
+          String excSample=graph.getExceptionRange(sucSample,blockSample).getUniqueExceptionsString();
+          boolean equalexc=excCatch == null ? excSample == null : excCatch.equals(excSample);
+          if (equalexc) {
+            if (catchBlocks.contains(sucCatch) && !setSample.contains(sucSample)) {
+              List<int[]> lst=entry.lstStoreVars;
+              if (sucCatch.getSeq().length() > 0 && sucSample.getSeq().length() > 0) {
+                Instruction instrCatch=sucCatch.getSeq().getInstr(0);
+                Instruction instrSample=sucSample.getSeq().getInstr(0);
+                if (instrCatch.opcode == CodeConstants.opc_astore && instrSample.opcode == CodeConstants.opc_astore) {
+                  lst=new ArrayList<int[]>(lst);
+                  lst.add(new int[]{instrCatch.getOperand(0),instrSample.getOperand(0)});
+                }
+              }
+              stack.add(new BlockStackEntry(sucCatch,sucSample,lst));
+            }
+          }
+ else {
+            return null;
+          }
+        }
+      }
+ else {
+        return null;
+      }
+    }
+    if (isLastBlock) {
+      HashSet<BasicBlock> setSuccs=new HashSet<BasicBlock>(blockSample.getSuccs());
+      setSuccs.removeAll(setSample);
+      for (      BlockStackEntry stackent : stack) {
+        setSuccs.remove(stackent.blockSample);
+      }
+      for (      BasicBlock succ : setSuccs) {
+        if (graph.getLast() != succ) {
+          mapNext.put(blockSample.id + "#" + succ.id,new BasicBlock[]{blockSample,succ,isTrueLastBlock ? succ : null});
+        }
+      }
+    }
+  }
+  return new Object[]{setSample,getUniqueNext(graph,new HashSet<BasicBlock[]>(mapNext.values()))};
+}

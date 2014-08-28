@@ -1,0 +1,67 @@
+{
+  VarNamesCollector vc=DecompilerContext.getVarncollector();
+  Iterator<Entry<Integer,Statement>> it=mapVarDefStatements.entrySet().iterator();
+  while (it.hasNext()) {
+    Entry<Integer,Statement> en=it.next();
+    Statement stat=en.getValue();
+    Integer index=en.getKey();
+    if (implDefVars.contains(index)) {
+      continue;
+    }
+    varproc.setVarName(new VarVersionPaar(index.intValue(),0),vc.getFreeName(index));
+    if (stat.type == Statement.TYPE_DO) {
+      DoStatement dstat=(DoStatement)stat;
+      if (dstat.getLooptype() == DoStatement.LOOP_FOR) {
+        if (dstat.getInitExprent() != null && setDefinition(dstat.getInitExprent(),index)) {
+          continue;
+        }
+ else {
+          List<Exprent> lstSpecial=Arrays.asList(new Exprent[]{dstat.getConditionExprent(),dstat.getIncExprent()});
+          for (          VarExprent var : getAllVars(lstSpecial)) {
+            if (var.getIndex() == index.intValue()) {
+              stat=stat.getParent();
+              break;
+            }
+          }
+        }
+      }
+    }
+    Statement first=findFirstBlock(stat,index);
+    List<Exprent> lst;
+    if (first == null) {
+      lst=stat.getVarDefinitions();
+    }
+ else     if (first.getExprents() == null) {
+      lst=first.getVarDefinitions();
+    }
+ else {
+      lst=first.getExprents();
+    }
+    boolean defset=false;
+    int addindex=0;
+    for (    Exprent expr : lst) {
+      if (setDefinition(expr,index)) {
+        defset=true;
+        break;
+      }
+ else {
+        boolean foundvar=false;
+        for (        Exprent exp : expr.getAllExprents(true)) {
+          if (exp.type == Exprent.EXPRENT_VAR && ((VarExprent)exp).getIndex() == index) {
+            foundvar=true;
+            break;
+          }
+        }
+        if (foundvar) {
+          break;
+        }
+      }
+      addindex++;
+    }
+    if (!defset) {
+      VarExprent var=new VarExprent(index.intValue(),varproc.getVarType(new VarVersionPaar(index.intValue(),0)),varproc);
+      var.setDefinition(true);
+      lst.add(addindex,var);
+    }
+  }
+}

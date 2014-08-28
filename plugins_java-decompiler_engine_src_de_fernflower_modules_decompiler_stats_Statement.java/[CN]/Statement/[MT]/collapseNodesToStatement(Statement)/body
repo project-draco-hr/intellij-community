@@ -1,0 +1,60 @@
+{
+  Statement head=stat.getFirst();
+  Statement post=stat.getPost();
+  VBStyleCollection<Statement,Integer> setNodes=stat.getStats();
+  if (post != null) {
+    for (    StatEdge edge : post.getEdges(STATEDGE_DIRECT_ALL,DIRECTION_BACKWARD)) {
+      if (stat.containsStatementStrict(edge.getSource())) {
+        edge.getSource().changeEdgeType(DIRECTION_FORWARD,edge,StatEdge.TYPE_BREAK);
+        stat.addLabeledEdge(edge);
+      }
+    }
+  }
+  for (  StatEdge prededge : head.getAllPredecessorEdges()) {
+    if (prededge.getType() != StatEdge.TYPE_EXCEPTION && stat.containsStatementStrict(prededge.getSource())) {
+      prededge.getSource().changeEdgeType(DIRECTION_FORWARD,prededge,StatEdge.TYPE_CONTINUE);
+      stat.addLabeledEdge(prededge);
+    }
+    head.removePredecessor(prededge);
+    prededge.getSource().changeEdgeNode(DIRECTION_FORWARD,prededge,stat);
+    stat.addPredecessor(prededge);
+  }
+  if (setNodes.containsKey(first.id)) {
+    first=stat;
+  }
+  Set<Statement> setHandlers=new HashSet<Statement>(head.getNeighbours(StatEdge.TYPE_EXCEPTION,DIRECTION_FORWARD));
+  for (  Statement node : setNodes) {
+    setHandlers.retainAll(node.getNeighbours(StatEdge.TYPE_EXCEPTION,DIRECTION_FORWARD));
+  }
+  if (!setHandlers.isEmpty()) {
+    for (    StatEdge edge : head.getEdges(StatEdge.TYPE_EXCEPTION,DIRECTION_FORWARD)) {
+      Statement handler=edge.getDestination();
+      if (setHandlers.contains(handler)) {
+        if (!setNodes.containsKey(handler.id)) {
+          stat.addSuccessor(new StatEdge(stat,handler,edge.getExceptions()));
+        }
+      }
+    }
+    for (    Statement node : setNodes) {
+      for (      StatEdge edge : node.getEdges(StatEdge.TYPE_EXCEPTION,DIRECTION_FORWARD)) {
+        if (setHandlers.contains(edge.getDestination())) {
+          node.removeSuccessor(edge);
+        }
+      }
+    }
+  }
+  if (post != null && !stat.getNeighbours(StatEdge.TYPE_EXCEPTION,DIRECTION_FORWARD).contains(post)) {
+    stat.addSuccessor(new StatEdge(StatEdge.TYPE_REGULAR,stat,post));
+  }
+  for (  Statement st : setNodes) {
+    stats.removeWithKey(st.id);
+  }
+  stats.addWithKey(stat,stat.id);
+  stat.setAllParent();
+  stat.setParent(this);
+  stat.buildContinueSet();
+  stat.buildMonitorFlags();
+  if (stat.type == Statement.TYPE_SWITCH) {
+    ((SwitchStatement)stat).sortEdgesAndNodes();
+  }
+}

@@ -1,0 +1,49 @@
+{
+  if (file.isDirectory()) {
+    File[] files=file.listFiles();
+    path+="/" + (path.length() == 0 ? "" : file.getName());
+    for (int i=files.length - 1; i >= 0; i--) {
+      addSpace(path,files[i],isOwn);
+    }
+  }
+ else {
+    String filename=file.getName();
+    boolean isArchive=false;
+    try {
+      if (filename.endsWith(".jar")) {
+        addArchive(path,file,ContextUnit.TYPE_JAR,isOwn);
+        isArchive=true;
+      }
+ else       if (filename.endsWith(".zip")) {
+        addArchive(path,file,ContextUnit.TYPE_ZIP,isOwn);
+        isArchive=true;
+      }
+    }
+ catch (    IOException ex) {
+      DecompilerContext.getLogger().writeMessage("Invalid archive file: " + (path.length() > 0 ? path + "/" : "") + filename,IFernflowerLogger.ERROR);
+    }
+    if (!isArchive) {
+      ContextUnit unit=units.get(path);
+      if (unit == null) {
+        unit=new ContextUnit(ContextUnit.TYPE_FOLDER,null,path,isOwn,saver,decdata);
+        units.put(path,unit);
+      }
+      boolean isClass=false;
+      if (filename.endsWith(".class")) {
+        try {
+          StructClass cl=new StructClass(loader.getClassStream(file.getAbsolutePath(),null),isOwn,loader);
+          classes.put(cl.qualifiedName,cl);
+          unit.addClass(cl,filename);
+          loader.addClassLink(cl.qualifiedName,new LazyLoader.Link(LazyLoader.Link.CLASS,file.getAbsolutePath(),null));
+          isClass=true;
+        }
+ catch (        IOException ex) {
+          DecompilerContext.getLogger().writeMessage("Invalid class file: " + (path.length() > 0 ? path + "/" : "") + filename,IFernflowerLogger.ERROR);
+        }
+      }
+      if (!isClass) {
+        unit.addOtherEntry(file.getAbsolutePath(),filename);
+      }
+    }
+  }
+}

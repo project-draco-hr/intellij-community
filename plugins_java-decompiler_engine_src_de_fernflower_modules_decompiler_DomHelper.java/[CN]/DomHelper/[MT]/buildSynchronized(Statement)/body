@@ -1,0 +1,46 @@
+{
+  for (  Statement st : stat.getStats()) {
+    buildSynchronized(st);
+  }
+  if (stat.type == Statement.TYPE_SEQUENCE) {
+    for (; ; ) {
+      boolean found=false;
+      List<Statement> lst=stat.getStats();
+      for (int i=0; i < lst.size() - 1; i++) {
+        Statement current=lst.get(i);
+        if (current.isMonitorEnter()) {
+          Statement next=lst.get(i + 1);
+          Statement nextDirect=next;
+          while (next.type == Statement.TYPE_SEQUENCE) {
+            next=next.getFirst();
+          }
+          if (next.type == Statement.TYPE_CATCHALL) {
+            CatchAllStatement ca=(CatchAllStatement)next;
+            if (ca.getFirst().isContainsMonitorExit() && ca.getHandler().isContainsMonitorExit()) {
+              current.removeSuccessor(current.getSuccessorEdges(Statement.STATEDGE_DIRECT_ALL).get(0));
+              for (              StatEdge edge : current.getPredecessorEdges(Statement.STATEDGE_DIRECT_ALL)) {
+                current.removePredecessor(edge);
+                edge.getSource().changeEdgeNode(Statement.DIRECTION_FORWARD,edge,nextDirect);
+                nextDirect.addPredecessor(edge);
+              }
+              stat.getStats().removeWithKey(current.id);
+              stat.setFirst(stat.getStats().get(0));
+              SynchronizedStatement sync=new SynchronizedStatement(current,ca.getFirst(),ca.getHandler());
+              sync.setAllParent();
+              for (              StatEdge edge : new HashSet<StatEdge>(ca.getLabelEdges())) {
+                sync.addLabeledEdge(edge);
+              }
+              current.addSuccessor(new StatEdge(StatEdge.TYPE_REGULAR,current,ca.getFirst()));
+              ca.getParent().replaceStatement(ca,sync);
+              found=true;
+              break;
+            }
+          }
+        }
+      }
+      if (!found) {
+        break;
+      }
+    }
+  }
+}
