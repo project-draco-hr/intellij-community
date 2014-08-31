@@ -85,34 +85,11 @@ catch (      Throwable e) {
       final LeakingParameters leakingParametersAndFrames=maybeLeakingParameter ? leakingParametersAndFrames(method,methodNode,argumentTypes,jsr) : null;
       boolean[] leakingParameters=leakingParametersAndFrames != null ? leakingParametersAndFrames.parameters : null;
       boolean[] leakingNullableParameters=leakingParametersAndFrames != null ? leakingParametersAndFrames.nullableParameters : null;
-      final NullableLazyValue<boolean[]> origins=new NullableLazyValue<boolean[]>(){
-        @Override protected boolean[] compute(){
-          try {
-            return OriginsAnalysis.resultOrigins(leakingParametersAndFrames.frames,methodNode.instructions,richControlFlow.controlFlow);
-          }
- catch (          AnalyzerException e) {
-            LOG.debug("when processing " + method + " in "+ presentableUrl,e);
-            return null;
-          }
-        }
-      }
-;
-      NotNullLazyValue<Equation<Key,Value>> outEquation=new NotNullLazyValue<Equation<Key,Value>>(){
-        @NotNull @Override protected Equation<Key,Value> compute(){
-          if (origins.getValue() != null) {
-            try {
-              return new InOutAnalysis(richControlFlow,Out,origins.getValue(),stable).analyze();
-            }
- catch (            AnalyzerException ignored) {
-            }
-          }
-          return new Equation<Key,Value>(new Key(method,Out,stable),FINAL_TOP);
-        }
-      }
-;
+      final boolean[] origins=isInterestingResult ? OriginsAnalysis.resultOrigins(leakingParametersAndFrames.frames,methodNode.instructions,richControlFlow.controlFlow) : null;
+      Equation<Key,Value> outEquation=isInterestingResult ? new InOutAnalysis(richControlFlow,Out,origins,stable).analyze() : null;
       if (isReferenceResult) {
-        result.add(outEquation.getValue());
-        result.add(new Equation<Key,Value>(new Key(method,NullableOut,stable),NullableMethodAnalysis.analyze(methodNode,origins.getValue(),jsr)));
+        result.add(outEquation);
+        result.add(new Equation<Key,Value>(new Key(method,NullableOut,stable),NullableMethodAnalysis.analyze(methodNode,origins,jsr)));
       }
       for (int i=0; i < argumentTypes.length; i++) {
         boolean isReferenceArg=ASMUtils.isReferenceType(argumentTypes[i]);
@@ -143,39 +120,27 @@ catch (      Throwable e) {
         }
         if (isReferenceArg && isInterestingResult) {
           if (leakingParameters[i]) {
-            if (origins.getValue() != null) {
-              if (!notNullParam) {
-                result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.Null),origins.getValue(),stable).analyze());
-              }
- else {
-                result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),FINAL_BOT));
-              }
-              result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.NotNull),origins.getValue(),stable).analyze());
+            if (!notNullParam) {
+              result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.Null),origins,stable).analyze());
             }
  else {
-              result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),FINAL_TOP));
-              result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.NotNull),stable),FINAL_TOP));
+              result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),FINAL_BOT));
             }
+            result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.NotNull),origins,stable).analyze());
           }
  else {
-            result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),outEquation.getValue().rhs));
-            result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.NotNull),stable),outEquation.getValue().rhs));
+            result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),outEquation.rhs));
+            result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.NotNull),stable),outEquation.rhs));
           }
         }
         if (ASMUtils.isBooleanType(argumentTypes[i]) && isInterestingResult) {
           if (leakingParameters[i]) {
-            if (origins.getValue() != null) {
-              result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.False),origins.getValue(),stable).analyze());
-              result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.True),origins.getValue(),stable).analyze());
-            }
- else {
-              result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.False),stable),FINAL_TOP));
-              result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.True),stable),FINAL_TOP));
-            }
+            result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.False),origins,stable).analyze());
+            result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.True),origins,stable).analyze());
           }
  else {
-            result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.False),stable),outEquation.getValue().rhs));
-            result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.True),stable),outEquation.getValue().rhs));
+            result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.False),stable),outEquation.rhs));
+            result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.True),stable),outEquation.rhs));
           }
         }
       }
