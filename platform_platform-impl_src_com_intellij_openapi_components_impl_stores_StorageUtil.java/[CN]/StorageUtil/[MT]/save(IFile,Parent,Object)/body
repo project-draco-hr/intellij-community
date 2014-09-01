@@ -1,21 +1,27 @@
 {
   try {
-    VirtualFile vFile=LocalFileSystem.getInstance().findFileByIoFile(file);
-    Couple<String> pair=loadFile(vFile);
-    String text=JDOMUtil.writeParent(element,pair.second);
+    BufferExposingByteArrayOutputStream byteOut;
     if (file.exists()) {
-      if (text.equals(pair.first)) {
+      Pair<byte[],String> pair=loadFile(LocalFileSystem.getInstance().findFileByIoFile(file));
+      byteOut=writeToBytes(element,pair.second);
+      if (equal(pair.first,byteOut)) {
         return null;
       }
     }
  else {
       file.createParentDirs();
+      byteOut=writeToBytes(element,SystemProperties.getLineSeparator());
     }
     AccessToken token=ApplicationManager.getApplication().acquireWriteActionLock(DocumentRunnable.IgnoreDocumentRunnable.class);
     try {
       VirtualFile virtualFile=getOrCreateVirtualFile(requestor,file);
-      byte[] bytes=text.getBytes(CharsetToolkit.UTF8);
-      virtualFile.setBinaryContent(bytes,-1,-1,requestor);
+      OutputStream virtualFileOut=virtualFile.getOutputStream(requestor);
+      try {
+        byteOut.writeTo(virtualFileOut);
+      }
+  finally {
+        virtualFileOut.close();
+      }
       return virtualFile;
     }
   finally {

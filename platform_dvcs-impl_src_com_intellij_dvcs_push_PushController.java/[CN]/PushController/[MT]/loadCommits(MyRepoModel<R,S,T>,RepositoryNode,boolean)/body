@@ -1,0 +1,47 @@
+{
+  node.stopLoading();
+  final T target=model.getTarget();
+  if (target == null)   return;
+  myPushLog.startLoading(node);
+  final ProgressIndicator indicator=node.startLoading();
+  final PushSupport<R,S,T> support=model.getSupport();
+  final AtomicReference<OutgoingResult> result=new AtomicReference<OutgoingResult>();
+  Task.Backgroundable task=new Task.Backgroundable(myProject,"Loading Commits",true){
+    @Override public void onCancel(){
+      node.stopLoading();
+    }
+    @Override public void onSuccess(){
+      OutgoingResult outgoing=result.get();
+      List<VcsError> errors=outgoing.getErrors();
+      if (!errors.isEmpty()) {
+        myPushLog.setChildren(node,ContainerUtil.map(errors,new Function<VcsError,DefaultMutableTreeNode>(){
+          @Override public DefaultMutableTreeNode fun(          final VcsError error){
+            VcsLinkedText errorLinkText=new VcsLinkedText(error.getText(),new VcsLinkListener(){
+              @Override public void hyperlinkActivated(              @NotNull DefaultMutableTreeNode sourceNode){
+                error.handleError(new CommitLoader(){
+                  @Override public void reloadCommits(){
+                    loadCommits(model,node,false);
+                  }
+                }
+);
+              }
+            }
+);
+            return new TextWithLinkNode(errorLinkText);
+          }
+        }
+),model.isSelected());
+      }
+ else {
+        model.setLoadedCommits(outgoing.getCommits());
+        myPushLog.setChildren(node,getPresentationForCommits(PushController.this.myProject,model.getLoadedCommits(),model.getNumberOfShownCommits()),model.isSelected());
+      }
+    }
+    @Override public void run(    @NotNull ProgressIndicator indicator){
+      OutgoingResult outgoing=support.getOutgoingCommitsProvider().getOutgoingCommits(model.getRepository(),new PushSpec<S,T>(model.getSource(),model.getTarget()),initial);
+      result.compareAndSet(null,outgoing);
+    }
+  }
+;
+  ProgressManagerImpl.runProcessWithProgressAsynchronously(task,indicator,null,ModalityState.any());
+}

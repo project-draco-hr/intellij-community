@@ -12,57 +12,6 @@
     myTreeRestorer=myTreeState.restoreState(tree);
   }
   if (position != null && Registry.is("ide.debugger.inline")) {
-    final VirtualFile file=position.getFile();
-    final FileEditor fileEditor=FileEditorManagerEx.getInstanceEx(project).getSelectedEditor(file);
-    if (fileEditor instanceof PsiAwareTextEditorImpl) {
-      final Editor editor=((PsiAwareTextEditorImpl)fileEditor).getEditor();
-      final SelectionListener listener=new SelectionListener(){
-        @Override public void selectionChanged(        SelectionEvent e){
-          final String text=editor.getDocument().getText(e.getNewRange());
-          final XDebuggerEvaluator evaluator=stackFrame.getEvaluator();
-          if (evaluator != null && !StringUtil.isEmpty(text) && !(text.contains("exec(") || text.contains("++") || text.contains("--")|| text.contains("="))) {
-            evaluator.evaluate(text,new XEvaluationCallbackBase(){
-              @Override public void evaluated(              @NotNull XValue result){
-                result.computePresentation(new XValueNodePresentationConfigurator.ConfigurableXValueNodeImpl(){
-                  @Override public void applyPresentation(                  @Nullable Icon icon,                  @NotNull XValuePresentation valuePresenter,                  boolean hasChildren){
-                    SimpleColoredText text=new SimpleColoredText();
-                    XValueNodeImpl.buildText(valuePresenter,text,false);
-                    SimpleColoredComponent component=HintUtil.createInformationComponent();
-                    text.appendToComponent(component);
-                    String str=text.toString();
-                    if ("undefined".equals(str) || str.startsWith("Cannot find local variable") || str.startsWith("Invalid expression")) {
-                      return;
-                    }
-                    HintManager.getInstance().hideAllHints();
-                    HintManager.getInstance().showInformationHint(editor,component);
-                  }
-                  @Override public void setFullValueEvaluator(                  @NotNull XFullValueEvaluator fullValueEvaluator){
-                  }
-                  @Override public boolean isObsolete(){
-                    return true;
-                  }
-                }
-,XValuePlace.TOOLTIP);
-              }
-              @Override public void errorOccurred(              @NotNull String errorMessage){
-                System.out.println(errorMessage);
-              }
-            }
-,position);
-          }
-        }
-      }
-;
-      editor.getSelectionModel().addSelectionListener(listener);
-      Disposer.register(tree,new Disposable(){
-        @Override public void dispose(){
-          final FileEditor fileEditor=FileEditorManagerEx.getInstanceEx(project).getSelectedEditor(file);
-          if (fileEditor instanceof PsiAwareTextEditorImpl) {
-            ((PsiAwareTextEditorImpl)fileEditor).getEditor().getSelectionModel().removeSelectionListener(listener);
-          }
-        }
-      }
-);
-    }
+    registerInlineEvaluator(stackFrame,tree,position,project);
   }
 }
