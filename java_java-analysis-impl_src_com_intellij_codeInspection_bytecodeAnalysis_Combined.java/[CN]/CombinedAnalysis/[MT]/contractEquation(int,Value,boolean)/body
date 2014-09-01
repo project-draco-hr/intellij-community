@@ -1,0 +1,48 @@
+{
+  final Key key=new Key(method,new InOut(i,inValue),stable);
+  final Result<Key,Value> result;
+  if (exception || (inValue == Value.Null && interpreter.dereferencedParams[i])) {
+    result=new Final<Key,Value>(Value.Bot);
+  }
+ else   if (FalseValue == returnValue) {
+    result=new Final<Key,Value>(Value.False);
+  }
+ else   if (TrueValue == returnValue) {
+    result=new Final<Key,Value>(Value.True);
+  }
+ else   if (returnValue instanceof TrackableNullValue) {
+    result=new Final<Key,Value>(Value.Null);
+  }
+ else   if (returnValue instanceof NotNullValue || ThisValue == returnValue) {
+    result=new Final<Key,Value>(Value.NotNull);
+  }
+ else   if (returnValue instanceof NthParamValue && ((NthParamValue)returnValue).n == i) {
+    result=new Final<Key,Value>(inValue);
+  }
+ else   if (returnValue instanceof TrackableCallValue) {
+    TrackableCallValue call=(TrackableCallValue)returnValue;
+    HashSet<Key> keys=new HashSet<Key>();
+    for (int argI=0; argI < call.args.size(); argI++) {
+      BasicValue arg=call.args.get(argI);
+      if (arg instanceof NthParamValue) {
+        NthParamValue npv=(NthParamValue)arg;
+        if (npv.n == i) {
+          keys.add(new Key(call.method,new InOut(argI,inValue),call.stableCall));
+        }
+      }
+    }
+    if (ASMUtils.isReferenceType(call.getType())) {
+      keys.add(new Key(call.method,Out,call.stableCall));
+    }
+    if (keys.isEmpty()) {
+      result=new Final<Key,Value>(Value.Top);
+    }
+ else {
+      result=new Pending<Key,Value>(new SingletonSet<Product<Key,Value>>(new Product<Key,Value>(Value.Top,keys)));
+    }
+  }
+ else {
+    result=new Final<Key,Value>(Value.Top);
+  }
+  return new Equation<Key,Value>(key,result);
+}
