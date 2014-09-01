@@ -1,27 +1,27 @@
 {
   try {
-    String lineSeparator;
-    String oldText;
+    BufferExposingByteArrayOutputStream byteOut;
     if (file.exists()) {
-      VirtualFile vFile=LocalFileSystem.getInstance().findFileByIoFile(file);
-      Couple<String> pair=loadFile(vFile);
-      lineSeparator=pair.second;
-      oldText=pair.first;
+      Pair<byte[],String> pair=loadFile(LocalFileSystem.getInstance().findFileByIoFile(file));
+      byteOut=writeToBytes(element,pair.second);
+      if (equal(pair.first,byteOut)) {
+        return null;
+      }
     }
  else {
-      oldText=null;
-      lineSeparator=SystemProperties.getLineSeparator();
       file.createParentDirs();
-    }
-    String text=JDOMUtil.writeParent(element,lineSeparator);
-    if (text.equals(oldText)) {
-      return null;
+      byteOut=writeToBytes(element,SystemProperties.getLineSeparator());
     }
     AccessToken token=ApplicationManager.getApplication().acquireWriteActionLock(DocumentRunnable.IgnoreDocumentRunnable.class);
     try {
       VirtualFile virtualFile=getOrCreateVirtualFile(requestor,file);
-      byte[] bytes=text.getBytes(CharsetToolkit.UTF8);
-      virtualFile.setBinaryContent(bytes,-1,-1,requestor);
+      OutputStream virtualFileOut=virtualFile.getOutputStream(requestor);
+      try {
+        byteOut.writeTo(virtualFileOut);
+      }
+  finally {
+        virtualFileOut.close();
+      }
       return virtualFile;
     }
   finally {
