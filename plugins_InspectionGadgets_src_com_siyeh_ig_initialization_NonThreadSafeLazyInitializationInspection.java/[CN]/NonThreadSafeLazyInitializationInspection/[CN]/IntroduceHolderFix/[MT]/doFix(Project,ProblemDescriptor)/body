@@ -1,0 +1,39 @@
+{
+  final PsiReferenceExpression expression=(PsiReferenceExpression)descriptor.getPsiElement();
+  final PsiElement resolved=expression.resolve();
+  if (!(resolved instanceof PsiField)) {
+    return;
+  }
+  final PsiField field=(PsiField)resolved;
+  @NonNls final String holderName=StringUtil.capitalize(field.getName()) + "Holder";
+  final PsiElement expressionParent=expression.getParent();
+  if (!(expressionParent instanceof PsiAssignmentExpression)) {
+    return;
+  }
+  final PsiAssignmentExpression assignmentExpression=(PsiAssignmentExpression)expressionParent;
+  final PsiExpression rhs=assignmentExpression.getRExpression();
+  if (rhs == null) {
+    return;
+  }
+  @NonNls final String text="private static class " + holderName + " {"+ "private static final "+ field.getType().getCanonicalText()+ " "+ field.getName()+ " = "+ rhs.getText()+ ";}";
+  final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(field.getProject());
+  final PsiClass holder=elementFactory.createClassFromText(text,field).getInnerClasses()[0];
+  final PsiMethod method=PsiTreeUtil.getParentOfType(expression,PsiMethod.class);
+  if (method == null) {
+    return;
+  }
+  final PsiClass holderClass=(PsiClass)method.getParent().addBefore(holder,method);
+  final PsiIfStatement ifStatement=PsiTreeUtil.getParentOfType(expression,PsiIfStatement.class);
+  if (ifStatement != null) {
+    ifStatement.delete();
+  }
+  final PsiExpression holderReference=elementFactory.createExpressionFromText(holderName + "." + field.getName(),field);
+  for (  PsiReference reference : ReferencesSearch.search(field).findAll()) {
+    reference.getElement().replace(holderReference);
+  }
+  field.delete();
+  if (!isOnTheFly()) {
+    return;
+  }
+  invokeInplaceRename(holderClass,holderName,suggestHolderName(field));
+}

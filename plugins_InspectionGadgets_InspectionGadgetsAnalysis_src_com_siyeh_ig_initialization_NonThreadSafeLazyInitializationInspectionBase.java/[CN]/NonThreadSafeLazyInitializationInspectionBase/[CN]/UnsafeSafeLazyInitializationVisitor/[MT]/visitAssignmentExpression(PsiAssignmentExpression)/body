@@ -1,0 +1,33 @@
+{
+  super.visitAssignmentExpression(expression);
+  final PsiExpression lhs=expression.getLExpression();
+  if (!(lhs instanceof PsiReferenceExpression)) {
+    return;
+  }
+  final PsiReferenceExpression reference=(PsiReferenceExpression)lhs;
+  final PsiElement referent=reference.resolve();
+  if (!(referent instanceof PsiField)) {
+    return;
+  }
+  final PsiField field=(PsiField)referent;
+  if (!field.hasModifierProperty(PsiModifier.STATIC)) {
+    return;
+  }
+  if (isInStaticInitializer(expression)) {
+    return;
+  }
+  if (isInSynchronizedContext(expression)) {
+    return;
+  }
+  final PsiStatement statement=PsiTreeUtil.getParentOfType(expression,PsiStatement.class);
+  final PsiElement parent=PsiTreeUtil.skipParentsOfType(statement,PsiCodeBlock.class,PsiBlockStatement.class);
+  if (!(parent instanceof PsiIfStatement)) {
+    return;
+  }
+  final PsiIfStatement ifStatement=(PsiIfStatement)parent;
+  final PsiExpression condition=ifStatement.getCondition();
+  if (condition == null || !isNullComparison(condition,field)) {
+    return;
+  }
+  registerError(lhs,ifStatement,field);
+}
