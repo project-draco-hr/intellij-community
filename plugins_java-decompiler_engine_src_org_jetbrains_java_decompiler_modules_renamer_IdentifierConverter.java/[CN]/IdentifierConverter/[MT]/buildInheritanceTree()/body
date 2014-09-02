@@ -1,0 +1,59 @@
+{
+  HashMap<String,ClassWrapperNode> nodes=new HashMap<String,ClassWrapperNode>();
+  HashMap<String,StructClass> classes=context.getClasses();
+  List<ClassWrapperNode> rootClasses=new ArrayList<ClassWrapperNode>();
+  List<ClassWrapperNode> rootInterfaces=new ArrayList<ClassWrapperNode>();
+  for (  StructClass cl : classes.values()) {
+    if (!cl.isOwn()) {
+      continue;
+    }
+    LinkedList<StructClass> stack=new LinkedList<StructClass>();
+    LinkedList<ClassWrapperNode> stackSubnodes=new LinkedList<ClassWrapperNode>();
+    stack.add(cl);
+    stackSubnodes.add(null);
+    while (!stack.isEmpty()) {
+      StructClass clstr=stack.removeFirst();
+      ClassWrapperNode child=stackSubnodes.removeFirst();
+      ClassWrapperNode node=nodes.get(clstr.qualifiedName);
+      boolean isNewNode=(node == null);
+      if (isNewNode) {
+        nodes.put(clstr.qualifiedName,node=new ClassWrapperNode(clstr));
+      }
+      if (child != null) {
+        node.addSubclass(child);
+      }
+      if (!isNewNode) {
+        break;
+      }
+ else {
+        boolean isInterface=((clstr.access_flags & CodeConstants.ACC_INTERFACE) != 0);
+        boolean found_parent=false;
+        if (isInterface) {
+          for (          String intrName : clstr.getInterfaceNames()) {
+            StructClass clparent=classes.get(intrName);
+            if (clparent != null) {
+              stack.add(clparent);
+              stackSubnodes.add(node);
+              found_parent=true;
+            }
+          }
+        }
+ else {
+          if (clstr.superClass != null) {
+            StructClass clparent=classes.get(clstr.superClass.getString());
+            if (clparent != null) {
+              stack.add(clparent);
+              stackSubnodes.add(node);
+              found_parent=true;
+            }
+          }
+        }
+        if (!found_parent) {
+          (isInterface ? rootInterfaces : rootClasses).add(node);
+        }
+      }
+    }
+  }
+  this.rootClasses=rootClasses;
+  this.rootInterfaces=rootInterfaces;
+}

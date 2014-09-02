@@ -1,0 +1,183 @@
+{
+  if (expr == null) {
+    return;
+  }
+  VarExprent varassign=null;
+  boolean finished=false;
+switch (expr.type) {
+case Exprent.EXPRENT_ASSIGNMENT:
+    AssignmentExprent assexpr=(AssignmentExprent)expr;
+  if (assexpr.getCondtype() == AssignmentExprent.CONDITION_NONE) {
+    Exprent dest=assexpr.getLeft();
+    if (dest.type == Exprent.EXPRENT_VAR) {
+      varassign=(VarExprent)dest;
+    }
+  }
+break;
+case Exprent.EXPRENT_FUNCTION:
+FunctionExprent func=(FunctionExprent)expr;
+switch (func.getFunctype()) {
+case FunctionExprent.FUNCTION_IIF:
+processExprent(func.getLstOperands().get(0),varmaparr,stat,calcLiveVars);
+SFormsFastMapDirect varmapFalse;
+if (varmaparr[1] == null) {
+varmapFalse=new SFormsFastMapDirect(varmaparr[0]);
+}
+ else {
+varmapFalse=varmaparr[1];
+varmaparr[1]=null;
+}
+processExprent(func.getLstOperands().get(1),varmaparr,stat,calcLiveVars);
+SFormsFastMapDirect[] varmaparrNeg=new SFormsFastMapDirect[]{varmapFalse,null};
+processExprent(func.getLstOperands().get(2),varmaparrNeg,stat,calcLiveVars);
+mergeMaps(varmaparr[0],varmaparrNeg[0]);
+varmaparr[1]=null;
+finished=true;
+break;
+case FunctionExprent.FUNCTION_CADD:
+processExprent(func.getLstOperands().get(0),varmaparr,stat,calcLiveVars);
+SFormsFastMapDirect[] varmaparrAnd=new SFormsFastMapDirect[]{new SFormsFastMapDirect(varmaparr[0]),null};
+processExprent(func.getLstOperands().get(1),varmaparrAnd,stat,calcLiveVars);
+varmaparr[1]=mergeMaps(varmaparr[varmaparr[1] == null ? 0 : 1],varmaparrAnd[varmaparrAnd[1] == null ? 0 : 1]);
+varmaparr[0]=varmaparrAnd[0];
+finished=true;
+break;
+case FunctionExprent.FUNCTION_COR:
+processExprent(func.getLstOperands().get(0),varmaparr,stat,calcLiveVars);
+SFormsFastMapDirect[] varmaparrOr=new SFormsFastMapDirect[]{new SFormsFastMapDirect(varmaparr[varmaparr[1] == null ? 0 : 1]),null};
+processExprent(func.getLstOperands().get(1),varmaparrOr,stat,calcLiveVars);
+varmaparr[1]=varmaparrOr[varmaparrOr[1] == null ? 0 : 1];
+varmaparr[0]=mergeMaps(varmaparr[0],varmaparrOr[0]);
+finished=true;
+}
+}
+if (!finished) {
+List<Exprent> lst=expr.getAllExprents();
+lst.remove(varassign);
+for (Exprent ex : lst) {
+processExprent(ex,varmaparr,stat,calcLiveVars);
+}
+}
+SFormsFastMapDirect varmap=varmaparr[0];
+if (expr.type == Exprent.EXPRENT_FIELD) {
+int index;
+if (mapFieldVars.containsKey(expr.id)) {
+index=mapFieldVars.get(expr.id);
+}
+ else {
+index=fieldvarcounter--;
+mapFieldVars.put(expr.id,index);
+ssuversions.createNode(new VarVersionPaar(index,1));
+}
+setCurrentVar(varmap,index,1);
+}
+ else if (expr.type == Exprent.EXPRENT_INVOCATION || (expr.type == Exprent.EXPRENT_ASSIGNMENT && ((AssignmentExprent)expr).getLeft().type == Exprent.EXPRENT_FIELD) || (expr.type == Exprent.EXPRENT_NEW && ((NewExprent)expr).getNewtype().type == CodeConstants.TYPE_OBJECT) || expr.type == Exprent.EXPRENT_FUNCTION) {
+boolean ismmpp=true;
+if (expr.type == Exprent.EXPRENT_FUNCTION) {
+ismmpp=false;
+FunctionExprent fexpr=(FunctionExprent)expr;
+if (fexpr.getFunctype() >= FunctionExprent.FUNCTION_IMM && fexpr.getFunctype() <= FunctionExprent.FUNCTION_PPI) {
+if (fexpr.getLstOperands().get(0).type == Exprent.EXPRENT_FIELD) {
+ismmpp=true;
+}
+}
+}
+if (ismmpp) {
+varmap.removeAllFields();
+}
+}
+if (varassign != null) {
+Integer varindex=varassign.getIndex();
+if (varassign.getVersion() == 0) {
+Integer nextver=getNextFreeVersion(varindex,stat);
+varassign.setVersion(nextver);
+ssuversions.createNode(new VarVersionPaar(varindex,nextver));
+setCurrentVar(varmap,varindex,nextver);
+}
+ else {
+if (calcLiveVars) {
+varMapToGraph(new VarVersionPaar(varindex.intValue(),varassign.getVersion()),varmap);
+}
+setCurrentVar(varmap,varindex,varassign.getVersion());
+}
+}
+ else if (expr.type == Exprent.EXPRENT_FUNCTION) {
+FunctionExprent func=(FunctionExprent)expr;
+switch (func.getFunctype()) {
+case FunctionExprent.FUNCTION_IMM:
+case FunctionExprent.FUNCTION_MMI:
+case FunctionExprent.FUNCTION_IPP:
+case FunctionExprent.FUNCTION_PPI:
+if (func.getLstOperands().get(0).type == Exprent.EXPRENT_VAR) {
+VarExprent var=(VarExprent)func.getLstOperands().get(0);
+Integer varindex=var.getIndex();
+VarVersionPaar varpaar=new VarVersionPaar(varindex.intValue(),var.getVersion());
+VarVersionPaar phantomver=phantomppnodes.get(varpaar);
+if (phantomver == null) {
+Integer nextver=getNextFreeVersion(varindex,null);
+phantomver=new VarVersionPaar(varindex,nextver);
+ssuversions.createNode(phantomver);
+VarVersionNode vernode=ssuversions.nodes.getWithKey(varpaar);
+FastSparseSet<Integer> vers=factory.spawnEmptySet();
+if (vernode.preds.size() == 1) {
+vers.add(vernode.preds.iterator().next().source.version);
+}
+ else {
+for (VarVersionEdge edge : vernode.preds) {
+vers.add(edge.source.preds.iterator().next().source.version);
+}
+}
+vers.add(nextver);
+createOrUpdatePhiNode(varpaar,vers,stat);
+phantomppnodes.put(varpaar,phantomver);
+}
+if (calcLiveVars) {
+varMapToGraph(varpaar,varmap);
+}
+setCurrentVar(varmap,varindex.intValue(),var.getVersion());
+}
+}
+}
+ else if (expr.type == Exprent.EXPRENT_VAR) {
+VarExprent vardest=(VarExprent)expr;
+Integer varindex=vardest.getIndex();
+Integer current_vers=vardest.getVersion();
+FastSparseSet<Integer> vers=varmap.get(varindex);
+int cardinality=vers.getCardinality();
+if (cardinality == 1) {
+if (current_vers.intValue() != 0) {
+if (calcLiveVars) {
+varMapToGraph(new VarVersionPaar(varindex,current_vers),varmap);
+}
+setCurrentVar(varmap,varindex,current_vers);
+}
+ else {
+Integer usever=getNextFreeVersion(varindex,stat);
+vardest.setVersion(usever);
+setCurrentVar(varmap,varindex,usever);
+Integer lastver=vers.iterator().next();
+VarVersionNode prenode=ssuversions.nodes.getWithKey(new VarVersionPaar(varindex,lastver));
+VarVersionNode usenode=ssuversions.createNode(new VarVersionPaar(varindex,usever));
+VarVersionEdge edge=new VarVersionEdge(VarVersionEdge.EDGE_GENERAL,prenode,usenode);
+prenode.addSuccessor(edge);
+usenode.addPredecessor(edge);
+}
+}
+ else if (cardinality == 2) {
+if (current_vers.intValue() != 0) {
+if (calcLiveVars) {
+varMapToGraph(new VarVersionPaar(varindex,current_vers),varmap);
+}
+setCurrentVar(varmap,varindex,current_vers);
+}
+ else {
+Integer usever=getNextFreeVersion(varindex,stat);
+vardest.setVersion(usever);
+ssuversions.createNode(new VarVersionPaar(varindex,usever));
+setCurrentVar(varmap,varindex,usever);
+current_vers=usever;
+}
+createOrUpdatePhiNode(new VarVersionPaar(varindex,current_vers),vers,stat);
+}
+}
+}

@@ -1,0 +1,54 @@
+{
+  if (options.isIncludeInherited) {
+    final PsiField[] fields=ApplicationManager.getApplication().runReadAction(new Computable<PsiField[]>(){
+      @Override public PsiField[] compute(){
+        return aClass.getAllFields();
+      }
+    }
+);
+    for (int i=0; i < fields.length; i++) {
+      final PsiField field=fields[i];
+      final int finalI=i;
+      final PsiClass fieldClass=ApplicationManager.getApplication().runReadAction(new Computable<PsiClass>(){
+        @Override public PsiClass compute(){
+          for (int j=0; j < finalI; j++) {
+            if (Comparing.strEqual(field.getName(),fields[j].getName()))             return null;
+          }
+          return field.getContainingClass();
+        }
+      }
+);
+      if (fieldClass == null)       continue;
+      boolean equivalent=ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
+        @Override public Boolean compute(){
+          return manager.areElementsEquivalent(fieldClass,aClass);
+        }
+      }
+);
+      if (equivalent) {
+        if (!addElementUsages(fields[i],options,processor))         return false;
+      }
+ else {
+        boolean success=ReferencesSearch.search(new ReferencesSearch.SearchParameters(field,options.searchScope,false,options.fastTrack)).forEach(new ReadActionProcessor<PsiReference>(){
+          @Override public boolean processInReadAction(          final PsiReference reference){
+            return addResultFromReference(reference,fieldClass,manager,aClass,options,processor);
+          }
+        }
+);
+        if (!success)         return false;
+      }
+    }
+  }
+ else {
+    PsiField[] fields=ApplicationManager.getApplication().runReadAction(new Computable<PsiField[]>(){
+      @Override public PsiField[] compute(){
+        return aClass.getFields();
+      }
+    }
+);
+    for (    PsiField field : fields) {
+      if (!addElementUsages(field,options,processor))       return false;
+    }
+  }
+  return true;
+}
