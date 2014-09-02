@@ -1,0 +1,76 @@
+{
+  List<Range> lstRanges=new ArrayList<Range>();
+  for (  ExceptionRangeCFG range : graph.getExceptions()) {
+    boolean found=false;
+    for (    Range arr : lstRanges) {
+      if (arr.handler == range.getHandler() && InterpreterUtil.equalObjects(range.getUniqueExceptionsString(),arr.uniqueStr)) {
+        arr.protectedRange.addAll(range.getProtectedRange());
+        found=true;
+        break;
+      }
+    }
+    if (!found) {
+      lstRanges.add(new Range(range.getHandler(),range.getUniqueExceptionsString(),new HashSet<BasicBlock>(range.getProtectedRange()),range));
+    }
+  }
+  for (  Range range : lstRanges) {
+    if (range.uniqueStr != null) {
+      BasicBlock handler=range.handler;
+      InstructionSequence seq=handler.getSeq();
+      Instruction firstinstr;
+      if (seq.length() > 0) {
+        firstinstr=seq.getInstr(0);
+        if (firstinstr.opcode == CodeConstants.opc_pop || firstinstr.opcode == CodeConstants.opc_astore) {
+          Set<BasicBlock> setrange=new HashSet<BasicBlock>(range.protectedRange);
+          for (          Range range_super : lstRanges) {
+            if (range != range_super) {
+              Set<BasicBlock> setrange_super=new HashSet<BasicBlock>(range_super.protectedRange);
+              if (!setrange.contains(range_super.handler) && !setrange_super.contains(handler) && (range_super.uniqueStr == null || setrange_super.containsAll(setrange))) {
+                if (range_super.uniqueStr == null) {
+                  setrange_super.retainAll(setrange);
+                }
+ else {
+                  setrange_super.removeAll(setrange);
+                }
+                if (!setrange_super.isEmpty()) {
+                  BasicBlock newblock=handler;
+                  if (seq.length() > 1) {
+                    newblock=new BasicBlock(++graph.last_id);
+                    InstructionSequence newseq=new SimpleInstructionSequence();
+                    newseq.addInstruction(firstinstr.clone(),-1);
+                    newblock.setSeq(newseq);
+                    graph.getBlocks().addWithKey(newblock,newblock.id);
+                    List<BasicBlock> lstTemp=new ArrayList<BasicBlock>();
+                    lstTemp.addAll(handler.getPreds());
+                    lstTemp.addAll(handler.getPredExceptions());
+                    for (                    BasicBlock pred : lstTemp) {
+                      pred.replaceSuccessor(handler,newblock);
+                    }
+                    for (                    ExceptionRangeCFG range_ext : graph.getExceptions()) {
+                      if (range_ext.getHandler() == handler) {
+                        range_ext.setHandler(newblock);
+                      }
+ else                       if (range_ext.getProtectedRange().contains(handler)) {
+                        newblock.addSuccessorException(range_ext.getHandler());
+                        range_ext.getProtectedRange().add(newblock);
+                      }
+                    }
+                    newblock.addSuccessor(handler);
+                    if (graph.getFirst() == handler) {
+                      graph.setFirst(newblock);
+                    }
+                    seq.removeInstruction(0);
+                  }
+                  newblock.addSuccessorException(range_super.handler);
+                  range_super.rangeCFG.getProtectedRange().add(newblock);
+                  handler=range.rangeCFG.getHandler();
+                  seq=handler.getSeq();
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

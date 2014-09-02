@@ -1,0 +1,47 @@
+{
+  Statement last=stat.getFirst();
+  while (last.type == Statement.TYPE_SEQUENCE) {
+    last=last.getStats().getLast();
+  }
+  if (last.type == Statement.TYPE_IF) {
+    IfStatement lastif=(IfStatement)last;
+    if (lastif.iftype == IfStatement.IFTYPE_IF && lastif.getIfstat() == null) {
+      StatEdge ifedge=lastif.getIfEdge();
+      StatEdge elseedge=lastif.getAllSuccessorEdges().get(0);
+      if ((ifedge.getType() == StatEdge.TYPE_BREAK && elseedge.getType() == StatEdge.TYPE_CONTINUE && elseedge.closure == stat && isDirectPath(stat,ifedge.getDestination())) || (ifedge.getType() == StatEdge.TYPE_CONTINUE && elseedge.getType() == StatEdge.TYPE_BREAK && ifedge.closure == stat && isDirectPath(stat,elseedge.getDestination()))) {
+        Set<Statement> set=stat.getNeighboursSet(StatEdge.TYPE_CONTINUE,Statement.DIRECTION_BACKWARD);
+        set.remove(last);
+        if (!set.isEmpty()) {
+          return false;
+        }
+        stat.setLooptype(DoStatement.LOOP_DOWHILE);
+        IfExprent ifexpr=(IfExprent)lastif.getHeadexprent().copy();
+        if (ifedge.getType() == StatEdge.TYPE_BREAK) {
+          ifexpr.negateIf();
+        }
+        stat.setConditionExprent(ifexpr.getCondition());
+        lastif.getFirst().removeSuccessor(ifedge);
+        lastif.removeSuccessor(elseedge);
+        if (lastif.getFirst().getExprents().isEmpty()) {
+          removeLastEmptyStatement(stat,lastif);
+        }
+ else {
+          lastif.setExprents(lastif.getFirst().getExprents());
+          StatEdge newedge=new StatEdge(StatEdge.TYPE_CONTINUE,lastif,stat);
+          lastif.addSuccessor(newedge);
+          stat.addLabeledEdge(newedge);
+        }
+        if (stat.getAllSuccessorEdges().isEmpty()) {
+          StatEdge edge=elseedge.getType() == StatEdge.TYPE_CONTINUE ? ifedge : elseedge;
+          edge.setSource(stat);
+          if (edge.closure == stat) {
+            edge.closure=stat.getParent();
+          }
+          stat.addSuccessor(edge);
+        }
+        return true;
+      }
+    }
+  }
+  return false;
+}

@@ -1,39 +1,51 @@
 {
-  if (myInitialized)   return;
+  if (ToolWindowManager.getInstance(myProject).getToolWindow(ToolWindowId.PREVIEW) != null)   return;
   myToolWindow=(ToolWindowImpl)ToolWindowManager.getInstance(myProject).registerToolWindow(ToolWindowId.PREVIEW,this,ToolWindowAnchor.RIGHT,myProject,false);
   myToolWindow.setIcon(AllIcons.Actions.PreviewDetails);
-  myEditorsSplitters=new EditorsSplitters(myManager,myDockManager,false){
-    @Override public void updateFileName(    VirtualFile updatedFile){
-      super.updateFileName(updatedFile);
-      if (updatedFile != null && updatedFile.equals(getCurrentFile())) {
-        updateWindowTitle(updatedFile);
+  myToolWindow.setContentUiType(ToolWindowContentUiType.COMBO,null);
+  myContentManager=myToolWindow.getContentManager();
+  myStubContent=myContentManager.getContent(0);
+  myContentManager.addContentManagerListener(new ContentManagerAdapter(){
+    @Override public void selectionChanged(    ContentManagerEvent event){
+      final VirtualFile file=event.getContent().getUserData(FILE_KEY);
+      if (event.getOperation() == ContentManagerEvent.ContentOperation.remove && file != null && file.equals(myModifiedFile)) {
+        close(file);
+        return;
       }
-    }
-    @Override protected void afterFileOpen(    VirtualFile file){
-      if (file.equals(myAwaitingForOpen)) {
-        updateWindowTitle(file);
-        Document document=FileDocumentManager.getInstance().getDocument(file);
-        if (document != null) {
-          myModifiedFile=null;
-          document.addDocumentListener(PreviewPanel.this,myProject);
+      if (event.getOperation() != ContentManagerEvent.ContentOperation.add)       return;
+      if (file != null) {
+        event.getContent().setComponent(PreviewPanel.this);
+        if (!file.equals(myWindow.getSelectedFile())) {
+          ApplicationManager.getApplication().invokeLater(new Runnable(){
+            @Override public void run(){
+              myManager.openFileWithProviders(file,false,myWindow);
+            }
+          }
+);
         }
       }
-      myAwaitingForOpen=null;
-    }
-    @Override public void setTabsPlacement(    int tabPlacement){
-      super.setTabsPlacement(UISettings.TABS_NONE);
-    }
-    @Override protected boolean showEmptyText(){
-      return false;
     }
   }
-;
-  myProject.getMessageBus().connect().subscribe(FileEditorManagerListener.Before.FILE_EDITOR_MANAGER,this);
+);
+  myEditorsSplitters=new MyEditorsSplitters();
+  myProject.getMessageBus().connect().subscribe(FileEditorManagerListener.Before.FILE_EDITOR_MANAGER,new FileEditorManagerListener.Before(){
+    @Override public void beforeFileOpened(    @NotNull FileEditorManager source,    @NotNull VirtualFile file){
+      myAwaitingForOpen=file;
+      VirtualFile currentFile=getCurrentFile();
+      if (currentFile != null && currentFile.equals(myModifiedFile) && !currentFile.equals(file)) {
+        close(currentFile);
+      }
+    }
+    @Override public void beforeFileClosed(    @NotNull FileEditorManager source,    @NotNull VirtualFile file){
+      checkStubContent();
+    }
+  }
+);
   myEditorsSplitters.createCurrentWindow();
   myWindow=myEditorsSplitters.getCurrentWindow();
   myWindow.setTabsPlacement(UISettings.TABS_NONE);
   setLayout(new GridLayout(1,1));
   add(myEditorsSplitters);
   myToolWindow.setTitleActions(new MoveToEditorTabsAction(),new CloseFileAction());
-  myInitialized=true;
+  myToolWindow.hide(null);
 }

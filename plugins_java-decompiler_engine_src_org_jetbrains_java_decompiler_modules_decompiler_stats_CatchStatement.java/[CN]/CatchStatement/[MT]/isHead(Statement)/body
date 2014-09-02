@@ -1,0 +1,59 @@
+{
+  if (head.getLastBasicType() != LASTBASICTYPE_GENERAL) {
+    return null;
+  }
+  HashSet<Statement> setHandlers=DecHelper.getUniquePredExceptions(head);
+  if (!setHandlers.isEmpty()) {
+    int hnextcount=0;
+    Statement next=null;
+    List<StatEdge> lstHeadSuccs=head.getSuccessorEdges(STATEDGE_DIRECT_ALL);
+    if (!lstHeadSuccs.isEmpty() && lstHeadSuccs.get(0).getType() == StatEdge.TYPE_REGULAR) {
+      next=lstHeadSuccs.get(0).getDestination();
+      hnextcount=2;
+    }
+    for (    StatEdge edge : head.getSuccessorEdges(StatEdge.TYPE_EXCEPTION)) {
+      Statement stat=edge.getDestination();
+      boolean handlerok=true;
+      if (edge.getExceptions() != null && setHandlers.contains(stat)) {
+        if (stat.getLastBasicType() != LASTBASICTYPE_GENERAL) {
+          handlerok=false;
+        }
+ else {
+          List<StatEdge> lstStatSuccs=stat.getSuccessorEdges(STATEDGE_DIRECT_ALL);
+          if (!lstStatSuccs.isEmpty() && lstStatSuccs.get(0).getType() == StatEdge.TYPE_REGULAR) {
+            Statement statn=lstStatSuccs.get(0).getDestination();
+            if (next == null) {
+              next=statn;
+            }
+ else             if (next != statn) {
+              handlerok=false;
+            }
+            if (handlerok) {
+              hnextcount++;
+            }
+          }
+        }
+      }
+ else {
+        handlerok=false;
+      }
+      if (!handlerok) {
+        setHandlers.remove(stat);
+      }
+    }
+    if (hnextcount != 1 && !setHandlers.isEmpty()) {
+      List<Statement> lst=new ArrayList<Statement>();
+      lst.add(head);
+      lst.addAll(setHandlers);
+      for (      Statement st : lst) {
+        if (st.isMonitorEnter()) {
+          return null;
+        }
+      }
+      if (DecHelper.checkStatementExceptions(lst)) {
+        return new CatchStatement(head,next,setHandlers);
+      }
+    }
+  }
+  return null;
+}
