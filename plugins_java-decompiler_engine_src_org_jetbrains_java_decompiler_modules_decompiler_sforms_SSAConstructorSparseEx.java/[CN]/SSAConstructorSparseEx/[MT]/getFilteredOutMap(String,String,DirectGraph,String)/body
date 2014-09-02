@@ -1,0 +1,69 @@
+{
+  SFormsFastMapDirect mapNew=new SFormsFastMapDirect();
+  if (nodeid.equals(dgraph.mapNegIfBranch.get(predid))) {
+    if (outNegVarVersions.containsKey(predid)) {
+      mapNew=outNegVarVersions.get(predid).getCopy();
+    }
+  }
+ else   if (outVarVersions.containsKey(predid)) {
+    mapNew=outVarVersions.get(predid).getCopy();
+  }
+  boolean isFinallyExit=dgraph.mapShortRangeFinallyPaths.containsKey(predid);
+  if (isFinallyExit && !mapNew.isEmpty()) {
+    SFormsFastMapDirect mapNewTemp=mapNew.getCopy();
+    SFormsFastMapDirect mapTrueSource=new SFormsFastMapDirect();
+    String exceptionDest=dgraph.mapFinallyMonitorExceptionPathExits.get(predid);
+    boolean isExceptionMonitorExit=(exceptionDest != null && !nodeid.equals(exceptionDest));
+    HashSet<String> setLongPathWrapper=new HashSet<String>();
+    for (    FinallyPathWrapper finwraplong : dgraph.mapLongRangeFinallyPaths.get(predid)) {
+      setLongPathWrapper.add(finwraplong.destination + "##" + finwraplong.source);
+    }
+    for (    FinallyPathWrapper finwrap : dgraph.mapShortRangeFinallyPaths.get(predid)) {
+      SFormsFastMapDirect map;
+      boolean recFinally=dgraph.mapShortRangeFinallyPaths.containsKey(finwrap.source);
+      if (recFinally) {
+        map=getFilteredOutMap(finwrap.entry,finwrap.source,dgraph,destid);
+      }
+ else {
+        if (finwrap.entry.equals(dgraph.mapNegIfBranch.get(finwrap.source))) {
+          map=outNegVarVersions.get(finwrap.source);
+        }
+ else {
+          map=outVarVersions.get(finwrap.source);
+        }
+      }
+      boolean isFalsePath=true;
+      if (recFinally) {
+        isFalsePath=!finwrap.destination.equals(nodeid);
+      }
+ else {
+        isFalsePath=!setLongPathWrapper.contains(destid + "##" + finwrap.source);
+      }
+      if (isFalsePath) {
+        mapNewTemp.complement(map);
+      }
+ else {
+        if (mapTrueSource.isEmpty()) {
+          if (map != null) {
+            mapTrueSource=map.getCopy();
+          }
+        }
+ else {
+          mergeMaps(mapTrueSource,map);
+        }
+      }
+    }
+    if (isExceptionMonitorExit) {
+      mapNew=mapTrueSource;
+    }
+ else {
+      mapNewTemp.union(mapTrueSource);
+      SFormsFastMapDirect oldInMap=inVarVersions.get(nodeid);
+      if (oldInMap != null) {
+        mapNewTemp.union(oldInMap);
+      }
+      mapNew.intersection(mapNewTemp);
+    }
+  }
+  return mapNew;
+}

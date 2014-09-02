@@ -1,0 +1,57 @@
+{
+  if (options.isIncludeInherited) {
+    final PsiMethod[] methods=ApplicationManager.getApplication().runReadAction(new Computable<PsiMethod[]>(){
+      @Override public PsiMethod[] compute(){
+        return aClass.getAllMethods();
+      }
+    }
+);
+    for (int i=0; i < methods.length; i++) {
+      final PsiMethod method=methods[i];
+      final int finalI=i;
+      final PsiClass methodClass=ApplicationManager.getApplication().runReadAction(new Computable<PsiClass>(){
+        @Override public PsiClass compute(){
+          MethodSignature methodSignature=method.getSignature(PsiSubstitutor.EMPTY);
+          for (int j=0; j < finalI; j++) {
+            if (methodSignature.equals(methods[j].getSignature(PsiSubstitutor.EMPTY)))             return null;
+          }
+          return method.getContainingClass();
+        }
+      }
+);
+      if (methodClass == null)       continue;
+      boolean equivalent=ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
+        @Override public Boolean compute(){
+          return manager.areElementsEquivalent(methodClass,aClass);
+        }
+      }
+);
+      if (equivalent) {
+        if (!addElementUsages(method,options,processor))         return false;
+      }
+ else {
+        MethodReferencesSearch.SearchParameters parameters=new MethodReferencesSearch.SearchParameters(method,options.searchScope,true,options.fastTrack);
+        boolean success=MethodReferencesSearch.search(parameters).forEach(new PsiReferenceProcessorAdapter(new PsiReferenceProcessor(){
+          @Override public boolean execute(          PsiReference reference){
+            addResultFromReference(reference,methodClass,manager,aClass,options,processor);
+            return true;
+          }
+        }
+));
+        if (!success)         return false;
+      }
+    }
+  }
+ else {
+    PsiMethod[] methods=ApplicationManager.getApplication().runReadAction(new Computable<PsiMethod[]>(){
+      @Override public PsiMethod[] compute(){
+        return aClass.getMethods();
+      }
+    }
+);
+    for (    PsiMethod method : methods) {
+      if (!addElementUsages(method,options,processor))       return false;
+    }
+  }
+  return true;
+}
