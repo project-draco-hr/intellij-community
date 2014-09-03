@@ -11,9 +11,8 @@
   boolean firstmt=true;
   boolean mthidden=false;
   for (  StructMethod mt : cl.getMethods()) {
-    int flags=mt.getAccessFlags();
-    boolean isSynthetic=(flags & CodeConstants.ACC_SYNTHETIC) != 0 || mt.getAttributes().containsKey("Synthetic");
-    boolean isBridge=(flags & CodeConstants.ACC_BRIDGE) != 0;
+    boolean isSynthetic=mt.isSynthetic();
+    boolean isBridge=mt.hasModifier(CodeConstants.ACC_BRIDGE);
     if ((!isSynthetic || !DecompilerContext.getOption(IFernflowerPreferences.REMOVE_SYNTHETIC)) && (!isBridge || !DecompilerContext.getOption(IFernflowerPreferences.REMOVE_BRIDGE)) && !wrapper.getHideMembers().contains(InterpreterUtil.makeUniqueKey(mt.getName(),mt.getDescriptor()))) {
       if (!mthidden && (!firstmt || node.type != ClassNode.CLASS_ANONYMOUS)) {
         bufstrwriter.write(DecompilerContext.getNewLineSeparator());
@@ -28,10 +27,9 @@
   int fields_count=0;
   boolean enumfields=false;
   for (  StructField fd : cl.getFields()) {
-    int flags=fd.access_flags;
-    boolean isSynthetic=(flags & CodeConstants.ACC_SYNTHETIC) != 0 || fd.getAttributes().containsKey("Synthetic");
-    if ((!isSynthetic || !DecompilerContext.getOption(IFernflowerPreferences.REMOVE_SYNTHETIC)) && !wrapper.getHideMembers().contains(InterpreterUtil.makeUniqueKey(fd.getName(),fd.getDescriptor()))) {
-      boolean isEnum=DecompilerContext.getOption(IFernflowerPreferences.DECOMPILE_ENUM) && (flags & CodeConstants.ACC_ENUM) != 0;
+    boolean hide=fd.isSynthetic() && DecompilerContext.getOption(IFernflowerPreferences.REMOVE_SYNTHETIC) || wrapper.getHideMembers().contains(InterpreterUtil.makeUniqueKey(fd.getName(),fd.getDescriptor()));
+    if (!hide) {
+      boolean isEnum=fd.hasModifier(CodeConstants.ACC_ENUM) && DecompilerContext.getOption(IFernflowerPreferences.DECOMPILE_ENUM);
       if (isEnum) {
         if (enumfields) {
           bufstrwriter1.write(",");
@@ -65,9 +63,10 @@
   writer.write(strwriter.toString());
   for (  ClassNode inner : node.nested) {
     if (inner.type == ClassNode.CLASS_MEMBER) {
-      StructClass innercl=inner.classStruct;
-      boolean isSynthetic=((inner.access | innercl.access_flags) & CodeConstants.ACC_SYNTHETIC) != 0 || innercl.getAttributes().containsKey("Synthetic");
-      if ((!isSynthetic || !DecompilerContext.getOption(IFernflowerPreferences.REMOVE_SYNTHETIC)) && !wrapper.getHideMembers().contains(innercl.qualifiedName)) {
+      StructClass innerCl=inner.classStruct;
+      boolean isSynthetic=(inner.access & CodeConstants.ACC_SYNTHETIC) != 0 || innerCl.isSynthetic();
+      boolean hide=isSynthetic && DecompilerContext.getOption(IFernflowerPreferences.REMOVE_SYNTHETIC) || wrapper.getHideMembers().contains(innerCl.qualifiedName);
+      if (!hide) {
         writer.write(DecompilerContext.getNewLineSeparator());
         classToJava(inner,writer,indent + 1);
       }
