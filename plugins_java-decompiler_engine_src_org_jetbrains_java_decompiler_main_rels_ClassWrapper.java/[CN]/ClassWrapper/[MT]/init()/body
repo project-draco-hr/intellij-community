@@ -1,0 +1,91 @@
+{
+  DecompilerContext.setProperty(DecompilerContext.CURRENT_CLASS,classStruct);
+  DecompilerContext.getLogger().startClass(classStruct.qualifiedName);
+  HashSet<String> setFieldNames=new HashSet<String>();
+  for (  StructField fd : classStruct.getFields()) {
+    setFieldNames.add(fd.getName());
+  }
+  int maxsec=Integer.parseInt(DecompilerContext.getProperty(IFernflowerPreferences.MAX_PROCESSING_METHOD).toString());
+  for (  StructMethod mt : classStruct.getMethods()) {
+    DecompilerContext.getLogger().startMethod(mt.getName() + " " + mt.getDescriptor());
+    VarNamesCollector vc=new VarNamesCollector();
+    DecompilerContext.setVarNamesCollector(vc);
+    CounterContainer counter=new CounterContainer();
+    DecompilerContext.setCounterContainer(counter);
+    DecompilerContext.setProperty(DecompilerContext.CURRENT_METHOD,mt);
+    DecompilerContext.setProperty(DecompilerContext.CURRENT_METHOD_DESCRIPTOR,MethodDescriptor.parseDescriptor(mt.getDescriptor()));
+    VarProcessor varproc=new VarProcessor();
+    DecompilerContext.setProperty(DecompilerContext.CURRENT_VAR_PROCESSOR,varproc);
+    RootStatement root=null;
+    boolean isError=false;
+    try {
+      if (mt.containsCode()) {
+        if (maxsec == 0) {
+          root=MethodProcessorThread.codeToJava(mt,varproc);
+        }
+ else {
+          MethodProcessorThread mtproc=new MethodProcessorThread(mt,varproc,DecompilerContext.getCurrentContext());
+          Thread mtthread=new Thread(mtproc);
+          long stopAt=System.currentTimeMillis() + maxsec * 1000;
+          mtthread.start();
+          while (mtthread.isAlive()) {
+synchronized (mtproc.lock) {
+              mtproc.lock.wait(100);
+            }
+            if (System.currentTimeMillis() >= stopAt) {
+              String message="Processing time limit exceeded for method " + mt.getName() + ", execution interrupted.";
+              DecompilerContext.getLogger().writeMessage(message,IFernflowerLogger.ERROR);
+              mtthread.stop();
+              isError=true;
+              break;
+            }
+          }
+          if (!isError) {
+            root=mtproc.getResult();
+          }
+        }
+      }
+ else {
+        boolean thisvar=!mt.hasModifier(CodeConstants.ACC_STATIC);
+        MethodDescriptor md=MethodDescriptor.parseDescriptor(mt.getDescriptor());
+        int paramcount=0;
+        if (thisvar) {
+          varproc.getThisvars().put(new VarVersionPaar(0,0),classStruct.qualifiedName);
+          paramcount=1;
+        }
+        paramcount+=md.params.length;
+        int varindex=0;
+        for (int i=0; i < paramcount; i++) {
+          varproc.setVarName(new VarVersionPaar(varindex,0),vc.getFreeName(varindex));
+          if (thisvar) {
+            if (i == 0) {
+              varindex++;
+            }
+ else {
+              varindex+=md.params[i - 1].stack_size;
+            }
+          }
+ else {
+            varindex+=md.params[i].stack_size;
+          }
+        }
+      }
+    }
+ catch (    Throwable ex) {
+      DecompilerContext.getLogger().writeMessage("Method " + mt.getName() + " "+ mt.getDescriptor()+ " couldn't be decompiled.",ex);
+      isError=true;
+    }
+    MethodWrapper meth=new MethodWrapper(root,varproc,mt,counter);
+    meth.decompiledWithErrors=isError;
+    methods.addWithKey(meth,InterpreterUtil.makeUniqueKey(mt.getName(),mt.getDescriptor()));
+    varproc.refreshVarNames(new VarNamesCollector(setFieldNames));
+    if (DecompilerContext.getOption(IFernflowerPreferences.USE_DEBUG_VAR_NAMES)) {
+      StructLocalVariableTableAttribute attr=(StructLocalVariableTableAttribute)mt.getAttributes().getWithKey(StructGeneralAttribute.ATTRIBUTE_LOCAL_VARIABLE_TABLE);
+      if (attr != null) {
+        varproc.setDebugVarNames(attr.getMapVarNames());
+      }
+    }
+    DecompilerContext.getLogger().endMethod();
+  }
+  DecompilerContext.getLogger().endClass();
+}

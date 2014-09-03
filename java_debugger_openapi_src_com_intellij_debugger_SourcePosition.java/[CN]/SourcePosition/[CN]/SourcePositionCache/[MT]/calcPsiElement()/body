@@ -1,5 +1,5 @@
 {
-  PsiFile psiFile=getFile();
+  final PsiFile psiFile=getFile();
   int lineNumber=getLine();
   if (lineNumber < 0) {
     return psiFile;
@@ -11,40 +11,47 @@
   if (lineNumber >= document.getLineCount()) {
     return psiFile;
   }
-  int startOffset=document.getLineStartOffset(lineNumber);
+  final int startOffset=document.getLineStartOffset(lineNumber);
   if (startOffset == -1) {
     return null;
   }
-  PsiElement rootElement=psiFile;
-  List<PsiFile> allFiles=psiFile.getViewProvider().getAllFiles();
-  if (allFiles.size() > 1) {
-    PsiClassOwner owner=ContainerUtil.findInstance(allFiles,PsiClassOwner.class);
-    if (owner != null) {
-      PsiClass[] classes=owner.getClasses();
-      if (classes.length == 1 && classes[0] instanceof SyntheticElement) {
-        rootElement=classes[0];
+  return ApplicationManager.getApplication().runReadAction(new Computable<PsiElement>(){
+    @Override public PsiElement compute(){
+      PsiElement rootElement=psiFile;
+      List<PsiFile> allFiles=psiFile.getViewProvider().getAllFiles();
+      if (allFiles.size() > 1) {
+        PsiClassOwner owner=ContainerUtil.findInstance(allFiles,PsiClassOwner.class);
+        if (owner != null) {
+          PsiClass[] classes=owner.getClasses();
+          if (classes.length == 1 && classes[0] instanceof SyntheticElement) {
+            rootElement=classes[0];
+          }
+        }
       }
-    }
-  }
-  PsiElement element;
-  while (true) {
-    final CharSequence charsSequence=document.getCharsSequence();
-    for (; startOffset < charsSequence.length(); startOffset++) {
-      char c=charsSequence.charAt(startOffset);
-      if (c != ' ' && c != '\t') {
-        break;
-      }
-    }
-    element=rootElement.findElementAt(startOffset);
-    if (element instanceof PsiComment) {
-      startOffset=element.getTextRange().getEndOffset() + 1;
-    }
+      PsiElement element=null;
+      int offset=startOffset;
+      while (true) {
+        final CharSequence charsSequence=document.getCharsSequence();
+        for (; offset < charsSequence.length(); offset++) {
+          char c=charsSequence.charAt(offset);
+          if (c != ' ' && c != '\t') {
+            break;
+          }
+        }
+        if (offset >= charsSequence.length())         break;
+        element=rootElement.findElementAt(offset);
+        if (element instanceof PsiComment) {
+          offset=element.getTextRange().getEndOffset() + 1;
+        }
  else {
-      break;
+          break;
+        }
+      }
+      if (element != null && element.getParent() instanceof PsiForStatement) {
+        return ((PsiForStatement)element.getParent()).getInitialization();
+      }
+      return element;
     }
   }
-  if (element != null && element.getParent() instanceof PsiForStatement) {
-    return ((PsiForStatement)element.getParent()).getInitialization();
-  }
-  return element;
+);
 }

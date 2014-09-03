@@ -1,4 +1,6 @@
 {
+  final int fileCount=scope.getFileCount();
+  final ProgressIndicator progressIndicator=ProgressManager.getInstance().getProgressIndicator();
   final List<LocalInspectionToolWrapper> lTools=new ArrayList<LocalInspectionToolWrapper>();
   final LinkedHashMap<PsiFile,List<HighlightInfo>> results=new LinkedHashMap<PsiFile,List<HighlightInfo>>();
   final SearchScope searchScope=scope.toSearchScope();
@@ -11,7 +13,11 @@
     range=null;
   }
   scope.accept(new PsiElementVisitor(){
+    private int myCount=0;
     @Override public void visitFile(    PsiFile file){
+      if (progressIndicator != null) {
+        progressIndicator.setFraction(((double)++myCount) / fileCount);
+      }
       if (isBinary(file))       return;
       for (      final Tools tools : profile.getAllEnabledInspectionTools(project)) {
         if (tools.getTool().getTool() instanceof CleanupLocalInspectionTool) {
@@ -54,7 +60,9 @@
       progressTask.setTask(new SequentialCleanupTask(project,results,progressTask));
       CommandProcessor.getInstance().executeCommand(project,new Runnable(){
         @Override public void run(){
-          CommandProcessor.getInstance().markCurrentCommandAsGlobal(project);
+          if (commandName != null) {
+            CommandProcessor.getInstance().markCurrentCommandAsGlobal(project);
+          }
           ApplicationManager.getApplication().runWriteAction(new Runnable(){
             @Override public void run(){
               ProgressManager.getInstance().run(progressTask);
@@ -70,7 +78,7 @@
     }
   }
 ;
-  if (ApplicationManager.getApplication().isUnitTestMode()) {
+  if (ApplicationManager.getApplication().isDispatchThread()) {
     runnable.run();
   }
  else {

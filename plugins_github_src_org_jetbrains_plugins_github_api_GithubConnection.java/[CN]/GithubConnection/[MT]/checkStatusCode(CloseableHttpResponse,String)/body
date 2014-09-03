@@ -1,0 +1,34 @@
+{
+  int code=response.getStatusLine().getStatusCode();
+switch (code) {
+case HttpStatus.SC_OK:
+case HttpStatus.SC_CREATED:
+case HttpStatus.SC_ACCEPTED:
+case HttpStatus.SC_NO_CONTENT:
+    return;
+case HttpStatus.SC_UNAUTHORIZED:
+case HttpStatus.SC_PAYMENT_REQUIRED:
+case HttpStatus.SC_FORBIDDEN:
+  String message=getErrorMessage(response);
+Header headerOTP=response.getFirstHeader("X-GitHub-OTP");
+if (headerOTP != null) {
+for (HeaderElement element : headerOTP.getElements()) {
+  if ("required".equals(element.getName())) {
+    throw new GithubTwoFactorAuthenticationException(message);
+  }
+}
+}
+if (message.contains("API rate limit exceeded")) {
+throw new GithubRateLimitExceededException(message);
+}
+throw new GithubAuthenticationException("Request response: " + message);
+case HttpStatus.SC_BAD_REQUEST:
+case HttpStatus.SC_UNPROCESSABLE_ENTITY:
+if (body != null) {
+LOG.info(body);
+}
+throw new GithubStatusCodeException(code + ": " + getErrorMessage(response),code);
+default :
+throw new GithubStatusCodeException(code + ": " + getErrorMessage(response),code);
+}
+}

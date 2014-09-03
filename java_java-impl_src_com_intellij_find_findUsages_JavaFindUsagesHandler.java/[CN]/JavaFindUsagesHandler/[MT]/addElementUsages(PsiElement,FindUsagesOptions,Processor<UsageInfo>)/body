@@ -1,0 +1,35 @@
+{
+  final SearchScope searchScope=options.searchScope;
+  final PsiClass[] parentClass=new PsiClass[1];
+  if (element instanceof PsiMethod && ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
+    @Override public Boolean compute(){
+      PsiMethod method=(PsiMethod)element;
+      parentClass[0]=method.getContainingClass();
+      return method.isConstructor();
+    }
+  }
+)) {
+    PsiMethod method=(PsiMethod)element;
+    if (parentClass[0] != null) {
+      boolean strictSignatureSearch=!(options instanceof JavaMethodFindUsagesOptions) || !((JavaMethodFindUsagesOptions)options).isIncludeOverloadUsages;
+      return MethodReferencesSearch.search(new MethodReferencesSearch.SearchParameters(method,searchScope,strictSignatureSearch,options.fastTrack)).forEach(new ReadActionProcessor<PsiReference>(){
+        @Override public boolean processInReadAction(        final PsiReference ref){
+          return addResult(ref,options,processor);
+        }
+      }
+);
+    }
+    return true;
+  }
+  final ReadActionProcessor<PsiReference> consumer=new ReadActionProcessor<PsiReference>(){
+    @Override public boolean processInReadAction(    final PsiReference ref){
+      return addResult(ref,options,processor);
+    }
+  }
+;
+  if (element instanceof PsiMethod) {
+    final boolean strictSignatureSearch=!(options instanceof JavaMethodFindUsagesOptions) || !((JavaMethodFindUsagesOptions)options).isIncludeOverloadUsages;
+    return MethodReferencesSearch.search(new MethodReferencesSearch.SearchParameters((PsiMethod)element,searchScope,strictSignatureSearch,options.fastTrack)).forEach(consumer);
+  }
+  return ReferencesSearch.search(new ReferencesSearch.SearchParameters(element,searchScope,false,options.fastTrack)).forEach(consumer);
+}
