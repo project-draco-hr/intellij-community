@@ -1,0 +1,39 @@
+{
+  if (isEmpty(element)) {
+    FileUtil.delete(file);
+    return null;
+  }
+  Parent document=!wrapAsDocument || element instanceof Document ? element : new Document((Element)element);
+  try {
+    BufferExposingByteArrayOutputStream byteOut;
+    if (file.exists()) {
+      Pair<byte[],String> pair=loadFile(LocalFileSystem.getInstance().findFileByIoFile(file));
+      byteOut=writeToBytes(document,pair.second);
+      if (equal(pair.first,byteOut)) {
+        return null;
+      }
+    }
+ else {
+      FileUtil.createParentDirs(file);
+      byteOut=writeToBytes(document,SystemProperties.getLineSeparator());
+    }
+    AccessToken token=ApplicationManager.getApplication().acquireWriteActionLock(DocumentRunnable.IgnoreDocumentRunnable.class);
+    try {
+      VirtualFile virtualFile=getOrCreateVirtualFile(requestor,file);
+      OutputStream virtualFileOut=virtualFile.getOutputStream(requestor);
+      try {
+        byteOut.writeTo(virtualFileOut);
+      }
+  finally {
+        virtualFileOut.close();
+      }
+      return virtualFile;
+    }
+  finally {
+      token.finish();
+    }
+  }
+ catch (  IOException e) {
+    throw new StateStorageException(e);
+  }
+}
