@@ -1,47 +1,36 @@
 {
   StructClass cl=wrapper.getClassStruct();
-  for (  StructMethod meth : cl.getMethods()) {
-    String name=meth.getName();
-    int flag=0;
+  for (  MethodWrapper method : wrapper.getMethods()) {
+    StructMethod mt=method.methodStruct;
+    String name=mt.getName();
+    String descriptor=mt.getDescriptor();
     if ("values".equals(name)) {
-      flag=1;
+      if (descriptor.equals("()[L" + cl.qualifiedName + ";")) {
+        wrapper.getHideMembers().add(InterpreterUtil.makeUniqueKey(name,descriptor));
+      }
     }
  else     if ("valueOf".equals(name)) {
-      flag=2;
-    }
-    if (flag > 0) {
-      String[] arr=meth.getDescriptor().split("[()]");
-      String par=arr[1];
-      if ((flag == 1 && par.length() == 0) || flag == 2 && "Ljava/lang/String;".equals(par)) {
-        wrapper.getHideMembers().add(InterpreterUtil.makeUniqueKey(name,meth.getDescriptor()));
+      if (descriptor.equals("(Ljava/lang/String;)L" + cl.qualifiedName + ";")) {
+        wrapper.getHideMembers().add(InterpreterUtil.makeUniqueKey(name,descriptor));
       }
     }
-  }
-  for (  MethodWrapper meth : wrapper.getMethods()) {
-    if ("<init>".equals(meth.methodStruct.getName())) {
-      Statement firstdata=findFirstData(meth.root);
-      if (firstdata == null || firstdata.getExprents().isEmpty()) {
-        return;
-      }
-      Exprent exprent=firstdata.getExprents().get(0);
-      if (exprent.type == Exprent.EXPRENT_INVOCATION) {
-        InvocationExprent invexpr=(InvocationExprent)exprent;
-        if (isInvocationSuperConstructor(invexpr,meth,wrapper)) {
-          firstdata.getExprents().remove(0);
+ else     if ("<init>".equals(name)) {
+      Statement firstData=findFirstData(method.root);
+      if (firstData != null && !firstData.getExprents().isEmpty()) {
+        Exprent exprent=firstData.getExprents().get(0);
+        if (exprent.type == Exprent.EXPRENT_INVOCATION) {
+          InvocationExprent invexpr=(InvocationExprent)exprent;
+          if (isInvocationSuperConstructor(invexpr,method,wrapper)) {
+            firstData.getExprents().remove(0);
+          }
         }
       }
     }
   }
   for (  StructField fd : cl.getFields()) {
-    if (fd.hasModifier(CodeConstants.ACC_ENUM)) {
-      Exprent initializer=wrapper.getStaticFieldInitializers().getWithKey(InterpreterUtil.makeUniqueKey(fd.getName(),fd.getDescriptor()));
-      if (initializer != null && initializer.type == Exprent.EXPRENT_NEW) {
-        NewExprent nexpr=(NewExprent)initializer;
-        if (nexpr.isAnonymous()) {
-          ClassNode child=DecompilerContext.getClassProcessor().getMapRootClasses().get(nexpr.getNewtype().value);
-          hideDummyFieldInConstant(child.wrapper);
-        }
-      }
+    String descriptor=fd.getDescriptor();
+    if (fd.isSynthetic() && descriptor.equals("[L" + cl.qualifiedName + ";")) {
+      wrapper.getHideMembers().add(InterpreterUtil.makeUniqueKey(fd.getName(),descriptor));
     }
   }
 }
