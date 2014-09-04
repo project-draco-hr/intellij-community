@@ -1,9 +1,22 @@
 {
   final PsiElement refElement=p.getElementToSearch();
-  if (PsiUtil.isAnnotationMethod(refElement)) {
-    PsiMethod method=(PsiMethod)refElement;
-    if (PsiAnnotation.DEFAULT_REFERENCED_METHOD_NAME.equals(method.getName()) && method.getParameterList().getParametersCount() == 0) {
-      final Query<PsiReference> query=ReferencesSearch.search(method.getContainingClass(),p.getScope(),p.isIgnoreAccessScope());
+  boolean isAnnotation=ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
+    @Override public Boolean compute(){
+      return PsiUtil.isAnnotationMethod(refElement);
+    }
+  }
+);
+  if (isAnnotation) {
+    final PsiMethod method=(PsiMethod)refElement;
+    PsiClass containingClass=ApplicationManager.getApplication().runReadAction(new Computable<PsiClass>(){
+      @Override public PsiClass compute(){
+        boolean isValueMethod=PsiAnnotation.DEFAULT_REFERENCED_METHOD_NAME.equals(method.getName()) && method.getParameterList().getParametersCount() == 0;
+        return isValueMethod ? method.getContainingClass() : null;
+      }
+    }
+);
+    if (containingClass != null) {
+      final Query<PsiReference> query=ReferencesSearch.search(containingClass,p.getScope(),p.isIgnoreAccessScope());
       return query.forEach(createImplicitDefaultAnnotationMethodConsumer(consumer));
     }
   }

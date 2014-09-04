@@ -1,0 +1,42 @@
+{
+  if (myUpdateRejected) {
+    return new ActionCallback.Rejected();
+  }
+  String text=getFilterText();
+  if (text.isEmpty()) {
+    myContext.setHoldingFilter(false);
+    myFiltered=null;
+  }
+ else {
+    myContext.setHoldingFilter(true);
+    myHits=myRegistrar.getConfigurables(myGroups,type,myFiltered,text,myProject);
+    myFiltered=myHits.getAll();
+  }
+  mySearch.getTextEditor().setBackground(myFiltered != null && myFiltered.isEmpty() ? LightColors.RED : UIUtil.getTextFieldBackground());
+  Configurable current=myContext.getCurrentConfigurable();
+  boolean shouldMoveSelection=myHits == null || (!myHits.getNameFullHits().contains(current) && !myHits.getContentHits().contains(current));
+  if (shouldMoveSelection && type != DocumentEvent.EventType.INSERT && (myFiltered == null || myFiltered.contains(current))) {
+    shouldMoveSelection=false;
+  }
+  Configurable candidate=adjustSelection ? current : null;
+  if (shouldMoveSelection && myHits != null) {
+    if (!myHits.getNameHits().isEmpty()) {
+      candidate=findConfigurable(myHits.getNameHits(),myHits.getNameFullHits());
+    }
+ else     if (!myHits.getContentHits().isEmpty()) {
+      candidate=findConfigurable(myHits.getContentHits(),null);
+    }
+  }
+  updateSpotlight(false);
+  if ((myFiltered == null || !myFiltered.isEmpty()) && candidate == null && myLastSelected != null) {
+    candidate=myLastSelected;
+    myLastSelected=null;
+  }
+  if (candidate == null && current != null) {
+    myLastSelected=current;
+  }
+  SimpleNode node=!adjustSelection ? null : findNode(candidate);
+  ActionCallback callback=fireUpdate(node,adjustSelection,now);
+  myDocumentWasChanged=true;
+  return callback;
+}

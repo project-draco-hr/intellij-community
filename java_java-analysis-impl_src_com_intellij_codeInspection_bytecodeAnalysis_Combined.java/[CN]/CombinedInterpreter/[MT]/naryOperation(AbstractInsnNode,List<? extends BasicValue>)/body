@@ -1,43 +1,54 @@
 {
   int opCode=insn.getOpcode();
   int shift=opCode == INVOKESTATIC ? 0 : 1;
+  int origin=insnIndex(insn);
 switch (opCode) {
 case INVOKESPECIAL:
 case INVOKEINTERFACE:
 case INVOKEVIRTUAL:
-    if (values.get(0) instanceof NParamValue) {
-      dereferenced[((NParamValue)values.get(0)).n]=true;
-    }
+    BasicValue receiver=values.get(0);
+  if (receiver instanceof NthParamValue) {
+    dereferencedParams[((NthParamValue)receiver).n]=true;
+  }
+if (receiver instanceof Trackable) {
+  dereferencedValues[((Trackable)receiver).getOriginInsnIndex()]=true;
+}
+default :
 }
 switch (opCode) {
 case INVOKESTATIC:
 case INVOKESPECIAL:
 case INVOKEVIRTUAL:
 case INVOKEINTERFACE:
-  boolean stable=opCode == INVOKESTATIC || opCode == INVOKESPECIAL;
+boolean stable=opCode == INVOKESTATIC || opCode == INVOKESPECIAL;
 MethodInsnNode mNode=(MethodInsnNode)insn;
 Method method=new Method(mNode.owner,mNode.name,mNode.desc);
 Type retType=Type.getReturnType(mNode.desc);
 for (int i=shift; i < values.size(); i++) {
-if (values.get(i) instanceof NParamValue) {
-if (opCode != INVOKEINTERFACE) {
-int n=((NParamValue)values.get(i)).n;
-Set<Key> npKeys=callDerefs[n];
+if (values.get(i) instanceof NthParamValue) {
+int n=((NthParamValue)values.get(i)).n;
+if (opCode == INVOKEINTERFACE) {
+notNullableParams[n]=true;
+}
+ else {
+Set<ParamKey> npKeys=parameterFlow[n];
 if (npKeys == null) {
-  npKeys=new HashSet<Key>();
-  callDerefs[n]=npKeys;
+npKeys=new HashSet<ParamKey>();
+parameterFlow[n]=npKeys;
 }
-npKeys.add(new Key(method,new In(i - shift),stable));
+npKeys.add(new ParamKey(method,i - shift,stable));
 }
 }
 }
+BasicValue receiver=null;
 if (shift == 1) {
-values.remove(0);
+receiver=values.remove(0);
 }
-return new CombinedCall(retType,method,stable,values);
+boolean thisCall=(opCode == INVOKEINTERFACE || opCode == INVOKEVIRTUAL) && receiver == ThisValue;
+return new TrackableCallValue(origin,retType,method,values,stable,thisCall);
 case MULTIANEWARRAY:
 return new NotNullValue(super.naryOperation(insn,values).getType());
 default :
 }
-return super.naryOperation(insn,values);
+return track(origin,super.naryOperation(insn,values));
 }

@@ -1,0 +1,37 @@
+{
+  ClassWrapper wrapper=node.wrapper;
+  boolean noSynthFlag=DecompilerContext.getOption(IFernflowerPreferences.SYNTHETIC_NOT_SET);
+  for (  StructField fd : wrapper.getClassStruct().getFields()) {
+    String keyField=InterpreterUtil.makeUniqueKey(fd.getName(),fd.getDescriptor());
+    if (wrapper.getStaticFieldInitializers().containsKey(keyField)) {
+      if (fd.hasModifier(CodeConstants.ACC_STATIC) && fd.hasModifier(CodeConstants.ACC_FINAL) && (noSynthFlag || fd.isSynthetic())) {
+        FieldDescriptor fdescr=FieldDescriptor.parseDescriptor(fd.getDescriptor());
+        if (VarType.VARTYPE_BOOLEAN.equals(fdescr.type)) {
+          Exprent initializer=wrapper.getStaticFieldInitializers().getWithKey(keyField);
+          if (initializer.type == Exprent.EXPRENT_FUNCTION) {
+            FunctionExprent fexpr=(FunctionExprent)initializer;
+            if (fexpr.getFunctype() == FunctionExprent.FUNCTION_BOOLNOT && fexpr.getLstOperands().get(0).type == Exprent.EXPRENT_INVOCATION) {
+              InvocationExprent invexpr=(InvocationExprent)fexpr.getLstOperands().get(0);
+              if (invexpr.getInstance() != null && invexpr.getInstance().type == Exprent.EXPRENT_CONST && "desiredAssertionStatus".equals(invexpr.getName()) && "java/lang/Class".equals(invexpr.getClassname()) && invexpr.getLstParameters().isEmpty()) {
+                ConstExprent cexpr=(ConstExprent)invexpr.getInstance();
+                if (VarType.VARTYPE_CLASS.equals(cexpr.getConsttype())) {
+                  ClassNode nd=node;
+                  while (nd != null) {
+                    if (nd.wrapper.getClassStruct().qualifiedName.equals(cexpr.getValue())) {
+                      break;
+                    }
+                    nd=nd.parent;
+                  }
+                  if (nd != null) {
+                    return fd;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
