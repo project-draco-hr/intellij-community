@@ -1,0 +1,34 @@
+{
+  if (elements == null || elements.length == 0) {
+    return null;
+  }
+  final PsiFile copy=PsiFileFactory.getInstance(project).createFileFromText(file.getName(),file.getFileType(),file.getText(),file.getModificationStamp(),true);
+  final PsiElement[] elementsCopy=new PsiElement[elements.length];
+  for (int i=0; i < elements.length; i++) {
+    PsiElement element=elements[i];
+    final TextRange textRange=element.getTextRange();
+    elementsCopy[i]=CodeInsightUtil.findElementInRange(copy,textRange.getStartOffset(),textRange.getEndOffset(),element.getClass());
+  }
+  final Document document=PsiDocumentManager.getInstance(project).getDocument(copy);
+  LOG.assertTrue(document != null);
+  final int startOffset=elements[0].getTextRange().getStartOffset();
+  final int endOffset=elements[elements.length - 1].getTextRange().getEndOffset();
+  final RangeMarker callSiteMarker=document.createRangeMarker(startOffset,endOffset);
+  callSiteMarker.setGreedyToLeft(true);
+  callSiteMarker.setGreedyToRight(true);
+  try {
+    final ExtractMethodObjectProcessor extractMethodObjectProcessor=new ExtractMethodObjectProcessor(project,editor,elementsCopy,""){
+      @Override protected AbstractExtractDialog createExtractMethodObjectDialog(      MyExtractMethodProcessor processor){
+        return new LightExtractMethodObjectDialog(this,methodName);
+      }
+    }
+;
+    extractMethodObjectProcessor.getExtractProcessor().setShowErrorDialogs(false);
+    ExtractMethodObjectHandler.extractMethodObject(project,editor,file,extractMethodObjectProcessor);
+    final String generatedCall=document.getText(new TextRange(callSiteMarker.getStartOffset(),callSiteMarker.getEndOffset()));
+    return new ExtractedData(generatedCall,extractMethodObjectProcessor.getInnerClass());
+  }
+  finally {
+    callSiteMarker.dispose();
+  }
+}
