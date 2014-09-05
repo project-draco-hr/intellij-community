@@ -1,0 +1,68 @@
+{
+  final PsiElement[] elements=fragment.getChildren();
+  if (elements.length == 0) {
+    return null;
+  }
+  final PsiFile copy=PsiFileFactory.getInstance(project).createFileFromText(file.getName(),file.getFileType(),file.getText(),file.getModificationStamp(),true);
+  final PsiElement originalContext=fragment.getContext();
+  if (originalContext == null) {
+    return null;
+  }
+  final TextRange range=originalContext.getTextRange();
+  final PsiElement originalAnchor=CodeInsightUtil.findElementInRange(copy,range.getStartOffset(),range.getEndOffset(),originalContext.getClass());
+  final PsiElement anchor=RefactoringUtil.getParentStatement(originalAnchor,false);
+  final PsiElement[] elementsCopy=new PsiElement[elements.length];
+  final PsiElement container=anchor.getParent();
+  elementsCopy[0]=ApplicationManager.getApplication().runWriteAction(new Computable<PsiElement>(){
+    @Override public PsiElement compute(){
+      return container.addRangeAfter(elements[0],elements[elements.length - 1],anchor);
+    }
+  }
+);
+  for (int i=1; i < elements.length; i++) {
+    elementsCopy[i]=elementsCopy[i - 1].getNextSibling();
+  }
+  final ControlFlow controlFlow;
+  try {
+    controlFlow=ControlFlowFactory.getInstance(project).getControlFlow(container,AllVariablesControlFlowPolicy.getInstance());
+  }
+ catch (  AnalysisCanceledException e) {
+    return null;
+  }
+  final List<PsiVariable> variables=ControlFlowUtil.getUsedVariables(controlFlow,0,controlFlow.getSize());
+  final String outputVariables=StringUtil.join(variables,new Function<PsiVariable,String>(){
+    @Override public String fun(    PsiVariable variable){
+      return "\"variable: \" + " + variable.getName();
+    }
+  }
+," +");
+  final PsiStatement outStatement=JavaPsiFacade.getElementFactory(project).createStatementFromText("System.out.println(" + outputVariables + ");",anchor);
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    public void run(){
+      container.addAfter(outStatement,elementsCopy[elementsCopy.length - 1]);
+    }
+  }
+);
+  final Document document=PsiDocumentManager.getInstance(project).getDocument(copy);
+  LOG.assertTrue(document != null);
+  final int startOffset=elementsCopy[0].getTextRange().getStartOffset();
+  final int endOffset=elementsCopy[elementsCopy.length - 1].getTextRange().getEndOffset();
+  final RangeMarker callSiteMarker=document.createRangeMarker(startOffset,endOffset);
+  callSiteMarker.setGreedyToLeft(true);
+  callSiteMarker.setGreedyToRight(true);
+  try {
+    final ExtractMethodObjectProcessor extractMethodObjectProcessor=new ExtractMethodObjectProcessor(project,null,elementsCopy,""){
+      @Override protected AbstractExtractDialog createExtractMethodObjectDialog(      MyExtractMethodProcessor processor){
+        return new LightExtractMethodObjectDialog(this,methodName);
+      }
+    }
+;
+    extractMethodObjectProcessor.getExtractProcessor().setShowErrorDialogs(false);
+    ExtractMethodObjectHandler.extractMethodObject(project,null,extractMethodObjectProcessor);
+    final String generatedCall=document.getText(new TextRange(callSiteMarker.getStartOffset(),callSiteMarker.getEndOffset()));
+    return new ExtractedData(generatedCall,extractMethodObjectProcessor.getInnerClass());
+  }
+  finally {
+    callSiteMarker.dispose();
+  }
+}
