@@ -1,26 +1,40 @@
 {
   super(project,true);
   IcsManager icsManager=IcsManager.OBJECT$.getInstance();
-  IcsSettings settings=icsManager.getSettings();
-  shareProjectWorkspaceCheckBox.setSelected(settings.getShareProjectWorkspace());
   urlTextField.setText(icsManager.getRepositoryManager().getUpstream());
   urlTextField.addBrowseFolderListener(new TextBrowseFolderListener(FileChooserDescriptorFactory.createSingleFolderDescriptor()));
-  syncButton=new JButton(IcsBundle.message("settings.panel.sync.repositories"));
-  syncButton.addActionListener(new ActionListener(){
-    @Override public void actionPerformed(    @NotNull ActionEvent e){
-      if (saveRemoteRepositoryUrl()) {
-        new SyncRepositoriesDialog(panel,project).show();
+  SyncType[] syncTypes=SettingsRepositoryPackage.getSYNC_TYPES();
+  if (SystemInfo.isMac) {
+    syncTypes=ArrayUtil.reverseArray(syncTypes);
+  }
+  syncActions=new Action[syncTypes.length];
+  for (int i=0, n=syncTypes.length; i < n; i++) {
+    final SyncType syncType=syncTypes[i];
+    syncActions[i]=new DialogWrapperAction(IcsBundle.message("action." + (syncType == SyncType.MERGE ? "Merge" : (syncType == SyncType.RESET_TO_THEIRS ? "ResetToTheirs" : "ResetToYours")) + "Settings.text")){
+      @Override protected void doAction(      ActionEvent event){
+        if (!saveRemoteRepositoryUrl()) {
+          return;
+        }
+        try {
+          IcsManager.OBJECT$.getInstance().sync(syncType,project);
+        }
+ catch (        Exception e) {
+          Messages.showErrorDialog(getContentPane(),StringUtil.notNullize(e.getMessage(),"Internal error"),IcsBundle.message("sync.rejected.title"));
+          return;
+        }
+        ActionsPackage.getNOTIFICATION_GROUP().createNotification(IcsBundle.message("sync.done.message"),NotificationType.INFORMATION).notify(project);
+        doOKAction();
       }
     }
+;
   }
-);
-  updateSyncButtonState();
   urlTextField.getTextField().getDocument().addDocumentListener(new DocumentAdapter(){
     @Override protected void textChanged(    DocumentEvent e){
       updateSyncButtonState();
     }
   }
 );
+  updateSyncButtonState();
   setTitle(IcsBundle.message("settings.panel.title"));
   setResizable(false);
   init();
