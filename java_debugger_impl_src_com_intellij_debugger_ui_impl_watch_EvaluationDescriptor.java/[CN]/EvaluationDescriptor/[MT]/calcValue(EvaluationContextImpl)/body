@@ -1,11 +1,9 @@
 {
   try {
     final EvaluationContextImpl thisEvaluationContext=getEvaluationContext(evaluationContext);
-    final ExpressionEvaluator evaluator;
-    if (Registry.is("debugger.compiling.evaluator")) {
-      evaluator=new CompilingEvaluator(getEvaluationText());
-    }
- else {
+    ExpressionEvaluator evaluator;
+    final ExtractLightMethodObjectHandler.ExtractedData data=getUserData(CompilingEvaluator.COMPILING_EVALUATOR_DATA);
+    try {
       evaluator=DebuggerInvocationUtil.commitAndRunReadAction(myProject,new EvaluatingComputable<ExpressionEvaluator>(){
         public ExpressionEvaluator compute() throws EvaluateException {
           final PsiElement psiContext=PositionUtil.getContextElement(evaluationContext);
@@ -13,6 +11,20 @@
         }
       }
 );
+    }
+ catch (    AnonymousClassException ex) {
+      if (Registry.is("debugger.compiling.evaluator") && data != null) {
+        evaluator=DebuggerInvocationUtil.commitAndRunReadAction(myProject,new EvaluatingComputable<ExpressionEvaluator>(){
+          public ExpressionEvaluator compute() throws EvaluateException {
+            final PsiElement psiContext=PositionUtil.getContextElement(evaluationContext);
+            return new CompilingEvaluator(getEvaluationText(),getEvaluationCode(thisEvaluationContext),psiContext,data,EvaluationDescriptor.this);
+          }
+        }
+);
+      }
+ else {
+        throw ex;
+      }
     }
     if (!thisEvaluationContext.getDebugProcess().isAttached()) {
       throw EvaluateExceptionUtil.PROCESS_EXITED;
