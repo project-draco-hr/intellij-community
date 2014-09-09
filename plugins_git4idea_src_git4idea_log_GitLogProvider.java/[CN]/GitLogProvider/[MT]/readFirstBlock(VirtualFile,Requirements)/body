@@ -1,31 +1,34 @@
 {
   if (!isRepositoryReady(root)) {
-    return Collections.emptyList();
+    return LogDataImpl.empty();
   }
+  GitRepository repository=ObjectUtils.assertNotNull(myRepositoryManager.getRepositoryForRoot(root));
   int commitCount=requirements.getCommitCount() * 2;
   String[] params=new String[]{"HEAD","--branches","--remotes","--max-count=" + commitCount};
-  List<VcsCommitMetadata> firstBlock=GitHistoryUtils.loadMetadata(myProject,root,params);
-  if (requirements instanceof VcsLogProviderRequirementsEx) {
+  boolean refresh=requirements instanceof VcsLogProviderRequirementsEx && ((VcsLogProviderRequirementsEx)requirements).isRefresh();
+  DetailedLogData data=GitHistoryUtils.loadMetadata(myProject,root,refresh,params);
+  Set<VcsRef> safeRefs=data.getRefs();
+  Set<VcsRef> allRefs=new OpenTHashSet<VcsRef>(safeRefs,REF_ONLY_NAME_STRATEGY);
+  addNewElements(allRefs,readBranches(repository));
+  Collection<VcsCommitMetadata> allDetails;
+  if (!refresh) {
+    allDetails=data.getCommits();
+  }
+ else {
     VcsLogProviderRequirementsEx rex=(VcsLogProviderRequirementsEx)requirements;
-    if (rex.isRefresh()) {
-      Collection<VcsRef> newTags=getNewTags(rex.getCurrentRefs(),rex.getPreviousRefs());
-      if (!newTags.isEmpty()) {
-        final Set<Hash> firstBlockHashes=ContainerUtil.map2Set(firstBlock,new Function<VcsCommitMetadata,Hash>(){
-          @Override public Hash fun(          VcsCommitMetadata metadata){
-            return metadata.getId();
-          }
-        }
-);
-        List<VcsRef> unmatchedHeads=getUnmatchedHeads(firstBlockHashes,newTags);
-        if (!unmatchedHeads.isEmpty()) {
-          List<VcsCommitMetadata> detailsFromTaggedBranches=loadSomeCommitsOnTaggedBranches(root,commitCount,unmatchedHeads);
-          Collection<VcsCommitMetadata> unmatchedCommits=getUnmatchedCommits(firstBlockHashes,detailsFromTaggedBranches);
-          firstBlock.addAll(unmatchedCommits);
-        }
-      }
+    Set<String> currentTags=readCurrentTagNames(root);
+    addOldStillExistingTags(allRefs,currentTags,rex.getPreviousRefs());
+    allDetails=ContainerUtil.newHashSet(data.getCommits());
+    Set<String> previousTags=new HashSet<String>(ContainerUtil.mapNotNull(rex.getPreviousRefs(),GET_TAG_NAME));
+    Set<String> safeTags=new HashSet<String>(ContainerUtil.mapNotNull(safeRefs,GET_TAG_NAME));
+    Set<String> newUnmatchedTags=remove(currentTags,previousTags,safeTags);
+    if (!newUnmatchedTags.isEmpty()) {
+      DetailedLogData commitsFromTags=loadSomeCommitsOnTaggedBranches(root,commitCount,newUnmatchedTags);
+      addNewElements(allDetails,commitsFromTags.getCommits());
+      addNewElements(allRefs,commitsFromTags.getRefs());
     }
   }
-  firstBlock=VcsLogSorter.sortByDateTopoOrder(firstBlock);
-  firstBlock=new ArrayList<VcsCommitMetadata>(firstBlock.subList(0,Math.min(firstBlock.size(),requirements.getCommitCount())));
-  return firstBlock;
+  List<VcsCommitMetadata> sortedCommits=VcsLogSorter.sortByDateTopoOrder(allDetails);
+  sortedCommits=sortedCommits.subList(0,Math.min(sortedCommits.size(),requirements.getCommitCount()));
+  return new LogDataImpl(allRefs,sortedCommits);
 }
