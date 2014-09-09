@@ -3,7 +3,12 @@
     if (createTempFile) {
       createTempFiles();
     }
-    final Map<String,List<String>> perModule=forkPerModule() ? new TreeMap<String,List<String>>() : null;
+    final Map<Module,List<String>> perModule=forkPerModule() ? new TreeMap<Module,List<String>>(new Comparator<Module>(){
+      @Override public int compare(      Module o1,      Module o2){
+        return StringUtil.compare(o1.getName(),o2.getName(),true);
+      }
+    }
+) : null;
     final PrintWriter writer=new PrintWriter(myTempFile,CharsetToolkit.UTF8);
     try {
       writer.println(packageName);
@@ -20,11 +25,10 @@
         if (perModule != null && element instanceof PsiElement) {
           final Module module=ModuleUtilCore.findModuleForPsiElement((PsiElement)element);
           if (module != null) {
-            final String moduleDir=PathMacroUtil.getModuleDir(module.getModuleFilePath());
-            List<String> list=perModule.get(moduleDir);
+            List<String> list=perModule.get(module);
             if (list == null) {
               list=new ArrayList<String>();
-              perModule.put(moduleDir,list);
+              perModule.put(module,list);
             }
             list.add(name);
           }
@@ -53,9 +57,14 @@
       final PrintWriter wWriter=new PrintWriter(myWorkingDirsFile,CharsetToolkit.UTF8);
       try {
         wWriter.println(packageName);
-        for (        String workingDir : perModule.keySet()) {
-          wWriter.println(workingDir);
-          final List<String> classNames=perModule.get(workingDir);
+        for (        Module module : perModule.keySet()) {
+          final String moduleDir=PathMacroUtil.getModuleDir(module.getModuleFilePath());
+          wWriter.println(moduleDir);
+          final JavaParameters parameters=new JavaParameters();
+          JavaParametersUtil.configureModule(module,parameters,JavaParameters.JDK_AND_CLASSES_AND_TESTS,myConfiguration.isAlternativeJrePathEnabled() ? myConfiguration.getAlternativeJrePath() : null);
+          configureAdditionalClasspath(parameters);
+          wWriter.println(parameters.getClassPath().getPathsString());
+          final List<String> classNames=perModule.get(module);
           wWriter.println(classNames.size());
           for (          String className : classNames) {
             wWriter.println(className);
