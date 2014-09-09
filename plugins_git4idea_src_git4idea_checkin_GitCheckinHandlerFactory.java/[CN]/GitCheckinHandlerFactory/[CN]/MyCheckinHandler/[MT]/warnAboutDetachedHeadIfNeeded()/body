@@ -1,6 +1,6 @@
 {
   DetachedRoot detachedRoot=getDetachedRoot();
-  if (detachedRoot == null) {
+  if (detachedRoot == null || !GitVcsSettings.getInstance(myProject).warnAboutDetachedHead()) {
     return ReturnResult.COMMIT;
   }
   final String title;
@@ -15,8 +15,28 @@
     title="Commit in detached HEAD may be dangerous";
     message=messageCommonStart + " is in the <b>detached HEAD</b> state. <br/>" + "You can look around, make experimental changes and commit them, but be sure to checkout a branch not to lose your work. <br/>"+ "Otherwise you risk losing your changes. <br/>"+ readMore("http://gitolite.com/detached-head.html","Read more about detached HEAD");
   }
-  final int choice=Messages.showOkCancelDialog(myPanel.getComponent(),XmlStringUtil.wrapInHtml(message),title,"Cancel","Commit",Messages.getWarningIcon());
-  if (choice != Messages.OK) {
+  DialogWrapper.DoNotAskOption dontAskAgain=new DialogWrapper.DoNotAskOption(){
+    @Override public boolean isToBeShown(){
+      return true;
+    }
+    @Override public void setToBeShown(    boolean toBeShown,    int exitCode){
+      if (exitCode == Messages.OK) {
+        GitVcsSettings.getInstance(myProject).setWarnAboutDetachedHead(toBeShown);
+      }
+    }
+    @Override public boolean canBeHidden(){
+      return true;
+    }
+    @Override public boolean shouldSaveOptionsOnCancel(){
+      return false;
+    }
+    @NotNull @Override public String getDoNotShowMessage(){
+      return "Don't warn again";
+    }
+  }
+;
+  int choice=Messages.showOkCancelDialog(myProject,XmlStringUtil.wrapInHtml(message),title,"Commit",CommonBundle.getCancelButtonText(),Messages.getWarningIcon(),dontAskAgain);
+  if (choice == Messages.OK) {
     return ReturnResult.COMMIT;
   }
  else {
