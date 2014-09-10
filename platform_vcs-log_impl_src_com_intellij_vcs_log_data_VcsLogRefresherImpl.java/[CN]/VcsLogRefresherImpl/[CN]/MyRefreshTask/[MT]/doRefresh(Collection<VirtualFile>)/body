@@ -1,26 +1,25 @@
 {
   StopWatch sw=StopWatch.start("refresh");
   PermanentGraph<Integer> permanentGraph=myCurrentDataPack.isFull() ? myCurrentDataPack.getPermanentGraph() : null;
-  Map<VirtualFile,Collection<VcsRef>> currentRefs=myCurrentDataPack.getRefsModel().getAllRefsByRoot();
+  Map<VirtualFile,Set<VcsRef>> currentRefs=myCurrentDataPack.getRefsModel().getAllRefsByRoot();
   try {
     if (permanentGraph != null) {
       int commitCount=myRecentCommitCount;
       for (int attempt=0; attempt <= 1; attempt++) {
         loadLogAndRefs(roots,currentRefs,commitCount);
-        List<? extends GraphCommit<Integer>> compoundLog=compoundLoadedLogs(myLoadedInfos.values());
-        Map<VirtualFile,Collection<VcsRef>> allNewRefs=getAllNewRefs(myLoadedInfos,currentRefs);
+        List<? extends GraphCommit<Integer>> compoundLog=multiRepoJoin(myLoadedInfo.getCommits());
+        Map<VirtualFile,Set<VcsRef>> allNewRefs=getAllNewRefs(myLoadedInfo,currentRefs);
         List<GraphCommit<Integer>> joinedFullLog=join(compoundLog,permanentGraph.getAllCommits(),currentRefs,allNewRefs);
         if (joinedFullLog == null) {
           commitCount*=5;
         }
  else {
-          return DataPack.build(joinedFullLog,new RefsModel(allNewRefs,myHashMap.asIndexGetter()),myHashMap.asIndexGetter(),myHashMap.asHashGetter(),myProviders,true);
+          return DataPack.build(joinedFullLog,allNewRefs,myProviders,myHashMap,true);
         }
       }
-      LOG.error("Couldn't join " + commitCount + " recent commits to the log ("+ permanentGraph.getAllCommits().size()+ " commits)",new Attachment("recent_commits",toLogString(myLoadedInfos)));
+      LOG.error("Couldn't join " + commitCount + " recent commits to the log ("+ permanentGraph.getAllCommits().size()+ " commits)",new Attachment("recent_commits",myLoadedInfo.toLogString(myHashMap.asIndexGetter())));
     }
-    Pair<PermanentGraph<Integer>,Map<VirtualFile,Collection<VcsRef>>> fullLogAndRefs=loadFullLog();
-    return DataPack.build(fullLogAndRefs.first,myProviders,new RefsModel(fullLogAndRefs.second,myHashMap.asIndexGetter()),true);
+    return loadFullLog();
   }
  catch (  Exception e) {
     myExceptionHandler.consume(e);
