@@ -23,7 +23,69 @@
   }
   DefaultTableModel model=new DefaultTableModel(data,range(0,data[0].length - 1));
   myTable.setModel(model);
-  myTable.setDefaultEditor(myTable.getColumnClass(0),new ArrayTableCellEditor(myProject));
+  myTable.setDefaultEditor(myTable.getColumnClass(0),new ArrayTableCellEditor(myProject){
+    private String getCellSlice(){
+      String expression=myLastPresentation.getSlice();
+      if (myTable.getRowCount() == 1) {
+        expression+="[" + myTable.getSelectedColumn() + "]";
+      }
+ else {
+        expression+="[" + myTable.getSelectedRow() + "]["+ myTable.getSelectedColumn()+ "]";
+      }
+      return expression;
+    }
+    private String changeValExpression(){
+      return getCellSlice() + " = " + myEditor.getDocument().getText();
+    }
+    @Override public void doOKAction(){
+      myEvaluator.evaluate(changeValExpression(),new XDebuggerEvaluator.XEvaluationCallback(){
+        @Override public void evaluated(        @NotNull XValue result){
+          AppUIUtil.invokeOnEdt(new Runnable(){
+            @Override public void run(){
+              XDebuggerTree tree=((XValueNodeImpl)myBaseNode).getTree();
+              final XDebuggerTreeState treeState=XDebuggerTreeState.saveState(tree);
+              tree.rebuildAndRestore(treeState);
+            }
+          }
+);
+          XDebuggerEvaluator.XEvaluationCallback callback=new XDebuggerEvaluator.XEvaluationCallback(){
+            @Override public void evaluated(            @NotNull XValue value){
+              String text=((PyDebugValue)value).getValue();
+              final String corrected;
+              if (!isNumeric()) {
+                if (!text.startsWith("\\\'") && !text.startsWith("\\\"")) {
+                  corrected="\'" + text + "\'";
+                }
+ else {
+                  corrected=text;
+                }
+              }
+ else {
+                corrected=text;
+              }
+              new WriteCommandAction(null){
+                protected void run(                @NotNull Result result) throws Throwable {
+                  myEditor.getDocument().setText(corrected);
+                }
+              }
+.execute();
+              lastValue=corrected;
+            }
+            @Override public void errorOccurred(            @NotNull String errorMessage){
+            }
+          }
+;
+          myEvaluator.evaluate(getCellSlice(),callback,null);
+        }
+        @Override public void errorOccurred(        @NotNull String errorMessage){
+          myComponent.setErrorSpinnerText(errorMessage);
+        }
+      }
+,null);
+      super.doOKAction();
+    }
+  }
+);
   enableColor(data);
   myComponent.getTextField().setText(myLastPresentation.getSlice());
 }
