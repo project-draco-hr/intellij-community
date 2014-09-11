@@ -1,11 +1,8 @@
 {
   try {
     final EvaluationContextImpl thisEvaluationContext=getEvaluationContext(evaluationContext);
-    final ExpressionEvaluator evaluator;
-    if (Registry.is("debugger.compiling.evaluator")) {
-      evaluator=new CompilingEvaluator(getEvaluationText());
-    }
- else {
+    ExpressionEvaluator evaluator=null;
+    try {
       evaluator=DebuggerInvocationUtil.commitAndRunReadAction(myProject,new EvaluatingComputable<ExpressionEvaluator>(){
         public ExpressionEvaluator compute() throws EvaluateException {
           final PsiElement psiContext=PositionUtil.getContextElement(evaluationContext);
@@ -13,6 +10,33 @@
         }
       }
 );
+    }
+ catch (    UnsupportedExpressionException ex) {
+      if (Registry.is("debugger.compiling.evaluator")) {
+        evaluator=DebuggerInvocationUtil.commitAndRunReadAction(myProject,new EvaluatingComputable<ExpressionEvaluator>(){
+          public ExpressionEvaluator compute() throws EvaluateException {
+            final PsiElement psiContext=PositionUtil.getContextElement(evaluationContext);
+            if (psiContext == null) {
+              return null;
+            }
+            PsiFile psiFile=psiContext.getContainingFile();
+            PsiCodeFragment fragment=createCodeFragment(psiContext);
+            try {
+              ExtractLightMethodObjectHandler.ExtractedData data=ExtractLightMethodObjectHandler.extractLightMethodObject(myProject,psiFile,fragment,CompilingEvaluator.getGeneratedClassName());
+              if (data != null) {
+                return new CompilingEvaluator(getEvaluationText(),getEvaluationCode(thisEvaluationContext),psiContext,data,EvaluationDescriptor.this);
+              }
+            }
+ catch (            PrepareFailedException ignored) {
+            }
+            return null;
+          }
+        }
+);
+      }
+      if (evaluator == null) {
+        throw ex;
+      }
     }
     if (!thisEvaluationContext.getDebugProcess().isAttached()) {
       throw EvaluateExceptionUtil.PROCESS_EXITED;
