@@ -1,113 +1,44 @@
 {
-  final SdkAdditionalData sdkData=mySdk.getSdkAdditionalData();
   final String homePath=mySdk.getHomePath();
   if (homePath == null) {
     throw new PyExternalProcessException(ERROR_INVALID_SDK,helperPath,args,"Cannot find interpreter for SDK");
   }
-  if (sdkData instanceof PyRemoteSdkAdditionalDataBase) {
-    RemoteSdkCredentials remoteSdkCredentials;
+  if (workingDir == null) {
+    workingDir=new File(homePath).getParent();
+  }
+  final List<String> cmdline=new ArrayList<String>();
+  cmdline.add(homePath);
+  cmdline.add(helperPath);
+  cmdline.addAll(args);
+  LOG.info("Running packaging tool: " + StringUtil.join(cmdline," "));
+  final boolean canCreate=FileUtil.ensureCanCreateFile(new File(homePath));
+  if (!canCreate && !SystemInfo.isWindows && askForSudo) {
     try {
-      remoteSdkCredentials=((RemoteSdkAdditionalData)sdkData).getRemoteSdkCredentials(false);
-    }
- catch (    InterruptedException e) {
-      LOG.error(e);
-      remoteSdkCredentials=null;
-    }
-catch (    final ExecutionException e) {
-      if (e.getCause() instanceof VagrantNotStartedException) {
-        throw new PyExternalProcessException(ERROR_VAGRANT_NOT_LAUNCHED,helperPath,args,"Vagrant instance is down. <a href=\"" + LAUNCH_VAGRANT + "\">Launch vagrant</a>").withHandler(LAUNCH_VAGRANT,new Runnable(){
-          @Override public void run(){
-            final PythonRemoteInterpreterManager manager=PythonRemoteInterpreterManager.getInstance();
-            if (manager != null) {
-              try {
-                manager.runVagrant(((VagrantNotStartedException)e.getCause()).getVagrantFolder());
-                clearCaches();
-              }
- catch (              ExecutionException e1) {
-                throw new RuntimeException(e1);
-              }
-            }
-          }
+      final ProcessOutput result=ExecUtil.sudoAndGetOutput(cmdline,"Please enter your password to make changes in system packages: ",workingDir);
+      String message=result.getStderr();
+      if (result.getExitCode() != 0) {
+        final String stdout=result.getStdout();
+        if (StringUtil.isEmptyOrSpaces(message)) {
+          message=stdout;
         }
-);
+        if (StringUtil.isEmptyOrSpaces(message)) {
+          message="Failed to perform action. Permission denied.";
+        }
+        throw new PyExternalProcessException(result.getExitCode(),helperPath,args,message);
       }
- else {
-        throw new PyExternalProcessException(ERROR_REMOTE_ACCESS,helperPath,args,e.getMessage());
+      if (SystemInfo.isMac && !StringUtil.isEmptyOrSpaces(message)) {
+        throw new PyExternalProcessException(result.getExitCode(),helperPath,args,message);
       }
+      return result;
     }
-    final PythonRemoteInterpreterManager manager=PythonRemoteInterpreterManager.getInstance();
-    if (manager != null && remoteSdkCredentials != null) {
-      final List<String> cmdline=new ArrayList<String>();
-      cmdline.add(homePath);
-      cmdline.add(RemoteFile.detectSystemByPath(homePath).createRemoteFile(helperPath).getPath());
-      cmdline.addAll(Collections2.transform(args,new Function<String,String>(){
-        @Override public String apply(        @Nullable String input){
-          return quoteIfNeeded(input);
-        }
-      }
-));
-      try {
-        if (askForSudo) {
-          askForSudo=!manager.ensureCanWrite(null,remoteSdkCredentials,remoteSdkCredentials.getInterpreterPath());
-        }
-        ProcessOutput processOutput;
-        do {
-          PathMappingSettings mappings=manager.setupMappings(null,(PyRemoteSdkAdditionalDataBase)sdkData,null);
-          processOutput=manager.runRemoteProcess(null,remoteSdkCredentials,mappings,ArrayUtil.toStringArray(cmdline),workingDir,askForSudo);
-          if (askForSudo && processOutput.getStderr().contains("sudo: 3 incorrect password attempts")) {
-            continue;
-          }
-          break;
-        }
- while (true);
-        return processOutput;
-      }
- catch (      ExecutionException e) {
-        throw new PyExternalProcessException(ERROR_INVALID_SDK,helperPath,args,"Error running SDK: " + e.getMessage(),e);
-      }
+ catch (    ExecutionException e) {
+      throw new PyExternalProcessException(ERROR_EXECUTION,helperPath,args,e.getMessage());
     }
- else {
-      throw new PyExternalProcessException(ERROR_INVALID_SDK,helperPath,args,PythonRemoteInterpreterManager.WEB_DEPLOYMENT_PLUGIN_IS_DISABLED);
+catch (    IOException e) {
+      throw new PyExternalProcessException(ERROR_ACCESS_DENIED,helperPath,args,e.getMessage());
     }
   }
  else {
-    if (workingDir == null) {
-      workingDir=new File(homePath).getParent();
-    }
-    final List<String> cmdline=new ArrayList<String>();
-    cmdline.add(homePath);
-    cmdline.add(helperPath);
-    cmdline.addAll(args);
-    LOG.info("Running packaging tool: " + StringUtil.join(cmdline," "));
-    final boolean canCreate=FileUtil.ensureCanCreateFile(new File(homePath));
-    if (!canCreate && !SystemInfo.isWindows && askForSudo) {
-      try {
-        final ProcessOutput result=ExecUtil.sudoAndGetOutput(cmdline,"Please enter your password to make changes in system packages: ",workingDir);
-        String message=result.getStderr();
-        if (result.getExitCode() != 0) {
-          final String stdout=result.getStdout();
-          if (StringUtil.isEmptyOrSpaces(message)) {
-            message=stdout;
-          }
-          if (StringUtil.isEmptyOrSpaces(message)) {
-            message="Failed to perform action. Permission denied.";
-          }
-          throw new PyExternalProcessException(result.getExitCode(),helperPath,args,message);
-        }
-        if (SystemInfo.isMac && !StringUtil.isEmptyOrSpaces(message)) {
-          throw new PyExternalProcessException(result.getExitCode(),helperPath,args,message);
-        }
-        return result;
-      }
- catch (      ExecutionException e) {
-        throw new PyExternalProcessException(ERROR_EXECUTION,helperPath,args,e.getMessage());
-      }
-catch (      IOException e) {
-        throw new PyExternalProcessException(ERROR_ACCESS_DENIED,helperPath,args,e.getMessage());
-      }
-    }
- else {
-      return PySdkUtil.getProcessOutput(workingDir,ArrayUtil.toStringArray(cmdline),TIMEOUT);
-    }
+    return PySdkUtil.getProcessOutput(workingDir,ArrayUtil.toStringArray(cmdline),TIMEOUT);
   }
 }
