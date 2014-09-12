@@ -1,8 +1,9 @@
 {
   PsiExpression expression=CodeInsightUtil.findExpressionInRange(fragment,0,fragment.getTextLength());
+  final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
   final PsiElement[] elements;
   if (expression != null) {
-    elements=new PsiElement[]{JavaPsiFacade.getElementFactory(project).createStatementFromText(expression.getText() + ";",expression)};
+    elements=new PsiElement[]{elementFactory.createStatementFromText(expression.getText() + ";",expression)};
   }
  else {
     elements=CodeInsightUtil.findStatementsInRange(fragment,0,fragment.getTextLength());
@@ -21,7 +22,19 @@
   final PsiElement container=anchor.getParent();
   final PsiElement firstElementCopy=container.addRangeBefore(elements[0],elements[elements.length - 1],anchor);
   final PsiElement[] elementsCopy=CodeInsightUtil.findStatementsInRange(copy,firstElementCopy.getTextRange().getStartOffset(),anchor.getTextRange().getStartOffset());
-  final int start=elementsCopy[0].getTextRange().getStartOffset();
+  if (elementsCopy[elementsCopy.length - 1] instanceof PsiExpressionStatement) {
+    final PsiExpression expr=((PsiExpressionStatement)elementsCopy[elementsCopy.length - 1]).getExpression();
+    if (!(expr instanceof PsiAssignmentExpression)) {
+      final PsiType expressionType=expr.getType();
+      if (expressionType != null && expressionType != PsiType.VOID) {
+        final String uniqueResultName=JavaCodeStyleManager.getInstance(project).suggestUniqueVariableName("result",elementsCopy[0],true);
+        final String statementText=expressionType.getCanonicalText() + " " + uniqueResultName+ " = "+ expr.getText()+ ";";
+        elementsCopy[elementsCopy.length - 1]=elementsCopy[elementsCopy.length - 1].replace(elementFactory.createStatementFromText(statementText,elementsCopy[elementsCopy.length - 1]));
+      }
+    }
+  }
+  LOG.assertTrue(elementsCopy[0].getParent() == container,"element: " + elementsCopy[0].getText() + "; container: "+ container.getText());
+  final int startOffsetInContainer=elementsCopy[0].getStartOffsetInParent();
   final ControlFlow controlFlow;
   try {
     controlFlow=ControlFlowFactory.getInstance(project).getControlFlow(container,LocalsOrMyInstanceFieldsControlFlowPolicy.getInstance());
@@ -43,7 +56,7 @@
     }
   }
 ," +");
-  PsiStatement outStatement=JavaPsiFacade.getElementFactory(project).createStatementFromText("System.out.println(" + outputVariables + ");",anchor);
+  PsiStatement outStatement=elementFactory.createStatementFromText("System.out.println(" + outputVariables + ");",anchor);
   outStatement=(PsiStatement)container.addAfter(outStatement,elementsCopy[elementsCopy.length - 1]);
   final ExtractMethodObjectProcessor extractMethodObjectProcessor=new ExtractMethodObjectProcessor(project,null,elementsCopy,""){
     @Override protected AbstractExtractDialog createExtractMethodObjectDialog(    MyExtractMethodProcessor processor){
@@ -75,6 +88,7 @@
  else {
     return null;
   }
-  final String generatedCall=copy.getText().substring(start,outStatement.getTextOffset());
+  final int startOffset=startOffsetInContainer + container.getTextRange().getStartOffset();
+  final String generatedCall=copy.getText().substring(startOffset,outStatement.getTextOffset());
   return new ExtractedData(generatedCall,(PsiClass)CodeStyleManager.getInstance(project).reformat(extractMethodObjectProcessor.getInnerClass()),originalAnchor);
 }

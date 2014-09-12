@@ -1,34 +1,25 @@
 {
-  UIUtil.invokeAndWaitIfNeeded(new Runnable(){
-    @Override public void run(){
-      for (      Module module : scope.getAffectedModules()) {
-        setupJdkForModule(module.getName());
+  try {
+    CompilerTester tester=new CompilerTester(myProject,Arrays.asList(scope.getAffectedModules()));
+    UIUtil.invokeAndWaitIfNeeded(new Runnable(){
+      @Override public void run(){
+        new MavenResourceCompilerConfigurationGenerator(myProject,MavenProjectsManager.getInstance(myProject).getProjectsTreeForTests()).generateBuildConfiguration(false);
       }
-      new MavenResourceCompilerConfigurationGenerator(myProject,MavenProjectsManager.getInstance(myProject).getProjectsTreeForTests()).generateBuildConfiguration(false);
     }
-  }
 );
-  CompilerWorkspaceConfiguration.getInstance(myProject).CLEAR_OUTPUT_DIRECTORY=true;
-  final Semaphore semaphore=new Semaphore();
-  semaphore.down();
-  UIUtil.invokeAndWaitIfNeeded(new Runnable(){
-    @Override public void run(){
-      CompilerTestUtil.enableExternalCompiler();
-      CompilerManager.getInstance(myProject).make(scope,new CompileStatusNotification(){
-        @Override public void finished(        boolean aborted,        int errors,        int warnings,        CompileContext compileContext){
-          semaphore.up();
+    try {
+      List<CompilerMessage> messages=tester.make(scope);
+      for (      CompilerMessage message : messages) {
+        if (message.getCategory() == CompilerMessageCategory.ERROR) {
+          fail("Compilation failed with error: " + message.getMessage());
         }
       }
-);
+    }
+  finally {
+      tester.tearDown();
     }
   }
-);
-  while (!semaphore.waitFor(100)) {
-    if (SwingUtilities.isEventDispatchThread()) {
-      UIUtil.dispatchAllInvocationEvents();
-    }
-  }
-  if (SwingUtilities.isEventDispatchThread()) {
-    UIUtil.dispatchAllInvocationEvents();
+ catch (  Exception e) {
+    throw new RuntimeException(e);
   }
 }
