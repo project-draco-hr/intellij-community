@@ -1,69 +1,65 @@
 {
   if (file.getFileType() != JavaClassFileType.INSTANCE)   return null;
-  final List<LibraryOrderEntry> libraries=findOrderEntriesContainingFile(file);
-  if (libraries == null)   return null;
-  PsiFile psiFile=PsiManager.getInstance(myProject).findFile(file);
-  final String fqn=JavaEditorFileSwapper.getFQN(psiFile);
-  if (fqn == null)   return null;
-  if (JavaEditorFileSwapper.findSourceFile(myProject,file) != null)   return null;
   final EditorNotificationPanel panel=new EditorNotificationPanel();
-  final VirtualFile sourceFile=findSourceFile(file);
-  final AttachSourcesProvider.AttachSourcesAction defaultAction;
-  if (sourceFile != null) {
-    panel.setText(ProjectBundle.message("library.sources.not.attached"));
-    defaultAction=new AttachJarAsSourcesAction(file);
-  }
- else {
-    panel.setText(ProjectBundle.message("library.sources.not.found"));
-    defaultAction=new ChooseAndAttachSourcesAction(myProject,panel);
-  }
-  List<AttachSourcesProvider.AttachSourcesAction> actions=new ArrayList<AttachSourcesProvider.AttachSourcesAction>();
-  boolean hasNonLightAction=false;
-  for (  AttachSourcesProvider each : Extensions.getExtensions(EXTENSION_POINT_NAME)) {
-    for (    AttachSourcesProvider.AttachSourcesAction action : each.getActions(libraries,psiFile)) {
-      if (hasNonLightAction) {
-        if (action instanceof AttachSourcesProvider.LightAttachSourcesAction) {
-          continue;
-        }
-      }
- else {
-        if (!(action instanceof AttachSourcesProvider.LightAttachSourcesAction)) {
-          actions.clear();
-          hasNonLightAction=true;
-        }
-      }
-      actions.add(action);
-    }
-  }
-  Collections.sort(actions,new Comparator<AttachSourcesProvider.AttachSourcesAction>(){
-    @Override public int compare(    AttachSourcesProvider.AttachSourcesAction o1,    AttachSourcesProvider.AttachSourcesAction o2){
-      return o1.getName().compareToIgnoreCase(o2.getName());
-    }
-  }
-);
-  actions.add(defaultAction);
-  for (  final AttachSourcesProvider.AttachSourcesAction each : actions) {
-    panel.createActionLabel(GuiUtils.getTextWithoutMnemonicEscaping(each.getName()),new Runnable(){
-      @Override public void run(){
-        if (!Comparing.equal(libraries,findOrderEntriesContainingFile(file))) {
-          Messages.showErrorDialog(myProject,"Cannot find library for " + StringUtil.getShortName(fqn),"Error");
-          return;
-        }
-        panel.setText(each.getBusyText());
-        Runnable onFinish=new Runnable(){
-          @Override public void run(){
-            SwingUtilities.invokeLater(new Runnable(){
-              @Override public void run(){
-                panel.setText(ProjectBundle.message("library.sources.not.found"));
-              }
+  panel.setText(ProjectBundle.message("class.file.decompiled.text"));
+  final VirtualFile sourceFile=JavaEditorFileSwapper.findSourceFile(myProject,file);
+  if (sourceFile == null) {
+    final List<LibraryOrderEntry> libraries=findLibraryEntriesForFile(file);
+    if (libraries != null) {
+      List<AttachSourcesProvider.AttachSourcesAction> actions=new ArrayList<AttachSourcesProvider.AttachSourcesAction>();
+      PsiFile clsFile=PsiManager.getInstance(myProject).findFile(file);
+      boolean hasNonLightAction=false;
+      for (      AttachSourcesProvider each : Extensions.getExtensions(EXTENSION_POINT_NAME)) {
+        for (        AttachSourcesProvider.AttachSourcesAction action : each.getActions(libraries,clsFile)) {
+          if (hasNonLightAction) {
+            if (action instanceof AttachSourcesProvider.LightAttachSourcesAction) {
+              continue;
             }
+          }
+ else {
+            if (!(action instanceof AttachSourcesProvider.LightAttachSourcesAction)) {
+              actions.clear();
+              hasNonLightAction=true;
+            }
+          }
+          actions.add(action);
+        }
+      }
+      Collections.sort(actions,new Comparator<AttachSourcesProvider.AttachSourcesAction>(){
+        @Override public int compare(        AttachSourcesProvider.AttachSourcesAction o1,        AttachSourcesProvider.AttachSourcesAction o2){
+          return o1.getName().compareToIgnoreCase(o2.getName());
+        }
+      }
 );
+      AttachSourcesProvider.AttachSourcesAction defaultAction;
+      if (findSourceFileInSameJar(file) != null) {
+        defaultAction=new AttachJarAsSourcesAction(file);
+      }
+ else {
+        defaultAction=new ChooseAndAttachSourcesAction(myProject,panel);
+      }
+      actions.add(defaultAction);
+      for (      final AttachSourcesProvider.AttachSourcesAction action : actions) {
+        panel.createActionLabel(GuiUtils.getTextWithoutMnemonicEscaping(action.getName()),new Runnable(){
+          @Override public void run(){
+            List<LibraryOrderEntry> entries=findLibraryEntriesForFile(file);
+            if (!Comparing.equal(libraries,entries)) {
+              Messages.showErrorDialog(myProject,"Can't find library for " + file.getName(),"Error");
+              return;
+            }
+            panel.setText(action.getBusyText());
+            action.perform(entries);
           }
         }
-;
-        ActionCallback callback=each.perform(findOrderEntriesContainingFile(file));
-        callback.doWhenRejected(onFinish);
-        callback.doWhenDone(onFinish);
+);
+      }
+    }
+  }
+ else {
+    panel.createActionLabel(ProjectBundle.message("class.file.open.source.action"),new Runnable(){
+      @Override public void run(){
+        OpenFileDescriptor descriptor=new OpenFileDescriptor(myProject,sourceFile);
+        FileEditorManager.getInstance(myProject).openTextEditor(descriptor,true);
       }
     }
 );
