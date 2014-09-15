@@ -1,0 +1,59 @@
+{
+  final long warmupEnd=System.currentTimeMillis() + 1000;
+  final long end=warmupEnd + 1000;
+  checkCanceledCalled=false;
+  final ProgressIndicator myIndicator=new ProgressIndicatorStub(){
+    @Override public void checkCanceled() throws ProcessCanceledException {
+      checkCanceledCalled=true;
+      assertTrue(isCanceled());
+      super.checkCanceled();
+    }
+    @Override public void processFinish(){
+      taskFinished=true;
+    }
+  }
+;
+  taskCanceled=taskSucceeded=taskFinished=false;
+  exception=null;
+  Future<?> future=ProgressManagerImpl.runProcessWithProgressAsynchronously(new Task.Backgroundable(getProject(),"xxx"){
+    @Override public void run(    @NotNull ProgressIndicator indicator){
+      try {
+        assertFalse(ApplicationManager.getApplication().isDispatchThread());
+        assertSame(indicator,myIndicator);
+        while (System.currentTimeMillis() < end) {
+          ProgressManager.checkCanceled();
+        }
+      }
+ catch (      RuntimeException e) {
+        exception=e;
+        throw e;
+      }
+catch (      Error e) {
+        exception=e;
+        throw e;
+      }
+    }
+    @Override public void onCancel(){
+      taskCanceled=true;
+    }
+    @Override public void onSuccess(){
+      taskSucceeded=true;
+    }
+  }
+,myIndicator,null);
+  ApplicationManager.getApplication().assertIsDispatchThread();
+  while (!future.isDone()) {
+    if (System.currentTimeMillis() < warmupEnd) {
+      assertFalse(checkCanceledCalled);
+    }
+ else {
+      myIndicator.cancel();
+    }
+  }
+  assertTrue(taskFinished);
+  UIUtil.dispatchAllInvocationEvents();
+  assertTrue(checkCanceledCalled);
+  assertFalse(taskSucceeded);
+  assertTrue(taskCanceled);
+  assertTrue(String.valueOf(exception),exception instanceof ProcessCanceledException);
+}
