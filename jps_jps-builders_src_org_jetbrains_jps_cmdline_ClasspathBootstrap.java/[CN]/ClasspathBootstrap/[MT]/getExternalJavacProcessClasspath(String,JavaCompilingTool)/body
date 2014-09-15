@@ -1,0 +1,56 @@
+{
+  final Set<File> cp=new LinkedHashSet<File>();
+  cp.add(getResourceFile(ExternalJavacProcess.class));
+  for (  String path : PathManager.getUtilClassPath()) {
+    cp.add(new File(path));
+  }
+  cp.add(getResourceFile(JpsModel.class));
+  cp.add(getResourceFile(JpsModelImpl.class));
+  cp.add(getResourceFile(Message.class));
+  cp.add(getResourceFile(NetUtil.class));
+  cp.add(getJpsPluginSystemClassesPath());
+  final Class<StandardJavaFileManager> optimizedFileManagerClass=getOptimizedFileManagerClass();
+  if (optimizedFileManagerClass != null) {
+    cp.add(getResourceFile(optimizedFileManagerClass));
+  }
+  try {
+    final Class<?> cmdLineWrapper=Class.forName("com.intellij.rt.execution.CommandLineWrapper");
+    cp.add(getResourceFile(cmdLineWrapper));
+  }
+ catch (  Throwable th) {
+    LOG.info(th);
+  }
+  try {
+    final String localJavaHome=FileUtil.toSystemIndependentName(SystemProperties.getJavaHome());
+    final File candidate=new File(sdkHome,"lib/tools.jar");
+    if (candidate.exists()) {
+      cp.add(candidate);
+    }
+ else {
+      final JavaCompiler systemCompiler=ToolProvider.getSystemJavaCompiler();
+      if (systemCompiler != null) {
+        final String localJarPath=FileUtil.toSystemIndependentName(getResourceFile(systemCompiler.getClass()).getPath());
+        String relPath=FileUtil.getRelativePath(localJavaHome,localJarPath,'/');
+        if (relPath != null) {
+          if (relPath.contains("..")) {
+            relPath=FileUtil.getRelativePath(FileUtil.toSystemIndependentName(new File(localJavaHome).getParent()),localJarPath,'/');
+          }
+          if (relPath != null) {
+            final File targetFile=new File(sdkHome,relPath);
+            cp.add(targetFile);
+          }
+        }
+      }
+    }
+  }
+ catch (  Throwable th) {
+    LOG.info(th);
+  }
+  cp.addAll(compilingTool.getAdditionalClasspath());
+  final Class<JavaSourceTransformer> transformerClass=JavaSourceTransformer.class;
+  final ServiceLoader<JavaSourceTransformer> loader=ServiceLoader.load(transformerClass,transformerClass.getClassLoader());
+  for (  JavaSourceTransformer t : loader) {
+    cp.add(getResourceFile(t.getClass()));
+  }
+  return new ArrayList<File>(cp);
+}

@@ -1,0 +1,35 @@
+{
+  if (ourSslContext == null) {
+    ourSslContext=initContext();
+  }
+  Map<String,String> params=createParameters(login,password,error);
+  HttpURLConnection connection=post(new URL(NEW_THREAD_POST_URL),join(params));
+  int responseCode=connection.getResponseCode();
+  if (responseCode != HttpURLConnection.HTTP_OK) {
+    throw new InternalEAPException(DiagnosticBundle.message("error.http.result.code",responseCode));
+  }
+  String response;
+  InputStream is=connection.getInputStream();
+  try {
+    byte[] bytes=FileUtil.loadBytes(is);
+    response=new String(bytes,ENCODING);
+  }
+  finally {
+    is.close();
+  }
+  if ("unauthorized".equals(response)) {
+    throw new NoSuchEAPUserException(login);
+  }
+  if (response.startsWith("update ")) {
+    throw new UpdateAvailableException(response.substring(7));
+  }
+  if (response.startsWith("message ")) {
+    throw new InternalEAPException(response.substring(8));
+  }
+  try {
+    return Integer.valueOf(response.trim()).intValue();
+  }
+ catch (  NumberFormatException ex) {
+    throw new InternalEAPException(DiagnosticBundle.message("error.itn.returns.wrong.data"));
+  }
+}

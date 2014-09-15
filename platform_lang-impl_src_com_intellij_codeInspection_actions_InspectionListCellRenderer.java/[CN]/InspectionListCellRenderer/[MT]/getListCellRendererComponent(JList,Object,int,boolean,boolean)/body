@@ -1,18 +1,42 @@
 {
-  final JPanel panel=new JPanel(new BorderLayout());
+  final BorderLayout layout=new BorderLayout();
+  layout.setHgap(5);
+  final JPanel panel=new JPanel(layout);
   panel.setOpaque(true);
   final Color bg=sel ? UIUtil.getListSelectionBackground() : UIUtil.getListBackground();
   final Color fg=sel ? UIUtil.getListSelectionForeground() : UIUtil.getListForeground();
   panel.setBackground(bg);
   panel.setForeground(fg);
-  SimpleTextAttributes attr=sel ? SELECTED : PLAIN;
   if (value instanceof InspectionToolWrapper) {
     final InspectionToolWrapper toolWrapper=(InspectionToolWrapper)value;
+    final String inspectionName="  " + toolWrapper.getDisplayName();
+    final String groupName=StringUtil.join(toolWrapper.getGroupPath()," | ");
+    final String matchingText=inspectionName + "|" + groupName;
+    List<TextRange> fragments=((MinusculeMatcher)myMatcher).matchingFragments(matchingText);
+    List<TextRange> adjustedFragments=new ArrayList<TextRange>();
+    if (fragments != null) {
+      adjustedFragments.addAll(fragments);
+    }
+    final int splitPoint=adjustRanges(adjustedFragments,inspectionName.length() + 1);
     final SimpleColoredComponent c=new SimpleColoredComponent();
-    SpeedSearchUtil.appendColoredFragmentForMatcher("  " + toolWrapper.getDisplayName(),c,attr,myMatcher,bg,sel);
+    final boolean matchHighlighting=Registry.is("ide.highlight.match.in.selected.only") && !sel;
+    if (matchHighlighting) {
+      c.append(inspectionName,myPlain);
+    }
+ else {
+      final List<TextRange> ranges=adjustedFragments.subList(0,splitPoint);
+      SpeedSearchUtil.appendColoredFragments(c,inspectionName,ranges,sel ? mySelected : myPlain,myHighlighted);
+    }
     panel.add(c,BorderLayout.WEST);
     final SimpleColoredComponent group=new SimpleColoredComponent();
-    SpeedSearchUtil.appendColoredFragmentForMatcher(toolWrapper.getGroupDisplayName() + "  ",group,attr,myMatcher,bg,sel);
+    if (matchHighlighting) {
+      group.append(groupName,SimpleTextAttributes.GRAYED_ATTRIBUTES);
+    }
+ else {
+      final SimpleTextAttributes attributes=sel ? mySelected : SimpleTextAttributes.GRAYED_ATTRIBUTES;
+      final List<TextRange> ranges=adjustedFragments.subList(splitPoint,adjustedFragments.size());
+      SpeedSearchUtil.appendColoredFragments(group,groupName,ranges,attributes,myHighlighted);
+    }
     final JPanel right=new JPanel(new BorderLayout());
     right.setBackground(bg);
     right.setForeground(fg);

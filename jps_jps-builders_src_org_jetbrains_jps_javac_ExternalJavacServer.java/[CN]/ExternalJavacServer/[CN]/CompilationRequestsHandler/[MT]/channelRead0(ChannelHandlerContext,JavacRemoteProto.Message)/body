@@ -1,0 +1,50 @@
+{
+  JavacProcessDescriptor descriptor=context.attr(SESSION_DESCRIPTOR).get();
+  UUID sessionId;
+  if (descriptor == null) {
+    sessionId=JavacProtoUtil.fromProtoUUID(message.getSessionId());
+    descriptor=myMessageHandlers.get(sessionId);
+    if (descriptor != null) {
+      descriptor.channel=context.channel();
+      context.attr(SESSION_DESCRIPTOR).set(descriptor);
+    }
+  }
+ else {
+    sessionId=descriptor.sessionId;
+  }
+  final ExternalJavacMessageHandler handler=descriptor != null ? descriptor.handler : null;
+  final JavacRemoteProto.Message.Type messageType=message.getMessageType();
+  JavacRemoteProto.Message reply=null;
+  try {
+    if (messageType == JavacRemoteProto.Message.Type.RESPONSE) {
+      final JavacRemoteProto.Message.Response response=message.getResponse();
+      final JavacRemoteProto.Message.Response.Type responseType=response.getResponseType();
+      if (handler != null) {
+        if (responseType == JavacRemoteProto.Message.Response.Type.REQUEST_ACK) {
+          final JavacRemoteProto.Message.Request request=descriptor.request;
+          if (request != null) {
+            reply=JavacProtoUtil.toMessage(sessionId,request);
+            descriptor.request=null;
+          }
+        }
+ else {
+          final boolean terminateOk=handler.handleMessage(message);
+          if (terminateOk) {
+            descriptor.setDone();
+          }
+        }
+      }
+ else {
+        reply=JavacProtoUtil.toMessage(sessionId,JavacProtoUtil.createCancelRequest());
+      }
+    }
+ else {
+      reply=JavacProtoUtil.toMessage(sessionId,JavacProtoUtil.createFailure("Unsupported message: " + messageType.name(),null));
+    }
+  }
+  finally {
+    if (reply != null) {
+      context.channel().writeAndFlush(reply);
+    }
+  }
+}

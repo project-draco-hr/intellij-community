@@ -1,6 +1,6 @@
 {
   myTextLabel.setFont(UIUtil.getLabelFont());
-  myRendererComponent.setBackground(selected ? UIUtil.getTreeSelectionBackground() : myTree.getBackground());
+  setPreferredSize(null);
   MyNode node=extractNode(value);
   if (node == null) {
     myTextLabel.setText(value.toString());
@@ -10,23 +10,18 @@
     if (myRoot == node.getParent()) {
       myTextLabel.setFont(myTextLabel.getFont().deriveFont(Font.BOLD));
     }
-    TreePath path=tree.getPathForRow(row);
-    if (path == null) {
-      if (value instanceof DefaultMutableTreeNode) {
-        path=new TreePath(((DefaultMutableTreeNode)value).getPath());
+    if (tree.isVisible()) {
+      int indent=node.myLevel * (UIUtil.getTreeLeftChildIndent() + UIUtil.getTreeRightChildIndent());
+      Insets treeInsets=tree.getInsets();
+      if (treeInsets != null) {
+        indent+=treeInsets.left + treeInsets.right;
+      }
+      int visibleWidth=tree.getVisibleRect().width;
+      if (visibleWidth > indent) {
+        Dimension size=getPreferredSize();
+        size.width=visibleWidth - indent;
       }
     }
-    int forcedWidth=2000;
-    if (path != null && tree.isVisible()) {
-      Rectangle visibleRect=tree.getVisibleRect();
-      int nestingLevel=tree.isRootVisible() ? path.getPathCount() - 1 : path.getPathCount() - 2;
-      int left=UIUtil.getTreeLeftChildIndent();
-      int right=UIUtil.getTreeRightChildIndent();
-      Insets treeInsets=tree.getInsets();
-      int indent=(left + right) * nestingLevel + (treeInsets != null ? treeInsets.left + treeInsets.right : 0);
-      forcedWidth=visibleRect.width > 0 ? visibleRect.width - indent : forcedWidth;
-    }
-    myRendererComponent.setPrefereedWidth(forcedWidth - 4);
   }
   myTextLabel.setForeground(selected ? UIUtil.getTreeSelectionForeground() : NORMAL_NODE);
   if (!selected && node != null) {
@@ -46,15 +41,15 @@
     if (parent instanceof MyNode) {
       if (myRoot == parent.getParent()) {
         project=findConfigurableProject(node);
-        if (node.myConfigurable instanceof NodeConfigurable) {
-          Configurable[] configurables=((NodeConfigurable)node.myConfigurable).getConfigurables();
+        if (node.myConfigurable instanceof SortedConfigurableGroup) {
+          Configurable[] configurables=((SortedConfigurableGroup)node.myConfigurable).getConfigurables();
           if (configurables != null) {
             project=findConfigurableProject(configurables[0]);
           }
         }
       }
- else       if (((MyNode)parent).myConfigurable instanceof NodeConfigurable) {
-        if (((MyNode)node.getParent()).myConfigurable instanceof NodeConfigurable) {
+ else       if (((MyNode)parent).myConfigurable instanceof SortedConfigurableGroup) {
+        if (((MyNode)node.getParent()).myConfigurable instanceof SortedConfigurableGroup) {
           project=findConfigurableProject(node);
         }
       }
@@ -68,13 +63,16 @@
  else {
     myProjectIcon.setVisible(false);
   }
-  if (value instanceof DefaultMutableTreeNode) {
-    DefaultMutableTreeNode treeNode=(DefaultMutableTreeNode)value;
-    TreePath treePath=new TreePath(treeNode.getPath());
-    myNodeIcon.setIcon(myTree.getHandleIcon(treeNode,treePath));
+  Icon nodeIcon=null;
+  if (node != null) {
+    if (0 == node.getChildCount()) {
+      nodeIcon=myTree.getEmptyHandle();
+    }
+ else     if (value instanceof DefaultMutableTreeNode) {
+      DefaultMutableTreeNode treeNode=(DefaultMutableTreeNode)value;
+      nodeIcon=myTree.isExpanded(new TreePath(treeNode.getPath())) ? myTree.getExpandedHandle() : myTree.getCollapsedHandle();
+    }
   }
- else {
-    myNodeIcon.setIcon(null);
-  }
-  return myRendererComponent;
+  myNodeIcon.setIcon(nodeIcon);
+  return this;
 }

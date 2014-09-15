@@ -1,38 +1,36 @@
 {
-  ZipFile archive;
-  if (type == ContextUnit.TYPE_JAR) {
-    archive=new JarFile(file);
-  }
- else {
-    archive=new ZipFile(file);
-  }
-  Enumeration<? extends ZipEntry> en=archive.entries();
-  while (en.hasMoreElements()) {
-    ZipEntry entr=en.nextElement();
-    ContextUnit unit=units.get(path + "/" + file.getName());
-    if (unit == null) {
-      unit=new ContextUnit(type,path,file.getName(),isOwn,saver,decdata);
-      if (type == ContextUnit.TYPE_JAR) {
-        unit.setManifest(((JarFile)archive).getManifest());
+  @SuppressWarnings("IOResourceOpenedButNotSafelyClosed") ZipFile archive=type == ContextUnit.TYPE_JAR ? new JarFile(file) : new ZipFile(file);
+  try {
+    Enumeration<? extends ZipEntry> entries=archive.entries();
+    while (entries.hasMoreElements()) {
+      ZipEntry entry=entries.nextElement();
+      ContextUnit unit=units.get(path + "/" + file.getName());
+      if (unit == null) {
+        unit=new ContextUnit(type,path,file.getName(),isOwn,saver,decompiledData);
+        if (type == ContextUnit.TYPE_JAR) {
+          unit.setManifest(((JarFile)archive).getManifest());
+        }
+        units.put(path + "/" + file.getName(),unit);
       }
-      units.put(path + "/" + file.getName(),unit);
-    }
-    String name=entr.getName();
-    if (!entr.isDirectory()) {
-      if (name.endsWith(".class")) {
-        StructClass cl=new StructClass(archive.getInputStream(entr),isOwn,loader);
-        classes.put(cl.qualifiedName,cl);
-        unit.addClass(cl,name);
-        if (loader != null) {
+      String name=entry.getName();
+      if (!entry.isDirectory()) {
+        if (name.endsWith(".class")) {
+          byte[] bytes=InterpreterUtil.getBytes(archive,entry);
+          StructClass cl=new StructClass(bytes,isOwn,loader);
+          classes.put(cl.qualifiedName,cl);
+          unit.addClass(cl,name);
           loader.addClassLink(cl.qualifiedName,new LazyLoader.Link(LazyLoader.Link.ENTRY,file.getAbsolutePath(),name));
+        }
+ else {
+          unit.addOtherEntry(file.getAbsolutePath(),name);
         }
       }
  else {
-        unit.addOtherEntry(file.getAbsolutePath(),name);
+        unit.addDirEntry(name);
       }
     }
- else     if (entr.isDirectory()) {
-      unit.addDirEntry(name);
-    }
+  }
+  finally {
+    archive.close();
   }
 }

@@ -1,12 +1,12 @@
 {
   List<VcsException> exceptions=new LinkedList<VcsException>();
-  Map<VirtualFile,Set<HgFile>> repositoriesMap=getFilesByRepository(changes);
-  for (  Map.Entry<VirtualFile,Set<HgFile>> entry : repositoriesMap.entrySet()) {
-    VirtualFile repo=entry.getKey();
+  Map<HgRepository,Set<HgFile>> repositoriesMap=getFilesByRepository(changes);
+  for (  Map.Entry<HgRepository,Set<HgFile>> entry : repositoriesMap.entrySet()) {
+    HgRepository repo=entry.getKey();
     Set<HgFile> selectedFiles=entry.getValue();
-    HgCommitCommand command=new HgCommitCommand(myProject,repo,preparedComment,myNextCommitAmend);
-    if (isMergeCommit(repo)) {
-      Set<HgFile> changedFilesNotInCommit=getChangedFilesNotInCommit(repo,selectedFiles);
+    HgCommitCommand command=new HgCommitCommand(myProject,repo.getRoot(),preparedComment,myNextCommitAmend);
+    if (isMergeCommit(repo.getRoot())) {
+      Set<HgFile> changedFilesNotInCommit=getChangedFilesNotInCommit(repo.getRoot(),selectedFiles);
       boolean partial=!changedFilesNotInCommit.isEmpty();
       if (partial) {
         final StringBuilder filesNotIncludedString=new StringBuilder();
@@ -26,6 +26,9 @@
     }
  else {
       command.setFiles(selectedFiles);
+      if (myShouldCommitSubrepos && repo.hasSubrepos()) {
+        command.setSubrepos(HgUtil.getNamesWithoutHashes(repo.getSubrepos()));
+      }
     }
     try {
       command.execute();
@@ -38,9 +41,7 @@ catch (    VcsException e) {
     }
   }
   if (myNextCommitIsPushed && exceptions.isEmpty()) {
-    final Set<VirtualFile> preselectedFiles=repositoriesMap.keySet();
-    HgRepositoryManager repositoryManager=HgUtil.getRepositoryManager(myProject);
-    final List<HgRepository> preselectedRepositories=HgActionUtil.collectRepositoriesFromFiles(repositoryManager,preselectedFiles);
+    final List<HgRepository> preselectedRepositories=ContainerUtil.newArrayList(repositoriesMap.keySet());
     UIUtil.invokeLaterIfNeeded(new Runnable(){
       public void run(){
         new VcsPushDialog(myProject,preselectedRepositories).show();

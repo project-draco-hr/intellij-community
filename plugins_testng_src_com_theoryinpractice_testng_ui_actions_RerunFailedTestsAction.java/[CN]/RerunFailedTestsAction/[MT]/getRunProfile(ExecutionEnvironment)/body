@@ -1,0 +1,59 @@
+{
+  final TestNGConfiguration configuration=(TestNGConfiguration)getModel().getProperties().getConfiguration();
+  final List<AbstractTestProxy> failedTests=getFailedTests(configuration.getProject());
+  return new MyRunProfile(configuration){
+    @Override @NotNull public Module[] getModules(){
+      return configuration.getModules();
+    }
+    @Override public RunProfileState getState(    @NotNull Executor executor,    @NotNull ExecutionEnvironment env){
+      return new TestNGRunnableState(env,configuration){
+        @Override protected SearchingForTestsTask createSearchingForTestsTask(        ServerSocket serverSocket,        final TestNGConfiguration config,        final File tempFile){
+          return new SearchingForTestsTask(serverSocket,config,tempFile,client){
+            @Override protected void fillTestObjects(            final Map<PsiClass,Collection<PsiMethod>> classes) throws CantRunException {
+              final HashMap<PsiClass,Collection<PsiMethod>> fullClassList=ContainerUtil.newHashMap();
+              super.fillTestObjects(fullClassList);
+              for (              final PsiClass aClass : fullClassList.keySet()) {
+                if (!ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
+                  @Override public Boolean compute(){
+                    return TestNGUtil.hasTest(aClass);
+                  }
+                }
+)) {
+                  classes.put(aClass,fullClassList.get(aClass));
+                }
+              }
+              final GlobalSearchScope scope=config.getConfigurationModule().getSearchScope();
+              final Project project=config.getProject();
+              for (              AbstractTestProxy proxy : failedTests) {
+                final Location location=proxy.getLocation(project,scope);
+                if (location != null) {
+                  final PsiElement element=location.getPsiElement();
+                  if (element instanceof PsiMethod && element.isValid()) {
+                    final PsiMethod psiMethod=(PsiMethod)element;
+                    PsiClass psiClass=psiMethod.getContainingClass();
+                    if (psiClass != null && psiClass.hasModifierProperty(PsiModifier.ABSTRACT)) {
+                      final AbstractTestProxy parent=proxy.getParent();
+                      final PsiElement elt=parent != null ? parent.getLocation(project,scope).getPsiElement() : null;
+                      if (elt instanceof PsiClass) {
+                        psiClass=(PsiClass)elt;
+                      }
+                    }
+                    Collection<PsiMethod> psiMethods=classes.get(psiClass);
+                    if (psiMethods == null) {
+                      psiMethods=new ArrayList<PsiMethod>();
+                      classes.put(psiClass,psiMethods);
+                    }
+                    psiMethods.add(psiMethod);
+                  }
+                }
+              }
+            }
+          }
+;
+        }
+      }
+;
+    }
+  }
+;
+}

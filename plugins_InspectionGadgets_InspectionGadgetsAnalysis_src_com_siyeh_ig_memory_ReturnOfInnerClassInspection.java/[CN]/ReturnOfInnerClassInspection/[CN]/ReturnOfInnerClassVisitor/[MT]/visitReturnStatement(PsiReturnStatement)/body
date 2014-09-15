@@ -1,0 +1,37 @@
+{
+  super.visitReturnStatement(statement);
+  final PsiExpression expression=ParenthesesUtils.stripParentheses(statement.getReturnValue());
+  if (expression == null) {
+    return;
+  }
+  final PsiMethod method=PsiTreeUtil.getParentOfType(statement,PsiMethod.class,true,PsiLambdaExpression.class);
+  if (method == null || method.hasModifierProperty(PsiModifier.PRIVATE)) {
+    return;
+  }
+  if (expression instanceof PsiNewExpression) {
+    final PsiNewExpression newExpression=(PsiNewExpression)expression;
+    final PsiAnonymousClass anonymousClass=newExpression.getAnonymousClass();
+    if (anonymousClass != null) {
+      registerStatementError(statement,ClassType.ANONYMOUS_CLASS);
+      return;
+    }
+  }
+  final PsiType type=expression.getType();
+  if (!(type instanceof PsiClassType)) {
+    return;
+  }
+  final PsiClassType classType=(PsiClassType)type;
+  final PsiClass aClass=classType.resolve();
+  if (aClass == null) {
+    return;
+  }
+  if (PsiUtil.isLocalClass(aClass)) {
+    registerStatementError(statement,ClassType.LOCAL_CLASS,aClass);
+    return;
+  }
+  final PsiClass containingClass=aClass.getContainingClass();
+  if (containingClass == null || aClass.hasModifierProperty(PsiModifier.STATIC)) {
+    return;
+  }
+  registerStatementError(statement,ClassType.INNER_CLASS,aClass);
+}
