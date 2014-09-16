@@ -15,16 +15,33 @@
   final boolean useSudo=!canCreate && !SystemInfo.isWindows && askForSudo;
   try {
     final Process process;
+    final Map<String,String> environment=PySdkUtil.mergeEnvVariables(System.getenv(),ImmutableMap.of("PYTHONUNBUFFERED","1"));
     if (useSudo) {
-      process=ExecUtil.sudo(cmdline,"Please enter your password to make changes in system packages: ",workingDir,null);
+      process=ExecUtil.sudo(cmdline,"Please enter your password to make changes in system packages: ",workingDir,environment);
     }
  else {
-      process=ExecUtil.exec(cmdline,workingDir,null);
+      process=ExecUtil.exec(cmdline,workingDir,environment);
     }
     final CapturingProcessHandler handler=new CapturingProcessHandler(process);
     final ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
     final ProcessOutput result;
     if (indicator != null) {
+      handler.addProcessListener(new ProcessAdapter(){
+        @Override public void onTextAvailable(        ProcessEvent event,        Key outputType){
+          if (outputType == ProcessOutputTypes.STDOUT || outputType == ProcessOutputTypes.STDERR) {
+            for (            String line : StringUtil.splitByLines(event.getText())) {
+              final String trimmed=line.trim();
+              if (isMeaningfulOutput(trimmed)) {
+                indicator.setText2(trimmed);
+              }
+            }
+          }
+        }
+        private boolean isMeaningfulOutput(        @NotNull String trimmed){
+          return trimmed.length() > 3;
+        }
+      }
+);
       result=handler.runProcessWithProgressIndicator(indicator);
     }
  else {
