@@ -24,7 +24,12 @@
   }
   GradleExecutionHelper.prepare(buildActionExecutor,resolverCtx.getExternalSystemTaskId(),resolverCtx.getSettings(),resolverCtx.getListener(),parametersList.getParameters(),commandLineArgs,resolverCtx.getConnection());
   ProjectImportAction.AllModels allModels;
+  final CancellationTokenSource cancellationTokenSource=GradleConnector.newCancellationTokenSource();
   try {
+    buildActionExecutor.withCancellationToken(cancellationTokenSource.token());
+synchronized (myCancellationMap) {
+      myCancellationMap.putValue(resolverCtx.getExternalSystemTaskId(),cancellationTokenSource);
+    }
     allModels=buildActionExecutor.run();
     if (allModels == null) {
       throw new IllegalStateException("Unable to get project model for the project: " + resolverCtx.getProjectPath());
@@ -35,6 +40,11 @@
     ModelBuilder<? extends IdeaProject> modelBuilder=myHelper.getModelBuilder(aClass,resolverCtx.getExternalSystemTaskId(),resolverCtx.getSettings(),resolverCtx.getConnection(),resolverCtx.getListener(),parametersList.getParameters());
     final IdeaProject ideaProject=modelBuilder.get();
     allModels=new ProjectImportAction.AllModels(ideaProject);
+  }
+ finally {
+synchronized (myCancellationMap) {
+      myCancellationMap.remove(resolverCtx.getExternalSystemTaskId(),cancellationTokenSource);
+    }
   }
   final BuildEnvironment buildEnvironment=getBuildEnvironment(resolverCtx);
   allModels.setBuildEnvironment(buildEnvironment);
