@@ -1,0 +1,41 @@
+{
+  super(project,true);
+  IcsManager icsManager=IcsManager.OBJECT$.getInstance();
+  urlTextField.setText(icsManager.getRepositoryManager().getUpstream());
+  urlTextField.addBrowseFolderListener(new TextBrowseFolderListener(FileChooserDescriptorFactory.createSingleFolderDescriptor()));
+  SyncType[] syncTypes=SyncType.values();
+  if (SystemInfo.isMac) {
+    syncTypes=ArrayUtil.reverseArray(syncTypes);
+  }
+  syncActions=new Action[syncTypes.length];
+  for (int i=0, n=syncTypes.length; i < n; i++) {
+    final SyncType syncType=syncTypes[i];
+    syncActions[i]=new DialogWrapperAction(IcsBundle.OBJECT$.message("action." + (syncType == SyncType.MERGE ? "Merge" : (syncType == SyncType.RESET_TO_THEIRS ? "ResetToTheirs" : "ResetToMy")) + "Settings.text")){
+      @Override protected void doAction(      ActionEvent event){
+        if (!saveRemoteRepositoryUrl()) {
+          return;
+        }
+        try {
+          IcsManager.OBJECT$.getInstance().sync(syncType,project);
+        }
+ catch (        Exception e) {
+          Messages.showErrorDialog(getContentPane(),StringUtil.notNullize(e.getMessage(),"Internal error"),IcsBundle.OBJECT$.message("sync.rejected.title"));
+          return;
+        }
+        ActionsPackage.getNOTIFICATION_GROUP().createNotification(IcsBundle.OBJECT$.message("sync.done.message"),NotificationType.INFORMATION).notify(project);
+        doOKAction();
+      }
+    }
+;
+  }
+  urlTextField.getTextField().getDocument().addDocumentListener(new DocumentAdapter(){
+    @Override protected void textChanged(    DocumentEvent e){
+      updateSyncButtonState();
+    }
+  }
+);
+  updateSyncButtonState();
+  setTitle(IcsBundle.OBJECT$.message("settings.panel.title"));
+  setResizable(false);
+  init();
+}
