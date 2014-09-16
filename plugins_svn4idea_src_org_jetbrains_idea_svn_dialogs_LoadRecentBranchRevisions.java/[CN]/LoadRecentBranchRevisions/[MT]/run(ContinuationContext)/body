@@ -1,45 +1,12 @@
 {
-  final ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
-  final SvnCommittedChangesProvider committedChangesProvider=(SvnCommittedChangesProvider)myMergeContext.getVcs().getCommittedChangesProvider();
-  final ChangeBrowserSettings settings=new ChangeBrowserSettings();
-  if (myFirst > 0) {
-    settings.CHANGE_BEFORE=String.valueOf(myFirst);
-    settings.USE_CHANGE_BEFORE_FILTER=true;
-  }
-  String local=SVNPathUtil.getRelativePath(myMergeContext.getWcInfo().getRepositoryRoot(),myMergeContext.getWcInfo().getRootUrl());
-  final String relativeLocal=(local.startsWith("/") ? local : "/" + local);
-  String relativeBranch=SVNPathUtil.getRelativePath(myMergeContext.getWcInfo().getRepositoryRoot(),myMergeContext.getSourceUrl());
-  relativeBranch=(relativeBranch.startsWith("/") ? relativeBranch : "/" + relativeBranch);
-  ProgressManager.progress2(SvnBundle.message("progress.text2.collecting.history",myMergeContext.getSourceUrl() + (myFirst > 0 ? ("@" + myFirst) : "")));
-  final List<Pair<SvnChangeList,LogHierarchyNode>> list=new ArrayList<Pair<SvnChangeList,LogHierarchyNode>>();
+  List<Pair<SvnChangeList,LogHierarchyNode>> changeLists=null;
   try {
-    committedChangesProvider.getCommittedChangesWithMergedRevisons(settings,new SvnRepositoryLocation(myMergeContext.getSourceUrl()),myBunchSize + (myFirst > 0 ? 2 : 1),new PairConsumer<SvnChangeList,LogHierarchyNode>(){
-      public void consume(      SvnChangeList svnList,      LogHierarchyNode tree){
-        indicator.setText2(SvnBundle.message("progress.text2.processing.revision",svnList.getNumber()));
-        list.add(Pair.create(svnList,tree));
-      }
-    }
-);
-  }
- catch (  VcsException e) {
-    context.handleException(e,true);
-    return;
-  }
-  myCommittedChangeLists=new ArrayList<CommittedChangeList>();
-  for (  Pair<SvnChangeList,LogHierarchyNode> pair : list) {
-    if (myFirst > 0 && myFirst == pair.getFirst().getNumber())     continue;
-    myCommittedChangeLists.add(pair.getFirst());
-  }
-  try {
-    myHelper=new OneShotMergeInfoHelper(myMergeContext);
-    ProgressManager.progress2("Calculating not merged revisions");
-    myHelper.prepare();
+    changeLists=getChangeListsBefore(myFirst);
   }
  catch (  VcsException e) {
     context.handleException(e,true);
   }
-  myLastLoaded=myCommittedChangeLists.size() < myBunchSize + 1;
-  if (myCommittedChangeLists.size() > myBunchSize) {
-    myCommittedChangeLists=myCommittedChangeLists.subList(0,myBunchSize);
+  if (changeLists != null) {
+    initialize(context,changeLists);
   }
 }
