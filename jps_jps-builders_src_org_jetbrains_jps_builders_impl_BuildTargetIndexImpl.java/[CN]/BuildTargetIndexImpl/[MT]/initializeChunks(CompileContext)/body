@@ -2,14 +2,32 @@
   if (myTargetChunks != null) {
     return;
   }
-  final List<? extends BuildTarget<?>> allTargets=getAllTargets();
+  List<BuildTarget<?>> allTargets=getAllTargets();
   TargetOutputIndex outputIndex=new TargetOutputIndexImpl(allTargets,context);
+  Map<BuildTarget<?>,Collection<BuildTarget<?>>> dummyTargetDependencies=new HashMap<BuildTarget<?>,Collection<BuildTarget<?>>>();
+  final List<BuildTarget<?>> realTargets=new ArrayList<BuildTarget<?>>(allTargets.size());
   for (  BuildTarget<?> target : allTargets) {
-    myDependencies.put(target,target.computeDependencies(this,outputIndex));
+    if (isDummy(target)) {
+      dummyTargetDependencies.put(target,target.computeDependencies(myRegistry,outputIndex));
+    }
+ else {
+      realTargets.add(target);
+    }
+  }
+  for (  BuildTarget<?> target : realTargets) {
+    Collection<BuildTarget<?>> dependencies=target.computeDependencies(this,outputIndex);
+    Collection<BuildTarget<?>> realDependencies;
+    if (!ContainerUtil.intersects(dependencies,dummyTargetDependencies.keySet())) {
+      realDependencies=dependencies;
+    }
+ else {
+      realDependencies=includeTransitiveDependenciesOfDummyTargets(dependencies,dummyTargetDependencies);
+    }
+    myDependencies.put(target,realDependencies);
   }
   GraphGenerator<BuildTarget<?>> graph=GraphGenerator.create(CachingSemiGraph.create(new GraphGenerator.SemiGraph<BuildTarget<?>>(){
     @Override public Collection<BuildTarget<?>> getNodes(){
-      return myAllTargets;
+      return realTargets;
     }
     @Override public Iterator<BuildTarget<?>> getIn(    BuildTarget<?> n){
       return myDependencies.get(n).iterator();

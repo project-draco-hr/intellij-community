@@ -1,0 +1,33 @@
+{
+  return GraphGenerator.create(new CachingSemiGraph<ModuleSourceSet>(new GraphGenerator.SemiGraph<ModuleSourceSet>(){
+    @Override public Collection<ModuleSourceSet> getNodes(){
+      Module[] modules=provider.getModules();
+      List<ModuleSourceSet> result=new ArrayList<ModuleSourceSet>(modules.length * 2);
+      for (      Module module : modules) {
+        addSourceSetIfAny(result,module,ModuleSourceSet.Type.PRODUCTION,provider);
+        addSourceSetIfAny(result,module,ModuleSourceSet.Type.TEST,provider);
+      }
+      return result;
+    }
+    @Override public Iterator<ModuleSourceSet> getIn(    final ModuleSourceSet n){
+      ModuleRootModel model=provider.getRootModel(n.getModule());
+      OrderEnumerator enumerator=model.orderEntries().compileOnly();
+      if (n.getType() == ModuleSourceSet.Type.PRODUCTION) {
+        enumerator=enumerator.productionOnly();
+      }
+      final List<ModuleSourceSet> deps=new ArrayList<ModuleSourceSet>();
+      enumerator.forEachModule(new Processor<Module>(){
+        @Override public boolean process(        Module module){
+          addSourceSetIfAny(deps,module,n.getType(),provider);
+          return true;
+        }
+      }
+);
+      if (n.getType() == ModuleSourceSet.Type.TEST) {
+        addSourceSetIfAny(deps,n.getModule(),ModuleSourceSet.Type.PRODUCTION,provider);
+      }
+      return deps.iterator();
+    }
+  }
+));
+}
