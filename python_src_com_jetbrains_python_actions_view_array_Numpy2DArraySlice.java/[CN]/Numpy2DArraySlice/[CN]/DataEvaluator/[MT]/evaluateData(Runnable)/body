@@ -1,0 +1,55 @@
+{
+  final XDebuggerEvaluator.XEvaluationCallback computeChildrenCallback=new XDebuggerEvaluator.XEvaluationCallback(){
+    @Override public void evaluated(    @NotNull XValue result){
+      String name=((PyDebugValue)result).getName();
+      final XValueNodeImpl node=new XValueNodeImpl(myValueProvider.getTree(),null,name,result);
+      DebuggerUIUtil.invokeLater(new Runnable(){
+        @Override public void run(){
+          node.startComputingChildren();
+        }
+      }
+);
+    }
+    @Override public void errorOccurred(    @NotNull String errorMessage){
+    }
+  }
+;
+  XDebuggerTreeListener treeListener=new XDebuggerTreeListener(){
+    @Override public void nodeLoaded(    @NotNull RestorableStateNode node,    String name){
+    }
+    @Override public void childrenLoaded(    @NotNull XDebuggerTreeNode node,    @NotNull List<XValueContainerNode<?>> children,    boolean last){
+      String fullName=((XValueNodeImpl)node).getName();
+      if (fullName != null && fullName.contains("[")) {
+        fullName=fullName.substring(0,fullName.lastIndexOf("["));
+      }
+      int row=-1;
+      if (fullName != null && fullName.contains("[")) {
+        row=Integer.parseInt(fullName.substring(fullName.lastIndexOf('[') + 1,fullName.length() - 1));
+      }
+ else       if (fullName != null && !fullName.contains("[")) {
+        row=0;
+      }
+      if (row != -1 && myData[row][0] == null) {
+        for (int i=0; i < node.getChildCount() - 1; i++) {
+          myData[row][i]=((XValueNodeImpl)node.getChildAt(i + 1)).getRawValue();
+        }
+        myFilledRows+=1;
+      }
+      if (myFilledRows == myRows + myFullSlice.get(myFullSlice.size() - 2).getFirst()) {
+        node.getTree().removeTreeListener(this);
+        callback.run();
+      }
+ else {
+        nextRow+=1;
+        startEvalNextRow(computeChildrenCallback);
+      }
+    }
+  }
+;
+  int size=myFullSlice.size();
+  myData=new Object[myFullSlice.get(size - 2).getSecond() - myFullSlice.get(size - 2).getFirst()][myFullSlice.get(size - 1).getSecond() - myFullSlice.get(size - 1).getFirst()];
+  myRows=myData.length;
+  myValueProvider.getTree().addTreeListener(treeListener);
+  nextRow=myFullSlice.get(size - 2).getFirst();
+  startEvalNextRow(computeChildrenCallback);
+}
