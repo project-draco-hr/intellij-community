@@ -1,16 +1,16 @@
 {
-  final Graph<Chunk<ModuleRootModel>> graph=ModuleCompilerUtil.toChunkGraph(myContext.getModulesConfigurator().createGraphGenerator());
-  final Collection<Chunk<ModuleRootModel>> chunks=graph.getNodes();
+  Graph<ModuleSourceSet> graph=ModuleCompilerUtil.createModuleSourceDependenciesGraph(myContext.getModulesConfigurator());
+  Collection<Chunk<ModuleSourceSet>> allSourceSetCycles=extractCycles(GraphAlgorithms.getInstance().computeStronglyConnectedComponents(graph));
+  List<Chunk<ModuleSourceSet>> sourceSetCycles=filterDuplicates(allSourceSetCycles);
   List<String> cycles=new ArrayList<String>();
-  for (  Chunk<ModuleRootModel> chunk : chunks) {
-    final Set<ModuleRootModel> modules=chunk.getNodes();
+  for (  Chunk<ModuleSourceSet> chunk : sourceSetCycles) {
+    final Set<ModuleSourceSet> sourceSets=chunk.getNodes();
     List<String> names=new ArrayList<String>();
-    for (    ModuleRootModel model : modules) {
-      names.add(model.getModule().getName());
+    for (    ModuleSourceSet sourceSet : sourceSets) {
+      String name=sourceSet.getDisplayName();
+      names.add(names.isEmpty() ? name : StringUtil.decapitalize(name));
     }
-    if (modules.size() > 1) {
-      cycles.add(StringUtil.join(names,", "));
-    }
+    cycles.add(StringUtil.join(names,", "));
   }
   if (!cycles.isEmpty()) {
     final Project project=myContext.getProject();
@@ -27,7 +27,7 @@
       description=ProjectBundle.message("module.circular.dependency.warning.description",cyclesString);
     }
  else {
-      message=ProjectBundle.message("module.circular.dependency.warning.short",cycles.get(0));
+      message=ProjectBundle.message("module.circular.dependency.warning.short",StringUtil.decapitalize(cycles.get(0)));
       description=null;
     }
     problemsHolder.registerProblem(new ProjectStructureProblemDescription(message,description,place,ProjectStructureProblemType.warning("module-circular-dependency"),Collections.<ConfigurationErrorQuickFix>emptyList()));
