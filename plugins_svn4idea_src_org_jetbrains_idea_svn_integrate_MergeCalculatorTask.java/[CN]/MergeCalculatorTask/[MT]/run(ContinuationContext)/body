@@ -1,58 +1,13 @@
 {
-  SvnBranchPointsCalculator.WrapperInvertor copyDataValue=null;
-  try {
-    copyDataValue=myCopyData.get().get();
-  }
- catch (  VcsException e) {
-    finishWithError(context,"Merge start wasn't found",Collections.singletonList(e));
-    return;
-  }
-  if (copyDataValue == null) {
-    finishWithError(context,"Merge start wasn't found",true);
-    return;
-  }
-  final ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
-  myIsReintegrate=copyDataValue.isInvertedSense();
-  if (!myMergeContext.getWcInfo().getFormat().supportsMergeInfo())   return;
-  final SvnBranchPointsCalculator.BranchCopyData data=copyDataValue.getTrue();
-  final long sourceLatest=data.getTargetRevision();
-  final SvnCommittedChangesProvider committedChangesProvider=(SvnCommittedChangesProvider)myMergeContext.getVcs().getCommittedChangesProvider();
-  final ChangeBrowserSettings settings=new ChangeBrowserSettings();
-  settings.CHANGE_AFTER=Long.toString(sourceLatest);
-  settings.USE_CHANGE_AFTER_FILTER=true;
-  String local=SVNPathUtil.getRelativePath(myMergeContext.getWcInfo().getRepositoryRoot(),myMergeContext.getWcInfo().getRootUrl());
-  final String relativeLocal=(local.startsWith("/") ? local : "/" + local);
-  String relativeBranch=SVNPathUtil.getRelativePath(myMergeContext.getWcInfo().getRepositoryRoot(),myMergeContext.getSourceUrl());
-  relativeBranch=(relativeBranch.startsWith("/") ? relativeBranch : "/" + relativeBranch);
-  final LinkedList<Pair<SvnChangeList,LogHierarchyNode>> list=new LinkedList<Pair<SvnChangeList,LogHierarchyNode>>();
-  try {
-    committedChangesProvider.getCommittedChangesWithMergedRevisons(settings,new SvnRepositoryLocation(myMergeContext.getSourceUrl()),0,new PairConsumer<SvnChangeList,LogHierarchyNode>(){
-      public void consume(      SvnChangeList svnList,      LogHierarchyNode tree){
-        indicator.checkCanceled();
-        if (sourceLatest >= svnList.getNumber())         return;
-        list.add(Pair.create(svnList,tree));
-      }
+  SvnBranchPointsCalculator.WrapperInvertor copyPoint=getCopyPoint(context);
+  if (copyPoint != null && myMergeContext.getWcInfo().getFormat().supportsMergeInfo()) {
+    List<Pair<SvnChangeList,LogHierarchyNode>> afterCopyPointChangeLists=getChangeListsAfter(context,copyPoint.getTrue().getTargetRevision());
+    List<CommittedChangeList> notMergedChangeLists=getNotMergedChangeLists(afterCopyPointChangeLists);
+    if (!notMergedChangeLists.isEmpty()) {
+      context.next(new ShowRevisionSelector(copyPoint,notMergedChangeLists));
     }
-);
-  }
- catch (  VcsException e) {
-    finishWithError(context,"Checking revisions for merge fault",Collections.singletonList(e));
-  }
-  indicator.setText("Checking merge information...");
-  for (  Pair<SvnChangeList,LogHierarchyNode> pair : list) {
-    final SvnChangeList svnList=pair.getFirst();
-    final SvnMergeInfoCache.MergeCheckResult checkResult=myMergeChecker.checkList(svnList);
-    indicator.setText2("Processing revision " + svnList.getNumber());
-    if (SvnMergeInfoCache.MergeCheckResult.NOT_MERGED.equals(checkResult)) {
-      boolean localChange=checkListForPaths(relativeLocal,relativeBranch,pair);
-      if (!localChange) {
-        myNotMerged.add(svnList);
-      }
+ else {
+      finishWithError(context,"Everything is up-to-date",false);
     }
   }
-  if (myNotMerged.isEmpty()) {
-    finishWithError(context,"Everything is up-to-date",false);
-    return;
-  }
-  context.next(new ShowRevisionSelector(copyDataValue));
 }

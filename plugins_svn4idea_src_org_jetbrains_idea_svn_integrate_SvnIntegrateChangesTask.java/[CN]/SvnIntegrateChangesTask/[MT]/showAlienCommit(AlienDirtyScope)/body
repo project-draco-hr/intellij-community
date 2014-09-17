@@ -1,0 +1,26 @@
+{
+  new Task.Backgroundable(myVcs.getProject(),SvnBundle.message("action.Subversion.integrate.changes.collecting.changes.to.commit.task.title")){
+    private final GatheringChangelistBuilder changesBuilder=new GatheringChangelistBuilder(myVcs,myAccumulatedFiles);
+    private final Ref<String> caughtError=new Ref<String>();
+    @Override public void run(    @NotNull ProgressIndicator indicator){
+      indicator.setIndeterminate(true);
+      if (!myVcs.getProject().isDisposed()) {
+        try {
+          new SvnChangeProvider(myVcs).getChanges(dirtyScope,changesBuilder,indicator,null);
+        }
+ catch (        VcsException e) {
+          caughtError.set(SvnBundle.message("action.Subversion.integrate.changes.error.unable.to.collect.changes.text",e.getMessage()));
+        }
+      }
+    }
+    @Override public void onSuccess(){
+      if (!caughtError.isNull()) {
+        VcsBalloonProblemNotifier.showOverVersionControlView(myVcs.getProject(),caughtError.get(),MessageType.ERROR);
+      }
+ else       if (!changesBuilder.getChanges().isEmpty()) {
+        CommitChangeListDialog.commitAlienChanges(myProject,changesBuilder.getChanges(),myVcs,myMerger.getComment(),myMerger.getComment());
+      }
+    }
+  }
+.queue();
+}
