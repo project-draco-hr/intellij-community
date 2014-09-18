@@ -1,4 +1,15 @@
 {
+  boolean installManagement=false;
+  final PyPackageManager manager=PyPackageManager.getInstance(mySdk);
+  if (!manager.hasManagement(false)) {
+    final int result=Messages.showYesNoDialog(project,"Python packaging tools are required for installing packages. Do you want to " + "install 'pip' and 'setuptools' for your interpreter?","Install Python Packaging Tools",Messages.getQuestionIcon());
+    if (result == Messages.YES) {
+      installManagement=true;
+    }
+ else {
+      return;
+    }
+  }
   final List<PyRequirement> chosen;
   if (myUnsatisfied.size() > 1) {
     final PyChooseRequirementsDialog dialog=new PyChooseRequirementsDialog(project,myUnsatisfied);
@@ -10,14 +21,19 @@
   if (chosen.isEmpty()) {
     return;
   }
-  final PyPackageManagerImpl.UI ui=new PyPackageManagerImpl.UI(project,mySdk,new PyPackageManagerImpl.UI.Listener(){
-    @Override public void started(){
-      setRunningPackagingTasks(myModule,true);
+  if (installManagement) {
+    final PyPackageManagerUI ui=new PyPackageManagerUI(project,mySdk,new UIListener(myModule){
+      @Override public void finished(      List<PyExternalProcessException> exceptions){
+        super.finished(exceptions);
+        if (exceptions.isEmpty()) {
+          installRequirements(project,chosen);
+        }
+      }
     }
-    @Override public void finished(    List<PyExternalProcessException> exceptions){
-      setRunningPackagingTasks(myModule,false);
-    }
-  }
 );
-  ui.install(chosen,Collections.<String>emptyList());
+    ui.installManagement();
+  }
+ else {
+    installRequirements(project,chosen);
+  }
 }

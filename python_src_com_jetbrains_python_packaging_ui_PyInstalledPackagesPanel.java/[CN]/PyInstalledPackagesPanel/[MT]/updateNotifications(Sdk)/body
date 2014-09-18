@@ -6,19 +6,8 @@
   final Application application=ApplicationManager.getApplication();
   application.executeOnPooledThread(new Runnable(){
     @Override public void run(){
-      PyExternalProcessException exc=null;
-      try {
-        PyPackageManagerImpl packageManager=(PyPackageManagerImpl)PyPackageManager.getInstance(selectedSdk);
-        myHasSetuptools=packageManager.findInstalledPackage(PyPackageManagerImpl.PACKAGE_SETUPTOOLS) != null;
-        if (!myHasSetuptools) {
-          myHasSetuptools=packageManager.findInstalledPackage(PyPackageManagerImpl.PACKAGE_DISTRIBUTE) != null;
-        }
-        myHasPip=packageManager.findInstalledPackage(PyPackageManagerImpl.PACKAGE_PIP) != null;
-      }
- catch (      PyExternalProcessException e) {
-        exc=e;
-      }
-      final PyExternalProcessException externalProcessException=exc;
+      PyPackageManager packageManager=PyPackageManager.getInstance(selectedSdk);
+      myHasManagement=packageManager.hasManagement(false);
       application.invokeLater(new Runnable(){
         @Override public void run(){
           if (selectedSdk == getSelectedSdk()) {
@@ -29,38 +18,21 @@
             myNotificationArea.hide();
             if (!invalid) {
               String text=null;
-              if (externalProcessException != null) {
-                final int retCode=externalProcessException.getRetcode();
-                if (retCode == PyPackageManagerImpl.ERROR_NO_PIP) {
-                  myHasPip=false;
-                }
- else                 if (retCode == PyPackageManagerImpl.ERROR_NO_SETUPTOOLS) {
-                  myHasSetuptools=false;
-                }
- else {
-                  text=externalProcessException.getMessage();
-                }
-                final boolean hasPackagingTools=myHasPip && myHasSetuptools;
-                allowCreateVirtualEnv&=!hasPackagingTools;
-                if (externalProcessException.hasHandler()) {
-                  final String key=externalProcessException.getHandler().first;
-                  myNotificationArea.addLinkHandler(key,new Runnable(){
-                    @Override public void run(){
-                      externalProcessException.getHandler().second.run();
-                      myNotificationArea.removeLinkHandler(key);
-                      updateNotifications(selectedSdk);
+              if (!myHasManagement) {
+                myNotificationArea.addLinkHandler(INSTALL_MANAGEMENT,new Runnable(){
+                  @Override public void run(){
+                    final Sdk sdk=getSelectedSdk();
+                    if (sdk != null) {
+                      installManagementTools(sdk);
                     }
+                    myNotificationArea.removeLinkHandler(INSTALL_MANAGEMENT);
+                    updateNotifications(selectedSdk);
                   }
+                }
 );
-                }
               }
-              if (text == null) {
-                if (!myHasSetuptools) {
-                  text="Python package management tools not found. <a href=\"" + INSTALL_SETUPTOOLS + "\">Install 'setuptools'</a>";
-                }
- else                 if (!myHasPip) {
-                  text="Python packaging tool 'pip' not found. <a href=\"" + INSTALL_PIP + "\">Install 'pip'</a>";
-                }
+              if (!myHasManagement) {
+                text="Python packaging tools not found. <a href=\"" + INSTALL_MANAGEMENT + "\">Install packaging tools</a>";
               }
               if (text != null) {
                 if (allowCreateVirtualEnv) {
@@ -69,7 +41,7 @@
                 myNotificationArea.showWarning(text);
               }
             }
-            myInstallButton.setEnabled(!invalid && externalProcessException == null && myHasPip);
+            myInstallButton.setEnabled(!invalid && myHasManagement);
           }
         }
       }

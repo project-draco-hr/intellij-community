@@ -1,0 +1,45 @@
+{
+  PsiCodeBlock body=method.getBody();
+  if (body == null)   return false;
+  final Ref<Boolean> impureFound=Ref.create(false);
+  final Ref<Boolean> hasReturns=Ref.create(false);
+  final List<PsiMethodCallExpression> calls=ContainerUtil.newArrayList();
+  body.accept(new JavaRecursiveElementWalkingVisitor(){
+    @Override public void visitAssignmentExpression(    PsiAssignmentExpression expression){
+      if (!isLocalVarReference(expression.getLExpression())) {
+        impureFound.set(true);
+      }
+      super.visitAssignmentExpression(expression);
+    }
+    @Override public void visitReturnStatement(    PsiReturnStatement statement){
+      if (statement.getReturnValue() != null) {
+        hasReturns.set(true);
+      }
+      super.visitReturnStatement(statement);
+    }
+    @Override public void visitPrefixExpression(    PsiPrefixExpression expression){
+      if (isMutatingOperation(expression.getOperationTokenType()) && !isLocalVarReference(expression.getOperand())) {
+        impureFound.set(true);
+      }
+      super.visitPrefixExpression(expression);
+    }
+    private boolean isMutatingOperation(    IElementType operationTokenType){
+      return operationTokenType == JavaTokenType.PLUSPLUS || operationTokenType == JavaTokenType.MINUSMINUS;
+    }
+    @Override public void visitPostfixExpression(    PsiPostfixExpression expression){
+      if (isMutatingOperation(expression.getOperationTokenType()) && !isLocalVarReference(expression.getOperand())) {
+        impureFound.set(true);
+      }
+      super.visitPostfixExpression(expression);
+    }
+    @Override public void visitMethodCallExpression(    PsiMethodCallExpression expression){
+      calls.add(expression);
+      super.visitMethodCallExpression(expression);
+    }
+  }
+);
+  if (impureFound.get() || calls.size() > 1 || !hasReturns.get())   return false;
+  if (calls.isEmpty())   return true;
+  final PsiMethod called=calls.get(0).resolveMethod();
+  return called != null && ControlFlowAnalyzer.isPure(called);
+}

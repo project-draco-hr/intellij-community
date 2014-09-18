@@ -1,0 +1,33 @@
+{
+  myShouldAddComma=false;
+  if (!(file instanceof JsonFile) || !super.checkAvailable(editor,file,info,down)) {
+    return false;
+  }
+  Pair<PsiElement,PsiElement> movedElementRange=getElementRange(editor,file,info.toMove);
+  if (!isValidElementRange(movedElementRange)) {
+    return false;
+  }
+  movedElementRange=expandCommentsInRange(movedElementRange);
+  info.toMove=new LineRange(movedElementRange.getFirst(),movedElementRange.getSecond());
+  final int lineCount=editor.getDocument().getLineCount();
+  if (down) {
+    info.toMove2=new LineRange(info.toMove.endLine,Math.min(info.toMove.endLine + 1,lineCount));
+  }
+ else {
+    info.toMove2=new LineRange(Math.max(info.toMove.startLine - 1,0),info.toMove.startLine);
+  }
+  if (movedElementRange.getFirst() instanceof PsiComment && movedElementRange.getSecond() instanceof PsiComment) {
+    return true;
+  }
+  final Pair<PsiElement,PsiElement> destElementRange=getElementRange(editor,file,info.toMove2);
+  if (isValidElementRange(destElementRange) && movedElementRange.getFirst().getParent() == destElementRange.getSecond().getParent()) {
+    final PsiElement commonParent=movedElementRange.getFirst().getParent();
+    final PsiElement lowerRightElement=down ? destElementRange.getSecond() : movedElementRange.getSecond();
+    if (lowerRightElement instanceof JsonElement) {
+      if (commonParent instanceof JsonArray && notFollowedByNextElementOrComma(lowerRightElement,JsonValue.class) || commonParent instanceof JsonObject && notFollowedByNextElementOrComma(lowerRightElement,JsonProperty.class)) {
+        myShouldAddComma=true;
+      }
+    }
+  }
+  return true;
+}

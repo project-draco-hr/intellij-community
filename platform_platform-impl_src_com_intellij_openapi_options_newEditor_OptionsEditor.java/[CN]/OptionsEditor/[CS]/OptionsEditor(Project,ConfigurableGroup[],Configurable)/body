@@ -1,6 +1,12 @@
 {
   myProperties=PropertiesComponent.getInstance(project);
-  mySearch=new MySearchField(){
+  mySettings=new Settings(groups){
+    @Override protected ActionCallback selectImpl(    Configurable configurable){
+      return OptionsEditor.this.select(configurable,"");
+    }
+  }
+;
+  mySearch=new SettingsSearch(){
     @Override protected void onTextKeyEvent(    final KeyEvent e){
       if (myTreeView != null) {
         myTreeView.myTree.processKeyEvent(e);
@@ -9,8 +15,31 @@
         myTree.processTextEvent(e);
       }
     }
+    @Override void delegateKeyEvent(    KeyEvent event){
+      myFilter.myDocumentWasChanged=false;
+      try {
+        super.delegateKeyEvent(event);
+      }
+  finally {
+        if (myFilter.myDocumentWasChanged && !isFilterFieldVisible()) {
+          setFilterFieldVisible(true,false,false);
+        }
+      }
+    }
   }
 ;
+  if (Registry.is("ide.new.settings.dialog")) {
+    final JTextField editor=mySearch.getTextEditor();
+    if (!SystemInfo.isMac) {
+      editor.putClientProperty("JTextField.variant","search");
+      if (!(editor.getUI() instanceof DarculaTextFieldUI)) {
+        editor.setUI((DarculaTextFieldUI)DarculaTextFieldUI.createUI(editor));
+        editor.setBorder(new DarculaTextBorder());
+      }
+    }
+    mySearch.setBackground(UIUtil.getSidePanelColor());
+    mySearch.setBorder(new EmptyBorder(5,10,2,10));
+  }
   myFilter=new SettingsFilter(project,groups,mySearch){
     @Override Configurable getConfigurable(    SimpleNode node){
       if (node instanceof OptionsTree.EditorNode) {
@@ -40,13 +69,13 @@
 ;
   if (Registry.is("ide.new.settings.dialog")) {
     myTreeView=new SettingsTreeView(myFilter,groups);
-    myTreeView.myTree.addKeyListener(myTreeKeyListener);
+    myTreeView.myTree.addKeyListener(mySearch);
     myTree=null;
   }
  else {
     myTreeView=null;
     myTree=new OptionsTree(myFilter,groups);
-    myTree.addKeyListener(myTreeKeyListener);
+    myTree.addKeyListener(mySearch);
   }
   getContext().addColleague(myTreeView != null ? myTreeView : myTree);
   Disposer.register(this,myTreeView != null ? myTreeView : myTree);
