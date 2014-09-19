@@ -1,54 +1,27 @@
 {
   if (element instanceof JsonStringLiteral) {
+    final JsonStringLiteral stringLiteral=(JsonStringLiteral)element;
+    final int elementOffset=element.getTextOffset();
     if (JsonPsiUtil.isPropertyKey(element)) {
       holder.createInfoAnnotation(element,debug ? "instance field" : null).setTextAttributes(DefaultLanguageHighlighterColors.INSTANCE_FIELD);
     }
-    String text=element.getText();
-    int offset=element.getTextOffset();
-    int length=text.length();
+    final String text=element.getText();
+    final int length=text.length();
     if (length <= 1 || text.charAt(0) != text.charAt(length - 1) || quoteEscaped(text,length - 1)) {
       holder.createErrorAnnotation(element.getTextRange(),JsonBundle.message("msg.missing.closing.quote"));
     }
-    int pos=1;
-    while (pos < length) {
-      if (text.charAt(pos) == '\\') {
-        if (pos >= length - 1) {
-          TextRange range=new TextRange(offset + pos,offset + pos + 1);
-          holder.createErrorAnnotation(range,JsonBundle.message("msg.illegal.escape.sequence"));
-          break;
+    final List<Pair<TextRange,String>> fragments=stringLiteral.getTextFragments();
+    for (    Pair<TextRange,String> fragment : fragments) {
+      final String fragmentText=fragment.getSecond();
+      if (fragmentText.startsWith("\\") && fragmentText.length() > 1 && !VALID_ESCAPE.matcher(fragmentText).matches()) {
+        final TextRange fragmentRange=fragment.getFirst();
+        if (fragmentText.startsWith("\\u")) {
+          holder.createErrorAnnotation(fragmentRange.shiftRight(elementOffset),JsonBundle.message("msg.illegal.unicode.escape.sequence"));
         }
-        char next=text.charAt(pos + 1);
-switch (next) {
-case '"':
-case '\\':
-case '/':
-case 'b':
-case 'f':
-case 'n':
-case 'r':
-case 't':
-          pos+=2;
-        break;
-case 'u':
-      int i=pos + 2;
-    for (; i < pos + 6; i++) {
-      if (i == length || !StringUtil.isHexDigit(text.charAt(i))) {
-        TextRange range=new TextRange(offset + pos,offset + i);
-        holder.createErrorAnnotation(range,JsonBundle.message("msg.illegal.unicode.escape.sequence"));
-        break;
+ else {
+          holder.createErrorAnnotation(fragmentRange.shiftRight(elementOffset),JsonBundle.message("msg.illegal.escape.sequence"));
+        }
       }
     }
-  pos=i;
-break;
-default :
-TextRange range=new TextRange(offset + pos,offset + pos + 2);
-holder.createErrorAnnotation(range,JsonBundle.message("msg.illegal.escape.sequence"));
-pos+=2;
-}
-}
- else {
-pos++;
-}
-}
-}
+  }
 }
