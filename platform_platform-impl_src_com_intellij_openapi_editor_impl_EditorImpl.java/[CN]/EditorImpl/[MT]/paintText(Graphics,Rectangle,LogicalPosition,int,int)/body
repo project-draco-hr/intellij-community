@@ -1,12 +1,6 @@
 {
   myCurrentFontType=null;
   myLastCache=null;
-  final int plainSpaceWidth=EditorUtil.getSpaceWidth(Font.PLAIN,this);
-  final int boldSpaceWidth=EditorUtil.getSpaceWidth(Font.BOLD,this);
-  final int italicSpaceWidth=EditorUtil.getSpaceWidth(Font.ITALIC,this);
-  final int boldItalicSpaceWidth=EditorUtil.getSpaceWidth(Font.BOLD | Font.ITALIC,this);
-  boolean spacesHaveSameWidth=plainSpaceWidth == boldSpaceWidth && plainSpaceWidth == italicSpaceWidth && plainSpaceWidth == boldItalicSpaceWidth;
-  myCommonSpaceWidth=spacesHaveSameWidth ? boldSpaceWidth : -1;
   int lineHeight=getLineHeight();
   int visibleLine=clip.y / lineHeight;
   Ref<LogicalPosition> logicalPosition=new Ref<LogicalPosition>(clipStartPosition);
@@ -36,13 +30,14 @@
   int fontType=attributes.getFontType();
   g.setColor(currentColor);
   CharSequence chars=myDocument.getImmutableCharSequence();
+  setWhitespaceEdgeValues(chars,lIterator);
   while (!iterationState.atEnd() && !lIterator.atEnd()) {
     int hEnd=iterationState.getEndOffset();
     int lEnd=lIterator.getEnd();
     if (hEnd >= lEnd) {
       FoldRegion collapsedFolderAt=myFoldingModel.getCollapsedRegionAtOffset(start);
       if (collapsedFolderAt == null) {
-        int i=drawStringWithSoftWraps(g,chars,start,lEnd - lIterator.getSeparatorLength(),position,clip,effectColor,effectType,fontType,currentColor,logicalPosition);
+        drawStringWithSoftWraps(g,chars,start,lEnd - lIterator.getSeparatorLength(),position,clip,effectColor,effectType,fontType,currentColor,logicalPosition);
         final VirtualFile file=getVirtualFile();
         if (myProject != null && file != null && !isOneLineMode()) {
           int offset=position.x;
@@ -70,6 +65,9 @@
         start=lEnd;
       }
       lIterator.advance();
+      if (!lIterator.atEnd()) {
+        setWhitespaceEdgeValues(chars,lIterator);
+      }
     }
  else {
       FoldRegion collapsedFolderAt=iterationState.getCurrentFold();
@@ -79,7 +77,9 @@
           position.x=drawStringWithSoftWraps(g,chars,collapsedFolderAt.getStartOffset(),collapsedFolderAt.getStartOffset(),position,clip,effectColor,effectType,fontType,currentColor,logicalPosition);
         }
         int foldingXStart=position.x;
+        myShowWhitespace=Boolean.FALSE;
         position.x=drawString(g,collapsedFolderAt.getPlaceholderText(),position,clip,effectColor,effectType,fontType,currentColor);
+        myShowWhitespace=null;
         BorderEffect.paintFoldedEffect(g,foldingXStart,position.y,position.x,getLineHeight(),effectColor,effectType);
       }
  else {
@@ -100,7 +100,9 @@
   FoldRegion collapsedFolderAt=iterationState.getCurrentFold();
   if (collapsedFolderAt != null) {
     int foldingXStart=position.x;
+    myShowWhitespace=Boolean.FALSE;
     int foldingXEnd=drawStringWithSoftWraps(g,collapsedFolderAt.getPlaceholderText(),position,clip,effectColor,effectType,fontType,currentColor,logicalPosition);
+    myShowWhitespace=null;
     BorderEffect.paintFoldedEffect(g,foldingXStart,position.y,foldingXEnd,getLineHeight(),effectColor,effectType);
   }
   final SoftWrap softWrap=mySoftWrapModel.getSoftWrap(clipEndOffset);

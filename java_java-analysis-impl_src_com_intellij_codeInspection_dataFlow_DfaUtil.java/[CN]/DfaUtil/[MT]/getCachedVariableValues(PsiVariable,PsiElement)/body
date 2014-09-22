@@ -1,32 +1,18 @@
 {
   if (variable == null || context == null)   return Collections.emptyList();
-  CachedValue<MultiValuesMap<PsiVariable,PsiExpression>> cachedValue=context.getUserData(DFA_VARIABLE_INFO_KEY);
-  if (cachedValue == null) {
-    final PsiElement codeBlock=DfaPsiUtil.getEnclosingCodeBlock(variable,context);
-    cachedValue=CachedValuesManager.getManager(context.getProject()).createCachedValue(new CachedValueProvider<MultiValuesMap<PsiVariable,PsiExpression>>(){
-      @Override public Result<MultiValuesMap<PsiVariable,PsiExpression>> compute(){
-        final MultiValuesMap<PsiVariable,PsiExpression> result;
-        if (codeBlock == null) {
-          result=null;
-        }
- else {
-          final ValuableInstructionVisitor visitor=new ValuableInstructionVisitor(context);
-          RunnerResult runnerResult=new ValuableDataFlowRunner(codeBlock).analyzeMethod(codeBlock,visitor);
-          if (runnerResult == RunnerResult.OK) {
-            result=visitor.myValues;
-          }
- else {
-            result=TOO_COMPLEX;
-          }
-        }
-        return new Result<MultiValuesMap<PsiVariable,PsiExpression>>(result,variable);
+  final PsiElement codeBlock=DfaPsiUtil.getEnclosingCodeBlock(variable,context);
+  if (codeBlock == null)   return Collections.emptyList();
+  final Map<PsiElement,ValuableInstructionVisitor.PlaceResult> value=getCachedPlaceResults(codeBlock);
+  if (value == null)   return null;
+  ValuableInstructionVisitor.PlaceResult placeResult=value.get(context);
+  final Collection<FList<PsiExpression>> concatenations=placeResult == null ? null : placeResult.myValues.get(variable);
+  if (concatenations != null) {
+    return ContainerUtil.map(concatenations,new Function<FList<PsiExpression>,PsiExpression>(){
+      @Override public PsiExpression fun(      FList<PsiExpression> expressions){
+        return concatenateExpressions(expressions);
       }
     }
-,false);
-    context.putUserData(DFA_VARIABLE_INFO_KEY,cachedValue);
+);
   }
-  final MultiValuesMap<PsiVariable,PsiExpression> value=cachedValue.getValue();
-  if (value == TOO_COMPLEX)   return null;
-  final Collection<PsiExpression> expressions=value == null ? null : value.get(variable);
-  return expressions == null ? Collections.<PsiExpression>emptyList() : expressions;
+  return Collections.emptyList();
 }
