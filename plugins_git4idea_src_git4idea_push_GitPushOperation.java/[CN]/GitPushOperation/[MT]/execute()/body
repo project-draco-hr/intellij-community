@@ -1,0 +1,57 @@
+{
+  PushUpdateSettings updateSettings=readPushUpdateSettings();
+  Label beforePushLabel=null;
+  Label afterPushLabel=null;
+  Map<GitRepository,String> preUpdatePositions=updateRootInfoAndRememberPositions();
+  final Map<GitRepository,GitPushRepoResult> results=ContainerUtil.newHashMap();
+  Map<GitRepository,GitUpdateResult> updatedRoots=ContainerUtil.newHashMap();
+  try {
+    Collection<GitRepository> remainingRoots=myPushSpecs.keySet();
+    for (int pushAttempt=0; pushAttempt < MAX_PUSH_ATTEMPTS && !remainingRoots.isEmpty(); pushAttempt++, remainingRoots=getRejectedAndNotPushed(results)) {
+      Map<GitRepository,GitPushRepoResult> resultMap=push(remainingRoots);
+      results.putAll(resultMap);
+      GroupedPushResult result=GroupedPushResult.group(resultMap);
+      if (!result.errors.isEmpty()) {
+        break;
+      }
+      if (!result.rejected.isEmpty()) {
+        boolean shouldUpdate=true;
+        if (pushingToNotTrackedBranch(result.rejected)) {
+          shouldUpdate=false;
+        }
+ else         if (pushAttempt == 0 && !mySettings.autoUpdateIfPushRejected()) {
+          updateSettings=showDialogAndGetExitCode(result.rejected.keySet(),updateSettings);
+          if (updateSettings != null) {
+            savePushUpdateSettings(updateSettings);
+          }
+ else {
+            shouldUpdate=false;
+          }
+        }
+        if (!shouldUpdate) {
+          break;
+        }
+        if (beforePushLabel == null) {
+          beforePushLabel=LocalHistory.getInstance().putSystemLabel(myProject,"Before push");
+        }
+        Collection<GitRepository> rootsToUpdate=updateSettings.shouldUpdateAllRoots() ? myPushSpecs.keySet() : result.rejected.keySet();
+        GitUpdateResult updateResult=update(rootsToUpdate,updateSettings.getUpdateMethod());
+        for (        GitRepository repository : rootsToUpdate) {
+          updatedRoots.put(repository,updateResult);
+        }
+        if (!updateResult.isSuccess() || updateResult == GitUpdateResult.SUCCESS_WITH_RESOLVED_CONFLICTS || updateResult == GitUpdateResult.INCOMPLETE) {
+          break;
+        }
+      }
+    }
+  }
+  finally {
+    if (beforePushLabel != null) {
+      afterPushLabel=LocalHistory.getInstance().putSystemLabel(myProject,"After push");
+    }
+    for (    GitRepository repository : myPushSpecs.keySet()) {
+      repository.update();
+    }
+  }
+  return prepareCombinedResult(results,updatedRoots,preUpdatePositions,beforePushLabel,afterPushLabel);
+}
