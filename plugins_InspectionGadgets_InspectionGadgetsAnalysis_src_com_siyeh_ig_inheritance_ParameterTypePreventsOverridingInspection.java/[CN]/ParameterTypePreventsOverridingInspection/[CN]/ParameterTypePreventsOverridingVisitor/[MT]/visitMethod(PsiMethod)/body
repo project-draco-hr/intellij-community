@@ -1,0 +1,59 @@
+{
+  super.visitMethod(method);
+  final PsiParameterList parameterList=method.getParameterList();
+  final int parameterCount=parameterList.getParametersCount();
+  if (parameterCount == 0) {
+    return;
+  }
+  final PsiType returnType=method.getReturnType();
+  if (returnType == null) {
+    return;
+  }
+  final PsiClass containingClass=method.getContainingClass();
+  if (containingClass == null) {
+    return;
+  }
+  final PsiClass superClass=containingClass.getSuperClass();
+  if (superClass == null) {
+    return;
+  }
+  final PsiParameter[] parameters=parameterList.getParameters();
+  final String name=method.getName();
+  final PsiMethod[] superMethods=superClass.findMethodsByName(name,true);
+  outer:   for (  PsiMethod superMethod : superMethods) {
+    final PsiType superReturnType=superMethod.getReturnType();
+    if (superReturnType == null || !superReturnType.isAssignableFrom(returnType)) {
+      continue;
+    }
+    final PsiParameterList superParameterList=superMethod.getParameterList();
+    if (superParameterList.getParametersCount() != parameterCount) {
+      continue;
+    }
+    final PsiParameter[] superParameters=superParameterList.getParameters();
+    final Map<PsiTypeElement,PsiTypeElement> problemTypeElements=ContainerUtilRt.newHashMap(2);
+    for (int i=0; i < parameters.length; i++) {
+      final PsiParameter parameter=parameters[i];
+      final PsiParameter superParameter=superParameters[i];
+      final PsiType type=parameter.getType();
+      final PsiType superType=superParameter.getType();
+      if (type.equals(superType)) {
+        continue;
+      }
+      if (!type.getPresentableText().equals(superType.getPresentableText())) {
+        return;
+      }
+      final PsiTypeElement typeElement=parameter.getTypeElement();
+      if (typeElement == null) {
+        return;
+      }
+      final PsiTypeElement superParameterTypeElement=superParameter.getTypeElement();
+      if (superParameterTypeElement == null) {
+        continue outer;
+      }
+      problemTypeElements.put(typeElement,superParameterTypeElement);
+    }
+    for (    Map.Entry<PsiTypeElement,PsiTypeElement> entry : problemTypeElements.entrySet()) {
+      registerError(entry.getKey(),entry.getKey(),entry.getValue());
+    }
+  }
+}
