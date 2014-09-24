@@ -1,0 +1,73 @@
+{
+  super.visitMethod(method);
+  final PsiParameterList parameterList=method.getParameterList();
+  final int parameterCount=parameterList.getParametersCount();
+  if (parameterCount == 0) {
+    return;
+  }
+  final PsiType returnType=method.getReturnType();
+  if (returnType == null) {
+    return;
+  }
+  final PsiClass containingClass=method.getContainingClass();
+  if (containingClass == null) {
+    return;
+  }
+  final PsiClass superClass=containingClass.getSuperClass();
+  if (superClass == null) {
+    return;
+  }
+  if (MethodUtils.hasSuper(method)) {
+    return;
+  }
+  final PsiParameter[] parameters=parameterList.getParameters();
+  final String name=method.getName();
+  final PsiMethod[] superMethods=superClass.findMethodsByName(name,true);
+  outer:   for (  PsiMethod superMethod : superMethods) {
+    final PsiType superReturnType=superMethod.getReturnType();
+    if (superReturnType == null || !superReturnType.isAssignableFrom(returnType)) {
+      continue;
+    }
+    final PsiParameterList superParameterList=superMethod.getParameterList();
+    if (superParameterList.getParametersCount() != parameterCount) {
+      continue;
+    }
+    final PsiParameter[] superParameters=superParameterList.getParameters();
+    final Map<PsiTypeElement,PsiClassType> problemTypeElements=ContainerUtilRt.newHashMap(2);
+    for (int i=0; i < parameters.length; i++) {
+      final PsiParameter parameter=parameters[i];
+      final PsiParameter superParameter=superParameters[i];
+      final PsiType type=parameter.getType();
+      final PsiType superType=superParameter.getType();
+      if (!(superType instanceof PsiClassType) || type.equals(superType)) {
+        continue;
+      }
+      if (!(type instanceof PsiClassType) || !type.getPresentableText().equals(superType.getPresentableText())) {
+        return;
+      }
+      final PsiTypeElement typeElement=parameter.getTypeElement();
+      if (typeElement == null) {
+        return;
+      }
+      final PsiTypeElement superParameterTypeElement=superParameter.getTypeElement();
+      if (superParameterTypeElement == null) {
+        continue outer;
+      }
+      problemTypeElements.put(typeElement,(PsiClassType)superType);
+    }
+    for (    Map.Entry<PsiTypeElement,PsiClassType> entry : problemTypeElements.entrySet()) {
+      final PsiTypeElement typeElement=entry.getKey();
+      final PsiClassType type=(PsiClassType)typeElement.getType();
+      final PsiClass aClass1=type.resolve();
+      if (aClass1 == null || aClass1 instanceof PsiTypeParameter) {
+        return;
+      }
+      final PsiClassType classType=entry.getValue();
+      final PsiClass aClass2=classType.resolve();
+      if (aClass2 == null || aClass2 instanceof PsiTypeParameter) {
+        continue;
+      }
+      registerError(typeElement,type.getCanonicalText(),classType.getCanonicalText());
+    }
+  }
+}

@@ -1,7 +1,7 @@
 {
   ExportableApplicationComponent[] components1=ApplicationManager.getApplication().getComponents(ExportableApplicationComponent.class);
   List<ExportableComponent> components2=ServiceBean.loadServicesFromBeans(ExportableComponent.EXTENSION_POINT,ExportableComponent.class);
-  MultiMap<File,ExportableComponent> result=MultiMap.createSet();
+  final MultiMap<File,ExportableComponent> result=MultiMap.createSet();
   for (  ExportableComponent component : ContainerUtil.concat(Arrays.asList(components1),components2)) {
     for (    File exportFile : component.getExportFiles()) {
       result.putValue(exportFile,component);
@@ -15,30 +15,36 @@
     }
   }
   ApplicationImpl application=(ApplicationImpl)ApplicationManager.getApplication();
-  StateStorageManager storageManager=application.getStateStore().getStateStorageManager();
-  List<Class<?>> classes=ServiceManagerImpl.getAllImplementationClasses(application);
-  for (  Class<?> aClass : classes) {
-    final State stateAnnotation=aClass.getAnnotation(State.class);
-    if (stateAnnotation != null && stateAnnotation.storages().length == 1 && !StringUtil.isEmpty(stateAnnotation.name())) {
-      if (ExportableComponent.class.isAssignableFrom(aClass)) {
-        continue;
-      }
-      Storage storage=stateAnnotation.storages()[0];
-      if (storage.roamingType() != RoamingType.DISABLED && storage.storageClass().equals(StateStorage.class) && storage.scheme() == StorageScheme.DEFAULT && !StringUtil.isEmpty(storage.file()) && storage.file().startsWith(StoragePathMacros.APP_CONFIG)) {
-        final File file=new File(storageManager.expandMacros(storage.file()));
-        if (!onlyExisting || file.exists()) {
-          result.putValue(file,new ExportableComponent(){
-            @NotNull @Override public File[] getExportFiles(){
-              return new File[]{file};
-            }
-            @NotNull @Override public String getPresentableName(){
-              return stateAnnotation.name();
-            }
+  final StateStorageManager storageManager=application.getStateStore().getStateStorageManager();
+  ServiceManagerImpl.processAllImplementationClasses(application,new PairProcessor<Class<?>,PluginDescriptor>(){
+    @Override public boolean process(    @NotNull Class<?> aClass,    @Nullable PluginDescriptor pluginDescriptor){
+      State stateAnnotation=aClass.getAnnotation(State.class);
+      if (stateAnnotation != null && !StringUtil.isEmpty(stateAnnotation.name())) {
+        if (ExportableComponent.class.isAssignableFrom(aClass)) {
+          return true;
+        }
+        int storageIndex;
+        Storage[] storages=stateAnnotation.storages();
+        if (storages.length == 1) {
+          storageIndex=0;
+        }
+ else         if (storages.length > 1 && stateAnnotation.storageChooser() == LastStorageChooserForWrite.class) {
+          storageIndex=storages.length - 1;
+        }
+ else {
+          return true;
+        }
+        Storage storage=storages[storageIndex];
+        if (storage.roamingType() != RoamingType.DISABLED && storage.storageClass().equals(StateStorage.class) && storage.scheme() == StorageScheme.DEFAULT && !StringUtil.isEmpty(storage.file()) && storage.file().startsWith(StoragePathMacros.APP_CONFIG)) {
+          File file=new File(storageManager.expandMacros(storage.file()));
+          if (!onlyExisting || file.exists()) {
+            result.putValue(file,new MyExportableComponent(file,getExportableComponentPresentableName(stateAnnotation.name(),aClass,pluginDescriptor)));
           }
-);
         }
       }
+      return true;
     }
   }
+);
   return result;
 }
