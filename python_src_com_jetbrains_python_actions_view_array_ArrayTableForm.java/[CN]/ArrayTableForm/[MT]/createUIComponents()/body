@@ -13,7 +13,46 @@
 ;
   myScrollPane.setRowHeaderView(rowTable);
   myScrollPane.setCorner(ScrollPaneConstants.UPPER_LEFT_CORNER,rowTable.getTableHeader());
+  mySliceTextField=new EditorTextField("value[0][0:, 0:]",myProject,PythonFileType.INSTANCE);
+  mySliceTextField.addNotify();
+  mySliceTextField.addFocusListener(new FocusListener(){
+    @Override public void focusGained(    FocusEvent e){
+      TextAttributes defaultTestAttributes=EditorColorsManager.getInstance().getGlobalScheme().getAttributes(EditorColors.LIVE_TEMPLATE_ATTRIBUTES);
+      Matcher m=EDITABLE_IN_SLICE_PATTERN.matcher(mySliceTextField.getText());
+      int guard=0;
+      while (m.find()) {
+        int start=m.start();
+        int end=m.end();
+        String match=m.group();
+        if (match.contains("[")) {
+          start+=1;
+        }
+        if (match.contains("]")) {
+          end-=1;
+        }
+        RangeHighlighter rh=mySliceTextField.getEditor().getMarkupModel().addRangeHighlighter(start,end,HighlighterLayer.LAST + 1,new TextAttributes(defaultTestAttributes.getForegroundColor(),defaultTestAttributes.getBackgroundColor(),JBColor.BLUE,defaultTestAttributes.getEffectType(),defaultTestAttributes.getFontType()),HighlighterTargetArea.EXACT_RANGE);
+        rh.setGreedyToLeft(true);
+        rh.setGreedyToRight(true);
+        mySliceTextField.getDocument().createGuardedBlock(guard,start);
+        myGuarded.add(new Pair<Integer,Integer>(guard,start));
+        guard=end;
+      }
+      mySliceTextField.getDocument().createGuardedBlock(guard,mySliceTextField.getText().length());
+      myGuarded.add(new Pair<Integer,Integer>(guard,mySliceTextField.getText().length()));
+    }
+    @Override public void focusLost(    FocusEvent e){
+      mySliceTextField.getEditor().getMarkupModel().removeAllHighlighters();
+      for (      Pair<Integer,Integer> p : myGuarded) {
+        RangeMarker block=mySliceTextField.getDocument().getRangeGuard(p.getFirst(),p.getSecond());
+        if (block != null) {
+          mySliceTextField.getDocument().removeGuardedBlock(block);
+        }
+      }
+    }
+  }
+);
   ((JBTableWithRows)myTable).setRowNumberTable((RowNumberTable)rowTable);
-  myScrollPane.getHorizontalScrollBar().addAdjustmentListener(new TableAdjustmentListener(myTable,100,100,TableAdjustmentListener.HORIZONTAL_MODE,50));
-  myScrollPane.getVerticalScrollBar().addAdjustmentListener(new TableAdjustmentListener(myTable,100,100,TableAdjustmentListener.VERTICAL_MODE,50));
+  ((JBTableWithRows)myTable).setSliceField(mySliceTextField);
+  myScrollPane.getHorizontalScrollBar().addAdjustmentListener(new TableAdjustmentListener(myTable,41,53,TableAdjustmentListener.HORIZONTAL_MODE,30,40,2,3));
+  myScrollPane.getVerticalScrollBar().addAdjustmentListener(new TableAdjustmentListener(myTable,41,53,TableAdjustmentListener.VERTICAL_MODE,30,40,2,3));
 }
