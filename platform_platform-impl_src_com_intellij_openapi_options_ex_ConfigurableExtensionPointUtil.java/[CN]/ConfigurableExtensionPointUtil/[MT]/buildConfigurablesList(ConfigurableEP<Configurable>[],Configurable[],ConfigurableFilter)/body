@@ -5,32 +5,27 @@
       result.add(component);
     }
   }
-  final Map<String,ConfigurableWrapper> idToConfigurable=new LinkedHashMap<String,ConfigurableWrapper>();
+  final Map<String,ConfigurableWrapper> idToConfigurable=ContainerUtil.newHashMap();
+  List<String> idsInEpOrder=ContainerUtil.newArrayList();
   for (  ConfigurableEP<Configurable> ep : extensions) {
     final Configurable configurable=ConfigurableWrapper.wrapConfigurable(ep);
     if (isSuppressed(configurable,filter))     continue;
     if (configurable instanceof ConfigurableWrapper) {
       final ConfigurableWrapper wrapper=(ConfigurableWrapper)configurable;
       idToConfigurable.put(wrapper.getId(),wrapper);
+      idsInEpOrder.add(wrapper.getId());
     }
  else {
       ContainerUtil.addIfNotNull(configurable,result);
     }
   }
-  for (  final String id : idToConfigurable.keySet()) {
-    final ConfigurableWrapper wrapper=idToConfigurable.get(id);
-    final String parentId=wrapper.getParentId();
-    if (parentId != null) {
-      final ConfigurableWrapper parent=idToConfigurable.get(parentId);
-      if (parent != null) {
-        idToConfigurable.put(parentId,parent.addChild(wrapper));
-      }
- else {
-        LOG.debug("Can't find parent for " + parentId + " ("+ wrapper+ ")");
-      }
-    }
+  Set<String> visited=ContainerUtil.newHashSet();
+  Map<String,List<String>> idTree=buildIdTree(idToConfigurable,idsInEpOrder);
+  for (  final String id : idsInEpOrder) {
+    addChildrenRec(id,idToConfigurable,visited,idTree);
   }
-  for (  ConfigurableWrapper wrapper : idToConfigurable.values()) {
+  for (  String id : idsInEpOrder) {
+    ConfigurableWrapper wrapper=idToConfigurable.get(id);
     String parentId=wrapper.getParentId();
     if (parentId == null || !idToConfigurable.containsKey(parentId)) {
       result.add(wrapper);
