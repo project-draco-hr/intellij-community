@@ -1,0 +1,92 @@
+{
+  final PsiFile containingFile=context.getContainingFile();
+  if (!(containingFile instanceof PsiJavaFile)) {
+    return false;
+  }
+  final PsiJavaFile javaFile=(PsiJavaFile)containingFile;
+  final PsiImportList imports=javaFile.getImportList();
+  if (imports == null) {
+    return false;
+  }
+  final PsiImportStatementBase[] importStatements=imports.getAllImportStatements();
+  final String shortName=ClassUtil.extractClassName(fqName);
+  final String packageName=ClassUtil.extractPackageName(fqName);
+  for (  final PsiImportStatementBase importStatement : importStatements) {
+    if (!importStatement.isOnDemand()) {
+      continue;
+    }
+    final PsiJavaCodeReferenceElement importReference=importStatement.getImportReference();
+    if (importReference == null) {
+      continue;
+    }
+    final String packageText=importReference.getText();
+    if (packageText.equals(packageName)) {
+      continue;
+    }
+    final PsiElement element=importReference.resolve();
+    if (element instanceof PsiPackage) {
+      final PsiPackage aPackage=(PsiPackage)element;
+      if (!strict) {
+        if (aPackage.containsClassNamed(shortName)) {
+          return true;
+        }
+      }
+ else {
+        final PsiClass[] classes=aPackage.findClassByShortName(shortName,containingFile.getResolveScope());
+        for (        final PsiClass aClass : classes) {
+          final String qualifiedClassName=aClass.getQualifiedName();
+          if (qualifiedClassName == null || fqName.equals(qualifiedClassName)) {
+            continue;
+          }
+          return containsConflictingReference(containingFile,qualifiedClassName);
+        }
+      }
+    }
+ else     if (element instanceof PsiClass) {
+      final PsiClass aClass=(PsiClass)element;
+      final PsiClass innerClass=aClass.findInnerClassByName(shortName,true);
+      if (importStatement instanceof PsiImportStatement) {
+        if (innerClass != null && PsiUtil.isAccessible(innerClass,containingFile,null)) {
+          final String qualifiedName=innerClass.getQualifiedName();
+          if (!fqName.equals(qualifiedName) && (!strict || containsConflictingReference(containingFile,qualifiedName))) {
+            return true;
+          }
+        }
+      }
+ else {
+        if (innerClass != null && PsiUtil.isAccessible(innerClass,containingFile,null) && innerClass.hasModifierProperty(PsiModifier.STATIC)) {
+          final String qualifiedName=innerClass.getQualifiedName();
+          if (!fqName.equals(qualifiedName) && (!strict || memberReferenced(innerClass,javaFile))) {
+            return true;
+          }
+        }
+        final PsiField field=aClass.findFieldByName(shortName,true);
+        if (field != null && PsiUtil.isAccessible(field,containingFile,null) && field.hasModifierProperty(PsiModifier.STATIC)) {
+          final PsiClass containingClass=field.getContainingClass();
+          if (containingClass == null) {
+            continue;
+          }
+          final String qualifiedName=containingClass.getQualifiedName() + '.' + field.getName();
+          if (!fqName.equals(qualifiedName) && (!strict || memberReferenced(field,javaFile))) {
+            return true;
+          }
+        }
+        final PsiMethod[] methods=aClass.findMethodsByName(shortName,true);
+        for (        PsiMethod method : methods) {
+          if (!PsiUtil.isAccessible(method,containingFile,null) || !method.hasModifierProperty(PsiModifier.STATIC)) {
+            continue;
+          }
+          final PsiClass containingClass=method.getContainingClass();
+          if (containingClass == null) {
+            continue;
+          }
+          final String qualifiedName=containingClass.getQualifiedName() + '.' + method.getName();
+          if (!fqName.equals(qualifiedName) && (!strict || memberReferenced(method,javaFile))) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return hasJavaLangImportConflict(fqName,javaFile) || hasDefaultImportConflict(fqName,javaFile);
+}
