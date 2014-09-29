@@ -23,6 +23,7 @@
   myShellThread.start();
   myIOPubClient=new WebSocketClient(getIOPubURI(),draft){
     private ArrayList<IpnbOutputCell> myOutput=new ArrayList<IpnbOutputCell>();
+    private Integer myExecCount=null;
     @Override public void onOpen(    ServerHandshake handshakeData){
       send(authMessage);
       myIsIOPubOpen=true;
@@ -46,10 +47,16 @@
         final PyStreamContent content=gson.fromJson(msg.getContent(),PyStreamContent.class);
         myOutput.add(createCellOutput(content));
       }
+ else       if ("pyin".equals(messageType)) {
+        final JsonElement executionCount=msg.getContent().get("execution_count");
+        if (executionCount != null) {
+          myExecCount=executionCount.getAsInt();
+        }
+      }
  else       if ("status".equals(messageType)) {
         final PyStatusContent content=gson.fromJson(msg.getContent(),PyStatusContent.class);
         if (content.getExecutionState().equals("idle")) {
-          myListener.onOutput(IpnbConnection.this,parentHeader.getMessageId(),(List<IpnbOutputCell>)myOutput.clone());
+          myListener.onOutput(IpnbConnection.this,parentHeader.getMessageId(),(List<IpnbOutputCell>)myOutput.clone(),myExecCount);
           myOutput.clear();
         }
       }
