@@ -1,0 +1,37 @@
+{
+  try {
+    final File file;
+    String componentName;
+    State state=appComponent.getClass().getAnnotation(State.class);
+    if (state != null) {
+      componentName=state.name();
+      Storage lastStorage=state.storages()[state.storages().length - 1];
+      StateStorageManager storageManager=((ApplicationImpl)ApplicationManager.getApplication()).getStateStore().getStateStorageManager();
+      file=new File(storageManager.expandMacros(lastStorage.file()));
+    }
+ else     if (appComponent instanceof ExportableApplicationComponent && appComponent instanceof NamedJDOMExternalizable) {
+      componentName=((ExportableApplicationComponent)appComponent).getComponentName();
+      file=PathManager.getOptionsFile((NamedJDOMExternalizable)appComponent);
+    }
+ else {
+      throw new AssertionError(appComponent.getClass() + " doesn't have @State annotation and doesn't implement ExportableApplicationComponent");
+    }
+    Element root=new Element("application");
+    Element element=JDomSerializationUtil.createComponentElement(componentName);
+    if (appComponent instanceof JDOMExternalizable) {
+      ((JDOMExternalizable)appComponent).writeExternal(element);
+    }
+ else {
+      element.addContent(((PersistentStateComponent<Element>)appComponent).getState().cloneContent());
+    }
+    root.addContent(element);
+    FileUtil.createParentDirs(file);
+    JDOMUtil.writeDocument(new Document(root),file,SystemProperties.getLineSeparator());
+  }
+ catch (  WriteExternalException e) {
+    throw new RuntimeException(e);
+  }
+catch (  IOException e) {
+    throw new RuntimeException(e);
+  }
+}
