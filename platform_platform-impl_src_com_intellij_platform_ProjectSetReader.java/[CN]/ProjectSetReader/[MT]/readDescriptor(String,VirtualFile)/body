@@ -1,30 +1,12 @@
 {
-  Application application=ApplicationManager.getApplication();
-  LOG.assertTrue(application.isUnitTestMode() || !application.isDispatchThread(),"should not be invoked from EDT");
   ProjectSetProcessor[] extensions=ProjectSetProcessor.EXTENSION_POINT_NAME.getExtensions();
   Map<String,ProjectSetProcessor> processors=new HashMap<String,ProjectSetProcessor>();
   for (  ProjectSetProcessor extension : extensions) {
     processors.put(extension.getId(),extension);
   }
   JsonElement parse=new JsonParser().parse(descriptor);
+  Iterator<Map.Entry<String,JsonElement>> iterator=parse.getAsJsonObject().entrySet().iterator();
   ProjectSetProcessor.Context context=new ProjectSetProcessor.Context();
   context.directory=forTests;
-  for (  Map.Entry<String,JsonElement> entry : parse.getAsJsonObject().entrySet()) {
-    String key=entry.getKey();
-    ProjectSetProcessor processor=processors.get(key);
-    if (processor == null) {
-      LOG.error("Processor not found for " + key);
-      return false;
-    }
-    JsonObject object=entry.getValue().getAsJsonObject();
-    List<Pair<String,String>> list=ContainerUtil.map(object.entrySet(),new Function<Map.Entry<String,JsonElement>,Pair<String,String>>(){
-      @Override public Pair<String,String> fun(      Map.Entry<String,JsonElement> entry){
-        JsonElement value=entry.getValue();
-        return Pair.create(entry.getKey(),value instanceof JsonPrimitive ? value.getAsString() : value.toString());
-      }
-    }
-);
-    if (!processor.processEntries(list,context))     return false;
-  }
-  return true;
+  runProcessor(processors,context,iterator);
 }
