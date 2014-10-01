@@ -1,30 +1,33 @@
 {
-  if (project.isDisposed())   return false;
-  final HashSet<Pair<VirtualFile,StateStorage>> causes=new HashSet<Pair<VirtualFile,StateStorage>>();
+  if (project.isDisposed()) {
+    return null;
+  }
+  final Set<Pair<VirtualFile,StateStorage>> causes=new SmartHashSet<Pair<VirtualFile,StateStorage>>();
+  Collection<ChangedFileEntry> changes;
 synchronized (myChangedProjectFiles) {
-    final List<Pair<VirtualFile,StateStorage>> changes=myChangedProjectFiles.remove(project);
-    if (changes != null) {
-      causes.addAll(changes);
-    }
-    if (causes.isEmpty())     return false;
-  }
-  final boolean[] reloadOk={false};
-  ApplicationManager.getApplication().runWriteAction(new Runnable(){
-    @Override public void run(){
-      try {
-        LOG.debug("[RELOAD] Reloading project/components...");
-        reloadOk[0]=((ProjectEx)project).getStateStore().reload(causes);
-      }
- catch (      StateStorageException e) {
-        Messages.showWarningDialog(ProjectBundle.message("project.reload.failed",e.getMessage()),ProjectBundle.message("project.reload.failed.title"));
-      }
-catch (      IOException e) {
-        Messages.showWarningDialog(ProjectBundle.message("project.reload.failed",e.getMessage()),ProjectBundle.message("project.reload.failed.title"));
+    changes=myChangedProjectFiles.remove(project);
+    if (!ContainerUtil.isEmpty(changes)) {
+      for (      ChangedFileEntry change : changes) {
+        causes.add(Pair.create(change.file,change.storage));
       }
     }
   }
-);
-  if (reloadOk[0])   return false;
+  if (causes.isEmpty()) {
+    return null;
+  }
+  AccessToken token=WriteAction.start();
+  try {
+    LOG.debug("[RELOAD] Reloading project/components...");
+    if (((ProjectEx)project).getStateStore().reload(causes)) {
+      return null;
+    }
+  }
+ catch (  StateStorageException e) {
+    Messages.showWarningDialog(ProjectBundle.message("project.reload.failed",e.getMessage()),ProjectBundle.message("project.reload.failed.title"));
+  }
+ finally {
+    token.finish();
+  }
   String message;
   if (causes.size() == 1) {
     message=ProjectBundle.message("project.reload.external.change.single",causes.iterator().next().first.getPresentableUrl());
@@ -48,5 +51,10 @@ catch (      IOException e) {
     }
     message=ProjectBundle.message("project.reload.external.change.multiple",filesBuilder.toString());
   }
-  return Messages.showDialog(message,ProjectBundle.message("project.reload.external.change.title"),new String[]{"&Reload Project","&Discard Changes"},-1,Messages.getQuestionIcon()) == 0;
+  if (Messages.showDialog(message,ProjectBundle.message("project.reload.external.change.title"),new String[]{"&Reload Project","&Discard Changes"},-1,Messages.getQuestionIcon()) == 0) {
+    return changes;
+  }
+ else {
+    return null;
+  }
 }
