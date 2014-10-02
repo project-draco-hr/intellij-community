@@ -1,18 +1,31 @@
 {
   Collection<String> notReloadableComponents;
-  AccessToken token=WriteAction.start();
+  boolean willBeReloaded=false;
   try {
-    notReloadableComponents=store.reload(causes);
-  }
- catch (  Throwable e) {
-    Messages.showWarningDialog(ProjectBundle.message("project.reload.failed",e.getMessage()),ProjectBundle.message("project.reload.failed.title"));
-    return ReloadComponentStoreStatus.ERROR;
-  }
+    AccessToken token=WriteAction.start();
+    try {
+      notReloadableComponents=store.reload(causes);
+    }
+ catch (    Throwable e) {
+      Messages.showWarningDialog(ProjectBundle.message("project.reload.failed",e.getMessage()),ProjectBundle.message("project.reload.failed.title"));
+      return ReloadComponentStoreStatus.ERROR;
+    }
  finally {
-    token.finish();
+      token.finish();
+    }
+    if (ContainerUtil.isEmpty(notReloadableComponents)) {
+      return ReloadComponentStoreStatus.SUCCESS;
+    }
+    willBeReloaded=askToRestart(store,notReloadableComponents,causes);
+    return willBeReloaded ? ReloadComponentStoreStatus.RESTART_AGREED : ReloadComponentStoreStatus.RESTART_CANCELLED;
   }
-  if (ContainerUtil.isEmpty(notReloadableComponents)) {
-    return ReloadComponentStoreStatus.SUCCESS;
+  finally {
+    if (!willBeReloaded) {
+      for (      Pair<VirtualFile,StateStorage> cause : causes) {
+        if (cause.second instanceof XmlElementStorage) {
+          ((XmlElementStorage)cause.second).enableSaving();
+        }
+      }
+    }
   }
-  return askToRestart(store,notReloadableComponents,causes) ? ReloadComponentStoreStatus.RESTART_REQUIRED : ReloadComponentStoreStatus.RESTART_CANCELLED;
 }
