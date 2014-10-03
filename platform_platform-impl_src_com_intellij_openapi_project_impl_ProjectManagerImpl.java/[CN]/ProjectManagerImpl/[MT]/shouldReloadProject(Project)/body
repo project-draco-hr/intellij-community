@@ -1,60 +1,20 @@
 {
   if (project.isDisposed()) {
-    return null;
+    return false;
   }
-  final Set<Pair<VirtualFile,StateStorage>> causes=new SmartHashSet<Pair<VirtualFile,StateStorage>>();
-  Collection<ChangedFileEntry> changes;
+  Collection<Pair<VirtualFile,StateStorage>> causes=new SmartList<Pair<VirtualFile,StateStorage>>();
+  Collection<Pair<VirtualFile,StateStorage>> changes;
 synchronized (myChangedProjectFiles) {
     changes=myChangedProjectFiles.remove(project);
     if (!ContainerUtil.isEmpty(changes)) {
-      for (      ChangedFileEntry change : changes) {
-        causes.add(Pair.create(change.file,change.storage));
+      for (      Pair<VirtualFile,StateStorage> change : changes) {
+        causes.add(change);
       }
     }
   }
   if (causes.isEmpty()) {
-    return null;
+    return false;
   }
-  AccessToken token=WriteAction.start();
-  try {
-    LOG.debug("[RELOAD] Reloading project/components...");
-    if (((ProjectEx)project).getStateStore().reload(causes)) {
-      return null;
-    }
-  }
- catch (  StateStorageException e) {
-    Messages.showWarningDialog(ProjectBundle.message("project.reload.failed",e.getMessage()),ProjectBundle.message("project.reload.failed.title"));
-  }
- finally {
-    token.finish();
-  }
-  String message;
-  if (causes.size() == 1) {
-    message=ProjectBundle.message("project.reload.external.change.single",causes.iterator().next().first.getPresentableUrl());
-  }
- else {
-    StringBuilder filesBuilder=new StringBuilder();
-    boolean first=true;
-    Set<String> alreadyShown=new HashSet<String>();
-    for (    Pair<VirtualFile,StateStorage> cause : causes) {
-      String url=cause.first.getPresentableUrl();
-      if (!alreadyShown.contains(url)) {
-        if (alreadyShown.size() > 10) {
-          filesBuilder.append("\n" + "and ").append(causes.size() - alreadyShown.size()).append(" more");
-          break;
-        }
-        if (!first)         filesBuilder.append("\n");
-        first=false;
-        filesBuilder.append(url);
-        alreadyShown.add(url);
-      }
-    }
-    message=ProjectBundle.message("project.reload.external.change.multiple",filesBuilder.toString());
-  }
-  if (Messages.showDialog(message,ProjectBundle.message("project.reload.external.change.title"),new String[]{"&Reload Project","&Discard Changes"},-1,Messages.getQuestionIcon()) == 0) {
-    return changes;
-  }
- else {
-    return null;
-  }
+  ReloadComponentStoreStatus status=ComponentStoreImpl.reloadStore(causes,((ProjectEx)project).getStateStore());
+  return status == ReloadComponentStoreStatus.RESTART_AGREED;
 }
