@@ -1,21 +1,28 @@
 {
+  if (myComponents.isEmpty()) {
+    return null;
+  }
+  StateStorageManager storageManager=getStateStorageManager();
+  StateStorageManager.ExternalizationSession externalizationSession=storageManager.startExternalization();
+  if (externalizationSession == null) {
+    return null;
+  }
+  String[] names=ArrayUtilRt.toStringArray(myComponents.keySet());
+  Arrays.sort(names);
+  for (  String name : names) {
+    Object component=myComponents.get(name);
+    if (component instanceof PersistentStateComponent) {
+      commitPersistentComponent((PersistentStateComponent<?>)component,externalizationSession);
+    }
+ else     if (component instanceof JDOMExternalizable) {
+      externalizationSession.setStateInOldStorage(component,ComponentManagerImpl.getComponentName(component),component);
+    }
+  }
+  SaveSession storageManagerSaveSession=storageManager.startSave(externalizationSession);
+  if (storageManagerSaveSession == null) {
+    return null;
+  }
   SaveSessionImpl session=createSaveSession();
-  try {
-    session.commit();
-  }
- catch (  Throwable e) {
-    try {
-      session.reset();
-    }
- catch (    Exception e1_ignored) {
-      LOG.info(e1_ignored);
-    }
-    PluginId pluginId=IdeErrorsDialog.findPluginId(e);
-    if (pluginId != null) {
-      throw new PluginException(e,pluginId);
-    }
-    throw new StateStorageException(e);
-  }
-  mySession=session;
-  return mySession;
+  session.myStorageManagerSaveSession=storageManagerSaveSession;
+  return session;
 }
