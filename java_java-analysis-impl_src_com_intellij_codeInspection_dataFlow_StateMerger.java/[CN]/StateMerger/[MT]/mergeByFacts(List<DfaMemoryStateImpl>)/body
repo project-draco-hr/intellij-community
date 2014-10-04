@@ -15,29 +15,23 @@
     for (    DfaMemoryStateImpl state : ContainerUtil.concat(statesByFact.get(fact),statesWithNegations)) {
       statesByUnrelatedFacts.putValue(getUnrelatedFacts(fact,state),state);
     }
-    Set<DfaMemoryStateImpl> removedStates=ContainerUtil.newIdentityTroveSet();
-    List<DfaMemoryStateImpl> result=ContainerUtil.newArrayList();
+    Replacements replacements=new Replacements(states);
     for (    Set<Fact> key : statesByUnrelatedFacts.keySet()) {
-      Collection<DfaMemoryStateImpl> group=statesByUnrelatedFacts.get(key);
-      if (group.size() > 1) {
-        DfaMemoryStateImpl copy=group.iterator().next().createCopy();
-        fact.removeFromState(copy);
-        if (fact.myType == FactType.equality) {
-          restoreOtherInequalities(fact,group,copy);
-        }
-        mergeUnknowns(copy,group);
-        removedStates.addAll(group);
-        result.add(copy);
-      }
-    }
-    if (!result.isEmpty()) {
-      for (      DfaMemoryStateImpl state : states) {
-        if (!removedStates.contains(state)) {
-          result.add(state);
+      final Collection<DfaMemoryStateImpl> group=statesByUnrelatedFacts.get(key);
+      final Set<DfaVariableValue> unknowns=getAllUnknownVariables(group);
+      replacements.stripAndMerge(group,new Function<DfaMemoryStateImpl,DfaMemoryStateImpl>(){
+        @Override public DfaMemoryStateImpl fun(        DfaMemoryStateImpl original){
+          DfaMemoryStateImpl copy=withUnknownVariables(original,unknowns);
+          fact.removeFromState(copy);
+          if (fact.myType == FactType.equality) {
+            restoreOtherInequalities(fact,group,copy);
+          }
+          return copy;
         }
       }
-      return result;
+);
     }
+    if (replacements.hasMerges())     return replacements.getMergeResult();
   }
   return null;
 }
