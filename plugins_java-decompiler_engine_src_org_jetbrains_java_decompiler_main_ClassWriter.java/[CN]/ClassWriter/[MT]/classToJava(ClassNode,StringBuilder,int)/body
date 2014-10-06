@@ -1,14 +1,17 @@
 {
   ClassNode outerNode=(ClassNode)DecompilerContext.getProperty(DecompilerContext.CURRENT_CLASS_NODE);
   DecompilerContext.setProperty(DecompilerContext.CURRENT_CLASS_NODE,node);
-  BytecodeMappingTracer tracer=new BytecodeMappingTracer();
+  int total_offset_lines=0;
+  BytecodeMappingTracer dummy_tracer=new BytecodeMappingTracer();
   try {
     invokeProcessors(node);
     ClassWrapper wrapper=node.wrapper;
     StructClass cl=wrapper.getClassStruct();
     DecompilerContext.getLogger().startWriteClass(cl.qualifiedName);
     String lineSeparator=DecompilerContext.getNewLineSeparator();
+    int start_class_def=buffer.length();
     writeClassDefinition(node,buffer,indent);
+    total_offset_lines=buffer.substring(start_class_def).toString().split(lineSeparator,-1).length - 1;
     boolean hasContent=false;
     boolean enumFields=false;
     for (    StructField fd : cl.getFields()) {
@@ -28,7 +31,7 @@
         buffer.append(lineSeparator);
         enumFields=false;
       }
-      fieldToJava(wrapper,cl,fd,buffer,indent + 1,tracer);
+      fieldToJava(wrapper,cl,fd,buffer,indent + 1,dummy_tracer);
       hasContent=true;
     }
     if (enumFields) {
@@ -42,9 +45,12 @@
       if (hasContent) {
         buffer.append(lineSeparator);
       }
-      boolean methodSkipped=!methodToJava(node,mt,buffer,indent + 1,tracer);
+      BytecodeMappingTracer method_tracer=new BytecodeMappingTracer(total_offset_lines);
+      boolean methodSkipped=!methodToJava(node,mt,buffer,indent + 1,method_tracer);
       if (!methodSkipped) {
         hasContent=true;
+        DecompilerContext.getBytecodeSourceMapper().addTracer(cl.qualifiedName,InterpreterUtil.makeUniqueKey(mt.getName(),mt.getDescriptor()),method_tracer);
+        total_offset_lines=method_tracer.getCurrentSourceline();
       }
  else {
         buffer.setLength(position);
