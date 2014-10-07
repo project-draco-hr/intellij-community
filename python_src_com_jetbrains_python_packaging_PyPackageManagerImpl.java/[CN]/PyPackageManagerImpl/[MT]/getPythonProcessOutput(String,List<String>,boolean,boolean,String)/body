@@ -1,7 +1,7 @@
 {
   final String homePath=mySdk.getHomePath();
   if (homePath == null) {
-    throw new PyExternalProcessException(ERROR_INVALID_SDK,helperPath,args,"Cannot find interpreter for SDK");
+    throw new ExecutionException("Cannot find Python interpreter for SDK " + mySdk.getName());
   }
   if (workingDir == null) {
     workingDir=new File(homePath).getParent();
@@ -16,11 +16,12 @@
   try {
     final Process process;
     final Map<String,String> environment=PySdkUtil.mergeEnvVariables(System.getenv(),ImmutableMap.of("PYTHONUNBUFFERED","1"));
+    final GeneralCommandLine commandLine=new GeneralCommandLine(cmdline).withWorkDirectory(workingDir).withEnvironment(environment);
     if (useSudo) {
-      process=ExecUtil.sudo(cmdline,"Please enter your password to make changes in system packages: ",workingDir,environment);
+      process=ExecUtil.sudo(commandLine,"Please enter your password to make changes in system packages: ");
     }
  else {
-      process=ExecUtil.exec(cmdline,workingDir,environment);
+      process=commandLine.createProcess();
     }
     final CapturingProcessHandler handler=new CapturingProcessHandler(process);
     final ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
@@ -48,28 +49,16 @@
       result=handler.runProcess(TIMEOUT);
     }
     if (result.isCancelled()) {
-      throw new PyProcessCancelledException(helperPath,args);
+      throw new RunCanceledByUserException();
     }
-    String message=result.getStderr();
-    if (result.getExitCode() != 0) {
-      final String stdout=result.getStdout();
-      if (StringUtil.isEmptyOrSpaces(message)) {
-        message=stdout;
-      }
-      if (StringUtil.isEmptyOrSpaces(message)) {
-        message="Failed to perform action. Permission denied.";
-      }
-      throw new PyExternalProcessException(result.getExitCode(),helperPath,args,message);
+    final int exitCode=result.getExitCode();
+    if (exitCode != 0) {
+      final String message=StringUtil.isEmptyOrSpaces(result.getStdout()) && StringUtil.isEmptyOrSpaces(result.getStderr()) ? "Permission denied" : "Non-zero exit code";
+      throw new PyExecutionException(message,helperPath,args,result);
     }
     return result;
   }
- catch (  PyProcessCancelledException e) {
-    throw e;
-  }
-catch (  ExecutionException e) {
-    throw new PyExternalProcessException(ERROR_EXECUTION,helperPath,args,e.getMessage());
-  }
-catch (  IOException e) {
-    throw new PyExternalProcessException(ERROR_ACCESS_DENIED,helperPath,args,e.getMessage());
+ catch (  IOException e) {
+    throw new PyExecutionException(e.getMessage(),helperPath,args);
   }
 }

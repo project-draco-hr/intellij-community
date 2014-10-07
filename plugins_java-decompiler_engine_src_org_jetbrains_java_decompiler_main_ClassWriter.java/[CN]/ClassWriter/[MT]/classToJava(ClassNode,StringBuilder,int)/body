@@ -1,12 +1,15 @@
 {
   ClassNode outerNode=(ClassNode)DecompilerContext.getProperty(DecompilerContext.CURRENT_CLASS_NODE);
   DecompilerContext.setProperty(DecompilerContext.CURRENT_CLASS_NODE,node);
+  int total_offset_lines=0;
+  BytecodeMappingTracer dummy_tracer=new BytecodeMappingTracer();
   try {
     invokeProcessors(node);
     ClassWrapper wrapper=node.wrapper;
     StructClass cl=wrapper.getClassStruct();
     DecompilerContext.getLogger().startWriteClass(cl.qualifiedName);
     String lineSeparator=DecompilerContext.getNewLineSeparator();
+    int start_class_def=buffer.length();
     writeClassDefinition(node,buffer,indent);
     boolean hasContent=false;
     boolean enumFields=false;
@@ -27,13 +30,14 @@
         buffer.append(lineSeparator);
         enumFields=false;
       }
-      fieldToJava(wrapper,cl,fd,buffer,indent + 1);
+      fieldToJava(wrapper,cl,fd,buffer,indent + 1,dummy_tracer);
       hasContent=true;
     }
     if (enumFields) {
       buffer.append(';');
       buffer.append(lineSeparator);
     }
+    total_offset_lines=buffer.substring(start_class_def).toString().split(lineSeparator,-1).length - 1;
     for (    StructMethod mt : cl.getMethods()) {
       boolean hide=mt.isSynthetic() && DecompilerContext.getOption(IFernflowerPreferences.REMOVE_SYNTHETIC) || mt.hasModifier(CodeConstants.ACC_BRIDGE) && DecompilerContext.getOption(IFernflowerPreferences.REMOVE_BRIDGE) || wrapper.getHiddenMembers().contains(InterpreterUtil.makeUniqueKey(mt.getName(),mt.getDescriptor()));
       if (hide)       continue;
@@ -41,9 +45,12 @@
       if (hasContent) {
         buffer.append(lineSeparator);
       }
-      boolean methodSkipped=!methodToJava(node,mt,buffer,indent + 1);
+      BytecodeMappingTracer method_tracer=new BytecodeMappingTracer(total_offset_lines);
+      boolean methodSkipped=!methodToJava(node,mt,buffer,indent + 1,method_tracer);
       if (!methodSkipped) {
         hasContent=true;
+        DecompilerContext.getBytecodeSourceMapper().addTracer(cl.qualifiedName,InterpreterUtil.makeUniqueKey(mt.getName(),mt.getDescriptor()),method_tracer);
+        total_offset_lines=(method_tracer.getCurrentSourceLine() + 1);
       }
  else {
         buffer.setLength(position);

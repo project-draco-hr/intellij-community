@@ -1,2 +1,46 @@
 {
+  IdeaCompilerOutput moduleCompilerOutput=gradleModule.getCompilerOutput();
+  File buildDir=null;
+  try {
+    buildDir=gradleModule.getGradleProject().getBuildDirectory();
+  }
+ catch (  UnsupportedMethodException ignore) {
+  }
+  Map<ExternalSystemSourceType,File> compileOutputPaths=ContainerUtil.newHashMap();
+  boolean inheritOutputDirs=false;
+  ModuleData moduleData=ideModule.getData();
+  if (moduleCompilerOutput != null) {
+    compileOutputPaths.put(ExternalSystemSourceType.SOURCE,moduleCompilerOutput.getOutputDir());
+    compileOutputPaths.put(ExternalSystemSourceType.RESOURCE,moduleCompilerOutput.getOutputDir());
+    compileOutputPaths.put(ExternalSystemSourceType.TEST,moduleCompilerOutput.getTestOutputDir());
+    compileOutputPaths.put(ExternalSystemSourceType.TEST_RESOURCE,moduleCompilerOutput.getTestOutputDir());
+    inheritOutputDirs=moduleCompilerOutput.getInheritOutputDirs();
+  }
+  ExternalProject externalProject=resolverCtx.getExtraProject(gradleModule,ExternalProject.class);
+  if (externalProject != null) {
+    externalProject=new DefaultExternalProject(externalProject);
+    buildDir=buildDir == null ? externalProject.getBuildDir() : buildDir;
+    if (!inheritOutputDirs) {
+      final File sourceCompileOutputPath=compileOutputPaths.get(ExternalSystemSourceType.SOURCE);
+      if (sourceCompileOutputPath == null) {
+        addCompileOutputPath(compileOutputPaths,externalProject,MAIN_SOURCE_SET,ExternalSystemSourceType.SOURCE);
+        addCompileOutputPath(compileOutputPaths,externalProject,MAIN_SOURCE_SET,ExternalSystemSourceType.RESOURCE);
+      }
+      final File testCompileOutputPath=compileOutputPaths.get(ExternalSystemSourceType.TEST);
+      if (testCompileOutputPath == null) {
+        addCompileOutputPath(compileOutputPaths,externalProject,TEST_SOURCE_SET,ExternalSystemSourceType.TEST);
+        addCompileOutputPath(compileOutputPaths,externalProject,TEST_SOURCE_SET,ExternalSystemSourceType.TEST_RESOURCE);
+      }
+    }
+  }
+ else {
+    LOG.warn(String.format("Unable to get ExternalProject model for '%s'",gradleModule.getName()));
+  }
+  for (  Map.Entry<ExternalSystemSourceType,File> sourceTypeFileEntry : compileOutputPaths.entrySet()) {
+    final File outputPath=ObjectUtils.chooseNotNull(sourceTypeFileEntry.getValue(),buildDir);
+    if (outputPath != null) {
+      moduleData.setCompileOutputPath(sourceTypeFileEntry.getKey(),outputPath.getAbsolutePath());
+    }
+  }
+  moduleData.setInheritProjectCompileOutputPath(inheritOutputDirs);
 }
