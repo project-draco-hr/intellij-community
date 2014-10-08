@@ -6,5 +6,36 @@
   projects.remove(projectSettings);
   projects.add(projectSettings);
   systemSettings.setLinkedProjectsSettings(projects);
-  ExternalSystemUtil.refreshProjects(new ImportSpecBuilder(myProject,getExternalSystemId()).use(ProgressExecutionMode.MODAL_SYNC));
+  final Ref<Couple<String>> error=Ref.create();
+  ExternalSystemUtil.refreshProjects(new ImportSpecBuilder(myProject,getExternalSystemId()).use(ProgressExecutionMode.MODAL_SYNC).callback(new ExternalProjectRefreshCallback(){
+    @Override public void onSuccess(    @Nullable final DataNode<ProjectData> externalProject){
+      if (externalProject == null) {
+        System.err.println("Got null External project after import");
+        return;
+      }
+      ExternalSystemApiUtil.executeProjectChangeAction(true,new DisposeAwareProjectChange(myProject){
+        @Override public void execute(){
+          ProjectRootManagerEx.getInstanceEx(myProject).mergeRootsChangesDuring(new Runnable(){
+            @Override public void run(){
+              ServiceManager.getService(ProjectDataManager.class).importData(externalProject.getKey(),Collections.singleton(externalProject),myProject,true);
+            }
+          }
+);
+        }
+      }
+);
+      System.out.println("External project was successfully imported");
+    }
+    @Override public void onFailure(    @NotNull String errorMessage,    @Nullable String errorDetails){
+      error.set(Couple.of(errorMessage,errorDetails));
+    }
+  }
+));
+  if (!error.isNull()) {
+    String failureMsg="Import failed: " + error.get().first;
+    if (StringUtil.isNotEmpty(error.get().second)) {
+      failureMsg+="\nError details: \n" + error.get().second;
+    }
+    fail(failureMsg);
+  }
 }
