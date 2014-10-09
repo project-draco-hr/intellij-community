@@ -1,14 +1,18 @@
 {
-  final Set<String> seenAttrs=collectUsedAttributes();
+  if (!context.maySwitchToAST(expr)) {
+    return null;
+  }
+  final Set<String> seenAttrs;
+  seenAttrs=collectUsedAttributes(expr);
   final Set<PyClass> candidates=Sets.newHashSet();
   for (  String attribute : seenAttrs) {
-    candidates.addAll(PyClassAttributesIndex.find(attribute,getProject()));
+    candidates.addAll(PyClassAttributesIndex.find(attribute,expr.getProject()));
   }
   final Set<PyClass> suitableClasses=Sets.newHashSet();
   for (  PyClass candidate : candidates) {
-    final Set<String> availableAttrs=Sets.newHashSet(PyUtil.getAllDeclaredAttributeNames(candidate));
+    final Set<String> availableAttrs=Sets.newHashSet(getAllDeclaredAttributeNames(candidate));
     for (    PyClass parent : candidate.getAncestorClasses(context)) {
-      availableAttrs.addAll(PyUtil.getAllDeclaredAttributeNames(parent));
+      availableAttrs.addAll(getAllDeclaredAttributeNames(parent));
     }
     if (availableAttrs.containsAll(seenAttrs)) {
       suitableClasses.add(candidate);
@@ -21,7 +25,13 @@
       }
     }
   }
-  return PyUnionType.union(ContainerUtil.map(suitableClasses,new Function<PyClass,PyType>(){
+  final List<PyClass> orderedWinners=ContainerUtil.sorted(suitableClasses,new Comparator<PyClass>(){
+    @Override public int compare(    PyClass o1,    PyClass o2){
+      return StringUtil.compare(o1.getName(),o2.getName(),true);
+    }
+  }
+);
+  return PyUnionType.union(ContainerUtil.map(orderedWinners,new Function<PyClass,PyType>(){
     @Override public PyType fun(    PyClass cls){
       return new PyClassTypeImpl(cls,false);
     }
