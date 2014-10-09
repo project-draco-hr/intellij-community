@@ -2,31 +2,23 @@
   PsiCompiledElement cls=psiClass.getUserData(ClsElementImpl.COMPILED_ELEMENT);
   if (cls != null && cls.isValid())   return (PsiClass)cls;
   VirtualFile vFile=psiClass.getContainingFile().getVirtualFile();
-  final Project project=psiClass.getProject();
-  final ProjectFileIndex idx=ProjectRootManager.getInstance(project).getFileIndex();
+  final ProjectFileIndex idx=ProjectRootManager.getInstance(myProject).getFileIndex();
   if (vFile == null || !idx.isInLibrarySource(vFile))   return psiClass;
   String fqn=psiClass.getQualifiedName();
   if (fqn == null)   return psiClass;
-  final Set<OrderEntry> orderEntries=new THashSet<OrderEntry>(idx.getOrderEntriesForFile(vFile));
-  PsiClass original=JavaPsiFacade.getInstance(project).findClass(fqn,new GlobalSearchScope(project){
-    @Override public int compare(    @NotNull VirtualFile file1,    @NotNull VirtualFile file2){
-      return 0;
-    }
-    @Override public boolean contains(    @NotNull VirtualFile file){
-      List<OrderEntry> entries=idx.getOrderEntriesForFile(file);
-      for (int i=0; i < entries.size(); i++) {
-        final OrderEntry entry=entries.get(i);
-        if (orderEntries.contains(entry))         return true;
+  final Set<OrderEntry> orderEntries=ContainerUtil.newHashSet(idx.getOrderEntriesForFile(vFile));
+  GlobalSearchScope librariesScope=LibraryScopeCache.getInstance(myProject).getLibrariesOnlyScope();
+  for (  PsiClass original : JavaPsiFacade.getInstance(myProject).findClasses(fqn,librariesScope)) {
+    PsiFile psiFile=original.getContainingFile();
+    if (psiFile != null) {
+      VirtualFile candidateFile=psiFile.getVirtualFile();
+      if (candidateFile != null) {
+        List<OrderEntry> entries=idx.getOrderEntriesForFile(candidateFile);
+        for (int i=0; i < entries.size(); i++) {
+          if (orderEntries.contains(entries.get(i)))           return original;
+        }
       }
-      return false;
-    }
-    @Override public boolean isSearchInModuleContent(    @NotNull Module aModule){
-      return false;
-    }
-    @Override public boolean isSearchInLibraries(){
-      return true;
     }
   }
-);
-  return original != null ? original : psiClass;
+  return psiClass;
 }
