@@ -1,0 +1,41 @@
+{
+  ToolWindowManagerImpl toolWindowManager=(ToolWindowManagerImpl)ToolWindowManager.getInstance(myProject);
+  if (!isAvailable() && toolWindowManager.getToolWindow(ToolWindowId.PREVIEW) != null) {
+    myHistory.clear();
+    myContentManager.removeAllContents(true);
+    toolWindowManager.unregisterToolWindow(ToolWindowId.PREVIEW);
+    return;
+  }
+  if (isAvailable() && toolWindowManager.getToolWindow(ToolWindowId.PREVIEW) == null) {
+    myToolWindow=(ToolWindowImpl)toolWindowManager.registerToolWindow(ToolWindowId.PREVIEW,myEmptyStatePanel,ToolWindowAnchor.RIGHT,myProject,false);
+    myContentManager=myToolWindow.getContentManager();
+    myToolWindow.setIcon(AllIcons.Actions.PreviewDetails);
+    myToolWindow.setContentUiType(ToolWindowContentUiType.COMBO,null);
+    myToolWindow.setAutoHide(true);
+    myEmptyStateContent=myContentManager.getContent(0);
+    myContentManager.addContentManagerListener(new ContentManagerAdapter(){
+      @Override public void selectionChanged(      ContentManagerEvent event){
+        if (myInnerSelectionChange || event.getOperation() != ContentManagerEvent.ContentOperation.add)         return;
+        PreviewInfo previewInfo=event.getContent().getUserData(INFO_KEY);
+        if (previewInfo != null) {
+          preview(previewInfo,true);
+        }
+      }
+    }
+);
+    MoveToStandardViewAction moveToStandardViewAction=new MoveToStandardViewAction();
+    moveToStandardViewAction.registerCustomShortcutSet(new ShortcutSet(){
+      @NotNull @Override public Shortcut[] getShortcuts(){
+        Keymap keymap=KeymapManager.getInstance().getActiveKeymap();
+        return keymap.getShortcuts("ShowContent");
+      }
+    }
+,myToolWindow.getComponent());
+    myToolWindow.setTitleActions(moveToStandardViewAction);
+    ArrayList<AnAction> myGearActions=new ArrayList<AnAction>();
+    for (    PreviewPanelProvider provider : myProviders) {
+      myGearActions.add(new ContentTypeToggleAction(provider));
+    }
+    myToolWindow.setAdditionalGearActions(new DefaultActionGroup("Preview",myGearActions));
+  }
+}

@@ -1,0 +1,46 @@
+{
+  String text=(String)args.get("initial");
+  String expected=(String)args.get("expected");
+  @SuppressWarnings("unchecked") List<TextRange> ranges=(List<TextRange>)args.get("ranges");
+  Info info=parse(text);
+  if (!isEmpty(ranges) && !isEmpty(info.ranges)) {
+    fail("Duplicate ranges set: explicit: " + ranges + ", "+ "derived: "+ info.ranges+ ", text:\n"+ text);
+  }
+  if (isEmpty(info.ranges)) {
+    info.ranges=!isEmpty(ranges) ? ranges : Arrays.asList(TextRange.from(0,text.length()));
+  }
+  myFixture.configureByText(fileType,info.text);
+  final FoldingModel foldingModel=myFixture.getEditor().getFoldingModel();
+  for (  final FoldingInfo foldingInfo : info.foldings) {
+    foldingModel.runBatchFoldingOperation(new Runnable(){
+      @Override public void run(){
+        FoldRegion region=foldingModel.addFoldRegion(foldingInfo.start,foldingInfo.end,foldingInfo.placeholder);
+        if (region != null)         region.setExpanded(false);
+      }
+    }
+);
+  }
+  @SuppressWarnings("unchecked") List<ArrangementGroupingRule> groupingRules=(List<ArrangementGroupingRule>)args.get("groups");
+  if (groupingRules == null)   groupingRules=Collections.emptyList();
+  List<?> rules=(List<?>)args.get("rules");
+  List<ArrangementSectionRule> sectionRules=Collections.emptyList();
+  if (rules != null)   sectionRules=ContainerUtil.map(rules,new Function<Object,ArrangementSectionRule>(){
+    @Override public ArrangementSectionRule fun(    Object o){
+      return o instanceof ArrangementSectionRule ? (ArrangementSectionRule)o : ArrangementSectionRule.create((StdArrangementMatchRule)o);
+    }
+  }
+);
+  @SuppressWarnings("unchecked") List<StdArrangementRuleAliasToken> aliases=(List<StdArrangementRuleAliasToken>)args.get("aliases");
+  CommonCodeStyleSettings settings=CodeStyleSettingsManager.getInstance(myFixture.getProject()).getCurrentSettings().getCommonSettings(language);
+  final StdArrangementSettings arrangementSettings=aliases == null ? new StdArrangementSettings(groupingRules,sectionRules) : new StdArrangementExtendableSettings(groupingRules,sectionRules,aliases);
+  settings.setArrangementSettings(arrangementSettings);
+  ArrangementEngine engine=ServiceManager.getService(myFixture.getProject(),ArrangementEngine.class);
+  engine.arrange(myFixture.getEditor(),myFixture.getFile(),info.ranges);
+  info=parse(expected);
+  assertEquals(info.text,myFixture.getEditor().getDocument().getText());
+  for (  FoldingInfo it : info.foldings) {
+    FoldRegion foldRegion=foldingModel.getCollapsedRegionAtOffset(it.start);
+    assertNotNull("Expected to find fold region at offset " + it.start,foldRegion);
+    assertEquals(it.end,foldRegion.getEndOffset());
+  }
+}

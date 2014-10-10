@@ -1,30 +1,22 @@
 {
-  final InputStream[] inputStreams=new InputStream[]{null};
-  final Exception[] exception=new Exception[]{null};
+  final Ref<URLConnection> connectionRef=Ref.create();
+  final Ref<Exception> exception=Ref.create();
   Future<?> downloadThreadFuture=ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
-    public void run(){
+    @Override public void run(){
       try {
-        final String urlToCheck;
+        String urlToCheck;
         if (!StandardFileSystems.FILE_PROTOCOL.equals(new URL(url).getProtocol())) {
           urlToCheck=url + (url.contains("?") ? "&" : "?") + "build="+ ApplicationInfo.getInstance().getBuild().asString();
         }
  else {
           urlToCheck=url;
         }
-        HttpURLConnection connection;
-        if (ApplicationManager.getApplication() != null) {
-          connection=HttpConfigurable.getInstance().openHttpConnection(urlToCheck);
-        }
- else {
-          connection=(HttpURLConnection)new URL(urlToCheck).openConnection();
-          connection.setReadTimeout(HttpConfigurable.CONNECTION_TIMEOUT);
-          connection.setConnectTimeout(HttpConfigurable.CONNECTION_TIMEOUT);
-        }
+        URLConnection connection=RepositoryHelper.openConnection(urlToCheck,true).first;
         connection.connect();
-        inputStreams[0]=connection.getInputStream();
+        connectionRef.set(connection);
       }
  catch (      IOException e) {
-        exception[0]=e;
+        exception.set(e);
       }
     }
   }
@@ -38,6 +30,8 @@
     downloadThreadFuture.cancel(true);
     throw new ConnectionException(IdeBundle.message("updates.timeout.error"));
   }
-  if (exception[0] != null)   throw exception[0];
-  return inputStreams[0];
+  if (!exception.isNull()) {
+    throw exception.get();
+  }
+  return connectionRef.get();
 }

@@ -9,14 +9,18 @@
   }
   final Collection<Change> changes=myCheckinProjectPanel.getSelectedChanges();
   final TodoCheckinHandlerWorker worker=new TodoCheckinHandlerWorker(myProject,changes,myTodoFilter,true);
-  final Runnable runnable=new Runnable(){
-    @Override public void run(){
+  final Ref<Boolean> completed=Ref.create(Boolean.FALSE);
+  ProgressManager.getInstance().run(new Task.Modal(myProject,"Looking for new and edited TODO items...",true){
+    @Override public void run(    @NotNull ProgressIndicator indicator){
+      indicator.setIndeterminate(true);
       worker.execute();
     }
+    @Override public void onSuccess(){
+      completed.set(Boolean.TRUE);
+    }
   }
-;
-  final boolean completed=ProgressManager.getInstance().runProcessWithProgressSynchronously(runnable,"Looking for new and edited TODO items...",true,myProject);
-  if (completed && (worker.getAddedOrEditedTodos().isEmpty() && worker.getInChangedTodos().isEmpty() && worker.getSkipped().isEmpty()))   return ReturnResult.COMMIT;
-  if (!completed)   return ReturnResult.CANCEL;
+);
+  if (completed.get() && (worker.getAddedOrEditedTodos().isEmpty() && worker.getInChangedTodos().isEmpty() && worker.getSkipped().isEmpty()))   return ReturnResult.COMMIT;
+  if (!completed.get())   return ReturnResult.CANCEL;
   return showResults(worker,executor);
 }

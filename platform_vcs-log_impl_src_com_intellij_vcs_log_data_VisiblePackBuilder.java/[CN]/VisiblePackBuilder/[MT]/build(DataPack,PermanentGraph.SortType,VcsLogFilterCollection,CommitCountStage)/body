@@ -1,0 +1,37 @@
+{
+  VcsLogHashFilter hashFilter=filters.getHashFilter();
+  if (hashFilter != null && !hashFilter.getHashes().isEmpty()) {
+    return Pair.create(applyHashFilter(dataPack,hashFilter.getHashes(),sortType),commitCount);
+  }
+  List<VcsLogDetailsFilter> detailsFilters=filters.getDetailsFilters();
+  Condition<Integer> filter;
+  boolean canRequestMore;
+  if (!detailsFilters.isEmpty()) {
+    List<Hash> matchingCommits=null;
+    if (commitCount == CommitCountStage.INITIAL) {
+      matchingCommits=filterInMemory(dataPack.getPermanentGraph(),detailsFilters);
+      if (matchingCommits.size() < commitCount.getCount()) {
+        commitCount=commitCount.next();
+        matchingCommits=null;
+      }
+    }
+    if (matchingCommits == null) {
+      try {
+        matchingCommits=getFilteredDetailsFromTheVcs(myLogProviders,filters,commitCount.getCount());
+      }
+ catch (      VcsException e) {
+        matchingCommits=Collections.emptyList();
+        LOG.error(e);
+      }
+    }
+    filter=getFilterFromCommits(matchingCommits);
+    canRequestMore=matchingCommits.size() >= commitCount.getCount();
+  }
+ else {
+    filter=null;
+    canRequestMore=false;
+  }
+  Set<Integer> heads=getMatchingHeads(dataPack.getRefs(),filters);
+  VisibleGraph<Integer> visibleGraph=dataPack.getPermanentGraph().createVisibleGraph(sortType,heads,filter);
+  return Pair.create(new VisiblePack(dataPack,visibleGraph,canRequestMore),commitCount);
+}

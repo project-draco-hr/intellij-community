@@ -1,49 +1,55 @@
 {
   if (StringUtil.isEmpty(name))   return true;
-  boolean result;
-  if (myTempMapMode) {
-    ++requests;
-    Set<Loader> loaders=myResources2LoadersTempMap.get(shortName);
-    result=loaders != null && loaders.contains(loader);
-    if (!result)     ++hits;
-    if (doDebug) {
-      boolean result2=myDebugInfo.loaderHasName(shortName,loader);
-      if (result2 != result) {
-        ++diffs3;
-      }
-      Resource resource=loader.getResource(name,true);
-      if (resource != null && !result || resource == null && result) {
-        ++falseHits;
+  myLock.readLock().lock();
+  try {
+    boolean result;
+    if (myNameFilter == null) {
+      Object loaders=myResources2LoadersTempMap.get(shortName);
+      result=contains(loader,loaders);
+      if (doDebug) {
+        ++requestsWithoutNameFilter;
+        if (!result)         ++hits;
+        boolean result2=myDebugInfo.loaderHasName(shortName,loader);
+        if (result2 != result) {
+          ++diffs3;
+        }
+        Resource resource=loader.getResource(name,true);
+        if (resource != null && !result || resource == null && result) {
+          ++falseHits;
+        }
+        if (requestsWithoutNameFilter % 1000 == 0) {
+          LOG.debug("Avoided disk hits: " + hits + " from "+ requestsWithoutNameFilter+ ", false hits:"+ falseHits+ ", bitmap diffs:"+ diffs3);
+        }
       }
     }
-    if (requests % 1000 == 0 && doDebug) {
-      LOG.debug("Avoided disk hits: " + hits + " from "+ requests+ ", false hits:"+ falseHits+ ", bitmap diffs:"+ diffs3);
-    }
-  }
  else {
-    ++requests2;
-    result=myNameFilter.maybeContains(shortName,loader);
-    if (!result)     ++hits2;
-    if (doDebug) {
-      boolean result2=myDebugInfo.loaderHasName(shortName,loader);
-      if (result2 != result) {
-        ++diffs2;
-      }
-      Set<Loader> loaders=myResources2LoadersTempMap.get(shortName);
-      if (result != (loaders != null && loaders.contains(loader))) {
-        ++diffs;
-      }
-      Resource resource=loader.getResource(name,true);
-      if (resource == null && result) {
-        ++falseHits2;
-      }
-      if (resource != null && !result) {
-        ++falseHits2;
+      result=myNameFilter.maybeContains(shortName,loader);
+      if (doDebug) {
+        ++requestsWithNameFilter;
+        if (!result)         ++avoidedDiskHits2;
+        boolean result2=myDebugInfo.loaderHasName(shortName,loader);
+        if (result2 != result) {
+          ++diffs2;
+        }
+        Object loaders=myResources2LoadersTempMap.get(shortName);
+        if (result != contains(loader,loaders)) {
+          ++diffs;
+        }
+        Resource resource=loader.getResource(name,true);
+        if (resource == null && result) {
+          ++falseHits2;
+        }
+        if (resource != null && !result) {
+          ++falseHits2;
+        }
+        if (requestsWithNameFilter % 1000 == 0) {
+          LOG.debug("Avoided disk hits2: " + avoidedDiskHits2 + " from "+ requestsWithNameFilter+ ","+ diffs+ ", false hits:"+ falseHits2+ ", bitmap diffs:"+ diffs2);
+        }
       }
     }
-    if (requests2 % 1000 == 0 && doDebug) {
-      LOG.debug("Avoided disk hits2: " + hits2 + " from "+ requests2+ ","+ diffs+ ", false hits:"+ falseHits2+ ", bitmap diffs:"+ diffs2);
-    }
+    return result;
   }
-  return result;
+  finally {
+    myLock.readLock().unlock();
+  }
 }

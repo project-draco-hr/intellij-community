@@ -1,0 +1,78 @@
+{
+  int N=5;
+  final AtomicBoolean[] anotherThreadStarted=new AtomicBoolean[N];
+  final AtomicBoolean[] anotherReadActionStarted=new AtomicBoolean[N];
+  for (int i=0; i < anotherReadActionStarted.length; i++) {
+    anotherReadActionStarted[i]=new AtomicBoolean();
+    anotherThreadStarted[i]=new AtomicBoolean();
+  }
+  new Thread(new Runnable(){
+    @Override public void run(){
+      try {
+        ApplicationManager.getApplication().runReadAction(new Runnable(){
+          @Override public void run(){
+            System.out.println("inside read action");
+            readStarted=true;
+            while (!tryingToStartWriteAction)             ;
+            TimeoutUtil.sleep(100);
+            for (int i=0; i < anotherReadActionStarted.length; i++) {
+              final int finalI=i;
+              new Thread(new Runnable(){
+                @Override public void run(){
+                  System.out.println("another thread started " + finalI);
+                  anotherThreadStarted[finalI].set(true);
+                  ApplicationManager.getApplication().runReadAction(new Runnable(){
+                    @Override public void run(){
+                      System.out.println("inside another thread read action " + finalI);
+                      anotherReadActionStarted[finalI].set(true);
+                      try {
+                        Thread.sleep(100);
+                      }
+ catch (                      InterruptedException e) {
+                        throw new RuntimeException(e);
+                      }
+                      anotherReadActionStarted[finalI].set(false);
+                      System.out.println("finished another thread read action " + finalI);
+                    }
+                  }
+);
+                  System.out.println("another thread finished " + finalI);
+                }
+              }
+,"another read action " + i).start();
+            }
+            for (            AtomicBoolean threadStarted : anotherThreadStarted) {
+              while (!threadStarted.get())               ;
+            }
+            for (int i=0; i < 10; i++) {
+              for (              AtomicBoolean readStarted : anotherReadActionStarted) {
+                assertThat(!readStarted.get(),"must not start another read action while write is pending");
+              }
+              TimeoutUtil.sleep(20);
+            }
+            System.out.println("finished read action");
+          }
+        }
+);
+      }
+ catch (      Throwable e) {
+        exception=e;
+      }
+    }
+  }
+,"read").start();
+  while (!readStarted)   ;
+  tryingToStartWriteAction=true;
+  System.out.println("write about to start");
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    @Override public void run(){
+      System.out.println("inside write action");
+      for (      AtomicBoolean readStarted : anotherReadActionStarted) {
+        assertThat(!readStarted.get(),"must not start another read action while write is running");
+      }
+      System.out.println("finished write action");
+    }
+  }
+);
+  if (exception != null)   throw exception;
+}

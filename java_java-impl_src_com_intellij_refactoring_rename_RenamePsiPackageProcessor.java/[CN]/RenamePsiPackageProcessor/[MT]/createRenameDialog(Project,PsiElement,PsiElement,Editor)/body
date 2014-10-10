@@ -1,0 +1,46 @@
+{
+  return new RenameDialog(project,element,nameSuggestionContext,editor){
+    @Override protected void createNewNameComponent(){
+      super.createNewNameComponent();
+      final String qualifiedName=((PsiPackage)element).getQualifiedName();
+      final String packageName=StringUtil.getPackageName(qualifiedName);
+      preselectExtension(packageName.isEmpty() ? 0 : packageName.length() + 1,qualifiedName.length());
+    }
+    @Override public String[] getSuggestedNames(){
+      return new String[]{((PsiPackage)element).getQualifiedName()};
+    }
+    protected void doAction(){
+      final PsiPackage psiPackage=(PsiPackage)element;
+      final String oldName=psiPackage.getQualifiedName();
+      final String newName=getNewName();
+      if (!Comparing.strEqual(StringUtil.getPackageName(oldName),StringUtil.getPackageName(newName))) {
+        final ProjectFileIndex index=ProjectRootManager.getInstance(myProject).getFileIndex();
+        final PsiDirectory[] directories=psiPackage.getDirectories();
+        invokeRefactoring(new MoveDirectoryWithClassesProcessor(myProject,directories,null,isSearchInComments(),isSearchInNonJavaFiles(),false,null){
+          @Override public TargetDirectoryWrapper getTargetDirectory(          final PsiDirectory dir){
+            final VirtualFile sourceRoot=index.getSourceRootForFile(dir.getVirtualFile());
+            LOG.assertTrue(sourceRoot != null);
+            return new TargetDirectoryWrapper(dir.getManager().findDirectory(sourceRoot),newName.replaceAll("\\.","\\/"));
+          }
+          @Override public void performRefactoring(          UsageInfo[] usages){
+            super.performRefactoring(usages);
+            for (            PsiDirectory directory : directories) {
+              directory.delete();
+            }
+          }
+          @Override protected String getTargetName(){
+            return newName;
+          }
+          @Override protected String getCommandName(){
+            return "Rename package";
+          }
+        }
+);
+      }
+ else {
+        super.doAction();
+      }
+    }
+  }
+;
+}

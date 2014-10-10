@@ -1,0 +1,53 @@
+{
+  FacetType<AppEngineFacet,AppEngineFacetConfiguration> facetType=AppEngineFacet.getFacetType();
+  AppEngineFacet appEngineFacet=FacetManager.getInstance(module).addFacet(facetType,facetType.getDefaultFacetName(),null);
+  AppEngineWebIntegration webIntegration=AppEngineWebIntegration.getInstance();
+  webIntegration.registerFrameworkInModel(frameworkSupportModel,appEngineFacet);
+  final AppEngineFacetConfiguration facetConfiguration=appEngineFacet.getConfiguration();
+  facetConfiguration.setSdkHomePath(sdkPath);
+  final AppEngineSdk sdk=appEngineFacet.getSdk();
+  final Artifact webArtifact=findOrCreateWebArtifact(appEngineFacet);
+  final VirtualFile webDescriptorDir=webIntegration.suggestParentDirectoryForAppEngineWebXml(module,rootModel);
+  if (webDescriptorDir != null) {
+    VirtualFile descriptor=createFileFromTemplate(AppEngineTemplateGroupDescriptorFactory.APP_ENGINE_WEB_XML_TEMPLATE,webDescriptorDir,AppEngineUtil.APP_ENGINE_WEB_XML_NAME);
+    if (descriptor != null) {
+      webIntegration.addDescriptor(webArtifact,module.getProject(),descriptor);
+    }
+  }
+  final Project project=module.getProject();
+  webIntegration.addDevServerToModuleDependencies(rootModel,sdk);
+  final Library apiJar=addProjectLibrary(module,"AppEngine API",sdk.getUserLibraryPaths(),VirtualFile.EMPTY_ARRAY);
+  rootModel.addLibraryEntry(apiJar);
+  webIntegration.addLibraryToArtifact(apiJar,webArtifact,project);
+  if (persistenceApi != null) {
+    facetConfiguration.setRunEnhancerOnMake(true);
+    facetConfiguration.setPersistenceApi(persistenceApi);
+    facetConfiguration.getFilesToEnhance().addAll(AppEngineUtil.getDefaultSourceRootsToEnhance(rootModel));
+    try {
+      final VirtualFile[] sourceRoots=rootModel.getSourceRoots();
+      final VirtualFile sourceRoot;
+      if (sourceRoots.length > 0) {
+        sourceRoot=sourceRoots[0];
+      }
+ else {
+        sourceRoot=findOrCreateChildDirectory(rootModel.getContentRoots()[0],"src");
+      }
+      VirtualFile metaInf=findOrCreateChildDirectory(sourceRoot,"META-INF");
+      if (persistenceApi == PersistenceApi.JDO || persistenceApi == PersistenceApi.JDO3) {
+        createFileFromTemplate(AppEngineTemplateGroupDescriptorFactory.APP_ENGINE_JDO_CONFIG_TEMPLATE,metaInf,AppEngineUtil.JDO_CONFIG_XML_NAME);
+      }
+ else {
+        final VirtualFile file=createFileFromTemplate(AppEngineTemplateGroupDescriptorFactory.APP_ENGINE_JPA_CONFIG_TEMPLATE,metaInf,AppEngineUtil.JPA_CONFIG_XML_NAME);
+        if (file != null) {
+          webIntegration.setupJpaSupport(module,file);
+        }
+      }
+    }
+ catch (    IOException e) {
+      LOG.error(e);
+    }
+    final Library library=addProjectLibrary(module,"AppEngine ORM",Collections.singletonList(sdk.getOrmLibDirectoryPath()),sdk.getOrmLibSources());
+    rootModel.addLibraryEntry(library);
+    webIntegration.addLibraryToArtifact(library,webArtifact,project);
+  }
+}

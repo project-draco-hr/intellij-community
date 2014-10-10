@@ -1,19 +1,25 @@
 {
-  node.stopLoading();
+  node.cancelLoading();
   final T target=model.getTarget();
-  if (target == null)   return;
-  myPushLog.startLoading(node);
+  if (target == null) {
+    node.stopLoading();
+    return;
+  }
+  node.setEnabled(true);
   final PushSupport<R,S,T> support=model.getSupport();
   final AtomicReference<OutgoingResult> result=new AtomicReference<OutgoingResult>();
   Runnable task=new Runnable(){
     @Override public void run(){
-      OutgoingResult outgoing=support.getOutgoingCommitsProvider().getOutgoingCommits(model.getRepository(),new PushSpec<S,T>(model.getSource(),model.getTarget()),initial);
+      final R repository=model.getRepository();
+      OutgoingResult outgoing=support.getOutgoingCommitsProvider().getOutgoingCommits(repository,new PushSpec<S,T>(model.getSource(),model.getTarget()),initial);
       result.compareAndSet(null,outgoing);
       UIUtil.invokeAndWaitIfNeeded(new Runnable(){
         @Override public void run(){
           OutgoingResult outgoing=result.get();
           List<VcsError> errors=outgoing.getErrors();
+          boolean shouldBeSelected;
           if (!errors.isEmpty()) {
+            shouldBeSelected=false;
             myPushLog.setChildren(node,ContainerUtil.map(errors,new Function<VcsError,DefaultMutableTreeNode>(){
               @Override public DefaultMutableTreeNode fun(              final VcsError error){
                 VcsLinkedText errorLinkText=new VcsLinkedText(error.getText(),new VcsLinkListener(){
@@ -33,14 +39,24 @@
 ));
           }
  else {
-            model.setLoadedCommits(outgoing.getCommits());
+            List<? extends VcsFullCommitDetails> commits=outgoing.getCommits();
+            shouldBeSelected=shouldSelectInitially(target,repository,model.getSupport().getRepositoryManager(),!commits.isEmpty());
+            model.setLoadedCommits(commits);
             myPushLog.setChildren(node,getPresentationForCommits(PushController.this.myProject,model.getLoadedCommits(),model.getNumberOfShownCommits()));
+            if (!commits.isEmpty()) {
+              myPushLog.selectIfNothingSelected(node);
+            }
           }
+          node.stopLoading();
+          if (shouldBeSelected) {
+            node.setChecked(true);
+          }
+          myDialog.enableOkActions(isPushAllowed());
         }
       }
 );
     }
   }
 ;
-  node.startLoading(myExecutorService.submit(task,result));
+  node.startLoading(myPushLog.getTree(),myExecutorService.submit(task,result));
 }

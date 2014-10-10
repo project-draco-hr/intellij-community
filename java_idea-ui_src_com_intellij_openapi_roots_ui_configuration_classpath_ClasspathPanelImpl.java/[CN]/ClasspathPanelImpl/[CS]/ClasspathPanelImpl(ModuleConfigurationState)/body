@@ -2,13 +2,33 @@
   super(new BorderLayout());
   myState=state;
   myModel=new ClasspathTableModel(state,getStructureConfigurableContext());
-  myEntryTable=new JBTable(myModel);
+  myEntryTable=new JBTable(myModel){
+    @Override protected TableRowSorter<TableModel> createRowSorter(    TableModel model){
+      return new DefaultColumnInfoBasedRowSorter(model){
+        @Override public void toggleSortOrder(        int column){
+          if (isSortable(column)) {
+            SortKey oldKey=ContainerUtil.getFirstItem(getSortKeys());
+            SortOrder oldOrder;
+            if (oldKey == null || oldKey.getColumn() != column) {
+              oldOrder=SortOrder.UNSORTED;
+            }
+ else {
+              oldOrder=oldKey.getSortOrder();
+            }
+            setSortKeys(Collections.singletonList(new SortKey(column,getNextSortOrder(oldOrder))));
+          }
+        }
+      }
+;
+    }
+  }
+;
   myEntryTable.setShowGrid(false);
   myEntryTable.setDragEnabled(false);
   myEntryTable.setIntercellSpacing(new Dimension(0,0));
   myEntryTable.setDefaultRenderer(ClasspathTableItem.class,new TableItemRenderer(getStructureConfigurableContext()));
   myEntryTable.setDefaultRenderer(Boolean.class,new ExportFlagRenderer(myEntryTable.getDefaultRenderer(Boolean.class)));
-  JComboBox scopeEditor=new JComboBox(new EnumComboBoxModel<DependencyScope>(DependencyScope.class));
+  JComboBox scopeEditor=new ComboBox(new EnumComboBoxModel<DependencyScope>(DependencyScope.class));
   myEntryTable.setDefaultEditor(DependencyScope.class,new DefaultCellEditor(scopeEditor));
   myEntryTable.setDefaultRenderer(DependencyScope.class,new ComboBoxTableRenderer<DependencyScope>(DependencyScope.values()){
     @Override protected String getTextFor(    @NotNull final DependencyScope value){
@@ -40,7 +60,7 @@
       final int count=myModel.getRowCount();
       Object[] elements=new Object[count];
       for (int idx=0; idx < count; idx++) {
-        elements[idx]=myModel.getItemAt(idx);
+        elements[idx]=myModel.getItem(idx);
       }
       return elements;
     }
@@ -50,7 +70,7 @@
     @Override public void selectElement(    Object element,    String selectedText){
       final int count=myModel.getRowCount();
       for (int row=0; row < count; row++) {
-        if (element.equals(myModel.getItemAt(row))) {
+        if (element.equals(myModel.getItem(row))) {
           final int viewRow=myEntryTable.convertRowIndexToView(row);
           myEntryTable.getSelectionModel().setSelectionInterval(viewRow,viewRow);
           TableUtil.scrollSelectionToVisible(myEntryTable);
@@ -60,21 +80,21 @@
     }
   }
 ;
-  setFixedColumnWidth(ClasspathTableModel.EXPORT_COLUMN,ClasspathTableModel.EXPORT_COLUMN_NAME);
-  setFixedColumnWidth(ClasspathTableModel.SCOPE_COLUMN,DependencyScope.COMPILE.toString() + "     ");
+  setFixedColumnWidth(ClasspathTableModel.EXPORT_COLUMN);
+  setFixedColumnWidth(ClasspathTableModel.SCOPE_COLUMN);
   myEntryTable.registerKeyboardAction(new ActionListener(){
     @Override public void actionPerformed(    ActionEvent e){
       final int[] selectedRows=myEntryTable.getSelectedRows();
       boolean currentlyMarked=true;
       for (      final int selectedRow : selectedRows) {
-        final ClasspathTableItem<?> item=myModel.getItemAt(myEntryTable.convertRowIndexToModel(selectedRow));
+        final ClasspathTableItem<?> item=getItemAt(selectedRow);
         if (selectedRow < 0 || !item.isExportable()) {
           return;
         }
         currentlyMarked&=item.isExported();
       }
       for (      final int selectedRow : selectedRows) {
-        myModel.getItemAt(myEntryTable.convertRowIndexToModel(selectedRow)).setExported(!currentlyMarked);
+        getItemAt(selectedRow).setExported(!currentlyMarked);
       }
       myModel.fireTableDataChanged();
       TableUtil.selectRows(myEntryTable,selectedRows);

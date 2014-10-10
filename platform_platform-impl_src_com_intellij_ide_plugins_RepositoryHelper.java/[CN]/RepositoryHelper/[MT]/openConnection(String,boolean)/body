@@ -1,0 +1,39 @@
+{
+  int i=0;
+  String url=initialUrl;
+  while (i++ < 99) {
+    URLConnection connection;
+    if (ApplicationManager.getApplication() != null) {
+      connection=HttpConfigurable.getInstance().openConnection(url);
+    }
+ else {
+      connection=new URL(url).openConnection();
+      connection.setConnectTimeout(HttpConfigurable.CONNECTION_TIMEOUT);
+      connection.setReadTimeout(HttpConfigurable.CONNECTION_TIMEOUT);
+    }
+    if (supportGzip) {
+      connection.setRequestProperty("Accept-Encoding","gzip");
+    }
+    connection.setUseCaches(false);
+    if (connection instanceof HttpURLConnection) {
+      int responseCode=((HttpURLConnection)connection).getResponseCode();
+      if (responseCode != HttpURLConnection.HTTP_OK && responseCode != HttpURLConnection.HTTP_NOT_MODIFIED) {
+        if (responseCode == HttpURLConnection.HTTP_MOVED_PERM || responseCode == HttpURLConnection.HTTP_MOVED_TEMP) {
+          url=connection.getHeaderField("Location");
+        }
+ else {
+          url=null;
+        }
+        if (url == null) {
+          throw new IOException(IdeBundle.message("error.connection.failed.with.http.code.N",responseCode));
+        }
+ else {
+          ((HttpURLConnection)connection).disconnect();
+          continue;
+        }
+      }
+    }
+    return Pair.create(connection,url == initialUrl ? null : url);
+  }
+  throw new IOException("Infinite redirection");
+}

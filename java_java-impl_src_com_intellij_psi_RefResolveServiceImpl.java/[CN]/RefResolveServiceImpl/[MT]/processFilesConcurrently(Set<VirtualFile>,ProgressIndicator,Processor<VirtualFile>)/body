@@ -1,0 +1,54 @@
+{
+  final List<VirtualFile> fileList=new ArrayList<VirtualFile>(files);
+  int parallelism=Math.min(4,JobSchedulerImpl.CORES_COUNT);
+  final Callable<Boolean> processFileFromSet=new Callable<Boolean>(){
+    @Override public Boolean call() throws Exception {
+      final boolean[] result={true};
+      ProgressManager.getInstance().executeProcessUnderProgress(new Runnable(){
+        @Override public void run(){
+          while (true) {
+            ProgressManager.checkCanceled();
+            VirtualFile file;
+synchronized (fileList) {
+              file=fileList.isEmpty() ? null : fileList.remove(fileList.size() - 1);
+            }
+            if (file == null) {
+              break;
+            }
+            if (!processor.process(file)) {
+              result[0]=false;
+              break;
+            }
+          }
+        }
+      }
+,indicator);
+      return result[0];
+    }
+  }
+;
+  List<Future<Boolean>> futures=ContainerUtil.map(Collections.nCopies(parallelism,""),new Function<String,Future<Boolean>>(){
+    @Override public Future<Boolean> fun(    String s){
+      return myApplication.executeOnPooledThread(processFileFromSet);
+    }
+  }
+);
+  List<Boolean> results=ContainerUtil.map(futures,new Function<Future<Boolean>,Boolean>(){
+    @Override public Boolean fun(    Future<Boolean> future){
+      try {
+        return future.get();
+      }
+ catch (      Exception e) {
+        LOG.error(e);
+      }
+      return false;
+    }
+  }
+);
+  return !ContainerUtil.exists(results,new Condition<Boolean>(){
+    @Override public boolean value(    Boolean result){
+      return result != null && !result;
+    }
+  }
+);
+}

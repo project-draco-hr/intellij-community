@@ -1,0 +1,35 @@
+{
+  if ("package-info.class".equals(file.getName())) {
+    return ClsFileImpl.decompile(file);
+  }
+  try {
+    Map<String,VirtualFile> files=ContainerUtil.newLinkedHashMap();
+    files.put(file.getPath(),file);
+    String mask=file.getNameWithoutExtension() + "$";
+    for (    VirtualFile child : file.getParent().getChildren()) {
+      String name=child.getNameWithoutExtension();
+      if (name.startsWith(mask) && name.length() > mask.length() && file.getFileType() == StdFileTypes.CLASS) {
+        files.put(FileUtil.toSystemIndependentName(child.getPath()),child);
+      }
+    }
+    MyBytecodeProvider provider=new MyBytecodeProvider(files);
+    MyResultSaver saver=new MyResultSaver();
+    myOptions.put(IFernflowerPreferences.USE_DEBUG_LINE_NUMBERS,Registry.is("decompiler.use.line.table") ? "1" : "0");
+    BaseDecompiler decompiler=new BaseDecompiler(provider,saver,myOptions,myLogger);
+    for (    String path : files.keySet()) {
+      decompiler.addSpace(new File(path),true);
+    }
+    decompiler.decompileContext();
+    return saver.myResult;
+  }
+ catch (  Exception e) {
+    if (ApplicationManager.getApplication().isUnitTestMode()) {
+      AssertionError error=new AssertionError(file.getUrl());
+      error.initCause(e);
+      throw error;
+    }
+ else {
+      throw new CannotDecompileException(e);
+    }
+  }
+}

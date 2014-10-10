@@ -1,0 +1,32 @@
+{
+  final GithubFullPath path=GithubUrlUtil.getUserAndRepositoryFromRemoteUrl(remote);
+  if (path == null) {
+    return GithubNotifications.showYesNoDialog(project,"Project is already on GitHub","Can't connect to repository from configured remote. You could want to check .git config.\n" + "Do you want to proceed anyway?");
+  }
+  try {
+    GithubRepo repo=GithubUtil.computeValueInModal(project,"Access to GitHub",new ThrowableConvertor<ProgressIndicator,GithubRepo,IOException>(){
+      @NotNull @Override public GithubRepo convert(      ProgressIndicator indicator) throws IOException {
+        return GithubUtil.runTask(project,authHolder,indicator,new ThrowableConvertor<GithubConnection,GithubRepo,IOException>(){
+          @NotNull @Override public GithubRepo convert(          @NotNull GithubConnection connection) throws IOException {
+            return GithubApiUtil.getDetailedRepoInfo(connection,path.getUser(),path.getRepository());
+          }
+        }
+);
+      }
+    }
+);
+    GithubNotifications.showInfoURL(project,"Project is already on GitHub","GitHub",repo.getHtmlUrl());
+    return false;
+  }
+ catch (  GithubStatusCodeException e) {
+    if (e.getStatusCode() == HttpStatus.SC_NOT_FOUND) {
+      return GithubNotifications.showYesNoDialog(project,"Project is already on GitHub","Can't connect to repository from configured remote. You could want to check .git config.\n" + "Do you want to proceed anyway?");
+    }
+    GithubNotifications.showErrorDialog(project,"Failed to connect to GitHub",e);
+    return false;
+  }
+catch (  IOException e) {
+    GithubNotifications.showErrorDialog(project,"Failed to connect to GitHub",e);
+    return false;
+  }
+}

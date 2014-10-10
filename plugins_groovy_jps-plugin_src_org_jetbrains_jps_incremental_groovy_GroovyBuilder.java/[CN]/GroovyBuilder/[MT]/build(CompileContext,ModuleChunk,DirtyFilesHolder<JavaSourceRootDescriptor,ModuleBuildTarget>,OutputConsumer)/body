@@ -2,14 +2,14 @@
   long start=0;
   try {
     JpsGroovySettings settings=JpsGroovySettings.getSettings(context.getProjectDescriptor().getProject());
-    final List<File> toCompile=collectChangedFiles(context,dirtyFilesHolder,settings);
+    final List<File> toCompile=collectChangedFiles(context,dirtyFilesHolder,myForStubs,false);
     if (toCompile.isEmpty()) {
       return hasFilesToCompileForNextRound(context) ? ExitCode.ADDITIONAL_PASS_REQUIRED : ExitCode.NOTHING_DONE;
     }
     if (Utils.IS_TEST_MODE || LOG.isDebugEnabled()) {
       LOG.info("forStubs=" + myForStubs);
     }
-    Map<ModuleBuildTarget,String> finalOutputs=getCanonicalModuleOutputs(context,chunk);
+    Map<ModuleBuildTarget,String> finalOutputs=getCanonicalModuleOutputs(context,chunk,this);
     if (finalOutputs == null) {
       return ExitCode.ABORT;
     }
@@ -34,7 +34,7 @@
     }
     final File tempFile=GroovycOSProcessHandler.fillFileWithGroovycParameters(compilerOutput,toCompilePaths,finalOutputs.values(),class2Src,encoding,patchers,optimizeClassLoading ? StringUtil.join(classpath,File.pathSeparator) : "");
     final GroovycOSProcessHandler handler=runGroovyc(context,chunk,tempFile,settings,classpath,optimizeClassLoading);
-    Map<ModuleBuildTarget,Collection<GroovycOSProcessHandler.OutputItem>> compiled=processCompiledFiles(context,chunk,generationOutputs,compilerOutput,handler);
+    Map<ModuleBuildTarget,Collection<GroovycOSProcessHandler.OutputItem>> compiled=processCompiledFiles(context,chunk,generationOutputs,compilerOutput,handler.getSuccessfullyCompiled());
     if (checkChunkRebuildNeeded(context,handler)) {
       return ExitCode.CHUNK_REBUILD_REQUIRED;
     }
@@ -45,7 +45,7 @@
     for (    CompilerMessage message : handler.getCompilerMessages(chunk.representativeTarget().getModule().getName())) {
       context.processMessage(message);
     }
-    if (!myForStubs && updateDependencies(context,chunk,dirtyFilesHolder,toCompile,compiled,outputConsumer)) {
+    if (!myForStubs && updateDependencies(context,chunk,dirtyFilesHolder,toCompile,compiled,outputConsumer,this)) {
       return ExitCode.ADDITIONAL_PASS_REQUIRED;
     }
     return hasFilesToCompileForNextRound(context) ? ExitCode.ADDITIONAL_PASS_REQUIRED : ExitCode.OK;

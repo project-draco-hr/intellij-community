@@ -3,23 +3,37 @@
     return computable.compute();
   }
   final AsyncFutureResult<Object> future=AsyncFutureFactory.getInstance().createAsyncFutureResult();
-synchronized (ourEDTLock) {
-    IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(new ExpirableRunnable(){
-      @Override public boolean isExpired(){
-        boolean b=expired.value(null);
-        if (b)         future.setException(new ProcessCanceledException());
-        return b;
+  final ExpirableRunnable runnable=new ExpirableRunnable(){
+    @Override public boolean isExpired(){
+      boolean b=expired.value(null);
+      if (b)       future.setException(new ProcessCanceledException());
+      return b;
+    }
+    @Override public void run(){
+      try {
+        future.set(computable.compute());
       }
-      @Override public void run(){
-        try {
-          future.set(computable.compute());
-        }
- catch (        Throwable e) {
-          future.setException(e);
-        }
+ catch (      Throwable e) {
+        future.setException(e);
       }
     }
+  }
+;
+  ProgressIndicator indicator=ProgressIndicatorProvider.getGlobalProgressIndicator();
+synchronized (ourEDTLock) {
+    if (indicator != null && indicator.isModal()) {
+      UIUtil.invokeLaterIfNeeded(new Runnable(){
+        @Override public void run(){
+          if (!runnable.isExpired()) {
+            runnable.run();
+          }
+        }
+      }
 );
+    }
+ else {
+      IdeFocusManager.getGlobalInstance().doWhenFocusSettlesDown(runnable);
+    }
   }
   try {
     return (T)future.get();

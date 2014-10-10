@@ -1,34 +1,46 @@
 {
-  if (!myTempMapMode) {
-    if (doDebug && registeredAfterClose > 0) {
-      LOG.debug("Registered number of classes after close " + registeredAfterClose + " "+ toString());
+  myLock.writeLock().lock();
+  try {
+    if (myNameFilter != null) {
+      if (doDebug && registeredAfterClose > 0) {
+        LOG.debug("Registered number of classes after close " + registeredAfterClose + " "+ toString());
+      }
+      return;
     }
-    return;
-  }
-  if (doDebug) {
-    LOG.debug("Registered number of classes before classes " + registeredBeforeClose + " "+ toString());
-  }
-  myTempMapMode=false;
-  int nBits=0;
-  int uniques=0;
-  for (  Map.Entry<String,Set<Loader>> e : myResources2LoadersTempMap.entrySet()) {
-    int size=e.getValue().size();
-    if (size == 1) {
-      ++uniques;
+    if (doDebug) {
+      LOG.debug("Registered number of classes before classes " + registeredBeforeClose + " "+ toString());
     }
-    nBits+=size;
-  }
-  if (nBits > 20000) {
-    nBits+=(int)(nBits * 0.03d);
-  }
-  myNameFilter=new Name2LoaderFilter(nBits,PROBABILITY);
-  for (  Map.Entry<String,Set<Loader>> e : myResources2LoadersTempMap.entrySet()) {
-    final String name=e.getKey();
-    for (    Loader loader : e.getValue()) {
-      myNameFilter.add(name,loader);
+    int nBits=0;
+    int uniques=0;
+    for (    Map.Entry<String,Object> e : myResources2LoadersTempMap.entrySet()) {
+      int size=e.getValue() instanceof Loader[] ? ((Loader[])e.getValue()).length : 1;
+      if (size == 1) {
+        ++uniques;
+      }
+      nBits+=size;
+    }
+    if (nBits > 20000) {
+      nBits+=(int)(nBits * 0.03d);
+    }
+    Name2LoaderFilter name2LoaderFilter=new Name2LoaderFilter(nBits,PROBABILITY);
+    for (    Map.Entry<String,Object> e : myResources2LoadersTempMap.entrySet()) {
+      final String name=e.getKey();
+      Object value=e.getValue();
+      if (value instanceof Loader) {
+        name2LoaderFilter.add(name,(Loader)value);
+      }
+ else {
+        for (        Loader loader : (Loader[])value) {
+          name2LoaderFilter.add(name,loader);
+        }
+      }
+    }
+    myNameFilter=name2LoaderFilter;
+    if (!doDebug) {
+      myResources2LoadersTempMap=null;
     }
   }
-  if (!doDebug) {
-    myResources2LoadersTempMap=null;
+  finally {
+    myLock.writeLock().unlock();
   }
 }

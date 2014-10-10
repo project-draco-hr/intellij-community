@@ -1,7 +1,6 @@
 {
   final SuspendContextImpl suspendContext=myEvaluationContext.getSuspendContext();
-  if (suspendContext.isResumed())   return;
-  myEvaluationContext.getDebugProcess().getManagerThread().schedule(new SuspendContextCommandImpl(suspendContext){
+  scheduleCommand(new SuspendContextCommandImpl(suspendContext){
     @Override public Priority getPriority(){
       return Priority.NORMAL;
     }
@@ -20,23 +19,29 @@
             presentation=new TypedStringValuePresentation(value,type);
           }
  else {
-            EvaluateException exception=myValueDescriptor.getEvaluateException();
+            @SuppressWarnings("ThrowableResultOfMethodCallIgnored") EvaluateException exception=myValueDescriptor.getEvaluateException();
             if (myValueDescriptor.getLastRenderer() instanceof ToStringRenderer && exception == null) {
-              presentation=new XRegularValuePresentation(StringUtil.wrapWithDoubleQuote(value.substring(0,Math.min(value.length(),XValueNode.MAX_VALUE_LENGTH))),type);
+              presentation=new XRegularValuePresentation(StringUtil.wrapWithDoubleQuote(truncateToMaxLength(value)),type);
+            }
+ else             if (myValueDescriptor.getLastRenderer() instanceof CompoundReferenceRenderer && exception == null) {
+              presentation=new XRegularValuePresentation(truncateToMaxLength(value),type);
             }
  else {
               presentation=new JavaValuePresentation(value,type,exception != null ? exception.getMessage() : null);
             }
           }
-          if (value.length() > XValueNode.MAX_VALUE_LENGTH) {
+          if (myValueDescriptor.getLastRenderer() instanceof FullValueEvaluatorProvider) {
+            node.setFullValueEvaluator(((FullValueEvaluatorProvider)myValueDescriptor.getLastRenderer()).getFullValueEvaluator(myEvaluationContext,myValueDescriptor));
+          }
+ else           if (value.length() > XValueNode.MAX_VALUE_LENGTH) {
             node.setFullValueEvaluator(new XFullValueEvaluator(){
               @Override public void startEvaluation(              @NotNull final XFullValueEvaluationCallback callback){
-                myEvaluationContext.getDebugProcess().getManagerThread().schedule(new SuspendContextCommandImpl(suspendContext){
+                scheduleCommand(new SuspendContextCommandImpl(suspendContext){
                   @Override public Priority getPriority(){
                     return Priority.NORMAL;
                   }
                   @Override public void contextAction() throws Exception {
-                    final String valueAsString=DebuggerUtilsEx.getValueOrErrorAsString(myEvaluationContext,myValueDescriptor.getValue());
+                    final String valueAsString=myValueDescriptor.getValueText();
                     DebuggerInvocationUtil.invokeLater(getProject(),new Runnable(){
                       @Override public void run(){
                         callback.evaluated(valueAsString);

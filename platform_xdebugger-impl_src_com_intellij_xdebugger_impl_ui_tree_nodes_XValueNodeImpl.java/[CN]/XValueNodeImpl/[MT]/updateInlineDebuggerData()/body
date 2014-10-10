@@ -4,26 +4,39 @@
     if (session != null) {
       final XSourcePosition position=session.getCurrentPosition();
       if (position != null) {
-        getValueContainer().computeSourcePosition(new XNearestSourcePosition(){
-          @Override public void setSourcePosition(          @Nullable XSourcePosition sourcePosition){
+        final XInlineDebuggerDataCallback callback=new XInlineDebuggerDataCallback(){
+          @Override public void computed(          @NotNull VirtualFile file,          @NotNull Document document,          int line){
             final Map<Pair<VirtualFile,Integer>,Set<XValueNodeImpl>> map=myTree.getProject().getUserData(XVariablesView.DEBUG_VARIABLES);
             final Map<VirtualFile,Long> timestamps=myTree.getProject().getUserData(XVariablesView.DEBUG_VARIABLES_TIMESTAMPS);
-            if (map == null || timestamps == null || sourcePosition == null)             return;
-            VirtualFile file=sourcePosition.getFile();
-            final Document doc=FileDocumentManager.getInstance().getDocument(file);
-            if (doc == null)             return;
-            int line=sourcePosition.getLine();
-            Pair<VirtualFile,Integer> key=Pair.create(file,line);
-            Set<XValueNodeImpl> presentations=map.get(key);
-            if (presentations == null) {
-              presentations=new LinkedHashSet<XValueNodeImpl>();
-              map.put(key,presentations);
-              timestamps.put(file,doc.getModificationStamp());
+            if (map == null || timestamps == null) {
+              return;
             }
+            Pair<VirtualFile,Integer> key=Pair.create(file,line);
+            Set<XValueNodeImpl> presentations=new LinkedHashSet<XValueNodeImpl>();
+            Set<XValueNodeImpl> old=map.put(key,presentations);
+            timestamps.put(file,document.getModificationStamp());
             presentations.add(XValueNodeImpl.this);
+            if (old != null) {
+              presentations.addAll(old);
+            }
           }
         }
+;
+        if (getValueContainer().computeInlineDebuggerData(callback) == ThreeState.UNSURE) {
+          getValueContainer().computeSourcePosition(new XNearestSourcePosition(){
+            @Override public void setSourcePosition(            @Nullable XSourcePosition sourcePosition){
+              final Map<Pair<VirtualFile,Integer>,Set<XValueNodeImpl>> map=myTree.getProject().getUserData(XVariablesView.DEBUG_VARIABLES);
+              final Map<VirtualFile,Long> timestamps=myTree.getProject().getUserData(XVariablesView.DEBUG_VARIABLES_TIMESTAMPS);
+              if (map == null || timestamps == null || sourcePosition == null)               return;
+              VirtualFile file=sourcePosition.getFile();
+              final Document doc=FileDocumentManager.getInstance().getDocument(file);
+              if (doc == null)               return;
+              int line=sourcePosition.getLine();
+              callback.computed(file,doc,line);
+            }
+          }
 );
+        }
       }
     }
   }

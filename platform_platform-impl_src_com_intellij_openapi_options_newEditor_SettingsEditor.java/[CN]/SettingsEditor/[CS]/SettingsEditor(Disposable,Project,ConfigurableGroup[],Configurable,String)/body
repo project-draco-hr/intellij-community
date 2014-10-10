@@ -1,0 +1,141 @@
+{
+  super(parent);
+  myProperties=PropertiesComponent.getInstance(project);
+  mySettings=new Settings(groups){
+    @Override protected ActionCallback selectImpl(    Configurable configurable){
+      myFilter.update(null,false,true);
+      return myTreeView.select(configurable);
+    }
+  }
+;
+  mySearch=new SettingsSearch(){
+    @Override void onTextKeyEvent(    KeyEvent event){
+      myTreeView.myTree.processKeyEvent(event);
+    }
+  }
+;
+  myFilter=new SettingsFilter(project,groups,mySearch){
+    @Override Configurable getConfigurable(    SimpleNode node){
+      return SettingsTreeView.getConfigurable(node);
+    }
+    @Override SimpleNode findNode(    Configurable configurable){
+      return myTreeView.findNode(configurable);
+    }
+    @Override void updateSpotlight(    boolean now){
+      if (!myDisposed && mySpotlightPainter != null) {
+        if (!now) {
+          mySpotlightPainter.updateLater();
+        }
+ else {
+          mySpotlightPainter.updateNow();
+        }
+      }
+    }
+  }
+;
+  myFilter.myContext.addColleague(new OptionsEditorColleague(){
+    @Override public ActionCallback onSelected(    @Nullable Configurable configurable,    Configurable oldConfigurable){
+      if (configurable != null) {
+        myProperties.setValue(SELECTED_CONFIGURABLE,ConfigurableVisitor.ByID.getID(configurable));
+      }
+      checkModified(oldConfigurable);
+      return myEditor.select(configurable);
+    }
+    @Override public ActionCallback onModifiedAdded(    Configurable configurable){
+      return updateIfCurrent(configurable);
+    }
+    @Override public ActionCallback onModifiedRemoved(    Configurable configurable){
+      return updateIfCurrent(configurable);
+    }
+    @Override public ActionCallback onErrorsChanged(){
+      return updateIfCurrent(myFilter.myContext.getCurrentConfigurable());
+    }
+    private ActionCallback updateIfCurrent(    Configurable configurable){
+      if (configurable != null && configurable == myFilter.myContext.getCurrentConfigurable()) {
+        updateStatus(configurable);
+        return ActionCallback.DONE;
+      }
+ else {
+        return ActionCallback.REJECTED;
+      }
+    }
+  }
+);
+  myTreeView=new SettingsTreeView(myFilter,groups);
+  myTreeView.myTree.addKeyListener(mySearch);
+  myTreeView.addComponentListener(new ComponentAdapter(){
+    @Override public void componentResized(    ComponentEvent event){
+      Dimension size=mySearch.getPreferredSize();
+      size.width=myTreeView.getWidth() - 10;
+      mySearch.setPreferredSize(size);
+      mySearch.setSize(size);
+      mySearch.revalidate();
+      mySearch.repaint();
+    }
+  }
+);
+  myEditor=new ConfigurableEditor(this,null,true){
+    @Override boolean apply(){
+      checkModified(myFilter.myContext.getCurrentConfigurable());
+      if (myFilter.myContext.getModified().isEmpty()) {
+        return true;
+      }
+      Map<Configurable,ConfigurationException> map=new LinkedHashMap<Configurable,ConfigurationException>();
+      for (      Configurable configurable : myFilter.myContext.getModified()) {
+        ConfigurationException exception=ConfigurableEditor.apply(configurable);
+        if (exception != null) {
+          map.put(configurable,exception);
+        }
+ else         if (!configurable.isModified()) {
+          myFilter.myContext.fireModifiedRemoved(configurable,null);
+        }
+      }
+      myFilter.myContext.fireErrorsChanged(map,null);
+      if (!map.isEmpty()) {
+        myTreeView.select(map.keySet().iterator().next());
+        return false;
+      }
+      updateStatus(myFilter.myContext.getCurrentConfigurable());
+      return true;
+    }
+    @Override void updateCurrent(    Configurable configurable,    boolean reset){
+      if (reset && configurable != null) {
+        myFilter.myContext.fireReset(configurable);
+      }
+      checkModified(configurable);
+    }
+    @Override void openLink(    Configurable configurable){
+      mySettings.select(configurable);
+    }
+  }
+;
+  mySplitter=new OnePixelSplitter(false,myProperties.getFloat(SPLITTER_PROPORTION,.2f));
+  mySplitter.setHonorComponentsMinimumSize(true);
+  mySplitter.setFirstComponent(myTreeView);
+  mySplitter.setSecondComponent(myEditor);
+  mySpotlightPainter=new SpotlightPainter(myEditor,this){
+    void updateNow(){
+      Configurable configurable=myFilter.myContext.getCurrentConfigurable();
+      update(myFilter,configurable,myEditor.getContent(configurable));
+    }
+  }
+;
+  myBanner=new Banner(myEditor.getResetAction());
+  myBanner.setBorder(BorderFactory.createEmptyBorder(0,5,0,5));
+  JPanel panel=new JPanel(new BorderLayout(10,10));
+  panel.add(BorderLayout.WEST,mySearch);
+  panel.add(BorderLayout.CENTER,myBanner);
+  panel.setBorder(BorderFactory.createCompoundBorder(new CustomLineBorder(OnePixelDivider.BACKGROUND,0,0,1,0),BorderFactory.createEmptyBorder(5,5,5,5)));
+  add(BorderLayout.NORTH,panel);
+  add(BorderLayout.CENTER,mySplitter);
+  if (configurable == null) {
+    String id=myProperties.getValue(SELECTED_CONFIGURABLE);
+    configurable=new ConfigurableVisitor.ByID(id != null ? id : "preferences.lookFeel").find(groups);
+    if (configurable == null) {
+      configurable=ConfigurableVisitor.ALL.find(groups);
+    }
+  }
+  myFilter.update(filter,false,true);
+  myTreeView.select(configurable);
+  Disposer.register(this,myTreeView);
+}

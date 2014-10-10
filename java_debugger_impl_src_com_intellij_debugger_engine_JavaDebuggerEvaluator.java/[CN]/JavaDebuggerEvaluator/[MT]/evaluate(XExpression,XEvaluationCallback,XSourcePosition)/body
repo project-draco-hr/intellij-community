@@ -4,7 +4,14 @@
       return Priority.NORMAL;
     }
     @Override public void threadAction(){
-      WatchItemDescriptor descriptor=new WatchItemDescriptor(myDebugProcess.getProject(),TextWithImportsImpl.fromXExpression(expression));
+      JavaDebugProcess process=myDebugProcess.getXdebugProcess();
+      if (process == null) {
+        callback.errorOccurred("No debug process");
+        return;
+      }
+      TextWithImports text=TextWithImportsImpl.fromXExpression(expression);
+      NodeManagerImpl nodeManager=process.getNodeManager();
+      WatchItemDescriptor descriptor=nodeManager.getWatchItemDescriptor(null,text,null);
       EvaluationContextImpl evalContext=myStackFrame.getFrameDebuggerContext().createEvaluationContext();
       if (evalContext == null) {
         callback.errorOccurred("Context is not available");
@@ -12,16 +19,11 @@
       }
       descriptor.setContext(evalContext);
       @SuppressWarnings("ThrowableResultOfMethodCallIgnored") EvaluateException exception=descriptor.getEvaluateException();
-      if (exception != null) {
+      if (exception != null && descriptor.getValue() == null) {
         callback.errorOccurred(exception.getMessage());
         return;
       }
-      JavaDebugProcess process=myDebugProcess.getXdebugProcess();
-      if (process == null) {
-        callback.errorOccurred("No debug process");
-        return;
-      }
-      callback.evaluated(JavaValue.create(null,descriptor,evalContext,process.getNodeManager(),true));
+      callback.evaluated(JavaValue.create(null,descriptor,evalContext,nodeManager,true));
     }
   }
 );

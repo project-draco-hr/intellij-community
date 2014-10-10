@@ -77,7 +77,7 @@ catch (      Throwable e) {
       List<Equation<Key,Value>> result=new ArrayList<Equation<Key,Value>>(argumentTypes.length * 4 + 2);
       boolean maybeLeakingParameter=isInterestingResult;
       for (      Type argType : argumentTypes) {
-        if (ASMUtils.isReferenceType(argType) || (isReferenceResult && ASMUtils.isBooleanType(argType))) {
+        if (ASMUtils.isReferenceType(argType)) {
           maybeLeakingParameter=true;
           break;
         }
@@ -92,9 +92,8 @@ catch (      Throwable e) {
         result.add(new Equation<Key,Value>(new Key(method,NullableOut,stable),NullableMethodAnalysis.analyze(methodNode,origins,jsr)));
       }
       for (int i=0; i < argumentTypes.length; i++) {
-        boolean isReferenceArg=ASMUtils.isReferenceType(argumentTypes[i]);
         boolean notNullParam=false;
-        if (isReferenceArg) {
+        if (ASMUtils.isReferenceType(argumentTypes[i])) {
           boolean possibleNPE=false;
           if (leakingParameters[i]) {
             NonNullInAnalysis notNullInAnalysis=new NonNullInAnalysis(richControlFlow,new In(i,In.NOT_NULL),stable);
@@ -117,30 +116,20 @@ catch (      Throwable e) {
  else {
             result.add(new Equation<Key,Value>(new Key(method,new In(i,In.NULLABLE),stable),FINAL_NULL));
           }
-        }
-        if (isReferenceArg && isInterestingResult) {
-          if (leakingParameters[i]) {
-            if (!notNullParam) {
-              result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.Null),origins,stable).analyze());
+          if (isInterestingResult) {
+            if (leakingParameters[i]) {
+              if (notNullParam) {
+                result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),FINAL_BOT));
+              }
+ else {
+                result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.Null),origins,stable).analyze());
+              }
+              result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.NotNull),origins,stable).analyze());
             }
  else {
-              result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),FINAL_BOT));
+              result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),outEquation.rhs));
+              result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.NotNull),stable),outEquation.rhs));
             }
-            result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.NotNull),origins,stable).analyze());
-          }
- else {
-            result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),outEquation.rhs));
-            result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.NotNull),stable),outEquation.rhs));
-          }
-        }
-        if (ASMUtils.isBooleanType(argumentTypes[i]) && isInterestingResult) {
-          if (leakingParameters[i]) {
-            result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.False),origins,stable).analyze());
-            result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.True),origins,stable).analyze());
-          }
- else {
-            result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.False),stable),outEquation.rhs));
-            result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.True),stable),outEquation.rhs));
           }
         }
       }
@@ -156,18 +145,13 @@ catch (      Throwable e) {
       }
       for (int i=0; i < argumentTypes.length; i++) {
         Type argType=argumentTypes[i];
-        boolean isRefArg=ASMUtils.isReferenceType(argType);
-        if (isRefArg) {
+        if (ASMUtils.isReferenceType(argType)) {
           result.add(analyzer.notNullParamEquation(i,stable));
           result.add(analyzer.nullableParamEquation(i,stable));
-        }
-        if (isRefArg && (isReferenceResult || isBooleanResult)) {
-          result.add(analyzer.contractEquation(i,Value.Null,stable));
-          result.add(analyzer.contractEquation(i,Value.NotNull,stable));
-        }
-        if (ASMUtils.isBooleanType(argType) && (isReferenceResult || isBooleanResult)) {
-          result.add(analyzer.contractEquation(i,Value.True,stable));
-          result.add(analyzer.contractEquation(i,Value.False,stable));
+          if (isReferenceResult || isBooleanResult) {
+            result.add(analyzer.contractEquation(i,Value.Null,stable));
+            result.add(analyzer.contractEquation(i,Value.NotNull,stable));
+          }
         }
       }
       return result;
@@ -179,25 +163,18 @@ catch (      Throwable e) {
         result.add(new Equation<Key,Value>(new Key(method,NullableOut,stable),FINAL_BOT));
       }
       for (int i=0; i < argumentTypes.length; i++) {
-        Type argType=argumentTypes[i];
-        boolean isReferenceArg=ASMUtils.isReferenceType(argType);
-        boolean isBooleanArg=ASMUtils.isBooleanType(argType);
-        if (isReferenceArg) {
+        if (ASMUtils.isReferenceType(argumentTypes[i])) {
           result.add(new Equation<Key,Value>(new Key(method,new In(i,In.NOT_NULL),stable),FINAL_TOP));
           result.add(new Equation<Key,Value>(new Key(method,new In(i,In.NULLABLE),stable),FINAL_TOP));
-        }
-        if (isReferenceArg && isInterestingResult) {
-          result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),FINAL_TOP));
-          result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.NotNull),stable),FINAL_TOP));
-        }
-        if (isBooleanArg && isInterestingResult) {
-          result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.False),stable),FINAL_TOP));
-          result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.True),stable),FINAL_TOP));
+          if (isInterestingResult) {
+            result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),FINAL_TOP));
+            result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.NotNull),stable),FINAL_TOP));
+          }
         }
       }
       return result;
     }
-    private LeakingParameters leakingParametersAndFrames(    Method method,    MethodNode methodNode,    Type[] argumentTypes,    boolean jsr) throws AnalyzerException {
+    @NotNull private LeakingParameters leakingParametersAndFrames(    Method method,    MethodNode methodNode,    Type[] argumentTypes,    boolean jsr) throws AnalyzerException {
       return argumentTypes.length < 32 ? LeakingParameters.buildFast(method.internalClassName,methodNode,jsr) : LeakingParameters.build(method.internalClassName,methodNode,jsr);
     }
   }
