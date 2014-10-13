@@ -1,10 +1,14 @@
 {
+  MultiMap<StateStorage,VirtualFile> storageToFiles=MultiMap.createLinkedSet();
+  for (  Pair<VirtualFile,StateStorage> pair : changedStorages) {
+    storageToFiles.putValue(pair.second,pair.first);
+  }
   Collection<String> notReloadableComponents;
   boolean willBeReloaded=false;
   try {
     AccessToken token=WriteAction.start();
     try {
-      notReloadableComponents=store.reload(causes);
+      notReloadableComponents=store.reload(storageToFiles);
     }
  catch (    Throwable e) {
       Messages.showWarningDialog(ProjectBundle.message("project.reload.failed",e.getMessage()),ProjectBundle.message("project.reload.failed.title"));
@@ -16,14 +20,14 @@
     if (ContainerUtil.isEmpty(notReloadableComponents)) {
       return ReloadComponentStoreStatus.SUCCESS;
     }
-    willBeReloaded=askToRestart(store,notReloadableComponents,causes);
+    willBeReloaded=askToRestart(store,notReloadableComponents,changedStorages);
     return willBeReloaded ? ReloadComponentStoreStatus.RESTART_AGREED : ReloadComponentStoreStatus.RESTART_CANCELLED;
   }
   finally {
     if (!willBeReloaded) {
-      for (      Pair<VirtualFile,StateStorage> cause : causes) {
-        if (cause.second instanceof XmlElementStorage) {
-          ((XmlElementStorage)cause.second).enableSaving();
+      for (      StateStorage storage : storageToFiles.keySet()) {
+        if (storage instanceof StateStorageBase) {
+          ((StateStorageBase)storage).enableSaving();
         }
       }
     }

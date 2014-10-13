@@ -8,36 +8,17 @@
   }
   final int length=XmlUtil.getPrefixLength(_systemId);
   final String systemId=_systemId.substring(length);
-  final PsiFile[] result=new PsiFile[]{null};
-  final Runnable action=new Runnable(){
-    @Override public void run(){
+  final Computable<PsiFile> action=new Computable<PsiFile>(){
+    @Override public PsiFile compute(){
       PsiFile baseFile=null;
-      VirtualFile vFile=null;
       if (baseSystemId != null) {
-        baseFile=resolve(null,baseSystemId);
-        if (baseFile == null) {
-          File workingFile=new File("");
-          String workingDir=workingFile.getAbsoluteFile().getAbsolutePath().replace(File.separatorChar,'/');
-          String id=StringUtil.replace(baseSystemId,workingDir,myFile.getVirtualFile().getParent().getPath());
-          vFile=UriUtil.findRelative(id,myFile);
-          if (vFile == null) {
-            vFile=UriUtil.findRelative(baseSystemId,myFile);
-            if (vFile == null) {
-              try {
-                vFile=VirtualFileManager.getInstance().findFileByUrl(VfsUtilCore.convertFromUrl(new URL(baseSystemId)));
-              }
- catch (              MalformedURLException ignore) {
-              }
-            }
-          }
-        }
-        if (vFile != null && !vFile.isDirectory() && !(vFile.getFileSystem() instanceof HttpFileSystem)) {
-          baseFile=PsiManager.getInstance(myProject).findFile(vFile);
-        }
+        baseFile=getBaseFile(baseSystemId);
       }
       if (baseFile == null) {
         baseFile=myFile;
       }
+      PsiFile byLocation=resolveByLocation(myFile,systemId);
+      if (byLocation != null)       return byLocation;
       String version=null;
       String tagName=null;
       if (baseFile == myFile) {
@@ -96,12 +77,11 @@
       if (LOG.isDebugEnabled()) {
         LOG.debug("resolveEntity: psiFile='" + (psiFile != null ? psiFile.getVirtualFile() : null) + "'");
       }
-      result[0]=psiFile;
+      return psiFile;
     }
   }
 ;
-  ApplicationManager.getApplication().runReadAction(action);
-  final PsiFile psiFile=result[0];
+  final PsiFile psiFile=ApplicationManager.getApplication().runReadAction(action);
   if (psiFile != null) {
     final VirtualFile file=psiFile.getVirtualFile();
     if (file != null) {
