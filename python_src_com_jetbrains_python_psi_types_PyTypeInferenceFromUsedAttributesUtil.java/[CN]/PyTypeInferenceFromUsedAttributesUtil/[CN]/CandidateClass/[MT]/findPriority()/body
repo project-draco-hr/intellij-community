@@ -1,0 +1,36 @@
+{
+  if (PyBuiltinCache.getInstance(myClass).isBuiltin(myClass)) {
+    return Priority.BUILTIN;
+  }
+  final PsiFile originalFile=myAnchor.getContainingFile();
+  final PsiFile candidateFile=myClass.getContainingFile();
+  if (candidateFile == originalFile) {
+    return Priority.SAME_FILE;
+  }
+  if (originalFile instanceof PyFile) {
+    final PyFile anchorModule=(PyFile)originalFile;
+    final QualifiedName moduleQName=findShortestImportableQName(myAnchor,candidateFile.getVirtualFile());
+    for (    PyFromImportStatement fromImportStatement : anchorModule.getFromImports()) {
+      if (Comparing.equal(fromImportStatement.getImportSourceQName(),moduleQName)) {
+        if (fromImportStatement.isStarImport()) {
+          return Priority.IMPORTED;
+        }
+        for (        PyImportElement importElement : fromImportStatement.getImportElements()) {
+          final PyReferenceExpression expression=importElement.getImportReferenceExpression();
+          if (expression != null && Comparing.equal(expression.getName(),myClass.getName())) {
+            return Priority.IMPORTED;
+          }
+        }
+      }
+    }
+    for (    PyImportElement importElement : anchorModule.getImportTargets()) {
+      if (Comparing.equal(importElement.getImportedQName(),moduleQName)) {
+        return Priority.IMPORTED;
+      }
+    }
+  }
+  if (ProjectRootManager.getInstance(myAnchor.getProject()).getFileIndex().isInSource(candidateFile.getVirtualFile())) {
+    return Priority.PROJECT;
+  }
+  return Priority.OTHER;
+}
