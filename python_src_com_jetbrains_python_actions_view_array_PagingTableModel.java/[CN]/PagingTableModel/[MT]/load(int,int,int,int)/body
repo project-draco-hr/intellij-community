@@ -1,6 +1,33 @@
 {
-  final ComparableArrayChunk segment=createChunk("",rLength,cLength,rOffset,cOffset);
+  final ComparableArrayChunk segment=createChunk(rLength,cLength,rOffset,cOffset);
   myPendingSet.add(segment);
   Runnable evaluator=getDataEvaluator(segment);
-  new Thread(evaluator).start();
+  final Thread evalThread=new Thread(evaluator);
+  evalThread.start();
+  final long until=System.currentTimeMillis() + RESPONSE_TIMEOUT;
+  new Thread(new Runnable(){
+    @Override public void run(){
+synchronized (myPendingSet) {
+        do {
+          try {
+            myPendingSet.wait(1000);
+          }
+ catch (          InterruptedException ignore) {
+          }
+        }
+ while (evalThread.isAlive() && System.currentTimeMillis() < until);
+        myPendingSet.remove(segment);
+        if (evalThread.isAlive()) {
+          evalThread.interrupt();
+          SwingUtilities.invokeLater(new Runnable(){
+            public void run(){
+              fireTableCellUpdated(segment.rOffset,segment.cOffset);
+            }
+          }
+);
+        }
+      }
+    }
+  }
+).start();
 }
