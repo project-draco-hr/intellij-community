@@ -13,12 +13,9 @@
     boolean isEnum=cl.hasModifier(CodeConstants.ACC_ENUM) && DecompilerContext.getOption(IFernflowerPreferences.DECOMPILE_ENUM);
     boolean isDeprecated=mt.getAttributes().containsKey("Deprecated");
     boolean clinit=false, init=false, dinit=false;
-    int startLine=-1;
+    StructLineNumberTableAttribute lineNumberTable=null;
     if (DecompilerContext.getOption(IFernflowerPreferences.USE_DEBUG_LINE_NUMBERS)) {
-      StructLineNumberTableAttribute lineNumberTable=(StructLineNumberTableAttribute)mt.getAttributes().getWithKey(StructGeneralAttribute.ATTRIBUTE_LINE_NUMBER_TABLE);
-      if (lineNumberTable != null) {
-        startLine=lineNumberTable.getFirstLine();
-      }
+      lineNumberTable=(StructLineNumberTableAttribute)mt.getAttributes().getWithKey(StructGeneralAttribute.ATTRIBUTE_LINE_NUMBER_TABLE);
     }
     MethodDescriptor md=MethodDescriptor.parseDescriptor(mt.getDescriptor());
     int flags=mt.getAccessFlags();
@@ -192,14 +189,20 @@
       if (!clinit && !dinit) {
         buffer.append(' ');
       }
-      buffer.setCurrentLine(startLine - 1);
+      if (lineNumberTable != null) {
+        buffer.setCurrentLine(lineNumberTable.getFirstLine() - 1);
+      }
       buffer.append('{').appendLineSeparator();
       RootStatement root=wrapper.getMethodWrapper(mt.getName(),mt.getDescriptor()).root;
       if (root != null && !methodWrapper.decompiledWithErrors) {
         try {
           tracer.incrementCurrentSourceLine(buffer.count(lineSeparator,start_index_method));
+          int startLine=tracer.getCurrentSourceLine();
           TextBuffer code=root.toJava(indent + 1,tracer);
           hideMethod=(clinit || dinit || hideConstructor(wrapper,init,throwsExceptions,paramCount)) && code.length() == 0;
+          if (!hideMethod && lineNumberTable != null) {
+            mapLines(code,lineNumberTable,tracer,startLine);
+          }
           buffer.append(code);
         }
  catch (        Throwable ex) {
