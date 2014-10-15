@@ -1,16 +1,18 @@
 {
-  if (!ENABLED || !context.maySwitchToAST(expression)) {
+  if (!ENABLED || !context.allowLocalUsages(expression)) {
     return null;
   }
-  final Set<String> seenAttrs;
-  seenAttrs=collectUsedAttributes(expression);
+  final Set<String> seenAttrs=collectUsedAttributes(expression);
+  LOG.debug(String.format("Attempting to infer type for expression: %s. Used attributes: %s",expression.getText(),seenAttrs));
   final Set<PyClass> candidates=Sets.newHashSet();
   for (  String attribute : seenAttrs) {
     if (COMMON_OBJECT_ATTRIBUTES.contains(attribute)) {
       candidates.add(PyBuiltinCache.getInstance(expression).getClass(PyNames.OBJECT));
     }
  else {
-      candidates.addAll(PyClassAttributesIndex.find(attribute,expression.getProject()));
+      final Collection<PyClass> declaringClasses=PyClassAttributesIndex.find(attribute,expression.getProject());
+      LOG.debug("Attribute " + attribute + " is declared in "+ declaringClasses.size()+ " classes");
+      candidates.addAll(declaringClasses);
     }
   }
   final Set<PyClass> suitableClasses=Sets.newHashSet();
@@ -18,11 +20,7 @@
     if (PyUserSkeletonsUtil.isUnderUserSkeletonsDirectory(candidate.getContainingFile())) {
       continue;
     }
-    final Set<String> availableAttrs=Sets.newHashSet(getAllDeclaredAttributeNames(candidate));
-    for (    PyClass parent : candidate.getAncestorClasses(context)) {
-      availableAttrs.addAll(getAllDeclaredAttributeNames(parent));
-    }
-    if (availableAttrs.containsAll(seenAttrs)) {
+    if (getAllInheritedAttributeNames(candidate,context).containsAll(seenAttrs)) {
       suitableClasses.add(candidate);
     }
   }
