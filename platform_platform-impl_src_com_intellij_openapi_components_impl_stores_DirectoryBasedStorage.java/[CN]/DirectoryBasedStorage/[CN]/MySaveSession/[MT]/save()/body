@@ -1,51 +1,32 @@
 {
-  final Set<String> currentNames=new SmartHashSet<String>();
-  File[] children=myDir.listFiles();
-  if (children != null) {
-    for (    File child : children) {
-      final String fileName=child.getName();
-      if (!myFileTypeManager.isFileIgnored(fileName) && StringUtil.endsWithIgnoreCase(fileName,".xml")) {
-        currentNames.add(fileName);
+  VirtualFile dir=storage.getVirtualFile();
+  if (copiedStorageData.isEmpty()) {
+    if (dir != null && dir.exists()) {
+      try {
+        StorageUtil.deleteFile(this,dir);
+      }
+ catch (      IOException e) {
+        throw new StateStorageException(e);
       }
     }
+    storage.myStorageData=copiedStorageData;
+    return;
   }
-  myStorageData.process(new DirectoryStorageData.StorageDataProcessor(){
-    @Override public void process(    final String componentName,    final File file,    final Element element){
-      currentNames.remove(file.getName());
-      if (myPathMacroSubstitutor != null) {
-        myPathMacroSubstitutor.collapsePaths(element);
-      }
-      if (file.lastModified() <= myStorageData.getLastTimeStamp()) {
-        StorageUtil.save(file,element,MySaveSession.this,false,LocalFileSystem.getInstance().findFileByIoFile(file));
-        myStorageData.updateLastTimestamp(file);
-      }
+  if (dir == null || !dir.isValid()) {
+    storage.myDir.mkdirs();
+    String parentFile=storage.myDir.getParent();
+    VirtualFile parentVirtualFile=parentFile == null ? null : LocalFileSystem.getInstance().refreshAndFindFileByPath(parentFile.replace(File.separatorChar,'/'));
+    if (parentVirtualFile == null) {
+      throw new StateStorageException(ProjectBundle.message("project.configuration.save.file.not.found",parentFile));
     }
+    dir=getFile(storage.myDir.getName(),parentVirtualFile);
   }
-);
-  if (myDir.exists() && !currentNames.isEmpty()) {
-    ApplicationManager.getApplication().runWriteAction(new Runnable(){
-      @Override public void run(){
-        if (myDir.exists()) {
-          for (          String name : currentNames) {
-            File child=new File(myDir,name);
-            if (child.lastModified() > myStorageData.getLastTimeStamp()) {
-              return;
-            }
-            final VirtualFile virtualFile=LocalFileSystem.getInstance().findFileByIoFile(child);
-            if (virtualFile != null) {
-              try {
-                LOG.debug("Removing configuration file: " + virtualFile.getPresentableUrl());
-                virtualFile.delete(MySaveSession.this);
-              }
- catch (              IOException e) {
-                LOG.error(e);
-              }
-            }
-          }
-        }
-      }
-    }
-);
+  if (!dirtyFileNames.isEmpty()) {
+    saveStates(dir);
   }
-  myStorageData.clear();
+  if (dir.exists() && !removedFileNames.isEmpty()) {
+    deleteFiles(dir);
+  }
+  storage.myVirtualFile=dir;
+  storage.myStorageData=copiedStorageData;
 }
