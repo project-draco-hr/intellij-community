@@ -11,15 +11,17 @@
   for (int i=0, n=syncTypes.length; i < n; i++) {
     final SyncType syncType=syncTypes[i];
     syncActions[i]=new DialogWrapperAction(IcsBundle.OBJECT$.message("action." + (syncType == SyncType.MERGE ? "Merge" : (syncType == SyncType.RESET_TO_THEIRS ? "ResetToTheirs" : "ResetToMy")) + "Settings.text")){
-      @Override protected void doAction(      ActionEvent event){
+      @SuppressWarnings("InstanceofCatchParameter") @Override protected void doAction(      ActionEvent event){
         boolean repositoryWillBeCreated=!icsManager.getRepositoryManager().isRepositoryExists();
-        if (!saveRemoteRepositoryUrl()) {
-          if (repositoryWillBeCreated) {
-            icsManager.getRepositoryManager().deleteRepository();
-          }
-          return;
-        }
+        boolean upstreamSet=false;
         try {
+          if (!saveRemoteRepositoryUrl()) {
+            if (repositoryWillBeCreated) {
+              icsManager.getRepositoryManager().deleteRepository();
+            }
+            return;
+          }
+          upstreamSet=true;
           if (repositoryWillBeCreated && syncType != SyncType.RESET_TO_THEIRS) {
             ApplicationManager.getApplication().saveSettings();
             icsManager.sync(syncType,project,new Function0<Unit>(){
@@ -38,7 +40,13 @@
           if (repositoryWillBeCreated) {
             icsManager.getRepositoryManager().deleteRepository();
           }
-          Messages.showErrorDialog(getContentPane(),StringUtil.notNullize(e.getMessage(),"Internal error"),IcsBundle.OBJECT$.message("sync.rejected.title"));
+          SettingsRepositoryPackage.getLOG().warn(e);
+          if (!upstreamSet || e instanceof NoRemoteRepositoryException) {
+            Messages.showErrorDialog(getContentPane(),IcsBundle.OBJECT$.message("set.upstream.failed.message",e.getMessage()),IcsBundle.OBJECT$.message("set.upstream.failed.title"));
+          }
+ else {
+            Messages.showErrorDialog(getContentPane(),StringUtil.notNullize(e.getMessage(),"Internal error"),IcsBundle.OBJECT$.message(e instanceof AuthenticationException ? "sync.not.authorized.title" : "sync.rejected.title"));
+          }
           return;
         }
         ActionsPackage.getNOTIFICATION_GROUP().createNotification(IcsBundle.OBJECT$.message("sync.done.message"),NotificationType.INFORMATION).notify(project);
