@@ -1,0 +1,48 @@
+{
+  PyClass cls=null;
+  PyFunction init=null;
+  if (target instanceof PyClass) {
+    cls=(PyClass)target;
+    init=cls.findInitOrNew(true);
+  }
+ else   if (target instanceof PyFunction) {
+    final PyFunction f=(PyFunction)target;
+    if (PyNames.INIT.equals(f.getName())) {
+      init=f;
+      cls=f.getContainingClass();
+    }
+  }
+  if (init != null) {
+    final PyType t=init.getCallType(context,call);
+    if (cls != null) {
+      if (init.getContainingClass() != cls) {
+        if (t instanceof PyCollectionType) {
+          final PyType elementType=((PyCollectionType)t).getElementType(context);
+          return Ref.create(new PyCollectionTypeImpl(cls,false,elementType));
+        }
+        return Ref.create(new PyClassTypeImpl(cls,false));
+      }
+    }
+    if (t != null && !(t instanceof PyNoneType)) {
+      return Ref.create(t);
+    }
+    if (cls != null && t == null) {
+      final PyFunction newMethod=cls.findMethodByName(PyNames.NEW,true);
+      if (newMethod != null && !PyBuiltinCache.getInstance(call).isBuiltin(newMethod)) {
+        return Ref.create(PyUnionType.createWeakType(new PyClassTypeImpl(cls,false)));
+      }
+    }
+  }
+  if (cls != null) {
+    return Ref.create(new PyClassTypeImpl(cls,false));
+  }
+  final PyType providedType=PyReferenceExpressionImpl.getReferenceTypeFromProviders(target,context,call);
+  if (providedType instanceof PyCallableType) {
+    return Ref.create(((PyCallableType)providedType).getCallType(context,call));
+  }
+  if (target instanceof Callable) {
+    final Callable callable=(Callable)target;
+    return Ref.create(callable.getCallType(context,call));
+  }
+  return null;
+}

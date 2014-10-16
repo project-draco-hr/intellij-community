@@ -35,15 +35,38 @@
   }
   String userFileName=FileUtil.getNameWithoutExtension(file.getName()) + ".py";
   VirtualFile userFile=taskDir.getVirtualFile().findChild(userFileName);
-  if (userFile != null) {
-    FileEditorManager.getInstance(project).openFile(userFile,true);
-    Editor editor=FileEditorManager.getInstance(project).getSelectedTextEditor();
-    if (editor == null) {
-      return;
-    }
-    for (    TaskWindow taskWindow : taskFile.getTaskWindows()) {
-      taskWindow.drawHighlighter(editor,true);
-    }
-    CCCreateCourseArchive.resetTaskFiles(taskFilesCopy);
+  if (userFile == null) {
+    LOG.info("Generated file " + userFileName + "was not found");
+    return;
   }
+  FrameWrapper showPreviewFrame=new FrameWrapper(project);
+  showPreviewFrame.setTitle(userFileName);
+  LabeledEditor labeledEditor=new LabeledEditor(null);
+  final EditorFactory factory=EditorFactory.getInstance();
+  Document document=FileDocumentManager.getInstance().getDocument(userFile);
+  if (document == null) {
+    return;
+  }
+  final EditorEx createdEditor=(EditorEx)factory.createEditor(document,project,PythonFileType.INSTANCE,true);
+  Disposer.register(project,new Disposable(){
+    public void dispose(){
+      factory.releaseEditor(createdEditor);
+    }
+  }
+);
+  for (  TaskWindow taskWindow : taskFile.getTaskWindows()) {
+    taskWindow.drawHighlighter(createdEditor,true);
+  }
+  JPanel header=new JPanel();
+  header.setLayout(new BoxLayout(header,BoxLayout.Y_AXIS));
+  header.setBorder(new EmptyBorder(10,10,10,10));
+  header.add(new JLabel("Read-only preview."));
+  String timeStamp=new SimpleDateFormat("yyyy/MM/dd HH:mm:ss").format(Calendar.getInstance().getTime());
+  header.add(new JLabel(String.format("Created %s.",timeStamp)));
+  labeledEditor.setComponent(createdEditor.getComponent(),header);
+  createdEditor.setCaretVisible(false);
+  createdEditor.setCaretEnabled(false);
+  showPreviewFrame.setComponent(labeledEditor);
+  showPreviewFrame.show();
+  CCCreateCourseArchive.resetTaskFiles(taskFilesCopy);
 }
