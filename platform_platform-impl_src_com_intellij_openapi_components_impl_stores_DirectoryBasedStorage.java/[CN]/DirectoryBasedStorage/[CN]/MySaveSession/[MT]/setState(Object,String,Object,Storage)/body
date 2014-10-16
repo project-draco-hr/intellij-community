@@ -1,23 +1,29 @@
 {
-  Element element;
+  Element compositeState;
   try {
-    element=DefaultStateSerializer.serializeState(state,storageSpec);
+    compositeState=DefaultStateSerializer.serializeState(state,storageSpec);
   }
  catch (  WriteExternalException e) {
-    throw new StateStorageException(e);
-  }
-catch (  Throwable e) {
-    LOG.info("Unable to serialize component state!",e);
+    LOG.debug(e);
     return;
   }
-  if (element != null) {
-    for (    Pair<Element,String> pair : myStorage.mySplitter.splitState(element)) {
-      Element e=pair.first;
-      String name=pair.second;
-      Element statePart=new Element(StorageData.COMPONENT);
-      statePart.setAttribute(StorageData.NAME,componentName);
-      statePart.addContent(e.detach());
-      myStorageData.put(componentName,new File(myStorage.myDir,name),statePart,false);
+catch (  Throwable e) {
+    LOG.info("Unable to serialize component state",e);
+    return;
+  }
+  removedFileNames.addAll(originalStorageData.getFileNames(componentName));
+  if (compositeState == null || JDOMUtil.isEmpty(compositeState)) {
+    doSetState(componentName,null,null);
+  }
+ else {
+    for (    Pair<Element,String> pair : storage.mySplitter.splitState(compositeState)) {
+      removedFileNames.remove(pair.second);
+      doSetState(componentName,pair.second,pair.first);
+    }
+    if (!removedFileNames.isEmpty()) {
+      for (      String fileName : removedFileNames) {
+        doSetState(componentName,fileName,null);
+      }
     }
   }
 }

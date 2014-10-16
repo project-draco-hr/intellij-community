@@ -1,28 +1,33 @@
 {
-  List<String> clauses=new ArrayList<String>();
-  HashSet<HKey> notNulls=methodAnnotations.notNulls;
-  HashMap<HKey,String> contracts=methodAnnotations.contracts;
+  List<String> contractClauses=new ArrayList<String>(arity * 2);
+  Set<HKey> notNulls=methodAnnotations.notNulls;
+  Set<HKey> pures=methodAnnotations.pures;
+  Map<HKey,String> contracts=methodAnnotations.contractsValues;
   for (  Map.Entry<HKey,Value> entry : solution.entrySet()) {
-    HKey key=entry.getKey().mkStable();
     Value value=entry.getValue();
     if (value == Value.Top || value == Value.Bot) {
       continue;
     }
+    HKey key=entry.getKey().mkStable();
     Direction direction=extractDirection(key.dirKey);
-    if (value == Value.NotNull && direction == Out && methodKey.equals(key)) {
-      notNulls.add(key);
+    HKey baseKey=key.mkBase();
+    if (!methodKey.equals(baseKey)) {
+      continue;
+    }
+    if (value == Value.NotNull && direction == Out) {
+      notNulls.add(methodKey);
+    }
+ else     if (value == Value.Pure && direction == Pure) {
+      pures.add(methodKey);
     }
  else     if (direction instanceof InOut) {
-      HKey baseKey=key.mkBase();
-      if (methodKey.equals(baseKey)) {
-        clauses.add(contractElement(arity,(InOut)direction,value));
-      }
+      contractClauses.add(contractElement(arity,(InOut)direction,value));
     }
   }
-  if (!notNulls.contains(methodKey) && !clauses.isEmpty()) {
-    Collections.sort(clauses);
+  if (!notNulls.contains(methodKey) && !contractClauses.isEmpty()) {
+    Collections.sort(contractClauses);
     StringBuilder sb=new StringBuilder("\"");
-    StringUtil.join(clauses,";",sb);
+    StringUtil.join(contractClauses,";",sb);
     sb.append('"');
     contracts.put(methodKey,sb.toString().intern());
   }
