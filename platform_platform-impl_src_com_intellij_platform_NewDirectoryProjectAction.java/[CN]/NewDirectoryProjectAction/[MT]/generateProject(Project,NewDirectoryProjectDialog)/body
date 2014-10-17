@@ -1,8 +1,8 @@
 {
-  final DirectoryProjectGenerator generator=dlg.getProjectGenerator();
-  final File location=new File(dlg.getNewProjectLocation());
+  final File location=new File(FileUtil.toSystemDependentName(dlg.getNewProjectLocation()));
   if (!location.exists() && !location.mkdirs()) {
-    Messages.showErrorDialog(project,"Cannot create directory '" + location + "'","Create Project");
+    String message=ActionsBundle.message("action.NewDirectoryProject.cannot.create.dir",location.getAbsolutePath());
+    Messages.showErrorDialog(project,message,ActionsBundle.message("action.NewDirectoryProject.title"));
     return null;
   }
   final VirtualFile baseDir=ApplicationManager.getApplication().runWriteAction(new Computable<VirtualFile>(){
@@ -11,14 +11,19 @@
     }
   }
 );
-  LOG.assertTrue(baseDir != null,"Couldn't find '" + location + "' in VFS");
+  if (baseDir == null) {
+    LOG.error("Couldn't find '" + location + "' in VFS");
+    return null;
+  }
   baseDir.refresh(false,true);
   if (baseDir.getChildren().length > 0) {
-    int rc=Messages.showYesNoDialog(project,"The directory '" + location + "' is not empty. Would you like to create a project from existing sources instead?","Create New Project",Messages.getQuestionIcon());
+    String message=ActionsBundle.message("action.NewDirectoryProject.not.empty",location.getAbsolutePath());
+    int rc=Messages.showYesNoDialog(project,message,ActionsBundle.message("action.NewDirectoryProject.title"),Messages.getQuestionIcon());
     if (rc == Messages.YES) {
       return PlatformProjectOpenProcessor.getInstance().doOpenProject(baseDir,null,false);
     }
   }
+  @SuppressWarnings("unchecked") final DirectoryProjectGenerator<Object> generator=dlg.getProjectGenerator();
   String generatorName=generator == null ? "empty" : ConvertUsagesUtil.ensureProperKey(generator.getName());
   UsageTrigger.trigger("NewDirectoryProjectAction." + generatorName);
   Object settings=null;
@@ -26,7 +31,7 @@
     try {
       settings=showSettings(generator,baseDir);
     }
- catch (    ProcessCanceledException e1) {
+ catch (    ProcessCanceledException e) {
       return null;
     }
   }

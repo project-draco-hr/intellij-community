@@ -5,24 +5,22 @@
     @Override public void after(    @NotNull List<? extends VFileEvent> events){
       Map<String,VirtualFile> rootsToRefresh=null;
 synchronized (ourLock) {
-        String[] rootPaths=ArrayUtil.toStringArray(ourHandlers.keySet());
         for (        VFileEvent event : events) {
           if (!(event.getFileSystem() instanceof LocalFileSystem))           continue;
+          if (event instanceof VFileCreateEvent)           continue;
+          if (event instanceof VFilePropertyChangeEvent && VirtualFile.PROP_HIDDEN.equals(((VFilePropertyChangeEvent)event).getPropertyName())) {
+            continue;
+          }
+          VirtualFile file=event.getFile();
           String path=event.getPath();
-          for (int i=0; i < rootPaths.length; i++) {
-            String rootPath=rootPaths[i];
-            if (rootPath == null)             continue;
-            ArchiveFileSystem vfs=ourHandlers.get(rootPath).first;
-            String localPath=vfs.extractLocalPath(rootPath);
-            if (FileUtil.startsWith(localPath,path)) {
-              ourHandlers.remove(rootPath);
-              NewVirtualFile root=ManagingFS.getInstance().findRoot(rootPath,vfs);
-              if (root != null) {
-                root.markDirtyRecursively();
-                if (rootsToRefresh == null)                 rootsToRefresh=ContainerUtil.newHashMap();
-                rootsToRefresh.put(localPath,root);
-              }
-              rootPaths[i]=null;
+          if (file == null || !file.isDirectory()) {
+            rootsToRefresh=invalidateHandlerForPath(path,rootsToRefresh);
+          }
+ else {
+            Collection<String> affectedPaths=ourDominatorsMap.get(path);
+            if (affectedPaths != null) {
+              affectedPaths=new ArrayList<String>(affectedPaths);
+              for (              String affectedPath : affectedPaths)               rootsToRefresh=invalidateHandlerForPath(affectedPath,rootsToRefresh);
             }
           }
         }
