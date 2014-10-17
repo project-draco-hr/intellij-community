@@ -3,7 +3,7 @@
   MessageBus bus=ApplicationManager.getApplication().getMessageBus();
   bus.connect().subscribe(VirtualFileManager.VFS_CHANGES,new BulkFileListener.Adapter(){
     @Override public void after(    @NotNull List<? extends VFileEvent> events){
-      Map<String,VirtualFile> rootsToRefresh=null;
+      InvalidationState state=null;
 synchronized (ourLock) {
         for (        VFileEvent event : events) {
           if (!(event.getFileSystem() instanceof LocalFileSystem))           continue;
@@ -13,23 +13,27 @@ synchronized (ourLock) {
           }
           VirtualFile file=event.getFile();
           String path=event.getPath();
+          if (event instanceof VFilePropertyChangeEvent) {
+            path=((VFilePropertyChangeEvent)event).getOldPath();
+          }
+ else           if (event instanceof VFileMoveEvent) {
+            path=((VFileMoveEvent)event).getOldPath();
+          }
           if (file == null || !file.isDirectory()) {
-            rootsToRefresh=invalidateHandlerForPath(path,rootsToRefresh);
+            if (state == null)             state=new InvalidationState();
+            state.invalidateHandlerForPath(path);
           }
  else {
             Collection<String> affectedPaths=ourDominatorsMap.get(path);
             if (affectedPaths != null) {
               affectedPaths=new ArrayList<String>(affectedPaths);
-              for (              String affectedPath : affectedPaths)               rootsToRefresh=invalidateHandlerForPath(affectedPath,rootsToRefresh);
+              if (state == null)               state=new InvalidationState();
+              for (              String affectedPath : affectedPaths)               state.invalidateHandlerForPath(affectedPath);
             }
           }
         }
       }
-      if (rootsToRefresh != null) {
-        ZipFileCache.reset(rootsToRefresh.keySet());
-        boolean async=!ApplicationManager.getApplication().isUnitTestMode();
-        RefreshQueue.getInstance().refresh(async,true,null,rootsToRefresh.values());
-      }
+      if (state != null)       state.scheduleRefresh();
     }
   }
 );
