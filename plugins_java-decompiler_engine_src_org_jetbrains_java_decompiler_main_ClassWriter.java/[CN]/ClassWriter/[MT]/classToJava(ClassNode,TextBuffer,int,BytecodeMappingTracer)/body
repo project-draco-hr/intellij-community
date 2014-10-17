@@ -1,14 +1,13 @@
 {
   ClassNode outerNode=(ClassNode)DecompilerContext.getProperty(DecompilerContext.CURRENT_CLASS_NODE);
   DecompilerContext.setProperty(DecompilerContext.CURRENT_CLASS_NODE,node);
-  int total_offset_lines=0;
+  final int startLine=tracer != null ? tracer.getCurrentSourceLine() : 0;
   BytecodeMappingTracer dummy_tracer=new BytecodeMappingTracer();
   try {
     invokeProcessors(node);
     ClassWrapper wrapper=node.wrapper;
     StructClass cl=wrapper.getClassStruct();
     DecompilerContext.getLogger().startWriteClass(cl.qualifiedName);
-    String lineSeparator=DecompilerContext.getNewLineSeparator();
     int start_class_def=buffer.length();
     writeClassDefinition(node,buffer,indent);
     boolean hasContent=false;
@@ -20,14 +19,14 @@
       if (isEnum) {
         if (enumFields) {
           buffer.append(',');
-          buffer.append(lineSeparator);
+          buffer.appendLineSeparator();
         }
         enumFields=true;
       }
  else       if (enumFields) {
         buffer.append(';');
-        buffer.append(lineSeparator);
-        buffer.append(lineSeparator);
+        buffer.appendLineSeparator();
+        buffer.appendLineSeparator();
         enumFields=false;
       }
       fieldToJava(wrapper,cl,fd,buffer,indent + 1,dummy_tracer);
@@ -35,22 +34,20 @@
     }
     if (enumFields) {
       buffer.append(';');
-      buffer.append(lineSeparator);
+      buffer.appendLineSeparator();
     }
-    total_offset_lines=buffer.count(lineSeparator,start_class_def);
     for (    StructMethod mt : cl.getMethods()) {
       boolean hide=mt.isSynthetic() && DecompilerContext.getOption(IFernflowerPreferences.REMOVE_SYNTHETIC) || mt.hasModifier(CodeConstants.ACC_BRIDGE) && DecompilerContext.getOption(IFernflowerPreferences.REMOVE_BRIDGE) || wrapper.getHiddenMembers().contains(InterpreterUtil.makeUniqueKey(mt.getName(),mt.getDescriptor()));
       if (hide)       continue;
       int position=buffer.length();
       if (hasContent) {
-        buffer.append(lineSeparator);
+        buffer.appendLineSeparator();
       }
-      BytecodeMappingTracer method_tracer=new BytecodeMappingTracer(total_offset_lines);
+      BytecodeMappingTracer method_tracer=new BytecodeMappingTracer(buffer.countLines() + startLine);
       boolean methodSkipped=!methodToJava(node,mt,buffer,indent + 1,method_tracer);
       if (!methodSkipped) {
         hasContent=true;
         DecompilerContext.getBytecodeSourceMapper().addTracer(cl.qualifiedName,InterpreterUtil.makeUniqueKey(mt.getName(),mt.getDescriptor()),method_tracer);
-        total_offset_lines=(method_tracer.getCurrentSourceLine() + 1);
       }
  else {
         buffer.setLength(position);
@@ -63,15 +60,15 @@
         boolean hide=isSynthetic && DecompilerContext.getOption(IFernflowerPreferences.REMOVE_SYNTHETIC) || wrapper.getHiddenMembers().contains(innerCl.qualifiedName);
         if (hide)         continue;
         if (hasContent) {
-          buffer.append(lineSeparator);
+          buffer.appendLineSeparator();
         }
-        classToJava(inner,buffer,indent + 1);
+        classToJava(inner,buffer,indent + 1,tracer);
         hasContent=true;
       }
     }
     buffer.appendIndent(indent).append('}');
     if (node.type != ClassNode.CLASS_ANONYMOUS) {
-      buffer.append(lineSeparator);
+      buffer.appendLineSeparator();
     }
   }
   finally {
