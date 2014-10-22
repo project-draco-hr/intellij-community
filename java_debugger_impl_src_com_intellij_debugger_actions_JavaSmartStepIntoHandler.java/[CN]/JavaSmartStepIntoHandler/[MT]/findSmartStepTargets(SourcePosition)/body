@@ -27,8 +27,7 @@
     }
  while (true);
     final List<SmartStepTarget> targets=new OrderedSet<SmartStepTarget>();
-    TextRange textRange=element.getTextRange();
-    final Range<Integer> lines=new Range<Integer>(doc.getLineNumber(textRange.getStartOffset()),doc.getLineNumber(textRange.getEndOffset()));
+    final Ref<TextRange> textRange=new Ref<TextRange>(lineRange);
     final PsiElementVisitor methodCollector=new JavaRecursiveElementVisitor(){
       final Stack<PsiMethod> myContextStack=new Stack<PsiMethod>();
       final Stack<String> myParamNameStack=new Stack<String>();
@@ -38,16 +37,23 @@
       }
       @Override public void visitAnonymousClass(      PsiAnonymousClass aClass){
         for (        PsiMethod psiMethod : aClass.getMethods()) {
-          targets.add(new MethodSmartStepTarget(psiMethod,getCurrentParamName(),psiMethod.getBody(),true,lines));
+          targets.add(new MethodSmartStepTarget(psiMethod,getCurrentParamName(),psiMethod.getBody(),true,null));
         }
       }
       public void visitLambdaExpression(      PsiLambdaExpression expression){
-        targets.add(new LambdaSmartStepTarget(expression,getCurrentParamName(),expression.getBody(),myNextLambdaExpressionOrdinal++,lines));
+        targets.add(new LambdaSmartStepTarget(expression,getCurrentParamName(),expression.getBody(),myNextLambdaExpressionOrdinal++,null));
       }
       @Override public void visitStatement(      PsiStatement statement){
         if (lineRange.intersects(statement.getTextRange())) {
           super.visitStatement(statement);
         }
+      }
+      @Override public void visitExpression(      PsiExpression expression){
+        TextRange range=expression.getTextRange();
+        if (lineRange.intersects(range)) {
+          textRange.set(textRange.get().union(range));
+        }
+        super.visitExpression(expression);
       }
       public void visitExpressionList(      PsiExpressionList expressionList){
         final PsiMethod psiMethod=myContextStack.isEmpty() ? null : myContextStack.peek();
@@ -75,7 +81,7 @@
         final PsiMethod psiMethod=expression.resolveMethod();
         if (psiMethod != null) {
           myContextStack.push(psiMethod);
-          targets.add(new MethodSmartStepTarget(psiMethod,null,expression instanceof PsiMethodCallExpression ? ((PsiMethodCallExpression)expression).getMethodExpression().getReferenceNameElement() : expression instanceof PsiNewExpression ? ((PsiNewExpression)expression).getClassOrAnonymousClassReference() : expression,false,lines));
+          targets.add(new MethodSmartStepTarget(psiMethod,null,expression instanceof PsiMethodCallExpression ? ((PsiMethodCallExpression)expression).getMethodExpression().getReferenceNameElement() : expression instanceof PsiNewExpression ? ((PsiNewExpression)expression).getClassOrAnonymousClassReference() : expression,false,null));
         }
         try {
           super.visitCallExpression(expression);
@@ -94,6 +100,10 @@
         break;
       }
       sibling.accept(methodCollector);
+    }
+    Range<Integer> lines=new Range<Integer>(doc.getLineNumber(textRange.get().getStartOffset()),doc.getLineNumber(textRange.get().getEndOffset()));
+    for (    SmartStepTarget target : targets) {
+      target.setCallingExpressionLines(lines);
     }
     return targets;
   }
