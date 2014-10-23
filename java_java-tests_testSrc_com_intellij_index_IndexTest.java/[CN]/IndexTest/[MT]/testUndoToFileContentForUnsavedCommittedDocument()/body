@@ -1,0 +1,31 @@
+{
+  VirtualFile dir=getVirtualFile(createTempDirectory());
+  PsiTestUtil.addSourceContentToRoots(myModule,dir);
+  final VirtualFile vFile=createChildData(dir,"Foo.java");
+  VfsUtil.saveText(vFile,"class Foo {}");
+  ((VirtualFileSystemEntry)vFile).setModificationStamp(0);
+  final Document document=FileDocumentManager.getInstance().getDocument(vFile);
+  assertTrue(document != null && document.getModificationStamp() == 0);
+  final GlobalSearchScope scope=GlobalSearchScope.projectScope(myProject);
+  assertNotNull(myJavaFacade.findClass("Foo",scope));
+  WriteCommandAction.runWriteCommandAction(myProject,new Runnable(){
+    @Override public void run(){
+      document.insertString(0,"import Bar;\n");
+      PsiDocumentManager.getInstance(myProject).commitAllDocuments();
+      assertNotNull(myJavaFacade.findClass("Foo",scope));
+    }
+  }
+);
+  final UndoManager undoManager=UndoManager.getInstance(getProject());
+  final FileEditor selectedEditor=FileEditorManager.getInstance(myProject).openFile(vFile,false)[0];
+  ((UndoManagerImpl)undoManager).setEditorProvider(new CurrentEditorProvider(){
+    @Override public FileEditor getCurrentEditor(){
+      return selectedEditor;
+    }
+  }
+);
+  assertTrue(undoManager.isUndoAvailable(selectedEditor));
+  FileDocumentManager.getInstance().saveDocument(document);
+  undoManager.undo(selectedEditor);
+  assertNotNull(myJavaFacade.findClass("Foo",scope));
+}
