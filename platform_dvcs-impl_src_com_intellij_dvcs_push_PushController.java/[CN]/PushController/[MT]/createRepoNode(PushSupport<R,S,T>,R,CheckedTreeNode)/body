@@ -10,9 +10,6 @@
   final RepositoryWithBranchPanel<T> repoPanel=new RepositoryWithBranchPanel<T>(myProject,repoName,source.getPresentation(),pushTargetPanel);
   CheckBoxModel checkBoxModel=model.getCheckBoxModel();
   final RepositoryNode repoNode=mySingleRepoProject ? new SingleRepositoryNode(repoPanel,checkBoxModel) : new RepositoryNode(repoPanel,checkBoxModel,target != null);
-  if (!support.shouldRequestIncomingChangesForNotCheckedRepositories()) {
-    model.getCheckBoxModel().setChecked(myPreselectedRepositories.contains(repository));
-  }
   pushTargetPanel.setFireOnChangeAction(new Runnable(){
     @Override public void run(){
       repoPanel.fireOnChange();
@@ -24,14 +21,21 @@
   repoPanel.addRepoNodeListener(new RepositoryNodeListener<T>(){
     @Override public void onTargetChanged(    T newTarget){
       repoNode.setChecked(true);
+      myExcludedRepositoryRoots.remove(model.getRepository().getRoot().getPath());
       model.setTarget(newTarget);
       model.clearErrors();
       loadCommits(model,repoNode,false);
     }
     @Override public void onSelectionChanged(    boolean isSelected){
       myDialog.enableOkActions(isPushAllowed());
-      if (isSelected && !model.hasCommitInfo() && !model.getSupport().shouldRequestIncomingChangesForNotCheckedRepositories()) {
-        loadCommits(model,repoNode,false);
+      if (isSelected) {
+        boolean forceLoad=myExcludedRepositoryRoots.remove(model.getRepository().getRoot().getPath());
+        if (!model.hasCommitInfo() && (forceLoad || !model.getSupport().shouldRequestIncomingChangesForNotCheckedRepositories())) {
+          loadCommits(model,repoNode,false);
+        }
+      }
+ else {
+        myExcludedRepositoryRoots.add(model.getRepository().getRoot().getPath());
       }
     }
   }
