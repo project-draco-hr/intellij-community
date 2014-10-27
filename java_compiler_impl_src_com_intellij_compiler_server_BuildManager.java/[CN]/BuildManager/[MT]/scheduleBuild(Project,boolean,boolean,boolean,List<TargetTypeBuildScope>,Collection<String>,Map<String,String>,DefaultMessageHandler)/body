@@ -1,15 +1,14 @@
 {
   final String projectPath=getProjectPath(project);
-  final Pair<RequestFuture<PreloadedProcessMessageHandler>,OSProcessHandler> preloaded=myPreloadedBuilds.get(projectPath);
+  final Pair<RequestFuture<PreloadedProcessMessageHandler>,OSProcessHandler> preloaded=myPreloadedBuilds.remove(projectPath);
   final RequestFuture<PreloadedProcessMessageHandler> preloadedFuture=preloaded != null ? preloaded.first : null;
-  final boolean usingPreloadedProcess=preloadedFuture != null && myMessageDispatcher.acquirePreloadedSessionIfReady(preloadedFuture.getRequestID());
+  final boolean usingPreloadedProcess=preloadedFuture != null;
   final UUID sessionId;
   final BuilderMessageHandler handler=new NotifyingMessageHandler(project,messageHandler,messageHandler instanceof AutoMakeMessageHandler);
   if (usingPreloadedProcess) {
     LOG.info("Using preloaded build process to compile " + projectPath);
     sessionId=preloadedFuture.getRequestID();
     preloadedFuture.getMessageHandler().setDelegateHandler(handler);
-    myPreloadedBuilds.remove(projectPath);
   }
  else {
     sessionId=UUID.randomUUID();
@@ -40,11 +39,7 @@
         CmdlineRemoteProto.Message.ControllerMessage.FSEvent currentFSChanges;
         final SequentialTaskExecutor projectTaskQueue;
 synchronized (myProjectDataMap) {
-          ProjectData data=myProjectDataMap.get(projectPath);
-          if (data == null) {
-            data=new ProjectData(new SequentialTaskExecutor(PooledThreadExecutor.INSTANCE));
-            myProjectDataMap.put(projectPath,data);
-          }
+          final ProjectData data=getProjectData(projectPath);
           if (isRebuild) {
             data.dropChanges();
           }
@@ -84,7 +79,10 @@ synchronized (myProjectDataMap) {
                 final OSProcessHandler processHandler;
                 final StringBuilder errorsOnLaunch=new StringBuilder();
                 if (usingPreloadedProcess) {
-                  myMessageDispatcher.sendBuildParameters(future.getRequestID(),params);
+                  final boolean paramsSent=myMessageDispatcher.sendBuildParameters(future.getRequestID(),params);
+                  if (!paramsSent) {
+                    myMessageDispatcher.cancelSession(future.getRequestID());
+                  }
                   processHandler=preloaded.second;
                 }
  else {
@@ -137,7 +135,7 @@ synchronized (myProjectDataMap) {
                     unregistered.sessionTerminated(sessionId);
                   }
                 }
-                if (Registry.is("compiler.process.preload") && !myPreloadedBuilds.containsKey(projectPath) && !project.isDisposed()) {
+                if (Registry.is("compiler.process.preload") && !project.isDisposed()) {
                   try {
                     final Pair<RequestFuture<PreloadedProcessMessageHandler>,OSProcessHandler> pair=launchPreloadedBuildProcess(project);
                     myPreloadedBuilds.put(projectPath,pair);

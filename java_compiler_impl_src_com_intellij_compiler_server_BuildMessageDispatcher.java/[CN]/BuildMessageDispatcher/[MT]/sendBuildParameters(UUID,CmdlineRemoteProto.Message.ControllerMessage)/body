@@ -1,10 +1,24 @@
 {
+  boolean succeeded=false;
   final SessionData sessionData=mySessionDescriptors.get(preloadedSessionId);
   if (sessionData != null) {
-    final Channel channel=sessionData.channel;
-    if (channel != null && channel.isActive() && sessionData.handler != null) {
-      sessionData.handler.buildStarted(preloadedSessionId);
-      channel.writeAndFlush(CmdlineProtoUtil.toMessage(preloadedSessionId,params));
+synchronized (sessionData) {
+      if (sessionData.state == SessionData.State.WAITING_PARAMS) {
+        sessionData.state=SessionData.State.RUNNING;
+        final Channel channel=sessionData.channel;
+        if (channel != null && channel.isActive()) {
+          sessionData.handler.buildStarted(preloadedSessionId);
+          channel.writeAndFlush(CmdlineProtoUtil.toMessage(preloadedSessionId,params));
+          succeeded=true;
+        }
+      }
+ else {
+        if (sessionData.state == SessionData.State.INITIAL) {
+          sessionData.params=params;
+          succeeded=true;
+        }
+      }
     }
   }
+  return succeeded;
 }
