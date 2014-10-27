@@ -4,7 +4,7 @@
   if (sessionData == null) {
     final CmdlineRemoteProto.Message.UUID id=message.getSessionId();
     sessionId=new UUID(id.getMostSigBits(),id.getLeastSigBits());
-    sessionData=myMessageHandlers.get(sessionId);
+    sessionData=mySessionDescriptors.get(sessionId);
     if (sessionData != null) {
       sessionData.channel=context.channel();
       context.attr(SESSION_DATA).set(sessionData);
@@ -30,14 +30,22 @@ case BUILDER_MESSAGE:
 final CmdlineRemoteProto.Message.BuilderMessage builderMessage=message.getBuilderMessage();
 final CmdlineRemoteProto.Message.BuilderMessage.Type msgType=builderMessage.getType();
 if (msgType == CmdlineRemoteProto.Message.BuilderMessage.Type.PARAM_REQUEST) {
+synchronized (sessionData) {
 final CmdlineRemoteProto.Message.ControllerMessage params=sessionData.params;
 if (params != null) {
-handler.buildStarted(sessionId);
-sessionData.params=null;
-context.writeAndFlush(CmdlineProtoUtil.toMessage(sessionId,params));
+  sessionData.state=SessionData.State.RUNNING;
+  handler.buildStarted(sessionId);
+  sessionData.params=null;
+  context.writeAndFlush(CmdlineProtoUtil.toMessage(sessionId,params));
 }
  else {
-cancelSession(sessionId);
+  if (sessionData.state == SessionData.State.INITIAL) {
+    sessionData.state=SessionData.State.WAITING_PARAMS;
+  }
+ else {
+    cancelSession(sessionId);
+  }
+}
 }
 }
  else {

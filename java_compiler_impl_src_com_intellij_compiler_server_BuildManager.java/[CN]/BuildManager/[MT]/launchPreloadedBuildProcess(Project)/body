@@ -1,0 +1,30 @@
+{
+  ensureListening();
+  final RequestFuture<PreloadedProcessMessageHandler> future=new RequestFuture<PreloadedProcessMessageHandler>(new PreloadedProcessMessageHandler(project),UUID.randomUUID(),new RequestFuture.CancelAction<PreloadedProcessMessageHandler>(){
+    @Override public void cancel(    RequestFuture<PreloadedProcessMessageHandler> future) throws Exception {
+      myMessageDispatcher.cancelSession(future.getRequestID());
+    }
+  }
+);
+  myMessageDispatcher.registerBuildMessageHandler(future,null);
+  try {
+    final OSProcessHandler processHandler=launchBuildProcess(project,myListenPort,future.getRequestID(),true);
+    processHandler.addProcessListener(new ProcessAdapter(){
+      @Override public void onTextAvailable(      ProcessEvent event,      Key outputType){
+        if (ProcessOutputTypes.STDERR.equals(outputType)) {
+          final String text=event.getText();
+          if (!StringUtil.isEmptyOrSpaces(text)) {
+            LOG.info("PRELOADED_BUILD_PROCESS: " + text);
+          }
+        }
+      }
+    }
+);
+    processHandler.startNotify();
+    return Pair.create(future,processHandler);
+  }
+ catch (  ExecutionException e) {
+    myMessageDispatcher.unregisterBuildMessageHandler(future.getRequestID());
+    throw e;
+  }
+}
