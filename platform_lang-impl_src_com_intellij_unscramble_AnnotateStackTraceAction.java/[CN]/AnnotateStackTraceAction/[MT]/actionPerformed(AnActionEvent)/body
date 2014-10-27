@@ -1,5 +1,5 @@
 {
-  cache=new HashMap<Integer,VcsFileRevision>();
+  cache=new HashMap<Integer,LastRevision>();
   ProgressManager.getInstance().run(new Task.Backgroundable(myEditor.getProject(),"Getting file history",true,PerformInBackgroundOption.ALWAYS_BACKGROUND){
     @Override public boolean shouldStartInBackground(){
       return true;
@@ -9,7 +9,7 @@
     private void showGutter(){
       final EditorGutterAction action=new EditorGutterAction(){
         @Override public void doAction(        int lineNum){
-          final VcsFileRevision revision=cache.get(lineNum);
+          final LastRevision revision=cache.get(lineNum);
           final List<RangeHighlighter> links=myHyperlinks.findAllHyperlinksOnLine(lineNum);
           if (!links.isEmpty()) {
             final RangeHighlighter key=links.get(links.size() - 1);
@@ -19,7 +19,7 @@
               final Project project=getProject();
               final AbstractVcs vcs=ProjectLevelVcsManagerEx.getInstanceEx(project).getVcsFor(file);
               if (vcs != null) {
-                final VcsRevisionNumber number=revision.getRevisionNumber();
+                final VcsRevisionNumber number=revision.getNumber();
                 final VcsKey vcsKey=vcs.getKeyInstanceMethod();
                 ShowAllAffectedGenericAction.showSubmittedFiles(project,number,file,vcsKey);
               }
@@ -38,16 +38,16 @@
           return Cursor.getDefaultCursor();
         }
         @Override public String getLineText(        int line,        Editor editor){
-          final VcsFileRevision revision=cache.get(line);
+          final LastRevision revision=cache.get(line);
           if (revision != null) {
-            return String.format("%" + maxDateLength + "s",DateFormatUtil.formatPrettyDate(revision.getRevisionDate())) + " " + revision.getAuthor();
+            return String.format("%" + maxDateLength + "s",DateFormatUtil.formatPrettyDate(revision.getDate())) + " " + revision.getAuthor();
           }
           return "";
         }
         @Override public String getToolTip(        int line,        Editor editor){
-          final VcsFileRevision revision=cache.get(line);
+          final LastRevision revision=cache.get(line);
           if (revision != null) {
-            return XmlStringUtil.wrapInHtml(revision.getAuthor() + " " + DateFormatUtil.formatDateTime(revision.getRevisionDate())+ "<br/>"+ revision.getCommitMessage());
+            return XmlStringUtil.wrapInHtml(revision.getAuthor() + " " + DateFormatUtil.formatDateTime(revision.getDate())+ "<br/>"+ revision.getMessage());
           }
           return null;
         }
@@ -98,10 +98,10 @@
       }
       for (      VirtualFile file : files) {
         indicator.checkCanceled();
-        VcsFileRevision revision=getLastRevision(file);
+        LastRevision revision=getLastRevision(file);
         if (revision != null) {
           final List<Integer> lines=files2lines.get(file);
-          final Date date=revision.getRevisionDate();
+          final Date date=revision.getDate();
           if (newestDate == null || date.after(newestDate)) {
             newestDate=date;
             newestLine=lines.get(0);
@@ -127,7 +127,7 @@
         }
       }
     }
-    @Nullable private VcsFileRevision getLastRevision(    @NotNull VirtualFile file){
+    @Nullable private LastRevision getLastRevision(    @NotNull VirtualFile file){
       try {
         final AbstractVcs vcs=VcsUtil.getVcsFor(myEditor.getProject(),file);
         if (vcs == null)         return null;
@@ -138,7 +138,7 @@
         if (session == null)         return null;
         List<VcsFileRevision> list=session.getRevisionList();
         if (list == null || list.isEmpty())         return null;
-        return list.get(0);
+        return LastRevision.create(list.get(0));
       }
  catch (      VcsException ignored) {
         ignored.printStackTrace();
