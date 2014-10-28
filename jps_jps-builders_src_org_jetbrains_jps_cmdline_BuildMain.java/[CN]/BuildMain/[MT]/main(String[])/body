@@ -1,14 +1,4 @@
 {
-  final long start=System.nanoTime();
-  Runtime.getRuntime().addShutdownHook(new Thread("TimeLogger"){
-    public void run(){
-      final long totalTime=(System.nanoTime() - start) / 1000000L;
-      final long millis=totalTime % 1000L;
-      final long seconds=totalTime / 1000L;
-      LOG.info("Total build time " + seconds + " sec "+ millis+ " ms");
-    }
-  }
-);
   System.out.println("Build process started. Classpath: " + System.getProperty("java.class.path"));
   final String host=args[HOST_ARG];
   final int port=Integer.parseInt(args[PORT_ARG]);
@@ -44,6 +34,56 @@
   final ChannelFuture future=bootstrap.connect(new InetSocketAddress(host,port)).awaitUninterruptibly();
   final boolean success=future.isSuccess();
   if (success) {
+    final String projectPathToPreload=System.getProperty(PRELOAD_PROJECT_PATH,null);
+    final String globalsPathToPreload=System.getProperty(PRELOAD_CONFIG_PATH,null);
+    if (projectPathToPreload != null && globalsPathToPreload != null) {
+      final long preloadStart=System.currentTimeMillis();
+      final PreloadedData data=new PreloadedData();
+      ourPreloadedData=data;
+      try {
+        FileSystemUtil.getAttributes(projectPathToPreload);
+        final BuildRunner runner=new BuildRunner(new JpsModelLoaderImpl(projectPathToPreload,globalsPathToPreload,null));
+        data.setRunner(runner);
+        final File dataStorageRoot=Utils.getDataStorageRoot(projectPathToPreload);
+        final BuildFSState fsState=new BuildFSState(false);
+        final ProjectDescriptor pd=runner.load(new MessageHandler(){
+          @Override public void processMessage(          BuildMessage msg){
+            data.addMessage(msg);
+          }
+        }
+,dataStorageRoot,fsState);
+        data.setProjectDescriptor(pd);
+        try {
+          final File fsStateFile=new File(dataStorageRoot,BuildSession.FS_STATE_FILE);
+          final DataInputStream in=new DataInputStream(new BufferedInputStream(new FileInputStream(fsStateFile)));
+          try {
+            final int version=in.readInt();
+            if (version == FSState.VERSION) {
+              final long savedOrdinal=in.readLong();
+              in.readBoolean();
+              fsState.load(in,pd.getModel(),pd.getBuildRootIndex());
+              data.setFsEventOrdinal(savedOrdinal);
+            }
+          }
+  finally {
+            in.close();
+          }
+        }
+ catch (        FileNotFoundException ignored) {
+        }
+catch (        IOException e) {
+          LOG.info("Error pre-loading FS state",e);
+          fsState.clearAll();
+        }
+        LOG.info("Pre-loaded project model in " + (System.currentTimeMillis() - preloadStart) + " ms");
+      }
+ catch (      Throwable e) {
+        LOG.info("Failed to pre-load project " + projectPathToPreload,e);
+      }
+    }
+ else     if (projectPathToPreload != null || globalsPathToPreload != null) {
+      LOG.info("Skipping project pre-loading step: both paths to project configuration files and path to global settings must be specified");
+    }
     future.channel().writeAndFlush(CmdlineProtoUtil.toMessage(sessionId,CmdlineProtoUtil.createParamRequest()));
   }
  else {
