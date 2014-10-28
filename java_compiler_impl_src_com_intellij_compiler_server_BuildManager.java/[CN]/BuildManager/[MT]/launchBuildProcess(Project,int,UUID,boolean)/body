@@ -1,0 +1,177 @@
+{
+  final String compilerPath;
+  final String vmExecutablePath;
+  JavaSdkVersion sdkVersion=null;
+  final String forcedCompiledJdkHome=Registry.stringValue(COMPILER_PROCESS_JDK_PROPERTY);
+  if (StringUtil.isEmptyOrSpaces(forcedCompiledJdkHome)) {
+    Sdk projectJdk=null;
+    int sdkMinorVersion=0;
+    final Set<Sdk> candidates=new HashSet<Sdk>();
+    final Sdk defaultSdk=ProjectRootManager.getInstance(project).getProjectSdk();
+    if (defaultSdk != null && defaultSdk.getSdkType() instanceof JavaSdkType) {
+      candidates.add(defaultSdk);
+    }
+    for (    Module module : ModuleManager.getInstance(project).getModules()) {
+      final Sdk sdk=ModuleRootManager.getInstance(module).getSdk();
+      if (sdk != null && sdk.getSdkType() instanceof JavaSdkType) {
+        candidates.add(sdk);
+      }
+    }
+    final JavaSdk javaSdkType=JavaSdk.getInstance();
+    for (    Sdk candidate : candidates) {
+      final String vs=candidate.getVersionString();
+      if (vs != null) {
+        final JavaSdkVersion candidateVersion=javaSdkType.getVersion(vs);
+        if (candidateVersion != null) {
+          final int candidateMinorVersion=getMinorVersion(vs);
+          if (projectJdk == null) {
+            sdkVersion=candidateVersion;
+            sdkMinorVersion=candidateMinorVersion;
+            projectJdk=candidate;
+          }
+ else {
+            final int result=candidateVersion.compareTo(sdkVersion);
+            if (result > 0 || (result == 0 && candidateMinorVersion > sdkMinorVersion)) {
+              sdkVersion=candidateVersion;
+              sdkMinorVersion=candidateMinorVersion;
+              projectJdk=candidate;
+            }
+          }
+        }
+      }
+    }
+    final Sdk internalJdk=JavaAwareProjectJdkTableImpl.getInstanceEx().getInternalJdk();
+    if (projectJdk == null || sdkVersion == null || !sdkVersion.isAtLeast(JavaSdkVersion.JDK_1_6)) {
+      projectJdk=internalJdk;
+    }
+    final JavaSdkType projectJdkType=(JavaSdkType)projectJdk.getSdkType();
+    if (projectJdk.equals(internalJdk)) {
+      final JavaCompiler systemCompiler=ToolProvider.getSystemJavaCompiler();
+      if (systemCompiler == null) {
+        throw new ExecutionException("No system java compiler is provided by the JRE. Make sure tools.jar is present in IntelliJ IDEA classpath.");
+      }
+      compilerPath=ClasspathBootstrap.getResourcePath(systemCompiler.getClass());
+    }
+ else {
+      compilerPath=projectJdkType.getToolsPath(projectJdk);
+      if (compilerPath == null) {
+        throw new ExecutionException("Cannot determine path to 'tools.jar' library for " + projectJdk.getName() + " ("+ projectJdk.getHomePath()+ ")");
+      }
+    }
+    vmExecutablePath=projectJdkType.getVMExecutablePath(projectJdk);
+  }
+ else {
+    compilerPath=new File(forcedCompiledJdkHome,"lib/tools.jar").getAbsolutePath();
+    vmExecutablePath=new File(forcedCompiledJdkHome,"bin/java").getAbsolutePath();
+  }
+  final CompilerWorkspaceConfiguration config=CompilerWorkspaceConfiguration.getInstance(project);
+  final GeneralCommandLine cmdLine=new GeneralCommandLine();
+  cmdLine.setExePath(vmExecutablePath);
+  final int heapSize=config.getProcessHeapSize(JavacConfiguration.getOptions(project,JavacConfiguration.class).MAXIMUM_HEAP_SIZE);
+  cmdLine.addParameter("-Xmx" + heapSize + "m");
+  if (SystemInfo.isMac && sdkVersion != null && JavaSdkVersion.JDK_1_6.equals(sdkVersion) && Registry.is("compiler.process.32bit.vm.on.mac")) {
+    cmdLine.addParameter("-d32");
+  }
+  cmdLine.addParameter("-Djava.awt.headless=true");
+  cmdLine.addParameter("-Djava.endorsed.dirs=\"\"");
+  if (IS_UNIT_TEST_MODE) {
+    cmdLine.addParameter("-Dtest.mode=true");
+  }
+  cmdLine.addParameter("-Djdt.compiler.useSingleThread=true");
+  if (requestProjectPreload) {
+    cmdLine.addParameter("-Dpreload.project.path=" + FileUtil.toCanonicalPath(getProjectPath(project)));
+    cmdLine.addParameter("-Dpreload.config.path=" + FileUtil.toCanonicalPath(PathManager.getOptionsPath()));
+  }
+  final String shouldGenerateIndex=System.getProperty(GlobalOptions.GENERATE_CLASSPATH_INDEX_OPTION);
+  if (shouldGenerateIndex != null) {
+    cmdLine.addParameter("-D" + GlobalOptions.GENERATE_CLASSPATH_INDEX_OPTION + "="+ shouldGenerateIndex);
+  }
+  cmdLine.addParameter("-D" + GlobalOptions.COMPILE_PARALLEL_OPTION + "="+ Boolean.toString(config.PARALLEL_COMPILATION));
+  cmdLine.addParameter("-D" + GlobalOptions.REBUILD_ON_DEPENDENCY_CHANGE_OPTION + "="+ Boolean.toString(config.REBUILD_ON_DEPENDENCY_CHANGE));
+  if (Boolean.TRUE.equals(Boolean.valueOf(System.getProperty("java.net.preferIPv4Stack","false")))) {
+    cmdLine.addParameter("-Djava.net.preferIPv4Stack=true");
+  }
+  boolean isProfilingMode=false;
+  final String additionalOptions=config.COMPILER_PROCESS_ADDITIONAL_VM_OPTIONS;
+  if (!StringUtil.isEmpty(additionalOptions)) {
+    final StringTokenizer tokenizer=new StringTokenizer(additionalOptions," ",false);
+    while (tokenizer.hasMoreTokens()) {
+      final String option=tokenizer.nextToken();
+      if ("-Dprofiling.mode=true".equals(option)) {
+        isProfilingMode=true;
+      }
+      cmdLine.addParameter(option);
+    }
+  }
+  if (isProfilingMode) {
+    cmdLine.addParameter("-agentlib:yjpagent=disablej2ee,disablealloc,delay=10000,sessionname=ExternalBuild");
+  }
+  final int debugPort=Registry.intValue("compiler.process.debug.port");
+  if (debugPort > 0) {
+    cmdLine.addParameter("-XX:+HeapDumpOnOutOfMemoryError");
+    cmdLine.addParameter("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=" + debugPort);
+  }
+  if (!Registry.is("compiler.process.use.memory.temp.cache")) {
+    cmdLine.addParameter("-D" + GlobalOptions.USE_MEMORY_TEMP_CACHE_OPTION + "=false");
+  }
+  if (mySystemCharset != null) {
+    cmdLine.setCharset(mySystemCharset);
+    cmdLine.addParameter("-D" + CharsetToolkit.FILE_ENCODING_PROPERTY + "="+ mySystemCharset.name());
+  }
+  cmdLine.addParameter("-D" + JpsGlobalLoader.FILE_TYPES_COMPONENT_NAME_KEY + "="+ FileTypeManagerImpl.getFileTypeComponentName());
+  for (  String name : new String[]{"user.language","user.country","user.region",PathManager.PROPERTY_PATHS_SELECTOR}) {
+    final String value=System.getProperty(name);
+    if (value != null) {
+      cmdLine.addParameter("-D" + name + "="+ value);
+    }
+  }
+  cmdLine.addParameter("-D" + PathManager.PROPERTY_HOME_PATH + "="+ PathManager.getHomePath());
+  cmdLine.addParameter("-D" + PathManager.PROPERTY_CONFIG_PATH + "="+ PathManager.getConfigPath());
+  cmdLine.addParameter("-D" + PathManager.PROPERTY_PLUGINS_PATH + "="+ PathManager.getPluginsPath());
+  cmdLine.addParameter("-D" + GlobalOptions.LOG_DIR_OPTION + "="+ FileUtil.toSystemIndependentName(getBuildLogDirectory().getAbsolutePath()));
+  final File workDirectory=getBuildSystemDirectory();
+  workDirectory.mkdirs();
+  cmdLine.addParameter("-Djava.io.tmpdir=" + FileUtil.toSystemIndependentName(workDirectory.getPath()) + "/"+ TEMP_DIR_NAME);
+  for (  BuildProcessParametersProvider provider : project.getExtensions(BuildProcessParametersProvider.EP_NAME)) {
+    final List<String> args=provider.getVMArguments();
+    cmdLine.addParameters(args);
+  }
+  @SuppressWarnings("UnnecessaryFullyQualifiedName") final Class<?> launcherClass=org.jetbrains.jps.cmdline.Launcher.class;
+  final List<String> launcherCp=new ArrayList<String>();
+  launcherCp.add(ClasspathBootstrap.getResourcePath(launcherClass));
+  launcherCp.add(compilerPath);
+  ClasspathBootstrap.appendJavaCompilerClasspath(launcherCp);
+  launcherCp.addAll(BuildProcessClasspathManager.getLauncherClasspath(project));
+  cmdLine.addParameter("-classpath");
+  cmdLine.addParameter(classpathToString(launcherCp));
+  cmdLine.addParameter(launcherClass.getName());
+  final List<String> cp=ClasspathBootstrap.getBuildProcessApplicationClasspath(true);
+  cp.addAll(myClasspathManager.getBuildProcessPluginsClasspath(project));
+  if (isProfilingMode) {
+    cp.add(new File(workDirectory,"yjp-controller-api-redist.jar").getPath());
+  }
+  cmdLine.addParameter(classpathToString(cp));
+  cmdLine.addParameter(BuildMain.class.getName());
+  cmdLine.addParameter("127.0.0.1");
+  cmdLine.addParameter(Integer.toString(port));
+  cmdLine.addParameter(sessionId.toString());
+  cmdLine.addParameter(FileUtil.toSystemIndependentName(workDirectory.getPath()));
+  cmdLine.setWorkDirectory(workDirectory);
+  final Process process=cmdLine.createProcess();
+  final OSProcessHandler processHandler=new OSProcessHandler(process,null,mySystemCharset){
+    @Override protected boolean shouldDestroyProcessRecursively(){
+      return true;
+    }
+  }
+;
+  processHandler.addProcessListener(new ProcessAdapter(){
+    @Override public void onTextAvailable(    ProcessEvent event,    Key outputType){
+      final String text=event.getText();
+      if (!StringUtil.isEmptyOrSpaces(text)) {
+        LOG.info("BUILDER_PROCESS [" + outputType.toString() + "]: "+ text.trim());
+      }
+    }
+  }
+);
+  return processHandler;
+}

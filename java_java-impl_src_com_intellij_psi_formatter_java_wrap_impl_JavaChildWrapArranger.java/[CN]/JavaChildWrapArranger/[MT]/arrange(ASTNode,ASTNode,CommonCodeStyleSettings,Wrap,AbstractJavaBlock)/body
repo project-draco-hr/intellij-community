@@ -1,0 +1,169 @@
+{
+  final JavaCodeStyleSettings javaSettings=settings.getRootSettings().getCustomSettings(JavaCodeStyleSettings.class);
+  ASTNode directParent=child.getTreeParent();
+  int role=((CompositeElement)directParent).getChildRole(child);
+  if (parent instanceof PsiPolyadicExpression) {
+    if (role == ChildRole.OPERATION_SIGN && !settings.BINARY_OPERATION_SIGN_ON_NEXT_LINE)     return null;
+    boolean rOperand=ArrayUtil.indexOf(((PsiPolyadicExpression)parent).getOperands(),child.getPsi()) > 0;
+    if (settings.BINARY_OPERATION_SIGN_ON_NEXT_LINE && rOperand)     return null;
+    return suggestedWrap;
+  }
+  IElementType nodeType=parent.getElementType();
+  IElementType childType=child.getElementType();
+  if (childType == JavaElementType.EXTENDS_LIST || childType == JavaElementType.IMPLEMENTS_LIST) {
+    return Wrap.createWrap(settings.EXTENDS_KEYWORD_WRAP,true);
+  }
+ else   if (childType == JavaElementType.THROWS_LIST) {
+    return Wrap.createWrap(settings.THROWS_KEYWORD_WRAP,true);
+  }
+ else   if (nodeType == JavaElementType.EXTENDS_LIST || nodeType == JavaElementType.IMPLEMENTS_LIST) {
+    if (role == ChildRole.REFERENCE_IN_LIST) {
+      return suggestedWrap;
+    }
+ else {
+      return null;
+    }
+  }
+ else   if (nodeType == JavaElementType.THROWS_LIST) {
+    if (role == ChildRole.REFERENCE_IN_LIST) {
+      return suggestedWrap;
+    }
+ else {
+      return null;
+    }
+  }
+ else   if (nodeType == JavaElementType.CONDITIONAL_EXPRESSION) {
+    if (role == ChildRole.COLON && !settings.TERNARY_OPERATION_SIGNS_ON_NEXT_LINE)     return null;
+    if (role == ChildRole.QUEST && !settings.TERNARY_OPERATION_SIGNS_ON_NEXT_LINE)     return null;
+    if (role == ChildRole.THEN_EXPRESSION && settings.TERNARY_OPERATION_SIGNS_ON_NEXT_LINE)     return null;
+    if (role == ChildRole.ELSE_EXPRESSION && settings.TERNARY_OPERATION_SIGNS_ON_NEXT_LINE)     return null;
+    return suggestedWrap;
+  }
+ else   if (JavaFormatterUtil.isAssignment(parent) && role != ChildRole.TYPE) {
+    if (role == ChildRole.INITIALIZER_EQ)     return settings.PLACE_ASSIGNMENT_SIGN_ON_NEXT_LINE ? suggestedWrap : null;
+    if (role == ChildRole.OPERATION_SIGN)     return settings.PLACE_ASSIGNMENT_SIGN_ON_NEXT_LINE ? suggestedWrap : null;
+    if (role == ChildRole.INITIALIZER)     return settings.PLACE_ASSIGNMENT_SIGN_ON_NEXT_LINE ? null : suggestedWrap;
+    if (role == ChildRole.ROPERAND)     return settings.PLACE_ASSIGNMENT_SIGN_ON_NEXT_LINE ? null : suggestedWrap;
+    if (role == ChildRole.CLOSING_SEMICOLON)     return null;
+    return suggestedWrap;
+  }
+ else   if (nodeType == JavaElementType.REFERENCE_EXPRESSION) {
+    if (role == ChildRole.DOT) {
+      return reservedWrapsProvider.getReservedWrap(JavaElementType.REFERENCE_EXPRESSION);
+    }
+ else {
+      return suggestedWrap;
+    }
+  }
+ else   if (nodeType == JavaElementType.FOR_STATEMENT) {
+    if (role == ChildRole.FOR_INITIALIZATION || role == ChildRole.CONDITION || role == ChildRole.FOR_UPDATE) {
+      return suggestedWrap;
+    }
+    if (role == ChildRole.LOOP_BODY) {
+      final boolean dontWrap=(childType == JavaElementType.CODE_BLOCK || childType == JavaElementType.BLOCK_STATEMENT) && settings.BRACE_STYLE == CommonCodeStyleSettings.END_OF_LINE;
+      return Wrap.createWrap(dontWrap ? WrapType.NONE : WrapType.NORMAL,true);
+    }
+ else {
+      return null;
+    }
+  }
+ else   if (parent.getPsi() instanceof PsiModifierListOwner) {
+    ASTNode prev=FormatterUtil.getPreviousNonWhitespaceSibling(child);
+    if (prev != null && prev.getElementType() == JavaElementType.MODIFIER_LIST) {
+      ASTNode last=prev.getLastChildNode();
+      if (last != null && last.getElementType() == JavaElementType.ANNOTATION) {
+        if (isTypeAnnotation(last.getPsi()) || javaSettings.DO_NOT_WRAP_AFTER_SINGLE_ANNOTATION && isFieldModifierListWithSingleAnnotation(prev)) {
+          return Wrap.createWrap(WrapType.NONE,false);
+        }
+ else {
+          return Wrap.createWrap(getWrapType(getAnnotationWrapType(parent,child,settings)),true);
+        }
+      }
+    }
+    return null;
+  }
+ else   if (nodeType == JavaElementType.MODIFIER_LIST) {
+    if (childType == JavaElementType.ANNOTATION) {
+      if (isTypeAnnotation(child.getPsi())) {
+        ASTNode prev=FormatterUtil.getPreviousNonWhitespaceSibling(child);
+        if (prev == null || prev.getElementType() != JavaElementType.ANNOTATION || isTypeAnnotation(prev.getPsi())) {
+          return Wrap.createWrap(WrapType.NONE,false);
+        }
+      }
+      return Wrap.createWrap(getWrapType(getAnnotationWrapType(parent.getTreeParent(),child,settings)),true);
+    }
+ else     if (childType == JavaTokenType.END_OF_LINE_COMMENT) {
+      return Wrap.createWrap(WrapType.NORMAL,true);
+    }
+    ASTNode prev=FormatterUtil.getPreviousNonWhitespaceSibling(child);
+    if (prev != null && prev.getElementType() == JavaElementType.ANNOTATION) {
+      if (javaSettings.DO_NOT_WRAP_AFTER_SINGLE_ANNOTATION && isFieldModifierListWithSingleAnnotation(parent)) {
+        return Wrap.createWrap(WrapType.NONE,false);
+      }
+      Wrap wrap=Wrap.createWrap(getWrapType(getAnnotationWrapType(parent.getTreeParent(),child,settings)),true);
+      putPreferredWrapInParentBlock(reservedWrapsProvider,wrap);
+      return wrap;
+    }
+    return null;
+  }
+ else   if (nodeType == JavaElementType.ASSERT_STATEMENT) {
+    if (role == ChildRole.CONDITION) {
+      return suggestedWrap;
+    }
+    if (role == ChildRole.ASSERT_DESCRIPTION && !settings.ASSERT_STATEMENT_COLON_ON_NEXT_LINE) {
+      return suggestedWrap;
+    }
+    if (role == ChildRole.COLON && settings.ASSERT_STATEMENT_COLON_ON_NEXT_LINE) {
+      return suggestedWrap;
+    }
+    return null;
+  }
+ else   if (nodeType == JavaElementType.CODE_BLOCK) {
+    if (child.getPsi() instanceof PsiStatement) {
+      return suggestedWrap;
+    }
+ else {
+      return null;
+    }
+  }
+ else   if (nodeType == JavaElementType.IF_STATEMENT) {
+    if (childType == JavaElementType.IF_STATEMENT && role == ChildRole.ELSE_BRANCH && settings.SPECIAL_ELSE_IF_TREATMENT) {
+      return Wrap.createWrap(WrapType.NONE,false);
+    }
+    if (role == ChildRole.THEN_BRANCH || role == ChildRole.ELSE_BRANCH) {
+      if (childType == JavaElementType.BLOCK_STATEMENT) {
+        return null;
+      }
+ else {
+        return Wrap.createWrap(WrapType.NORMAL,true);
+      }
+    }
+  }
+ else   if (nodeType == JavaElementType.FOREACH_STATEMENT || nodeType == JavaElementType.WHILE_STATEMENT) {
+    if (role == ChildRole.LOOP_BODY) {
+      if (childType == JavaElementType.BLOCK_STATEMENT) {
+        return null;
+      }
+ else {
+        return Wrap.createWrap(WrapType.NORMAL,true);
+      }
+    }
+  }
+ else   if (nodeType == JavaElementType.DO_WHILE_STATEMENT) {
+    if (role == ChildRole.LOOP_BODY) {
+      return Wrap.createWrap(WrapType.NORMAL,true);
+    }
+ else     if (role == ChildRole.WHILE_KEYWORD) {
+      return Wrap.createWrap(WrapType.NORMAL,true);
+    }
+  }
+ else   if (nodeType == JavaElementType.ANNOTATION_ARRAY_INITIALIZER) {
+    if (suggestedWrap != null) {
+      return suggestedWrap;
+    }
+    if (role == ChildRole.ANNOTATION_VALUE) {
+      return Wrap.createWrap(WrapType.NORMAL,true);
+    }
+  }
+  return suggestedWrap;
+}
