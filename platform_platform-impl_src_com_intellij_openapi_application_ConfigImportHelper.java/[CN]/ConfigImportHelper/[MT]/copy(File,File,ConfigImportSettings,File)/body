@@ -1,0 +1,45 @@
+{
+  src=src.getCanonicalFile();
+  dest=dest.getCanonicalFile();
+  if (!src.isDirectory()) {
+    throw new IOException(ApplicationBundle.message("config.import.invalid.directory.error",src.getAbsolutePath()));
+  }
+  if (!dest.isDirectory()) {
+    throw new IOException(ApplicationBundle.message("config.import.invalid.directory.error",dest.getAbsolutePath()));
+  }
+  if (FileUtil.filesEqual(src,dest)) {
+    return;
+  }
+  FileUtil.ensureExists(dest);
+  File[] childFiles=src.listFiles(new FilenameFilter(){
+    @Override public boolean accept(    @NotNull File dir,    @NotNull String name){
+      return !StringUtil.startsWithChar(name,'.') && !name.equals(PLUGINS_PATH);
+    }
+  }
+);
+  if (childFiles == null || childFiles.length == 0) {
+    return;
+  }
+  for (  File from : childFiles) {
+    File to=new File(dest,from.getName());
+    if (from.isDirectory()) {
+      FileUtil.copyDir(from,to,false);
+    }
+ else {
+      FileUtil.copy(from,to);
+    }
+  }
+  File plugins=new File(src,PLUGINS_PATH);
+  if (!loadOldPlugins(plugins,dest) && SystemInfo.isMac) {
+    File oldPluginsDir=getOldPath(oldInstallationHome,settings,PathManager.PROPERTY_PLUGINS_PATH,new Function<String,String>(){
+      @Override public String fun(      String pathSelector){
+        return PathManager.getDefaultPluginPathFor(pathSelector);
+      }
+    }
+);
+    if (oldPluginsDir == null) {
+      oldPluginsDir=new File(PathManager.getDefaultPluginPathFor(src.getName()));
+    }
+    loadOldPlugins(oldPluginsDir,dest);
+  }
+}
