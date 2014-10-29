@@ -1,0 +1,38 @@
+{
+  List<Process> processes=new LinkedList<Process>();
+  if (ourFailed) {
+    return processes;
+  }
+  try {
+    IntByReference session=new IntByReference();
+    char[] sessionKey=new char[Win32RestartManager.CCH_RM_SESSION_KEY + 1];
+    int error=Win32RestartManager.INSTANCE.RmStartSession(session,0,sessionKey);
+    if (error != 0) {
+      Runner.logger.warn("Unable to start restart manager session");
+      return processes;
+    }
+    StringArray resources=new StringArray(new WString[]{new WString(file.toString())});
+    error=Win32RestartManager.INSTANCE.RmRegisterResources(session.getValue(),1,resources,0,Pointer.NULL,0,null);
+    if (error != 0) {
+      Runner.logger.warn("Unable to register restart manager resource " + file.getAbsolutePath());
+      return processes;
+    }
+    IntByReference procInfoNeeded=new IntByReference();
+    Win32RestartManager.RmProcessInfo info=new Win32RestartManager.RmProcessInfo();
+    Win32RestartManager.RmProcessInfo[] infos=(Win32RestartManager.RmProcessInfo[])info.toArray(MAX_PROCESSES);
+    IntByReference procInfo=new IntByReference(infos.length);
+    error=Win32RestartManager.INSTANCE.RmGetList(session.getValue(),procInfoNeeded,procInfo,info,new LongByReference());
+    if (error != 0) {
+      Runner.logger.warn("Unable to get the list of processes using " + file.getAbsolutePath());
+      return processes;
+    }
+    for (int i=0; i < procInfo.getValue(); i++) {
+      processes.add(new Process(infos[i].Process.dwProcessId,new String(infos[i].strAppName).trim()));
+    }
+    Win32RestartManager.INSTANCE.RmEndSession(session.getValue());
+  }
+ catch (  Throwable t) {
+    ourFailed=true;
+  }
+  return processes;
+}
