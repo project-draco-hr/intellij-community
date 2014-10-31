@@ -23,17 +23,18 @@
     myConfiguration=myManager.getConfigurationTemplate(factory).getConfiguration();
   }
  else {
-    final String name=element.getAttributeValue(NAME_ATTR);
-    myConfiguration=myManager.doCreateConfiguration(name,factory,false);
+    myConfiguration=myManager.doCreateConfiguration(element.getAttributeValue(NAME_ATTR),factory,false);
   }
   myConfiguration.readExternal(element);
-  List<Element> runners=element.getChildren(RUNNER_ELEMENT);
-  myUnloadedRunnerSettings=null;
-  StringInterner interner=new StringInterner();
-  for (  final Element runnerElement : runners) {
+  if (myUnloadedRunnerSettings != null) {
+    myUnloadedRunnerSettings.clear();
+  }
+  myLoadedRunnerSettings.clear();
+  for (  Element runnerElement : element.getChildren(RUNNER_ELEMENT)) {
     String id=runnerElement.getAttributeValue(RUNNER_ID);
     ProgramRunner runner=RunnerRegistry.getInstance().findRunnerById(id);
     if (runner != null) {
+      myLoadedRunnerSettings.add(id);
       RunnerSettings settings=createRunnerSettings(runner);
       if (settings != null) {
         settings.readExternal(runnerElement);
@@ -41,17 +42,16 @@
       myRunnerSettings.put(runner,settings);
     }
  else {
-      if (myUnloadedRunnerSettings == null)       myUnloadedRunnerSettings=new SmartList<Element>();
-      JDOMUtil.internElement(runnerElement,interner);
+      if (myUnloadedRunnerSettings == null) {
+        myUnloadedRunnerSettings=new SmartList<Element>();
+      }
       myUnloadedRunnerSettings.add(runnerElement);
     }
   }
-  List configurations=element.getChildren(CONFIGURATION_ELEMENT);
   myUnloadedConfigurationPerRunnerSettings=null;
-  for (  final Object configuration : configurations) {
-    Element configurationElement=(Element)configuration;
-    String id=configurationElement.getAttributeValue(RUNNER_ID);
-    ProgramRunner runner=RunnerRegistry.getInstance().findRunnerById(id);
+  for (Iterator<Element> iterator=element.getChildren(CONFIGURATION_ELEMENT).iterator(); iterator.hasNext(); ) {
+    Element configurationElement=iterator.next();
+    ProgramRunner runner=RunnerRegistry.getInstance().findRunnerById(configurationElement.getAttributeValue(RUNNER_ID));
     if (runner != null) {
       ConfigurationPerRunnerSettings settings=myConfiguration.createRunnerSettings(new InfoProvider(runner));
       if (settings != null) {
@@ -60,7 +60,10 @@
       myConfigurationPerRunnerSettings.put(runner,settings);
     }
  else {
-      if (myUnloadedConfigurationPerRunnerSettings == null)       myUnloadedConfigurationPerRunnerSettings=new ArrayList<Element>(1);
+      if (myUnloadedConfigurationPerRunnerSettings == null) {
+        myUnloadedConfigurationPerRunnerSettings=new SmartList<Element>();
+      }
+      iterator.remove();
       myUnloadedConfigurationPerRunnerSettings.add(configurationElement);
     }
   }
