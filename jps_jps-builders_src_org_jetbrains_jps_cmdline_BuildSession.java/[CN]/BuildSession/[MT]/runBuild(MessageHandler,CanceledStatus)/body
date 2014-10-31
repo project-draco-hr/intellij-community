@@ -9,11 +9,24 @@
   }
   final ProjectDescriptor preloadedProject=myPreloadedData != null ? myPreloadedData.getProjectDescriptor() : null;
   final DataInputStream fsStateStream=preloadedProject != null || myInitialFSDelta == null ? null : createFSDataStream(dataStorageRoot,myInitialFSDelta.getOrdinal());
-  if (fsStateStream != null) {
-    final boolean hasWorkToDoWithModules=fsStateStream.readBoolean() || myInitialFSDelta == null;
+  if (fsStateStream != null || myPreloadedData != null) {
+    final boolean hasWorkFlag=fsStateStream != null ? fsStateStream.readBoolean() : myPreloadedData.hasWorkToDo();
+    final boolean hasWorkToDoWithModules=hasWorkFlag || myInitialFSDelta == null;
     if (!myForceModelLoading && (myBuildType == BuildType.BUILD || myBuildType == BuildType.UP_TO_DATE_CHECK) && !hasWorkToDoWithModules&& scopeContainsModulesOnlyForIncrementalMake(myScopes)&& !containsChanges(myInitialFSDelta)) {
-      updateFsStateOnDisk(dataStorageRoot,fsStateStream,myInitialFSDelta.getOrdinal());
-      return;
+      final DataInputStream storedFsData;
+      if (myPreloadedData != null) {
+        storedFsData=createFSDataStream(dataStorageRoot,myInitialFSDelta.getOrdinal());
+        if (storedFsData != null) {
+          storedFsData.readBoolean();
+        }
+      }
+ else {
+        storedFsData=fsStateStream;
+      }
+      if (storedFsData != null) {
+        updateFsStateOnDisk(dataStorageRoot,storedFsData,myInitialFSDelta.getOrdinal());
+        return;
+      }
     }
   }
   final BuildFSState fsState=preloadedProject != null ? preloadedProject.fsState : new BuildFSState(false);
