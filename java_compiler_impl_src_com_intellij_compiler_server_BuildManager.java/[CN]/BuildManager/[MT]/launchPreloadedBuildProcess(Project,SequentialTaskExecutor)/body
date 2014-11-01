@@ -11,22 +11,14 @@
       try {
         myMessageDispatcher.registerBuildMessageHandler(future,null);
         final OSProcessHandler processHandler=launchBuildProcess(project,myListenPort,future.getRequestID(),true);
-        processHandler.addProcessListener(new ProcessAdapter(){
-          @Override public void onTextAvailable(          ProcessEvent event,          Key outputType){
-            if (ProcessOutputTypes.STDERR.equals(outputType)) {
-              final String text=event.getText();
-              if (!StringUtil.isEmptyOrSpaces(text)) {
-                LOG.info("PRELOADED_BUILD_PROCESS: " + text);
-              }
-            }
-          }
-        }
-);
+        final StringBuffer errors=new StringBuffer();
+        processHandler.addProcessListener(new StdOutputCollector(errors));
+        STDERR_OUTPUT.set(processHandler,errors);
         processHandler.startNotify();
         return Pair.create(future,processHandler);
       }
  catch (      ExecutionException e) {
-        myMessageDispatcher.unregisterBuildMessageHandler(future.getRequestID());
+        handleProcessExecutionFailure(future.getRequestID(),e);
         throw e;
       }
     }
