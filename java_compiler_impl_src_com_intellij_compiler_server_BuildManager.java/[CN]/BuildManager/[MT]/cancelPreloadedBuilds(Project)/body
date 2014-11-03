@@ -5,10 +5,22 @@
       Pair<RequestFuture<PreloadedProcessMessageHandler>,OSProcessHandler> pair=takePreloadedProcess(projectPath);
       if (pair != null) {
         final RequestFuture<PreloadedProcessMessageHandler> future=pair.first;
+        final OSProcessHandler processHandler=pair.second;
         myMessageDispatcher.cancelSession(future.getRequestID());
         getProjectData(projectPath).taskQueue.submit(new Runnable(){
           @Override public void run(){
-            future.waitFor();
+            Throwable error=null;
+            try {
+              while (!processHandler.waitFor()) {
+                LOG.info("processHandler.waitFor() returned false for session " + future.getRequestID() + ", continue waiting");
+              }
+            }
+ catch (            Throwable e) {
+              error=e;
+            }
+ finally {
+              notifySessionTerminationIfNeeded(future.getRequestID(),error);
+            }
           }
         }
 );
