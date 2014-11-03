@@ -1,0 +1,43 @@
+{
+  AnActionButton copyButton=new AnActionButton(ActionsBundle.message("action.EditorCopy.text"),AllIcons.Actions.Copy){
+    @Override public void actionPerformed(    @NotNull AnActionEvent e){
+      stopEditing();
+      StringBuilder sb=new StringBuilder();
+      List<EnvironmentVariable> variables=getEnvironmentVariables();
+      for (      EnvironmentVariable environmentVariable : variables) {
+        if (environmentVariable.getIsPredefined() || isEmpty(environmentVariable))         continue;
+        if (sb.length() > 0)         sb.append('\n');
+        sb.append(StringUtil.escapeChar(environmentVariable.getName(),'=')).append('=').append(StringUtil.escapeChar(environmentVariable.getValue(),'='));
+      }
+      CopyPasteManager.getInstance().setContents(new StringSelection(sb.toString()));
+    }
+  }
+;
+  AnActionButton pasteButton=new AnActionButton(ActionsBundle.message("action.EditorPaste.text"),AllIcons.Actions.Menu_paste){
+    @Override public void actionPerformed(    @NotNull AnActionEvent e){
+      stopEditing();
+      String content=CopyPasteManager.getInstance().getContents(DataFlavor.stringFlavor);
+      if (content == null || !content.contains("="))       return;
+      List<EnvironmentVariable> parsed=new ArrayList<EnvironmentVariable>();
+      List<String> lines=StringUtil.split(content,"\n");
+      for (      String line : lines) {
+        int pos=line.indexOf('=');
+        if (pos == -1)         continue;
+        while (pos > 0 && line.charAt(pos - 1) == '\\') {
+          pos=line.indexOf('=',pos + 1);
+        }
+        parsed.add(new EnvironmentVariable(StringUtil.unescapeStringCharacters(line.substring(0,pos)),StringUtil.unescapeStringCharacters(line.substring(pos + 1)),false));
+      }
+      List<EnvironmentVariable> variables=new ArrayList<EnvironmentVariable>(ContainerUtil.filter(getEnvironmentVariables(),new Condition<EnvironmentVariable>(){
+        @Override public boolean value(        EnvironmentVariable variable){
+          return variable.getIsPredefined();
+        }
+      }
+));
+      variables.addAll(parsed);
+      setValues(variables);
+    }
+  }
+;
+  return new AnActionButton[]{copyButton,pasteButton};
+}
