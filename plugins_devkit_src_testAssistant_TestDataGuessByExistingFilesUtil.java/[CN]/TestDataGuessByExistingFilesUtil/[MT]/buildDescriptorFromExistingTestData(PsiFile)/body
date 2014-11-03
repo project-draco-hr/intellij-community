@@ -3,46 +3,14 @@
   if (psiClass == null) {
     return null;
   }
-  final String qualifiedName=psiClass.getQualifiedName();
-  if (CLASSES_WITHOUT_TEST_DATA.contains(qualifiedName)) {
+  final TestDataDescriptor cachedValue=CachedValuesManager.getCachedValue(psiClass,new CachedValueProvider<TestDataDescriptor>(){
+    @Nullable @Override public Result<TestDataDescriptor> compute(){
+      return new Result<TestDataDescriptor>(buildDescriptor(psiClass),PsiModificationTracker.JAVA_STRUCTURE_MODIFICATION_COUNT);
+    }
+  }
+);
+  if (cachedValue == TestDataDescriptor.NOTHING_FOUND) {
     return null;
   }
-  final Pair<TestDataDescriptor,Long> cached=CACHE.get(qualifiedName);
-  if (cached != null) {
-    if (cached.first.isComplete()) {
-      return cached.first;
-    }
-    if (cached.second > System.currentTimeMillis()) {
-      return null;
-    }
-  }
-  TestFramework[] frameworks=Extensions.getExtensions(TestFramework.EXTENSION_NAME);
-  TestFramework framework=null;
-  for (  TestFramework each : frameworks) {
-    if (each.isTestClass(psiClass)) {
-      framework=each;
-      break;
-    }
-  }
-  if (framework == null) {
-    return null;
-  }
-  final PsiElement setUpMethod=framework.findSetUpMethod(psiClass);
-  final PsiElement tearDownMethod=framework.findTearDownMethod(psiClass);
-  List<String> testNames=new ArrayList<String>();
-  for (  PsiMethod method : psiClass.getMethods()) {
-    final String name=getTestName(method.getName());
-    if (StringUtil.isEmpty(name) || method == setUpMethod || method == tearDownMethod || name.equals(psiClass.getName()) || isUtilityMethod(method,psiClass,framework)) {
-      continue;
-    }
-    testNames.add(name);
-  }
-  ProjectFileIndex fileIndex=ProjectRootManager.getInstance(psiClass.getProject()).getFileIndex();
-  final TestDataDescriptor descriptor=buildDescriptor(fileIndex,testNames,psiClass);
-  if (isClassWithoutTestData(descriptor,testNames,psiClass)) {
-    CLASSES_WITHOUT_TEST_DATA.add(qualifiedName);
-    return null;
-  }
-  CACHE.put(qualifiedName,new Pair<TestDataDescriptor,Long>(descriptor,System.currentTimeMillis() + CACHE_ENTRY_TTL_MS));
-  return descriptor;
+  return cachedValue;
 }

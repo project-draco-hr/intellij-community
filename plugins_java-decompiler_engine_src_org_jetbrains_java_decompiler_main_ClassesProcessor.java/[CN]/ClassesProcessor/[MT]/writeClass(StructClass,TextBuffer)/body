@@ -1,0 +1,53 @@
+{
+  ClassNode root=mapRootClasses.get(cl.qualifiedName);
+  if (root.type != ClassNode.CLASS_ROOT) {
+    return;
+  }
+  DecompilerContext.getLogger().startReadingClass(cl.qualifiedName);
+  try {
+    ImportCollector importCollector=new ImportCollector(root);
+    DecompilerContext.setImportCollector(importCollector);
+    DecompilerContext.setCounterContainer(new CounterContainer());
+    DecompilerContext.setBytecodeSourceMapper(new BytecodeSourceMapper());
+    new LambdaProcessor().processClass(root);
+    addClassnameToImport(root,importCollector);
+    initWrappers(root);
+    new NestedClassProcessor().processClass(root,root);
+    new NestedMemberAccess().propagateMemberAccess(root);
+    TextBuffer classBuffer=new TextBuffer(AVERAGE_CLASS_SIZE);
+    new ClassWriter().classToJava(root,classBuffer,0,null);
+    int total_offset_lines=0;
+    int index=cl.qualifiedName.lastIndexOf("/");
+    if (index >= 0) {
+      total_offset_lines+=2;
+      String packageName=cl.qualifiedName.substring(0,index).replace('/','.');
+      buffer.append("package ");
+      buffer.append(packageName);
+      buffer.append(";");
+      buffer.appendLineSeparator();
+      buffer.appendLineSeparator();
+    }
+    int import_lines_written=importCollector.writeImports(buffer);
+    if (import_lines_written > 0) {
+      buffer.appendLineSeparator();
+      total_offset_lines+=import_lines_written + 1;
+    }
+    total_offset_lines=buffer.countLines();
+    buffer.append(classBuffer);
+    if (DecompilerContext.getOption(IFernflowerPreferences.BYTECODE_SOURCE_MAPPING)) {
+      BytecodeSourceMapper mapper=DecompilerContext.getBytecodeSourceMapper();
+      mapper.addTotalOffset(total_offset_lines);
+      if (DecompilerContext.getOption(IFernflowerPreferences.DUMP_ORIGINAL_LINES)) {
+        buffer.dumpOriginalLineNumbers(mapper.getOriginalLinesMapping());
+      }
+      if (DecompilerContext.getOption(IFernflowerPreferences.UNIT_TEST_MODE)) {
+        buffer.appendLineSeparator();
+        mapper.dumpMapping(buffer,true);
+      }
+    }
+  }
+  finally {
+    destroyWrappers(root);
+    DecompilerContext.getLogger().endReadingClass();
+  }
+}

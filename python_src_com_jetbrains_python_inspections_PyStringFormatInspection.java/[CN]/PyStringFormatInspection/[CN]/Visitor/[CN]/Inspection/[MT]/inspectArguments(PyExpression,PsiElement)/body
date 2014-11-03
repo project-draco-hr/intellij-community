@@ -1,2 +1,118 @@
 {
+  final Class[] SIMPLE_RHS_EXPRESSIONS={PyLiteralExpression.class,PySubscriptionExpression.class,PyBinaryExpression.class,PyConditionalExpression.class};
+  final PyBuiltinCache builtinCache=PyBuiltinCache.getInstance(problemTarget);
+  final PyResolveContext resolveContext=PyResolveContext.noImplicits().withTypeEvalContext(myTypeEvalContext);
+  final String s=myFormatSpec.get("1");
+  if (PyUtil.instanceOf(rightExpression,SIMPLE_RHS_EXPRESSIONS)) {
+    if (s != null) {
+      final PyType rightType=myTypeEvalContext.getType(rightExpression);
+      if (rightType instanceof PySubscriptableType) {
+        final PySubscriptableType tupleType=(PySubscriptableType)rightType;
+        for (int i=0; i <= tupleType.getElementCount(); i+=1) {
+          final PyType elementType=tupleType.getElementType(i);
+          if (elementType != null) {
+            final String typeName=myFormatSpec.get(String.valueOf(i + 1));
+            final PyType type=typeName != null ? PyTypeParser.getTypeByName(problemTarget,typeName) : null;
+            checkTypeCompatible(problemTarget,elementType,type);
+          }
+        }
+        return tupleType.getElementCount();
+      }
+ else {
+        checkExpressionType(rightExpression,s,problemTarget);
+      }
+    }
+    return 1;
+  }
+ else   if (rightExpression instanceof PyReferenceExpression) {
+    if (PyNames.DICT.equals(rightExpression.getName()))     return -1;
+    final PsiElement pyElement=((PyReferenceExpression)rightExpression).followAssignmentsChain(resolveContext).getElement();
+    if (pyElement == rightExpression || !(pyElement instanceof PyExpression)) {
+      return -1;
+    }
+    if (pyElement instanceof PyDictLiteralExpression) {
+      return inspectDict(rightExpression,problemTarget,true);
+    }
+    return inspectArguments((PyExpression)pyElement,problemTarget);
+  }
+ else   if (rightExpression instanceof PyCallExpression) {
+    final Callable callable=((PyCallExpression)rightExpression).resolveCalleeFunction(resolveContext);
+    if (callable instanceof PyFunction && myTypeEvalContext.maySwitchToAST(callable)) {
+      PyStatementList statementList=((PyFunction)callable).getStatementList();
+      PyReturnStatement[] returnStatements=PyUtil.getAllChildrenOfType(statementList,PyReturnStatement.class);
+      int expressionsSize=-1;
+      for (      PyReturnStatement returnStatement : returnStatements) {
+        if (returnStatement.getExpression() instanceof PyCallExpression) {
+          return -1;
+        }
+        List<PyExpression> expressionList=PyUtil.flattenedParensAndTuples(returnStatement.getExpression());
+        if (expressionsSize < 0) {
+          expressionsSize=expressionList.size();
+        }
+        if (expressionsSize != expressionList.size()) {
+          return -1;
+        }
+      }
+      return expressionsSize;
+    }
+    return -1;
+  }
+ else   if (rightExpression instanceof PyParenthesizedExpression) {
+    final PyExpression rhs=((PyParenthesizedExpression)rightExpression).getContainedExpression();
+    return inspectArguments(rhs,rhs);
+  }
+ else   if (rightExpression instanceof PyTupleExpression) {
+    final PyExpression[] expressions=((PyTupleExpression)rightExpression).getElements();
+    int i=1;
+    for (    PyExpression expression : expressions) {
+      final String formatSpec=myFormatSpec.get(Integer.toString(i));
+      if (formatSpec != null) {
+        checkExpressionType(expression,formatSpec,expression);
+      }
+      ++i;
+    }
+    return expressions.length;
+  }
+ else   if (rightExpression instanceof PyDictLiteralExpression) {
+    return inspectDict(rightExpression,problemTarget,false);
+  }
+ else   if (PyUtil.instanceOf(rightExpression,PySequenceExpression.class,PyComprehensionElement.class)) {
+    if (s != null) {
+      checkTypeCompatible(problemTarget,builtinCache.getStrType(),PyTypeParser.getTypeByName(problemTarget,s));
+      return 1;
+    }
+  }
+ else   if (rightExpression instanceof PySliceExpression && s != null) {
+    final PyType type=myTypeEvalContext.getType(((PySliceExpression)rightExpression).getOperand());
+    final PyType stringType=PyBuiltinCache.getInstance(rightExpression).getStringType(LanguageLevel.forElement(rightExpression));
+    final PyType listType=PyBuiltinCache.getInstance(rightExpression).getListType();
+    if (type == null || PyTypeChecker.match(listType,type,myTypeEvalContext) || PyTypeChecker.match(stringType,type,myTypeEvalContext)) {
+      checkTypeCompatible(problemTarget,builtinCache.getStrType(),PyTypeParser.getTypeByName(problemTarget,s));
+      return 1;
+    }
+    PySliceItem sliceItem=((PySliceExpression)rightExpression).getSliceItem();
+    if (sliceItem != null) {
+      PyExpression lower=sliceItem.getLowerBound();
+      PyExpression upper=sliceItem.getUpperBound();
+      PyExpression stride=sliceItem.getStride();
+      if (upper instanceof PyNumericLiteralExpression) {
+        BigInteger lowerVal;
+        if (lower instanceof PyNumericLiteralExpression) {
+          lowerVal=((PyNumericLiteralExpression)lower).getBigIntegerValue();
+        }
+ else {
+          lowerVal=BigInteger.ZERO;
+        }
+        int count=(((PyNumericLiteralExpression)upper).getBigIntegerValue().subtract(lowerVal)).intValue();
+        int strideVal;
+        if (stride instanceof PyNumericLiteralExpression)         strideVal=((PyNumericLiteralExpression)stride).getBigIntegerValue().intValue();
+ else         strideVal=1;
+        int res=count / strideVal;
+        int residue=count % strideVal == 0 ? 0 : 1;
+        return res + residue;
+      }
+    }
+    return -1;
+  }
+  return -1;
 }

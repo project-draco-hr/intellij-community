@@ -7,32 +7,34 @@
   InstructionSequence seq=block.getSeq();
   for (int i=0; i < seq.length(); i++) {
     Instruction instr=seq.getInstr(i);
+    Integer bytecode_offset=block.getOldOffset(i);
+    Set<Integer> bytecode_offsets=bytecode_offset >= 0 ? new HashSet<Integer>(Arrays.asList(bytecode_offset)) : null;
 switch (instr.opcode) {
 case opc_aconst_null:
-      pushEx(stack,exprlist,new ConstExprent(VarType.VARTYPE_NULL,null));
+      pushEx(stack,exprlist,new ConstExprent(VarType.VARTYPE_NULL,null,bytecode_offsets));
     break;
 case opc_bipush:
 case opc_sipush:
-  pushEx(stack,exprlist,new ConstExprent(instr.getOperand(0),true));
+  pushEx(stack,exprlist,new ConstExprent(instr.getOperand(0),true,bytecode_offsets));
 break;
 case opc_lconst_0:
 case opc_lconst_1:
-pushEx(stack,exprlist,new ConstExprent(VarType.VARTYPE_LONG,new Long(instr.opcode - opc_lconst_0)));
+pushEx(stack,exprlist,new ConstExprent(VarType.VARTYPE_LONG,new Long(instr.opcode - opc_lconst_0),bytecode_offsets));
 break;
 case opc_fconst_0:
 case opc_fconst_1:
 case opc_fconst_2:
-pushEx(stack,exprlist,new ConstExprent(VarType.VARTYPE_FLOAT,new Float(instr.opcode - opc_fconst_0)));
+pushEx(stack,exprlist,new ConstExprent(VarType.VARTYPE_FLOAT,new Float(instr.opcode - opc_fconst_0),bytecode_offsets));
 break;
 case opc_dconst_0:
 case opc_dconst_1:
-pushEx(stack,exprlist,new ConstExprent(VarType.VARTYPE_DOUBLE,new Double(instr.opcode - opc_dconst_0)));
+pushEx(stack,exprlist,new ConstExprent(VarType.VARTYPE_DOUBLE,new Double(instr.opcode - opc_dconst_0),bytecode_offsets));
 break;
 case opc_ldc:
 case opc_ldc_w:
 case opc_ldc2_w:
 PrimitiveConstant cn=pool.getPrimitiveConstant(instr.getOperand(0));
-pushEx(stack,exprlist,new ConstExprent(consts[cn.type - CONSTANT_Integer],cn.value));
+pushEx(stack,exprlist,new ConstExprent(consts[cn.type - CONSTANT_Integer],cn.value,bytecode_offsets));
 break;
 case opc_iload:
 case opc_lload:
@@ -59,7 +61,7 @@ break;
 case opc_daload:
 vartype=VarType.VARTYPE_DOUBLE;
 }
-pushEx(stack,exprlist,new ArrayExprent(arr,index,arrtypes[instr.opcode - opc_iaload]),vartype);
+pushEx(stack,exprlist,new ArrayExprent(arr,index,arrtypes[instr.opcode - opc_iaload],bytecode_offsets),vartype);
 break;
 case opc_istore:
 case opc_lstore:
@@ -68,7 +70,7 @@ case opc_dstore:
 case opc_astore:
 Exprent top=stack.pop();
 int varindex=instr.getOperand(0);
-AssignmentExprent assign=new AssignmentExprent(new VarExprent(varindex,vartypes[instr.opcode - opc_istore],varProcessor),top);
+AssignmentExprent assign=new AssignmentExprent(new VarExprent(varindex,vartypes[instr.opcode - opc_istore],varProcessor),top,bytecode_offsets);
 exprlist.add(assign);
 break;
 case opc_iastore:
@@ -82,7 +84,7 @@ case opc_sastore:
 Exprent value=stack.pop();
 Exprent index_store=stack.pop();
 Exprent arr_store=stack.pop();
-AssignmentExprent arrassign=new AssignmentExprent(new ArrayExprent(arr_store,index_store,arrtypes[instr.opcode - opc_iastore]),value);
+AssignmentExprent arrassign=new AssignmentExprent(new ArrayExprent(arr_store,index_store,arrtypes[instr.opcode - opc_iastore],bytecode_offsets),value,bytecode_offsets);
 exprlist.add(arrassign);
 break;
 case opc_iadd:
@@ -105,7 +107,7 @@ case opc_irem:
 case opc_lrem:
 case opc_frem:
 case opc_drem:
-pushEx(stack,exprlist,new FunctionExprent(func1[(instr.opcode - opc_iadd) / 4],stack));
+pushEx(stack,exprlist,new FunctionExprent(func1[(instr.opcode - opc_iadd) / 4],stack,bytecode_offsets));
 break;
 case opc_ishl:
 case opc_lshl:
@@ -119,17 +121,17 @@ case opc_ior:
 case opc_lor:
 case opc_ixor:
 case opc_lxor:
-pushEx(stack,exprlist,new FunctionExprent(func2[(instr.opcode - opc_ishl) / 2],stack));
+pushEx(stack,exprlist,new FunctionExprent(func2[(instr.opcode - opc_ishl) / 2],stack,bytecode_offsets));
 break;
 case opc_ineg:
 case opc_lneg:
 case opc_fneg:
 case opc_dneg:
-pushEx(stack,exprlist,new FunctionExprent(FunctionExprent.FUNCTION_NEG,stack));
+pushEx(stack,exprlist,new FunctionExprent(FunctionExprent.FUNCTION_NEG,stack,bytecode_offsets));
 break;
 case opc_iinc:
 VarExprent vevar=new VarExprent(instr.getOperand(0),VarType.VARTYPE_INT,varProcessor);
-exprlist.add(new AssignmentExprent(vevar,new FunctionExprent(instr.getOperand(1) < 0 ? FunctionExprent.FUNCTION_SUB : FunctionExprent.FUNCTION_ADD,Arrays.asList(new Exprent[]{vevar.copy(),new ConstExprent(VarType.VARTYPE_INT,new Integer(Math.abs(instr.getOperand(1))))}))));
+exprlist.add(new AssignmentExprent(vevar,new FunctionExprent(instr.getOperand(1) < 0 ? FunctionExprent.FUNCTION_SUB : FunctionExprent.FUNCTION_ADD,Arrays.asList(vevar.copy(),new ConstExprent(VarType.VARTYPE_INT,Math.abs(instr.getOperand(1)),null)),bytecode_offsets),bytecode_offsets));
 break;
 case opc_i2l:
 case opc_i2f:
@@ -146,14 +148,14 @@ case opc_d2f:
 case opc_i2b:
 case opc_i2c:
 case opc_i2s:
-pushEx(stack,exprlist,new FunctionExprent(func3[instr.opcode - opc_i2l],stack));
+pushEx(stack,exprlist,new FunctionExprent(func3[instr.opcode - opc_i2l],stack,bytecode_offsets));
 break;
 case opc_lcmp:
 case opc_fcmpl:
 case opc_fcmpg:
 case opc_dcmpl:
 case opc_dcmpg:
-pushEx(stack,exprlist,new FunctionExprent(func4[instr.opcode - opc_lcmp],stack));
+pushEx(stack,exprlist,new FunctionExprent(func4[instr.opcode - opc_lcmp],stack,bytecode_offsets));
 break;
 case opc_ifeq:
 case opc_ifne:
@@ -161,7 +163,7 @@ case opc_iflt:
 case opc_ifge:
 case opc_ifgt:
 case opc_ifle:
-exprlist.add(new IfExprent(negifs[func5[instr.opcode - opc_ifeq]],stack));
+exprlist.add(new IfExprent(negifs[func5[instr.opcode - opc_ifeq]],stack,bytecode_offsets));
 break;
 case opc_if_icmpeq:
 case opc_if_icmpne:
@@ -171,15 +173,15 @@ case opc_if_icmpgt:
 case opc_if_icmple:
 case opc_if_acmpeq:
 case opc_if_acmpne:
-exprlist.add(new IfExprent(negifs[func6[instr.opcode - opc_if_icmpeq]],stack));
+exprlist.add(new IfExprent(negifs[func6[instr.opcode - opc_if_icmpeq]],stack,bytecode_offsets));
 break;
 case opc_ifnull:
 case opc_ifnonnull:
-exprlist.add(new IfExprent(negifs[func7[instr.opcode - opc_ifnull]],stack));
+exprlist.add(new IfExprent(negifs[func7[instr.opcode - opc_ifnull]],stack,bytecode_offsets));
 break;
 case opc_tableswitch:
 case opc_lookupswitch:
-exprlist.add(new SwitchExprent(stack.pop()));
+exprlist.add(new SwitchExprent(stack.pop(),bytecode_offsets));
 break;
 case opc_ireturn:
 case opc_lreturn:
@@ -188,27 +190,27 @@ case opc_dreturn:
 case opc_areturn:
 case opc_return:
 case opc_athrow:
-exprlist.add(new ExitExprent(instr.opcode == opc_athrow ? ExitExprent.EXIT_THROW : ExitExprent.EXIT_RETURN,instr.opcode == opc_return ? null : stack.pop(),instr.opcode == opc_athrow ? null : ((MethodDescriptor)DecompilerContext.getProperty(DecompilerContext.CURRENT_METHOD_DESCRIPTOR)).ret));
+exprlist.add(new ExitExprent(instr.opcode == opc_athrow ? ExitExprent.EXIT_THROW : ExitExprent.EXIT_RETURN,instr.opcode == opc_return ? null : stack.pop(),instr.opcode == opc_athrow ? null : ((MethodDescriptor)DecompilerContext.getProperty(DecompilerContext.CURRENT_METHOD_DESCRIPTOR)).ret,bytecode_offsets));
 break;
 case opc_monitorenter:
 case opc_monitorexit:
-exprlist.add(new MonitorExprent(func8[instr.opcode - opc_monitorenter],stack.pop()));
+exprlist.add(new MonitorExprent(func8[instr.opcode - opc_monitorenter],stack.pop(),bytecode_offsets));
 break;
 case opc_checkcast:
 case opc_instanceof:
-stack.push(new ConstExprent(new VarType(pool.getPrimitiveConstant(instr.getOperand(0)).getString(),true),null));
+stack.push(new ConstExprent(new VarType(pool.getPrimitiveConstant(instr.getOperand(0)).getString(),true),null,null));
 case opc_arraylength:
-pushEx(stack,exprlist,new FunctionExprent(mapConsts.get(instr.opcode).intValue(),stack));
+pushEx(stack,exprlist,new FunctionExprent(mapConsts.get(instr.opcode).intValue(),stack,bytecode_offsets));
 break;
 case opc_getstatic:
 case opc_getfield:
-pushEx(stack,exprlist,new FieldExprent(pool.getLinkConstant(instr.getOperand(0)),instr.opcode == opc_getstatic ? null : stack.pop()));
+pushEx(stack,exprlist,new FieldExprent(pool.getLinkConstant(instr.getOperand(0)),instr.opcode == opc_getstatic ? null : stack.pop(),bytecode_offsets));
 break;
 case opc_putstatic:
 case opc_putfield:
 Exprent valfield=stack.pop();
-Exprent exprfield=new FieldExprent(pool.getLinkConstant(instr.getOperand(0)),instr.opcode == opc_putstatic ? null : stack.pop());
-exprlist.add(new AssignmentExprent(exprfield,valfield));
+Exprent exprfield=new FieldExprent(pool.getLinkConstant(instr.getOperand(0)),instr.opcode == opc_putstatic ? null : stack.pop(),bytecode_offsets);
+exprlist.add(new AssignmentExprent(exprfield,valfield,bytecode_offsets));
 break;
 case opc_invokevirtual:
 case opc_invokespecial:
@@ -223,7 +225,7 @@ List<PooledConstant> bootstrap_arguments=bootstrap.getMethodArguments(invoke_con
 LinkConstant content_method_handle=(LinkConstant)bootstrap_arguments.get(1);
 dynamic_invokation_type=content_method_handle.index1;
 }
-InvocationExprent exprinv=new InvocationExprent(instr.opcode,invoke_constant,stack,dynamic_invokation_type);
+InvocationExprent exprinv=new InvocationExprent(instr.opcode,invoke_constant,stack,dynamic_invokation_type,bytecode_offsets);
 if (exprinv.getDescriptor().ret.type == CodeConstants.TYPE_VOID) {
 exprlist.add(exprinv);
 }
@@ -240,10 +242,10 @@ VarType arrtype=new VarType(pool.getPrimitiveConstant(instr.getOperand(0)).getSt
 if (instr.opcode != opc_multianewarray) {
 arrtype.arraydim+=arrdims;
 }
-pushEx(stack,exprlist,new NewExprent(arrtype,stack,arrdims));
+pushEx(stack,exprlist,new NewExprent(arrtype,stack,arrdims,bytecode_offsets));
 break;
 case opc_newarray:
-pushEx(stack,exprlist,new NewExprent(new VarType(arr_type[instr.getOperand(0) - 4],1),stack,1));
+pushEx(stack,exprlist,new NewExprent(new VarType(arr_type[instr.getOperand(0) - 4],1),stack,1,bytecode_offsets));
 break;
 case opc_dup:
 pushEx(stack,exprlist,stack.getByOffset(-1).copy());

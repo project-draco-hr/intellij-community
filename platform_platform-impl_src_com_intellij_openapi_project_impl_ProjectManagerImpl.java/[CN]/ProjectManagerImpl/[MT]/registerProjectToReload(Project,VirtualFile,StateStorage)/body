@@ -1,38 +1,17 @@
 {
-  if (cause.exists()) {
-    try {
-      byte[] bytes=cause.contentsToByteArray();
-      mySavedCopies.put(cause,bytes);
-      mySavedTimestamps.put(cause,cause.getTimeStamp());
-    }
- catch (    IOException e) {
-      LOG.error(e);
-    }
-  }
   if (LOG.isDebugEnabled()) {
-    LOG.debug("[RELOAD] Registering project to reload: " + cause,new Exception());
+    LOG.debug("[RELOAD] Registering project to reload: " + file,new Exception());
   }
-  if (project != null) {
-synchronized (myChangedProjectFiles) {
-      List<Pair<VirtualFile,StateStorage>> changedProjectFiles=myChangedProjectFiles.get(project);
-      if (changedProjectFiles == null) {
-        changedProjectFiles=new SmartList<Pair<VirtualFile,StateStorage>>();
-        myChangedProjectFiles.put(project,changedProjectFiles);
-      }
-      changedProjectFiles.add(Pair.create(cause,storage));
-    }
+  if (project == null) {
+    myChangedApplicationFiles.add(Pair.create(file,storage));
   }
  else {
-    myChangedApplicationFiles.add(Pair.create(cause,storage));
+    myChangedProjectFiles.putValue(project,Pair.create(file,storage));
   }
-  myChangedFilesAlarm.cancelAllRequests();
-  myChangedFilesAlarm.addRequest(new Runnable(){
-    @Override public void run(){
-      LOG.debug("[RELOAD] Scheduling reload application & project, myReloadBlockCount = " + myReloadBlockCount);
-      if (myReloadBlockCount.get() == 0) {
-        scheduleReloadApplicationAndProject();
-      }
-    }
+  if (storage instanceof StateStorageBase) {
+    ((StateStorageBase)storage).disableSaving();
   }
-,444);
+  if (isReloadUnblocked()) {
+    myChangedFilesAlarm.cancelAndRequest();
+  }
 }

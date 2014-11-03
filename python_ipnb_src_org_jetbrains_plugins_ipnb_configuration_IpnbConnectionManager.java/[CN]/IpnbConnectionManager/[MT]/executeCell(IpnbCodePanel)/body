@@ -1,0 +1,51 @@
+{
+  final IpnbFileEditor fileEditor=codePanel.getFileEditor();
+  final String path=fileEditor.getVirtualFile().getPath();
+  if (!myKernels.containsKey(path)) {
+    try {
+      final String url=IpnbSettings.getInstance(myProject).getURL();
+      if (StringUtil.isEmptyOrSpaces(url)) {
+        BalloonBuilder balloonBuilder=JBPopupFactory.getInstance().createHtmlTextBalloonBuilder("Please, specify IPython Notebook URL in <a href=\"\">Settings->IPython Notebook</a>",null,MessageType.WARNING.getPopupBackground(),new HyperlinkAdapter(){
+          @Override protected void hyperlinkActivated(          HyperlinkEvent e){
+            ShowSettingsUtil.getInstance().showSettingsDialog(myProject,"IPython Notebook");
+          }
+        }
+);
+        final Balloon balloon=balloonBuilder.createBalloon();
+        balloon.showInCenterOf(fileEditor.getRunCellButton());
+        return;
+      }
+      final IpnbConnection connection=new IpnbConnection(new URI(url),new IpnbConnectionListenerBase(){
+        @Override public void onOpen(        @NotNull IpnbConnection connection){
+          final String messageId=connection.execute(codePanel.getCell().getSourceAsString());
+          myUpdateMap.put(messageId,codePanel);
+        }
+        @Override public void onOutput(        @NotNull IpnbConnection connection,        @NotNull String parentMessageId,        @NotNull List<IpnbOutputCell> outputs,        @Nullable Integer execCount){
+          if (!myUpdateMap.containsKey(parentMessageId))           return;
+          final IpnbCodePanel cell=myUpdateMap.remove(parentMessageId);
+          cell.getCell().setPromptNumber(execCount);
+          cell.updatePanel(outputs);
+        }
+      }
+);
+      myKernels.put(path,connection);
+    }
+ catch (    IOException e) {
+      BalloonBuilder balloonBuilder=JBPopupFactory.getInstance().createHtmlTextBalloonBuilder("Please, check that IPython Notebook is running",null,MessageType.WARNING.getPopupBackground(),null);
+      final Balloon balloon=balloonBuilder.createBalloon();
+      balloon.showInCenterOf(fileEditor.getRunCellButton());
+    }
+catch (    URISyntaxException e) {
+      BalloonBuilder balloonBuilder=JBPopupFactory.getInstance().createHtmlTextBalloonBuilder("Please, check IPython Notebook URL in Settings->IPython Notebook",null,MessageType.WARNING.getPopupBackground(),null);
+      final Balloon balloon=balloonBuilder.createBalloon();
+      balloon.showInCenterOf(fileEditor.getRunCellButton());
+    }
+  }
+ else {
+    final IpnbConnection connection=myKernels.get(path);
+    if (connection != null) {
+      final String messageId=connection.execute(codePanel.getCell().getSourceAsString());
+      myUpdateMap.put(messageId,codePanel);
+    }
+  }
+}

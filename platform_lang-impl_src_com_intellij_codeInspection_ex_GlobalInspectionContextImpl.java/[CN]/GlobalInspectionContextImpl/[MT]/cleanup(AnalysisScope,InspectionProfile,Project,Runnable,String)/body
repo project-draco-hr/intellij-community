@@ -31,8 +31,8 @@
       if (!lTools.isEmpty()) {
         final LocalInspectionsPass pass=new LocalInspectionsPass(file,PsiDocumentManager.getInstance(project).getDocument(file),range != null ? range.getStartOffset() : 0,range != null ? range.getEndOffset() : file.getTextLength(),LocalInspectionsPass.EMPTY_PRIORITY_RANGE,true,HighlightInfoProcessor.getEmpty());
         Runnable runnable=new Runnable(){
-          public void run(){
-            pass.doInspectInBatch(GlobalInspectionContextImpl.this,(InspectionManagerEx)InspectionManager.getInstance(project),lTools);
+          @Override public void run(){
+            pass.doInspectInBatch(GlobalInspectionContextImpl.this,InspectionManager.getInstance(project),lTools);
           }
         }
 ;
@@ -47,11 +47,27 @@
             }
           }
         }
-        results.put(file,infos);
+        if (!infos.isEmpty()) {
+          results.put(file,infos);
+        }
       }
     }
   }
 );
+  if (results.isEmpty()) {
+    UIUtil.invokeLaterIfNeeded(new Runnable(){
+      @Override public void run(){
+        if (commandName != null) {
+          NOTIFICATION_GROUP.createNotification(InspectionsBundle.message("inspection.no.problems.message"),MessageType.INFO).notify(getProject());
+        }
+        if (postRunnable != null) {
+          postRunnable.run();
+        }
+      }
+    }
+);
+    return;
+  }
   Runnable runnable=new Runnable(){
     @Override public void run(){
       if (!FileModificationService.getInstance().preparePsiElementsForWrite(results.keySet()))       return;

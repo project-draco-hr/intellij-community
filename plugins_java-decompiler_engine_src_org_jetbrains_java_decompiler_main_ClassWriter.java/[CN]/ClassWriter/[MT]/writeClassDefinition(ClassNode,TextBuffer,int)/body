@@ -1,0 +1,87 @@
+{
+  if (node.type == ClassNode.CLASS_ANONYMOUS) {
+    buffer.append(" {").appendLineSeparator();
+    return;
+  }
+  ClassWrapper wrapper=node.wrapper;
+  StructClass cl=wrapper.getClassStruct();
+  int flags=node.type == ClassNode.CLASS_ROOT ? cl.getAccessFlags() : node.access;
+  boolean isDeprecated=cl.getAttributes().containsKey("Deprecated");
+  boolean isSynthetic=(flags & CodeConstants.ACC_SYNTHETIC) != 0 || cl.getAttributes().containsKey("Synthetic");
+  boolean isEnum=DecompilerContext.getOption(IFernflowerPreferences.DECOMPILE_ENUM) && (flags & CodeConstants.ACC_ENUM) != 0;
+  boolean isInterface=(flags & CodeConstants.ACC_INTERFACE) != 0;
+  boolean isAnnotation=(flags & CodeConstants.ACC_ANNOTATION) != 0;
+  if (isDeprecated) {
+    appendDeprecation(buffer,indent);
+  }
+  if (interceptor != null) {
+    String oldName=interceptor.getOldName(cl.qualifiedName);
+    appendRenameComment(buffer,oldName,MType.CLASS,indent);
+  }
+  if (isSynthetic) {
+    appendComment(buffer,"synthetic class",indent);
+  }
+  appendAnnotations(buffer,cl,indent);
+  buffer.appendIndent(indent);
+  if (isEnum) {
+    flags&=~CodeConstants.ACC_ABSTRACT;
+    flags&=~CodeConstants.ACC_FINAL;
+  }
+  appendModifiers(buffer,flags,CLASS_ALLOWED,isInterface,CLASS_EXCLUDED);
+  if (isEnum) {
+    buffer.append("enum ");
+  }
+ else   if (isInterface) {
+    if (isAnnotation) {
+      buffer.append('@');
+    }
+    buffer.append("interface ");
+  }
+ else {
+    buffer.append("class ");
+  }
+  GenericClassDescriptor descriptor=null;
+  if (DecompilerContext.getOption(IFernflowerPreferences.DECOMPILE_GENERIC_SIGNATURES)) {
+    StructGenericSignatureAttribute attr=(StructGenericSignatureAttribute)cl.getAttributes().getWithKey("Signature");
+    if (attr != null) {
+      descriptor=GenericMain.parseClassSignature(attr.getSignature());
+    }
+  }
+  buffer.append(node.simpleName);
+  if (descriptor != null && !descriptor.fparameters.isEmpty()) {
+    appendTypeParameters(buffer,descriptor.fparameters,descriptor.fbounds);
+  }
+  buffer.append(' ');
+  if (!isEnum && !isInterface && cl.superClass != null) {
+    VarType supertype=new VarType(cl.superClass.getString(),true);
+    if (!VarType.VARTYPE_OBJECT.equals(supertype)) {
+      buffer.append("extends ");
+      if (descriptor != null) {
+        buffer.append(GenericMain.getGenericCastTypeName(descriptor.superclass));
+      }
+ else {
+        buffer.append(ExprProcessor.getCastTypeName(supertype));
+      }
+      buffer.append(' ');
+    }
+  }
+  if (!isAnnotation) {
+    int[] interfaces=cl.getInterfaces();
+    if (interfaces.length > 0) {
+      buffer.append(isInterface ? "extends " : "implements ");
+      for (int i=0; i < interfaces.length; i++) {
+        if (i > 0) {
+          buffer.append(", ");
+        }
+        if (descriptor != null) {
+          buffer.append(GenericMain.getGenericCastTypeName(descriptor.superinterfaces.get(i)));
+        }
+ else {
+          buffer.append(ExprProcessor.getCastTypeName(new VarType(cl.getInterface(i),true)));
+        }
+      }
+      buffer.append(' ');
+    }
+  }
+  buffer.append('{').appendLineSeparator();
+}

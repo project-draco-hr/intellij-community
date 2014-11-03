@@ -7,23 +7,35 @@
     model.setError(VcsError.createEmptyTargetError(repoName));
   }
   final PushTargetPanel<T> pushTargetPanel=support.createTargetPanel(repository,target);
-  RepositoryWithBranchPanel<T> repoPanel=new RepositoryWithBranchPanel<T>(myProject,repoName,source.getPresentation(),pushTargetPanel);
-  final RepositoryNode repoNode=mySingleRepoProject ? new SingleRepositoryNode(repoPanel) : new RepositoryNode(repoPanel,target != null);
+  final RepositoryWithBranchPanel<T> repoPanel=new RepositoryWithBranchPanel<T>(myProject,repoName,source.getPresentation(),pushTargetPanel);
+  CheckBoxModel checkBoxModel=model.getCheckBoxModel();
+  final RepositoryNode repoNode=mySingleRepoProject ? new SingleRepositoryNode(repoPanel,checkBoxModel) : new RepositoryNode(repoPanel,checkBoxModel,target != null);
+  pushTargetPanel.setFireOnChangeAction(new Runnable(){
+    @Override public void run(){
+      repoPanel.fireOnChange();
+      ((DefaultTreeModel)myPushLog.getTree().getModel()).nodeChanged(repoNode);
+    }
+  }
+);
   myView2Model.put(repoNode,model);
   repoPanel.addRepoNodeListener(new RepositoryNodeListener<T>(){
     @Override public void onTargetChanged(    T newTarget){
-      model.setSelected(true);
       repoNode.setChecked(true);
+      myExcludedRepositoryRoots.remove(model.getRepository().getRoot().getPath());
       model.setTarget(newTarget);
       model.clearErrors();
       loadCommits(model,repoNode,false);
-      myDialog.updateButtons();
     }
     @Override public void onSelectionChanged(    boolean isSelected){
-      model.setSelected(isSelected);
-      myDialog.updateButtons();
-      if (isSelected && !model.hasCommitInfo() && !model.getSupport().shouldRequestIncomingChangesForNotCheckedRepositories()) {
-        loadCommits(model,repoNode,false);
+      myDialog.enableOkActions(isPushAllowed());
+      if (isSelected) {
+        boolean forceLoad=myExcludedRepositoryRoots.remove(model.getRepository().getRoot().getPath());
+        if (!model.hasCommitInfo() && (forceLoad || !model.getSupport().shouldRequestIncomingChangesForNotCheckedRepositories())) {
+          loadCommits(model,repoNode,false);
+        }
+      }
+ else {
+        myExcludedRepositoryRoots.add(model.getRepository().getRoot().getPath());
       }
     }
   }

@@ -1,0 +1,29 @@
+{
+  if (!getDirectory(context))   return;
+  if (!getDirectoryName(context,entries))   return;
+  ProgressManager.getInstance().run(new Task.Backgroundable(null,"Hey",true){
+    @Override public void run(    @NotNull ProgressIndicator indicator){
+      for (      Pair<String,String> pair : entries) {
+        String vcs=pair.getFirst();
+        final VcsCheckoutProcessor processor=VcsCheckoutProcessor.getProcessor(vcs);
+        if (processor == null) {
+          LOG.error("Checkout processor not found for " + vcs);
+          return;
+        }
+        JsonElement element=new JsonParser().parse(pair.getSecond());
+        HashMap<String,String> parameters=new HashMap<String,String>();
+        for (        Map.Entry<String,JsonElement> entry : element.getAsJsonObject().entrySet()) {
+          JsonElement value=entry.getValue();
+          parameters.put(entry.getKey(),value instanceof JsonPrimitive ? value.getAsString() : value.toString());
+        }
+        String directoryName=context.directoryName;
+        if (parameters.get("targetDir") != null) {
+          directoryName+="/" + parameters.get("targetDir");
+        }
+        if (!processor.checkout(parameters,context.directory,directoryName))         return;
+      }
+      runNext.run();
+    }
+  }
+);
+}

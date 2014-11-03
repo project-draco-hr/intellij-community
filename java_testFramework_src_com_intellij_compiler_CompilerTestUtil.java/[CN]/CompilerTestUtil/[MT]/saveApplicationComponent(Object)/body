@@ -16,7 +16,7 @@
  else {
       throw new AssertionError(appComponent.getClass() + " doesn't have @State annotation and doesn't implement ExportableApplicationComponent");
     }
-    Element root=new Element("application");
+    final Element root=new Element("application");
     Element element=JDomSerializationUtil.createComponentElement(componentName);
     if (appComponent instanceof JDOMExternalizable) {
       ((JDOMExternalizable)appComponent).writeExternal(element);
@@ -25,13 +25,23 @@
       element.addContent(((PersistentStateComponent<Element>)appComponent).getState().cloneContent());
     }
     root.addContent(element);
-    FileUtil.createParentDirs(file);
-    JDOMUtil.writeDocument(new Document(root),file,SystemProperties.getLineSeparator());
+    Assert.assertTrue("Cannot create " + file,FileUtil.createIfDoesntExist(file));
+    new WriteAction(){
+      protected void run(      @NotNull final Result result) throws IOException {
+        VirtualFile virtualFile=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file);
+        Assert.assertNotNull(file.getAbsolutePath(),virtualFile);
+        OutputStream stream=virtualFile.getOutputStream(new SaveSessionRequestor());
+        try {
+          JDOMUtil.writeParent(root,stream,SystemProperties.getLineSeparator());
+        }
+  finally {
+          stream.close();
+        }
+      }
+    }
+.execute().throwException();
   }
  catch (  WriteExternalException e) {
-    throw new RuntimeException(e);
-  }
-catch (  IOException e) {
     throw new RuntimeException(e);
   }
 }

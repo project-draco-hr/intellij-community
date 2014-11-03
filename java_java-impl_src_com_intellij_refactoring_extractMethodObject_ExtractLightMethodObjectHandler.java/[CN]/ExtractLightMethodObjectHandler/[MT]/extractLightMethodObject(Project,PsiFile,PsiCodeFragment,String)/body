@@ -1,11 +1,7 @@
 {
-  PsiExpression expression=CodeInsightUtil.findExpressionInRange(fragment,0,fragment.getTextLength());
   final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
-  final PsiElement[] elements;
-  if (expression != null) {
-    elements=new PsiElement[]{elementFactory.createStatementFromText(expression.getText() + ";",expression)};
-  }
- else {
+  PsiElement[] elements=completeToStatementArray(fragment,elementFactory);
+  if (elements == null) {
     elements=CodeInsightUtil.findStatementsInRange(fragment,0,fragment.getTextLength());
   }
   if (elements.length == 0) {
@@ -18,8 +14,24 @@
   }
   final TextRange range=originalContext.getTextRange();
   final PsiElement originalAnchor=CodeInsightUtil.findElementInRange(copy,range.getStartOffset(),range.getEndOffset(),originalContext.getClass());
-  final PsiElement anchor=RefactoringUtil.getParentStatement(originalAnchor,false);
-  final PsiElement container=anchor.getParent();
+  final PsiClass containingClass=PsiTreeUtil.getParentOfType(originalAnchor,PsiClass.class);
+  if (containingClass == null) {
+    return null;
+  }
+  PsiElement anchor=RefactoringUtil.getParentStatement(originalAnchor,false);
+  if (anchor == null) {
+    if (PsiTreeUtil.getParentOfType(originalAnchor,PsiCodeBlock.class) != null) {
+      anchor=originalAnchor;
+    }
+  }
+  final PsiElement container;
+  if (anchor == null) {
+    container=((PsiClassInitializer)containingClass.add(elementFactory.createClassInitializer())).getBody();
+    anchor=container.getLastChild();
+  }
+ else {
+    container=anchor.getParent();
+  }
   final PsiElement firstElementCopy=container.addRangeBefore(elements[0],elements[elements.length - 1],anchor);
   final PsiElement[] elementsCopy=CodeInsightUtil.findStatementsInRange(copy,firstElementCopy.getTextRange().getStartOffset(),anchor.getTextRange().getStartOffset());
   if (elementsCopy[elementsCopy.length - 1] instanceof PsiExpressionStatement) {

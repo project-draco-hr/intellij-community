@@ -1,0 +1,29 @@
+{
+  final CountDownLatch moveChangesWaiter=new CountDownLatch(1);
+  final AtomicReference<LocalChangeList> resultingChangeList=new AtomicReference<LocalChangeList>();
+  ChangeListAdapter listener=new ChangeListAdapter(){
+    @Override public void changesMoved(    Collection<Change> changes,    ChangeList fromList,    ChangeList toList){
+      if (toList instanceof LocalChangeList && targetChangeList.getId().equals(((LocalChangeList)toList).getId())) {
+        resultingChangeList.set((LocalChangeList)toList);
+        moveChangesWaiter.countDown();
+      }
+    }
+  }
+;
+  try {
+    myChangeListManager.addChangeListListener(listener);
+    myChangeListManager.moveChangesTo(targetChangeList,originalChanges.toArray(new Change[originalChanges.size()]));
+    boolean success=moveChangesWaiter.await(100,TimeUnit.SECONDS);
+    if (!success) {
+      LOG.error("Couldn't await for changes move.");
+    }
+    return resultingChangeList.get();
+  }
+ catch (  InterruptedException e) {
+    LOG.error(e);
+    return null;
+  }
+ finally {
+    myChangeListManager.removeChangeListListener(listener);
+  }
+}

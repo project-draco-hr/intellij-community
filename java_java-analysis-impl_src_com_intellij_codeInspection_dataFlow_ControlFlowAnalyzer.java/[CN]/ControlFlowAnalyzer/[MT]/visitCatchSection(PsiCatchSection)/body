@@ -2,20 +2,22 @@
   startElement(section);
   PsiCodeBlock catchBlock=section.getCatchBlock();
   if (catchBlock != null) {
+    CatchDescriptor currentDescriptor=new CatchDescriptor(section.getParameter(),catchBlock);
+    DfaVariableValue exceptionHolder=getExceptionHolder(currentDescriptor);
     PsiType declaredType=section.getCatchType();
     List<PsiType> flattened=declaredType instanceof PsiDisjunctionType ? ((PsiDisjunctionType)declaredType).getDisjunctions() : ContainerUtil.createMaybeSingletonList(declaredType);
     for (    PsiType catchType : flattened) {
-      addInstruction(new PushInstruction(myExceptionHolder,null));
+      addInstruction(new PushInstruction(exceptionHolder,null));
       addInstruction(new PushInstruction(myFactory.createTypeValue(catchType,Nullness.UNKNOWN),null));
       addInstruction(new BinopInstruction(JavaTokenType.INSTANCEOF_KEYWORD,null,section.getProject()));
       addInstruction(new ConditionalGotoInstruction(ControlFlow.deltaOffset(getStartOffset(catchBlock),-5),false,null));
     }
-    addThrowCode(true,null);
+    rethrowException(currentDescriptor,true);
     addInstruction(new PushInstruction(myFactory.getVarFactory().createVariableValue(section.getParameter(),false),null));
-    addInstruction(new PushInstruction(myExceptionHolder,null));
-    addInstruction(new AssignInstruction(null));
+    addInstruction(new PushInstruction(exceptionHolder,null));
+    addInstruction(new AssignInstruction(null,null));
     addInstruction(new PopInstruction());
-    addInstruction(new FlushVariableInstruction(myExceptionHolder));
+    addInstruction(new FlushVariableInstruction(exceptionHolder));
     catchBlock.accept(this);
   }
   finishElement(section);

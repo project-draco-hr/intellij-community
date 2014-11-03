@@ -1,176 +1,147 @@
 {
   final String projectPath=getProjectPath(project);
-  final UUID sessionId=UUID.randomUUID();
-  final boolean isAutomake=messageHandler instanceof AutoMakeMessageHandler;
-  final BuilderMessageHandler handler=new MessageHandlerWrapper(messageHandler){
-    @Override public void buildStarted(    UUID sessionId){
-      super.buildStarted(sessionId);
-      try {
-        ApplicationManager.getApplication().getMessageBus().syncPublisher(BuildManagerListener.TOPIC).buildStarted(project,sessionId,isAutomake);
-      }
- catch (      Throwable e) {
-        LOG.error(e);
-      }
-    }
-    @Override public void sessionTerminated(    UUID sessionId){
-      try {
-        super.sessionTerminated(sessionId);
-      }
-  finally {
-        try {
-          ApplicationManager.getApplication().getMessageBus().syncPublisher(BuildManagerListener.TOPIC).buildFinished(project,sessionId,isAutomake);
-        }
- catch (        Throwable e) {
-          LOG.error(e);
-        }
-      }
-    }
-  }
-;
-  if (myListenPort < 0) {
-    try {
-synchronized (this) {
-        if (myListenPort < 0) {
-          myListenPort=startListening();
-        }
-      }
-    }
- catch (    Exception e) {
-      handler.handleFailure(sessionId,CmdlineProtoUtil.createFailure(e.getMessage(),null));
-      handler.sessionTerminated(sessionId);
-      return null;
-    }
-  }
+  final BuilderMessageHandler handler=new NotifyingMessageHandler(project,messageHandler,messageHandler instanceof AutoMakeMessageHandler);
   try {
-    final RequestFuture<BuilderMessageHandler> future=new RequestFuture<BuilderMessageHandler>(handler,sessionId,new RequestFuture.CancelAction<BuilderMessageHandler>(){
-      @Override public void cancel(      RequestFuture<BuilderMessageHandler> future) throws Exception {
-        myMessageDispatcher.cancelSession(future.getRequestID());
+    ensureListening();
+  }
+ catch (  Exception e) {
+    final UUID sessionId=UUID.randomUUID();
+    handler.handleFailure(sessionId,CmdlineProtoUtil.createFailure(e.getMessage(),null));
+    handler.sessionTerminated(sessionId);
+    return null;
+  }
+  final DelegateFuture<BuilderMessageHandler> _future=new DelegateFuture<BuilderMessageHandler>();
+  runCommand(new Runnable(){
+    @Override public void run(){
+      final Pair<RequestFuture<PreloadedProcessMessageHandler>,OSProcessHandler> preloaded=takePreloadedProcess(projectPath);
+      final RequestFuture<PreloadedProcessMessageHandler> preloadedFuture=preloaded != null ? preloaded.first : null;
+      final boolean usingPreloadedProcess=preloadedFuture != null;
+      final UUID sessionId;
+      if (usingPreloadedProcess) {
+        LOG.info("Using preloaded build process to compile " + projectPath);
+        sessionId=preloadedFuture.getRequestID();
+        preloadedFuture.getMessageHandler().setDelegateHandler(handler);
       }
-    }
-);
-    runCommand(new Runnable(){
-      @Override public void run(){
-        if (future.isCancelled() || project.isDisposed()) {
-          handler.sessionTerminated(sessionId);
-          future.setDone();
-          return;
-        }
-        final CmdlineRemoteProto.Message.ControllerMessage.GlobalSettings globals=CmdlineRemoteProto.Message.ControllerMessage.GlobalSettings.newBuilder().setGlobalOptionsPath(PathManager.getOptionsPath()).build();
-        CmdlineRemoteProto.Message.ControllerMessage.FSEvent currentFSChanges;
-        final SequentialTaskExecutor projectTaskQueue;
-synchronized (myProjectDataMap) {
-          ProjectData data=myProjectDataMap.get(projectPath);
-          if (data == null) {
-            data=new ProjectData(new SequentialTaskExecutor(PooledThreadExecutor.INSTANCE));
-            myProjectDataMap.put(projectPath,data);
-          }
-          if (isRebuild || (isAutomake && Registry.is("compiler.automake.force.fs.rescan"))) {
-            data.dropChanges();
-          }
-          if (IS_UNIT_TEST_MODE) {
-            LOG.info("Scheduling build for " + projectPath + "; CHANGED: "+ new HashSet<String>(convertToStringPaths(data.myChanged))+ "; DELETED: "+ new HashSet<String>(convertToStringPaths(data.myDeleted)));
-          }
-          currentFSChanges=data.getAndResetRescanFlag() ? null : data.createNextEvent();
-          projectTaskQueue=data.taskQueue;
-        }
-        final CmdlineRemoteProto.Message.ControllerMessage params;
-        if (isRebuild) {
-          params=CmdlineProtoUtil.createBuildRequest(projectPath,scopes,Collections.<String>emptyList(),userData,globals,null);
-        }
- else         if (onlyCheckUpToDate) {
-          params=CmdlineProtoUtil.createUpToDateCheckRequest(projectPath,scopes,paths,userData,globals,currentFSChanges);
-        }
  else {
-          params=CmdlineProtoUtil.createBuildRequest(projectPath,scopes,isMake ? Collections.<String>emptyList() : paths,userData,globals,currentFSChanges);
+        sessionId=UUID.randomUUID();
+      }
+      final RequestFuture<? extends BuilderMessageHandler> future=usingPreloadedProcess ? preloadedFuture : new RequestFuture<BuilderMessageHandler>(handler,sessionId,new RequestFuture.CancelAction<BuilderMessageHandler>(){
+        @Override public void cancel(        RequestFuture<BuilderMessageHandler> future) throws Exception {
+          myMessageDispatcher.cancelSession(future.getRequestID());
         }
-        myMessageDispatcher.registerBuildMessageHandler(sessionId,new MessageHandlerWrapper(handler){
-          @Override public void sessionTerminated(          UUID sessionId){
+      }
+);
+      _future.setDelegate(future);
+      if (!usingPreloadedProcess && (future.isCancelled() || project.isDisposed())) {
+        handler.sessionTerminated(sessionId);
+        ((BasicFuture)future).setDone();
+        return;
+      }
+      final CmdlineRemoteProto.Message.ControllerMessage.GlobalSettings globals=CmdlineRemoteProto.Message.ControllerMessage.GlobalSettings.newBuilder().setGlobalOptionsPath(PathManager.getOptionsPath()).build();
+      CmdlineRemoteProto.Message.ControllerMessage.FSEvent currentFSChanges;
+      final SequentialTaskExecutor projectTaskQueue;
+synchronized (myProjectDataMap) {
+        final ProjectData data=getProjectData(projectPath);
+        if (isRebuild) {
+          data.dropChanges();
+        }
+        if (IS_UNIT_TEST_MODE) {
+          LOG.info("Scheduling build for " + projectPath + "; CHANGED: "+ new HashSet<String>(convertToStringPaths(data.myChanged))+ "; DELETED: "+ new HashSet<String>(convertToStringPaths(data.myDeleted)));
+        }
+        currentFSChanges=data.getAndResetRescanFlag() ? null : data.createNextEvent();
+        projectTaskQueue=data.taskQueue;
+      }
+      final CmdlineRemoteProto.Message.ControllerMessage params;
+      if (isRebuild) {
+        params=CmdlineProtoUtil.createBuildRequest(projectPath,scopes,Collections.<String>emptyList(),userData,globals,null);
+      }
+ else       if (onlyCheckUpToDate) {
+        params=CmdlineProtoUtil.createUpToDateCheckRequest(projectPath,scopes,paths,userData,globals,currentFSChanges);
+      }
+ else {
+        params=CmdlineProtoUtil.createBuildRequest(projectPath,scopes,isMake ? Collections.<String>emptyList() : paths,userData,globals,currentFSChanges);
+      }
+      if (!usingPreloadedProcess) {
+        myMessageDispatcher.registerBuildMessageHandler(future,params);
+      }
+      try {
+        projectTaskQueue.submit(new Runnable(){
+          @Override public void run(){
+            Throwable execFailure=null;
             try {
-              super.sessionTerminated(sessionId);
-            }
-  finally {
-              future.setDone();
-            }
-          }
-        }
-,params);
-        try {
-          projectTaskQueue.submit(new Runnable(){
-            @Override public void run(){
-              Throwable execFailure=null;
-              try {
-                if (project.isDisposed()) {
+              if (project.isDisposed()) {
+                if (usingPreloadedProcess) {
+                  future.cancel(false);
+                }
+ else {
                   return;
                 }
-                myBuildsInProgress.put(projectPath,future);
-                final OSProcessHandler processHandler=launchBuildProcess(project,myListenPort,sessionId);
-                final StringBuilder stdErrOutput=new StringBuilder();
-                processHandler.addProcessListener(new ProcessAdapter(){
-                  @Override public void onTextAvailable(                  ProcessEvent event,                  Key outputType){
-                    final String text=event.getText();
-                    if (!StringUtil.isEmptyOrSpaces(text)) {
-                      LOG.info("BUILDER_PROCESS [" + outputType.toString() + "]: "+ text.trim());
-                      if (stdErrOutput.length() < 1024 && ProcessOutputTypes.STDERR.equals(outputType)) {
-                        stdErrOutput.append(text);
+              }
+              myBuildsInProgress.put(projectPath,future);
+              final OSProcessHandler processHandler;
+              CharSequence errorsOnLaunch;
+              if (usingPreloadedProcess) {
+                final boolean paramsSent=myMessageDispatcher.sendBuildParameters(future.getRequestID(),params);
+                if (!paramsSent) {
+                  myMessageDispatcher.cancelSession(future.getRequestID());
+                }
+                processHandler=preloaded.second;
+                errorsOnLaunch=STDERR_OUTPUT.get(processHandler);
+              }
+ else {
+                processHandler=launchBuildProcess(project,myListenPort,sessionId,false);
+                errorsOnLaunch=new StringBuffer();
+                processHandler.addProcessListener(new StdOutputCollector((StringBuffer)errorsOnLaunch));
+                processHandler.startNotify();
+              }
+              while (!processHandler.waitFor()) {
+                LOG.info("processHandler.waitFor() returned false for session " + sessionId + ", continue waiting");
+              }
+              final int exitValue=processHandler.getProcess().exitValue();
+              if (exitValue != 0) {
+                final StringBuilder msg=new StringBuilder();
+                msg.append("Abnormal build process termination: ");
+                if (errorsOnLaunch != null && errorsOnLaunch.length() > 0) {
+                  msg.append("\n").append(errorsOnLaunch);
+                }
+ else {
+                  msg.append("unknown error");
+                }
+                handler.handleFailure(sessionId,CmdlineProtoUtil.createFailure(msg.toString(),null));
+              }
+            }
+ catch (            Throwable e) {
+              execFailure=e;
+            }
+ finally {
+              myBuildsInProgress.remove(projectPath);
+              notifySessionTerminationIfNeeded(sessionId,execFailure);
+              if (Registry.is("compiler.process.preload") && !project.isDisposed()) {
+                runCommand(new Runnable(){
+                  public void run(){
+                    if (!myPreloadedBuilds.containsKey(projectPath)) {
+                      try {
+                        final Future<Pair<RequestFuture<PreloadedProcessMessageHandler>,OSProcessHandler>> preloadResult=launchPreloadedBuildProcess(project,projectTaskQueue);
+                        myPreloadedBuilds.put(projectPath,preloadResult);
+                      }
+ catch (                      Throwable e) {
+                        LOG.info("Error pre-loading build process for project " + projectPath,e);
                       }
                     }
                   }
                 }
 );
-                processHandler.startNotify();
-                final boolean terminated=processHandler.waitFor();
-                if (terminated) {
-                  final int exitValue=processHandler.getProcess().exitValue();
-                  if (exitValue != 0) {
-                    final StringBuilder msg=new StringBuilder();
-                    msg.append("Abnormal build process termination: ");
-                    if (stdErrOutput.length() > 0) {
-                      msg.append("\n").append(stdErrOutput);
-                    }
- else {
-                      msg.append("unknown error");
-                    }
-                    handler.handleFailure(sessionId,CmdlineProtoUtil.createFailure(msg.toString(),null));
-                  }
-                }
- else {
-                  handler.handleFailure(sessionId,CmdlineProtoUtil.createFailure("Disconnected from build process",null));
-                }
-              }
- catch (              Throwable e) {
-                execFailure=e;
-              }
- finally {
-                myBuildsInProgress.remove(projectPath);
-                if (myMessageDispatcher.getAssociatedChannel(sessionId) == null) {
-                  final BuilderMessageHandler unregistered=myMessageDispatcher.unregisterBuildMessageHandler(sessionId);
-                  if (unregistered != null) {
-                    if (execFailure != null) {
-                      unregistered.handleFailure(sessionId,CmdlineProtoUtil.createFailure(execFailure.getMessage(),execFailure));
-                    }
-                    unregistered.sessionTerminated(sessionId);
-                  }
-                }
               }
             }
           }
+        }
 );
-        }
- catch (        Throwable e) {
-          final BuilderMessageHandler unregistered=myMessageDispatcher.unregisterBuildMessageHandler(sessionId);
-          if (unregistered != null) {
-            unregistered.handleFailure(sessionId,CmdlineProtoUtil.createFailure(e.getMessage(),e));
-            unregistered.sessionTerminated(sessionId);
-          }
-        }
+      }
+ catch (      Throwable e) {
+        handleProcessExecutionFailure(sessionId,e);
       }
     }
+  }
 );
-    return future;
-  }
- catch (  Throwable e) {
-    handler.handleFailure(sessionId,CmdlineProtoUtil.createFailure(e.getMessage(),e));
-    handler.sessionTerminated(sessionId);
-  }
-  return null;
+  return _future;
 }
