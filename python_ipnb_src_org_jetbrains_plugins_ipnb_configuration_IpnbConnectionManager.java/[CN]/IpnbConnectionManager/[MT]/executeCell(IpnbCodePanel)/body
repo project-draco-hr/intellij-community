@@ -1,45 +1,31 @@
 {
   final IpnbFileEditor fileEditor=codePanel.getFileEditor();
-  final String path=fileEditor.getVirtualFile().getPath();
+  final VirtualFile virtualFile=fileEditor.getVirtualFile();
+  final String path=virtualFile.getPath();
   if (!myKernels.containsKey(path)) {
-    try {
-      final String url=IpnbSettings.getInstance(myProject).getURL();
-      if (StringUtil.isEmptyOrSpaces(url)) {
-        BalloonBuilder balloonBuilder=JBPopupFactory.getInstance().createHtmlTextBalloonBuilder("Please, specify IPython Notebook URL in <a href=\"\">Settings->IPython Notebook</a>",null,MessageType.WARNING.getPopupBackground(),new HyperlinkAdapter(){
-          @Override protected void hyperlinkActivated(          HyperlinkEvent e){
-            ShowSettingsUtil.getInstance().showSettingsDialog(myProject,"IPython Notebook");
-          }
-        }
-);
-        final Balloon balloon=balloonBuilder.createBalloon();
-        balloon.showInCenterOf(fileEditor.getRunCellButton());
+    String url=IpnbSettings.getInstance(myProject).getURL();
+    if (url == null) {
+      url=DEFAULT_URL;
+    }
+    if (!isAvailable(url)) {
+      url=showDialogUrl(url);
+      if (url == null)       return;
+      startIpythonServer(url,fileEditor);
+      if (myProcessHandler != null) {
+        waitForIpythonServer();
+        startConnection(codePanel,path,url);
         return;
       }
-      final IpnbConnection connection=new IpnbConnection(new URI(url),new IpnbConnectionListenerBase(){
-        @Override public void onOpen(        @NotNull IpnbConnection connection){
-          final String messageId=connection.execute(codePanel.getCell().getSourceAsString());
-          myUpdateMap.put(messageId,codePanel);
-        }
-        @Override public void onOutput(        @NotNull IpnbConnection connection,        @NotNull String parentMessageId,        @NotNull List<IpnbOutputCell> outputs,        @Nullable Integer execCount){
-          if (!myUpdateMap.containsKey(parentMessageId))           return;
-          final IpnbCodePanel cell=myUpdateMap.remove(parentMessageId);
-          cell.getCell().setPromptNumber(execCount);
-          cell.updatePanel(outputs);
-        }
+ else {
+        showWarning(fileEditor,"Could not start IPython Notebook");
+        return;
       }
-);
-      myKernels.put(path,connection);
     }
- catch (    IOException e) {
-      BalloonBuilder balloonBuilder=JBPopupFactory.getInstance().createHtmlTextBalloonBuilder("Please, check that IPython Notebook is running",null,MessageType.WARNING.getPopupBackground(),null);
-      final Balloon balloon=balloonBuilder.createBalloon();
-      balloon.showInCenterOf(fileEditor.getRunCellButton());
+    if (StringUtil.isEmptyOrSpaces(url)) {
+      showWarning(fileEditor,"Please, specify IPython Notebook URL in <a href=\"\">Settings->IPython Notebook</a>");
+      return;
     }
-catch (    URISyntaxException e) {
-      BalloonBuilder balloonBuilder=JBPopupFactory.getInstance().createHtmlTextBalloonBuilder("Please, check IPython Notebook URL in Settings->IPython Notebook",null,MessageType.WARNING.getPopupBackground(),null);
-      final Balloon balloon=balloonBuilder.createBalloon();
-      balloon.showInCenterOf(fileEditor.getRunCellButton());
-    }
+    startConnection(codePanel,path,url);
   }
  else {
     final IpnbConnection connection=myKernels.get(path);
