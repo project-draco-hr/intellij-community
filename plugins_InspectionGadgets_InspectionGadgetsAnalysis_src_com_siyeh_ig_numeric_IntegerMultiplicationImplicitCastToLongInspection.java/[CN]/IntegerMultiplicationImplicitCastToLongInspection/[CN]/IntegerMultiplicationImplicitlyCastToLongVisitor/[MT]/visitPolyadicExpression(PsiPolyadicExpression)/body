@@ -1,5 +1,5 @@
 {
-  super.visitBinaryExpression(expression);
+  super.visitPolyadicExpression(expression);
   final IElementType tokenType=expression.getOperationTokenType();
   if (!tokenType.equals(JavaTokenType.ASTERISK) && !tokenType.equals(JavaTokenType.LTLT)) {
     return;
@@ -8,12 +8,7 @@
   if (!isNonLongInteger(type)) {
     return;
   }
-  final PsiExpression rhs=expression.getROperand();
-  if (rhs == null) {
-    return;
-  }
-  final PsiType rhsType=rhs.getType();
-  if (!isNonLongInteger(rhsType)) {
+  if (expression.getOperands().length < 2 || expression.getLastChild() instanceof PsiErrorElement) {
     return;
   }
   final PsiExpression context=getContainingExpression(expression);
@@ -27,13 +22,14 @@
   if (!contextType.equals(PsiType.LONG)) {
     return;
   }
-  try {
-    final Object result=ExpressionUtils.computeConstantExpression(expression,true);
-    if (ignoreNonOverflowingCompileTimeConstants && result != null) {
-      return;
+  if (ignoreNonOverflowingCompileTimeConstants) {
+    try {
+      if (ExpressionUtils.computeConstantExpression(expression,true) != null) {
+        return;
+      }
+    }
+ catch (    ConstantEvaluationOverflowException ignore) {
     }
   }
- catch (  ConstantEvaluationOverflowException ignore) {
-  }
-  registerError(expression);
+  registerError(expression,tokenType);
 }
