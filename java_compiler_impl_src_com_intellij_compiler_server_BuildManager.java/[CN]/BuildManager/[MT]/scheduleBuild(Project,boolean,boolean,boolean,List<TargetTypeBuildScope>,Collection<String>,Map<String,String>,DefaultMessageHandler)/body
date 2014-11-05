@@ -79,29 +79,19 @@ synchronized (myProjectDataMap) {
               }
               myBuildsInProgress.put(projectPath,future);
               final OSProcessHandler processHandler;
-              final StringBuilder errorsOnLaunch=new StringBuilder();
+              CharSequence errorsOnLaunch;
               if (usingPreloadedProcess) {
                 final boolean paramsSent=myMessageDispatcher.sendBuildParameters(future.getRequestID(),params);
                 if (!paramsSent) {
                   myMessageDispatcher.cancelSession(future.getRequestID());
                 }
                 processHandler=preloaded.second;
+                errorsOnLaunch=STDERR_OUTPUT.get(processHandler);
               }
  else {
                 processHandler=launchBuildProcess(project,myListenPort,sessionId,false);
-                processHandler.addProcessListener(new ProcessAdapter(){
-                  @Override public void onTextAvailable(                  ProcessEvent event,                  Key outputType){
-                    if (ProcessOutputTypes.STDERR.equals(outputType)) {
-                      if (errorsOnLaunch.length() < 1024) {
-                        final String text=event.getText();
-                        if (!StringUtil.isEmptyOrSpaces(text)) {
-                          errorsOnLaunch.append(text);
-                        }
-                      }
-                    }
-                  }
-                }
-);
+                errorsOnLaunch=new StringBuffer();
+                processHandler.addProcessListener(new StdOutputCollector((StringBuffer)errorsOnLaunch));
                 processHandler.startNotify();
               }
               while (!processHandler.waitFor()) {
@@ -111,7 +101,7 @@ synchronized (myProjectDataMap) {
               if (exitValue != 0) {
                 final StringBuilder msg=new StringBuilder();
                 msg.append("Abnormal build process termination: ");
-                if (errorsOnLaunch.length() > 0) {
+                if (errorsOnLaunch != null && errorsOnLaunch.length() > 0) {
                   msg.append("\n").append(errorsOnLaunch);
                 }
  else {
@@ -125,24 +115,18 @@ synchronized (myProjectDataMap) {
             }
  finally {
               myBuildsInProgress.remove(projectPath);
-              if (myMessageDispatcher.getAssociatedChannel(sessionId) == null) {
-                final BuilderMessageHandler unregistered=myMessageDispatcher.unregisterBuildMessageHandler(sessionId);
-                if (unregistered != null) {
-                  if (execFailure != null) {
-                    unregistered.handleFailure(sessionId,CmdlineProtoUtil.createFailure(execFailure.getMessage(),execFailure));
-                  }
-                  unregistered.sessionTerminated(sessionId);
-                }
-              }
+              notifySessionTerminationIfNeeded(sessionId,execFailure);
               if (Registry.is("compiler.process.preload") && !project.isDisposed()) {
                 runCommand(new Runnable(){
                   public void run(){
-                    try {
-                      final Future<Pair<RequestFuture<PreloadedProcessMessageHandler>,OSProcessHandler>> preloadResult=launchPreloadedBuildProcess(project,projectTaskQueue);
-                      myPreloadedBuilds.put(projectPath,preloadResult);
-                    }
- catch (                    Exception e) {
-                      LOG.info("Error pre-loading build process for project " + projectPath,e);
+                    if (!myPreloadedBuilds.containsKey(projectPath)) {
+                      try {
+                        final Future<Pair<RequestFuture<PreloadedProcessMessageHandler>,OSProcessHandler>> preloadResult=launchPreloadedBuildProcess(project,projectTaskQueue);
+                        myPreloadedBuilds.put(projectPath,preloadResult);
+                      }
+ catch (                      Throwable e) {
+                        LOG.info("Error pre-loading build process for project " + projectPath,e);
+                      }
                     }
                   }
                 }
@@ -154,11 +138,7 @@ synchronized (myProjectDataMap) {
 );
       }
  catch (      Throwable e) {
-        final BuilderMessageHandler unregistered=myMessageDispatcher.unregisterBuildMessageHandler(sessionId);
-        if (unregistered != null) {
-          unregistered.handleFailure(sessionId,CmdlineProtoUtil.createFailure(e.getMessage(),e));
-          unregistered.sessionTerminated(sessionId);
-        }
+        handleProcessExecutionFailure(sessionId,e);
       }
     }
   }
