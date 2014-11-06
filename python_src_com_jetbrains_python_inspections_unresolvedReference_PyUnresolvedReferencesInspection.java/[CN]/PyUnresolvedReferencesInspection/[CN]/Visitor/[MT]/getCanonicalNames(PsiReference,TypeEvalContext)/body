@@ -1,14 +1,13 @@
 {
   final PsiElement element=reference.getElement();
+  final List<QualifiedName> result=new SmartList<QualifiedName>();
   if (reference instanceof PyOperatorReference && element instanceof PyQualifiedExpression) {
     final PyExpression receiver=((PyOperatorReference)reference).getReceiver();
     if (receiver != null) {
       final PyType type=context.getType(receiver);
       if (type instanceof PyClassType) {
-        final String name=((PyClassType)type).getClassQName();
-        if (name != null) {
-          return QualifiedName.fromDottedString(name).append(((PyQualifiedExpression)element).getReferencedName());
-        }
+        final String methodName=((PyQualifiedExpression)element).getReferencedName();
+        ContainerUtil.addIfNotNull(result,extractAttributeQNameFromClassType(methodName,(PyClassType)type));
       }
     }
   }
@@ -20,16 +19,20 @@
       if (qualifier != null) {
         final PyType type=context.getType(qualifier);
         if (type instanceof PyClassType) {
-          final String name=((PyClassType)type).getClassQName();
-          if (name != null) {
-            return QualifiedName.fromDottedString(name).append(exprName);
-          }
+          ContainerUtil.addIfNotNull(result,extractAttributeQNameFromClassType(exprName,(PyClassType)type));
         }
  else         if (type instanceof PyModuleType) {
           final PyFile file=((PyModuleType)type).getModule();
           final QualifiedName name=QualifiedNameFinder.findCanonicalImportPath(file,element);
           if (name != null) {
-            return name.append(exprName);
+            ContainerUtil.addIfNotNull(result,name.append(exprName));
+          }
+        }
+ else         if (type instanceof PyUnionType) {
+          for (          PyType memberType : ((PyUnionType)type).getMembers()) {
+            if (memberType instanceof PyClassType) {
+              ContainerUtil.addIfNotNull(result,extractAttributeQNameFromClassType(exprName,(PyClassType)memberType));
+            }
           }
         }
       }
@@ -38,14 +41,14 @@
         if (parent instanceof PyImportElement) {
           final PyImportStatementBase importStmt=PsiTreeUtil.getParentOfType(parent,PyImportStatementBase.class);
           if (importStmt instanceof PyImportStatement) {
-            return QualifiedName.fromComponents(exprName);
+            ContainerUtil.addIfNotNull(result,QualifiedName.fromComponents(exprName));
           }
  else           if (importStmt instanceof PyFromImportStatement) {
             final PsiElement resolved=((PyFromImportStatement)importStmt).resolveImportSource();
             if (resolved != null) {
               final QualifiedName path=QualifiedNameFinder.findCanonicalImportPath(resolved,element);
               if (path != null) {
-                return path.append(exprName);
+                ContainerUtil.addIfNotNull(result,path.append(exprName));
               }
             }
           }
@@ -53,14 +56,14 @@
  else {
           final QualifiedName path=QualifiedNameFinder.findCanonicalImportPath(element,element);
           if (path != null) {
-            return path.append(exprName);
+            ContainerUtil.addIfNotNull(result,path.append(exprName));
           }
         }
       }
     }
   }
  else   if (reference instanceof DocStringParameterReference) {
-    return QualifiedName.fromDottedString(reference.getCanonicalText());
+    ContainerUtil.addIfNotNull(result,QualifiedName.fromDottedString(reference.getCanonicalText()));
   }
-  return null;
+  return result;
 }
