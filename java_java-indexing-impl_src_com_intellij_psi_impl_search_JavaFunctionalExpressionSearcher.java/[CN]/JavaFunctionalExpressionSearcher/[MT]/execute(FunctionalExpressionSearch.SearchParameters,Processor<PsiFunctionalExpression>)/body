@@ -1,8 +1,23 @@
 {
   final PsiClass aClass=queryParameters.getElementToSearch();
+  final Set<Module> highLevelModules=new HashSet<Module>();
   if (ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
     @Override public Boolean compute(){
-      return !LambdaUtil.isFunctionalClass(aClass) || !PsiUtil.isLanguageLevel8OrHigher(aClass);
+      if (LambdaUtil.isFunctionalClass(aClass)) {
+        final Project project=aClass.getProject();
+        final boolean projectLevelIsHigh=PsiUtil.getLanguageLevel(project).isAtLeast(LanguageLevel.JDK_1_8);
+        for (        Module module : ModuleManager.getInstance(project).getModules()) {
+          final LanguageLevelModuleExtension extension=ModuleRootManager.getInstance(module).getModuleExtension(LanguageLevelModuleExtension.class);
+          if (extension != null) {
+            final LanguageLevel level=extension.getLanguageLevel();
+            if (level == null && projectLevelIsHigh || level != null && level.isAtLeast(LanguageLevel.JDK_1_8)) {
+              highLevelModules.add(module);
+            }
+          }
+        }
+        return highLevelModules.isEmpty();
+      }
+      return true;
     }
   }
 )) {
@@ -13,5 +28,5 @@
       return queryParameters.getEffectiveSearchScope();
     }
   }
-),consumer);
+),consumer,highLevelModules);
 }
