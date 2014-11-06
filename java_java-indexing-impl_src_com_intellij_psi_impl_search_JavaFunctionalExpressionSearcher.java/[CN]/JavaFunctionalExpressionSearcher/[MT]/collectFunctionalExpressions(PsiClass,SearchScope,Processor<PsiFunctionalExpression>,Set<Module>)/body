@@ -13,94 +13,26 @@
 );
   final Project project=PsiUtilCore.getProjectInReadAction(aClass);
   final GlobalSearchScope scope=new ModulesScope(highLevelModules,project).intersectWith(useScope instanceof GlobalSearchScope ? (GlobalSearchScope)useScope : new EverythingGlobalScope(project));
-  final Collection<PsiMethod> lambdaCandidates=ApplicationManager.getApplication().runReadAction(new Computable<Collection<PsiMethod>>(){
-    @Override public Collection<PsiMethod> compute(){
-      final String functionalInterfaceName=aClass.getName();
-      final GlobalSearchScope useClassScope=classScope instanceof GlobalSearchScope ? (GlobalSearchScope)classScope : scope;
-      JavaMethodParameterTypesIndex parameterTypesIndex=JavaMethodParameterTypesIndex.getInstance();
-      LinkedHashSet<PsiMethod> methods=new LinkedHashSet<PsiMethod>(parameterTypesIndex.get(functionalInterfaceName,project,useClassScope));
-      methods.addAll(parameterTypesIndex.get(JavaMethodElementType.TYPE_PARAMETER_PSEUDO_NAME,project,GlobalSearchScope.allScope(project)));
-      return methods;
+  final ProjectFileIndex index=ProjectRootManager.getInstance(project).getFileIndex();
+  CommonProcessors.CollectProcessor<VirtualFile> processor=new CommonProcessors.CollectProcessor<VirtualFile>(){
+    @Override protected boolean accept(    VirtualFile virtualFile){
+      return scope.contains(virtualFile) && virtualFile.getFileType() == JavaFileType.INSTANCE && index.isInSource(virtualFile);
     }
   }
-);
-  for (  PsiMethod psiMethod : lambdaCandidates) {
-    for (    final PsiReference ref : MethodReferencesSearch.search(psiMethod,scope,false)) {
-      boolean accepted=ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
-        @Override public Boolean compute(){
-          final PsiElement refElement=ref.getElement();
-          if (refElement != null) {
-            final PsiElement candidateElement=refElement.getParent();
-            if (candidateElement instanceof PsiCallExpression) {
-              final PsiExpressionList argumentList=((PsiCallExpression)candidateElement).getArgumentList();
-              if (argumentList != null) {
-                final PsiExpression[] args=argumentList.getExpressions();
-                for (                PsiExpression arg : args) {
-                  if (arg instanceof PsiFunctionalExpression) {
-                    final PsiFunctionalExpression functionalExpression=(PsiFunctionalExpression)arg;
-                    final PsiType functionalType=functionalExpression.getFunctionalInterfaceType();
-                    if (PsiUtil.resolveClassInType(functionalType) == aClass) {
-                      if (!consumer.process(functionalExpression))                       return false;
-                    }
-                  }
-                }
-              }
-            }
-          }
-          return true;
-        }
-      }
-);
-      if (!accepted)       return false;
-    }
-  }
-  for (  final PsiReference reference : ReferencesSearch.search(aClass,scope)) {
-    boolean accepted=ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
+;
+  final PsiSearchHelperImpl helper=(PsiSearchHelperImpl)PsiSearchHelper.SERVICE.getInstance(project);
+  helper.processFilesWithText(scope,UsageSearchContext.IN_CODE,true,"::",processor);
+  helper.processFilesWithText(scope,UsageSearchContext.IN_CODE,true,"->",processor);
+  Collection<VirtualFile> files=processor.getResults();
+  LOG.info("#files: " + files.size());
+  final PsiManager psiManager=PsiManager.getInstance(project);
+  for (  final VirtualFile file : files) {
+    if (!ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
       @Override public Boolean compute(){
-        final PsiElement element=reference.getElement();
-        if (element != null) {
-          final PsiElement parent=element.getParent();
-          if (parent instanceof PsiTypeElement) {
-            final PsiElement gParent=parent.getParent();
-            if (gParent instanceof PsiVariable) {
-              final PsiExpression initializer=PsiUtil.skipParenthesizedExprDown(((PsiVariable)gParent).getInitializer());
-              if (initializer instanceof PsiFunctionalExpression) {
-                if (!consumer.process((PsiFunctionalExpression)initializer))                 return false;
-              }
-              for (              PsiReference varRef : ReferencesSearch.search(parent,scope)) {
-                final PsiElement varElement=varRef.getElement();
-                if (varElement != null) {
-                  final PsiElement varElementParent=varElement.getParent();
-                  if (varElementParent instanceof PsiAssignmentExpression && ((PsiAssignmentExpression)varElementParent).getLExpression() == varElement) {
-                    final PsiExpression rExpression=PsiUtil.skipParenthesizedExprDown(((PsiAssignmentExpression)varElementParent).getRExpression());
-                    if (rExpression instanceof PsiFunctionalExpression) {
-                      if (!consumer.process((PsiFunctionalExpression)rExpression))                       return false;
-                    }
-                  }
-                }
-              }
-            }
- else             if (gParent instanceof PsiMethod) {
-              final PsiReturnStatement[] returnStatements=ApplicationManager.getApplication().runReadAction(new Computable<PsiReturnStatement[]>(){
-                @Override public PsiReturnStatement[] compute(){
-                  return PsiUtil.findReturnStatements((PsiMethod)gParent);
-                }
-              }
-);
-              for (              PsiReturnStatement returnStatement : returnStatements) {
-                final PsiExpression returnValue=returnStatement.getReturnValue();
-                if (returnValue instanceof PsiFunctionalExpression) {
-                  if (!consumer.process((PsiFunctionalExpression)returnValue))                   return false;
-                }
-              }
-            }
-          }
-        }
-        return true;
+        return processFileWithFunctionalInterfaces(aClass,consumer,psiManager,file);
       }
     }
-);
-    if (!accepted)     return false;
+))     return false;
   }
   return true;
 }
