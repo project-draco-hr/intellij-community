@@ -1,5 +1,17 @@
 {
-  Future<T> future=ApplicationManager.getApplication().executeOnPooledThread(callable);
+  final Ref<Throwable> error=Ref.create();
+  Future<T> future=ApplicationManager.getApplication().executeOnPooledThread(new Callable<T>(){
+    @Override public T call() throws Exception {
+      try {
+        return callable.call();
+      }
+ catch (      Throwable t) {
+        error.set(t);
+        return null;
+      }
+    }
+  }
+);
   while (true) {
     try {
       ProgressManager.checkCanceled();
@@ -9,7 +21,9 @@
       throw e;
     }
     try {
-      return future.get(200,TimeUnit.MILLISECONDS);
+      T result=future.get(200,TimeUnit.MILLISECONDS);
+      ExceptionUtil.rethrowAll(error.get());
+      return result;
     }
  catch (    TimeoutException ignored) {
     }
