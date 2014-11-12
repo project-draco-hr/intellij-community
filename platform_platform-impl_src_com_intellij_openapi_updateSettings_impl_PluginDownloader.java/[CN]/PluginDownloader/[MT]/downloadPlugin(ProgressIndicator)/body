@@ -1,44 +1,39 @@
 {
-  final File pluginsTemp=new File(PathManager.getPluginTempPath());
+  File pluginsTemp=new File(PathManager.getPluginTempPath());
   if (!pluginsTemp.exists() && !pluginsTemp.mkdirs()) {
     throw new IOException(IdeBundle.message("error.cannot.create.temp.dir",pluginsTemp));
   }
   final File file=FileUtil.createTempFile(pluginsTemp,"plugin_","_download",true,false);
-  if (progressIndicator != null) {
-    progressIndicator.setText(IdeBundle.message("progress.connecting"));
+  progressIndicator.checkCanceled();
+  progressIndicator.setText(IdeBundle.message("progress.downloading.plugin",getPluginName()));
+  return HttpRequests.request(myPluginUrl).supportGzip(false).effectiveUrlConsumer(new Consumer<String>(){
+    @Override public void consume(    String url){
+      myPluginUrl=url;
+    }
   }
-  URLConnection connection=null;
-  try {
-    connection=openConnection(myPluginUrl);
-    final InputStream is=(ApplicationManager.getApplication() != null) ? UrlConnectionUtil.getConnectionInputStream(connection,progressIndicator) : connection.getInputStream();
-    if (is == null) {
-      throw new IOException("Failed to open connection");
-    }
-    if (progressIndicator != null && ApplicationManager.getApplication() != null) {
-      progressIndicator.setText(IdeBundle.message("progress.downloading.plugin",getPluginName()));
-    }
-    try {
-      final OutputStream fos=new BufferedOutputStream(new FileOutputStream(file,false));
+).get(new ThrowableConvertor<URLConnection,File,IOException>(){
+    @Override public File convert(    URLConnection connection) throws IOException {
+      progressIndicator.checkCanceled();
+      InputStream input=HttpRequests.getInputStream(connection);
       try {
-        NetUtils.copyStreamContent(progressIndicator,is,fos,connection.getContentLength());
+        OutputStream fileOut=new FileOutputStream(file);
+        try {
+          NetUtils.copyStreamContent(progressIndicator,input,fileOut,connection.getContentLength());
+        }
+  finally {
+          fileOut.close();
+        }
       }
   finally {
-        fos.close();
+        input.close();
       }
-    }
-  finally {
-      is.close();
-    }
-    if (myFileName == null) {
-      myFileName=guessFileName(connection,file);
-    }
-    final File newFile=new File(file.getParentFile(),myFileName);
-    FileUtil.rename(file,newFile);
-    return newFile;
-  }
-  finally {
-    if (connection instanceof HttpURLConnection) {
-      ((HttpURLConnection)connection).disconnect();
+      if (myFileName == null) {
+        myFileName=guessFileName(connection,file);
+      }
+      File newFile=new File(file.getParentFile(),myFileName);
+      FileUtil.rename(file,newFile);
+      return newFile;
     }
   }
+);
 }

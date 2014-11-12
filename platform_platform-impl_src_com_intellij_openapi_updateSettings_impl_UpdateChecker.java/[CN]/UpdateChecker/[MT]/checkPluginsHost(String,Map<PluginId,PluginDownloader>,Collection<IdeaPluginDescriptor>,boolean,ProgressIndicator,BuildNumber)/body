@@ -1,34 +1,58 @@
 {
+  String url;
+  if (StandardFileSystems.FILE_PROTOCOL.equals(new URL(host).getProtocol())) {
+    url=host;
+  }
+ else {
+    url=host + (host.contains("?") ? '&' : '?') + "build="+ ApplicationInfo.getInstance().getBuild().asString();
+  }
+  BufferExposingByteArrayOutputStream bytes=HttpRequests.request(url).get(new ThrowableConvertor<URLConnection,BufferExposingByteArrayOutputStream,Exception>(){
+    @Override public BufferExposingByteArrayOutputStream convert(    URLConnection connection) throws Exception {
+      InputStream input=HttpRequests.getInputStream(connection);
+      try {
+        BufferExposingByteArrayOutputStream output=new BufferExposingByteArrayOutputStream();
+        try {
+          NetUtils.copyStreamContent(indicator,input,output,connection.getContentLength());
+        }
+  finally {
+          output.close();
+        }
+        return output;
+      }
+  finally {
+        input.close();
+      }
+    }
+  }
+);
+  ByteArrayInputStream inputStream=new ByteArrayInputStream(bytes.getInternalBuffer(),0,bytes.size());
   final Document document;
   try {
-    document=JDOMUtil.loadDocument(RepositoryHelper.getConnectionInputStream(loadVersionInfo(host)));
+    document=JDOMUtil.loadDocument(inputStream);
   }
  catch (  JDOMException e) {
     return false;
   }
-  final List<IdeaPluginDescriptor> descriptors=RepositoryHelper.loadPluginsFromDescription(loadVersionInfo(host),indicator);
-  for (  IdeaPluginDescriptor descriptor : descriptors) {
+ finally {
+    inputStream.reset();
+  }
+  SAXParser parser=SAXParserFactory.newInstance().newSAXParser();
+  RepositoryContentHandler handler=new RepositoryContentHandler();
+  parser.parse(inputStream,handler);
+  for (  IdeaPluginDescriptor descriptor : handler.getPluginsList()) {
     ((PluginNode)descriptor).setRepositoryName(host);
     prepareToInstall(PluginDownloader.createDownloader(descriptor,buildNumber),buildNumber,downloaded,incompatiblePlugins,collectToUpdate,indicator);
   }
   boolean success=true;
-  for (  Object plugin : document.getRootElement().getChildren("plugin")) {
-    final Element pluginElement=(Element)plugin;
+  for (  Element pluginElement : document.getRootElement().getChildren("plugin")) {
     final String pluginId=pluginElement.getAttributeValue("id");
-    final String pluginUrl=pluginElement.getAttributeValue("url");
+    String pluginUrl=pluginElement.getAttributeValue("url");
     final String pluginVersion=pluginElement.getAttributeValue("version");
-    final Element descriptionElement=pluginElement.getChild("description");
-    final String description;
-    if (descriptionElement != null) {
-      description=descriptionElement.getText();
-    }
- else {
-      description=null;
-    }
-    final List<PluginId> dependsPlugins=new ArrayList<PluginId>();
-    final List depends=pluginElement.getChildren("depends");
-    for (    Object depend : depends) {
-      dependsPlugins.add(PluginId.getId(((Element)depend).getText()));
+    Element descriptionElement=pluginElement.getChild("description");
+    String description=descriptionElement != null ? descriptionElement.getText() : null;
+    List<PluginId> dependsPlugins=new SmartList<PluginId>();
+    for (    Element depend : pluginElement.getChildren("depends")) {
+      dependsPlugins.add(PluginId.getId(depend.getText()));
     }
     if (pluginId == null) {
       LOG.info("plugin id should not be null");
@@ -40,8 +64,10 @@
       success=false;
       continue;
     }
-    final VirtualFile pluginFile=PluginDownloader.findPluginFile(pluginUrl,host);
-    if (pluginFile == null)     continue;
+    VirtualFile pluginFile=PluginDownloader.findPluginFile(pluginUrl,host);
+    if (pluginFile == null) {
+      continue;
+    }
     if (collectToUpdate) {
       final String finalPluginUrl=getPluginUrl(pluginFile);
       if (ApplicationManager.getApplication().isDispatchThread()) {
