@@ -1,4 +1,7 @@
 {
+  final State[] sharedPendingStates=new State[Analysis.STEPS_LIMIT];
+  final PendingAction[] sharedPendingActions=new PendingAction[Analysis.STEPS_LIMIT];
+  final PResults.PResult[] sharedResults=new PResults.PResult[Analysis.STEPS_LIMIT];
   final Map<Key,List<Equation<Key,Value>>> equations=new HashMap<Key,List<Equation<Key,Value>>>();
   classReader.accept(new ClassVisitor(Opcodes.ASM5){
     private String className;
@@ -95,7 +98,7 @@ catch (      Throwable e) {
       boolean[] leakingParameters=leakingParametersAndFrames != null ? leakingParametersAndFrames.parameters : null;
       boolean[] leakingNullableParameters=leakingParametersAndFrames != null ? leakingParametersAndFrames.nullableParameters : null;
       final boolean[] origins=isInterestingResult ? OriginsAnalysis.resultOrigins(leakingParametersAndFrames.frames,methodNode.instructions,richControlFlow.controlFlow) : null;
-      Equation<Key,Value> outEquation=isInterestingResult ? new InOutAnalysis(richControlFlow,Out,origins,stable).analyze() : null;
+      Equation<Key,Value> outEquation=isInterestingResult ? new InOutAnalysis(richControlFlow,Out,origins,stable,sharedPendingStates).analyze() : null;
       if (isReferenceResult) {
         result.add(outEquation);
         result.add(new Equation<Key,Value>(new Key(method,NullableOut,stable),NullableMethodAnalysis.analyze(methodNode,origins,jsr)));
@@ -105,7 +108,7 @@ catch (      Throwable e) {
         if (ASMUtils.isReferenceType(argumentTypes[i])) {
           boolean possibleNPE=false;
           if (leakingParameters[i]) {
-            NonNullInAnalysis notNullInAnalysis=new NonNullInAnalysis(richControlFlow,new In(i,In.NOT_NULL_MASK),stable);
+            NonNullInAnalysis notNullInAnalysis=new NonNullInAnalysis(richControlFlow,new In(i,In.NOT_NULL_MASK),stable,sharedPendingActions,sharedResults);
             Equation<Key,Value> notNullParamEquation=notNullInAnalysis.analyze();
             possibleNPE=notNullInAnalysis.possibleNPE;
             notNullParam=notNullParamEquation.rhs.equals(FINAL_NOT_NULL);
@@ -119,7 +122,7 @@ catch (      Throwable e) {
               result.add(new Equation<Key,Value>(new Key(method,new In(i,In.NULLABLE_MASK),stable),FINAL_TOP));
             }
  else {
-              result.add(new NullableInAnalysis(richControlFlow,new In(i,In.NULLABLE_MASK),stable).analyze());
+              result.add(new NullableInAnalysis(richControlFlow,new In(i,In.NULLABLE_MASK),stable,sharedPendingStates).analyze());
             }
           }
  else {
@@ -131,9 +134,9 @@ catch (      Throwable e) {
                 result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),FINAL_BOT));
               }
  else {
-                result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.Null),origins,stable).analyze());
+                result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.Null),origins,stable,sharedPendingStates).analyze());
               }
-              result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.NotNull),origins,stable).analyze());
+              result.add(new InOutAnalysis(richControlFlow,new InOut(i,Value.NotNull),origins,stable,sharedPendingStates).analyze());
             }
  else {
               result.add(new Equation<Key,Value>(new Key(method,new InOut(i,Value.Null),stable),outEquation.rhs));
