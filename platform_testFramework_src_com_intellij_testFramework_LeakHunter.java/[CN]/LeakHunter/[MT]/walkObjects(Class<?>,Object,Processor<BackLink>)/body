@@ -1,10 +1,13 @@
 {
+  TIntHashSet visited=new TIntHashSet();
+  Queue<BackLink> toVisit=new Queue<BackLink>(1000000);
+  toVisit.addLast(new BackLink(startRoot,null,null));
   while (true) {
     if (toVisit.isEmpty())     return;
-    BackLink backLink=toVisit.pop();
+    BackLink backLink=toVisit.pullFirst();
     Object root=backLink.value;
-    if (!visited.add(root))     continue;
-    Class rootClass=backLink.aClass;
+    if (!visited.add(System.identityHashCode(root)))     continue;
+    Class rootClass=root.getClass();
     for (    Field field : getAllFields(rootClass)) {
       String fieldName=field.getName();
       if (root instanceof Reference && "referent".equals(fieldName))       continue;
@@ -19,29 +22,25 @@ catch (      IllegalAccessException e) {
         throw new RuntimeException(e);
       }
       if (value == null)       continue;
-      Class valueClass=value.getClass();
+      Class<?> valueClass=value.getClass();
       if (lookFor.isAssignableFrom(valueClass) && isReallyLeak(field,fieldName,value,valueClass)) {
-        BackLink newBackLink=new BackLink(valueClass,value,field,backLink);
+        BackLink newBackLink=new BackLink(value,field,backLink);
         leakProcessor.process(newBackLink);
       }
  else {
-        BackLink newBackLink=new BackLink(valueClass,value,field,backLink);
-        if (toFollow(valueClass)) {
-          toVisit.push(newBackLink);
-        }
+        BackLink newBackLink=new BackLink(value,field,backLink);
+        toVisit.addLast(newBackLink);
       }
     }
     if (rootClass.isArray()) {
-      if (toFollow(rootClass.getComponentType())) {
-        try {
-          for (          Object o : (Object[])root) {
-            if (o == null)             continue;
-            Class oClass=o.getClass();
-            toVisit.push(new BackLink(oClass,o,null,backLink));
-          }
+      try {
+        for (        Object o : (Object[])root) {
+          if (o == null)           continue;
+          if (isTrivial(o.getClass()))           continue;
+          toVisit.addLast(new BackLink(o,null,backLink));
         }
- catch (        ClassCastException ignored) {
-        }
+      }
+ catch (      ClassCastException ignored) {
       }
     }
   }
