@@ -16,27 +16,17 @@
               int endOffset=controlFlow.getEndOffset(body);
               final Collection<PsiStatement> exitPoints=ControlFlowUtil.findExitPointsAndStatements(controlFlow,startOffset,endOffset,new IntArrayList(),PsiContinueStatement.class,PsiBreakStatement.class,PsiReturnStatement.class,PsiThrowStatement.class);
               if (exitPoints.isEmpty()) {
-                final boolean[] effectivelyFinal={true};
-                body.accept(new JavaRecursiveElementWalkingVisitor(){
-                  @Override public void visitElement(                  PsiElement element){
-                    if (!effectivelyFinal[0])                     return;
-                    super.visitElement(element);
-                  }
-                  @Override public void visitReferenceExpression(                  PsiReferenceExpression expression){
-                    if (!effectivelyFinal[0])                     return;
-                    super.visitReferenceExpression(expression);
-                    final PsiElement resolve=expression.resolve();
-                    if (resolve instanceof PsiVariable && !(resolve instanceof PsiField)) {
-                      effectivelyFinal[0]=HighlightControlFlowUtil.isEffectivelyFinal((PsiVariable)resolve,body,expression);
-                    }
+                final List<PsiVariable> usedVariables=ControlFlowUtil.getUsedVariables(controlFlow,startOffset,endOffset);
+                for (                PsiVariable variable : usedVariables) {
+                  if (!HighlightControlFlowUtil.isEffectivelyFinal(variable,body,null)) {
+                    return;
                   }
                 }
-);
-                if (effectivelyFinal[0] && ExceptionUtil.getThrownCheckedExceptions(new PsiElement[]{body}).isEmpty()) {
+                if (ExceptionUtil.getThrownCheckedExceptions(new PsiElement[]{body}).isEmpty()) {
                   if (isCollectCall(body)) {
                     holder.registerProblem(iteratedValue,"Can be replaced with collect call",ProblemHighlightType.GENERIC_ERROR_OR_WARNING,new ReplaceWithCollectCallFix());
                   }
- else                   if (!isTrivial(body,statement.getIterationParameter(),iteratedValueType)) {
+ else                   if (!isTrivial(body,statement.getIterationParameter())) {
                     holder.registerProblem(iteratedValue,"Can be replaced with foreach call",ProblemHighlightType.GENERIC_ERROR_OR_WARNING,new ReplaceWithForeachCallFix());
                   }
                 }
