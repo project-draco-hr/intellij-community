@@ -29,18 +29,45 @@ catch (          IndexNotReadyException e) {
 ;
       final long startTime=System.currentTimeMillis();
       if (myNeedReadAction) {
-        if (!ApplicationManagerEx.getApplicationEx().tryRunReadAction(new Runnable(){
-          @Override public void run(){
-            IconDeferrerImpl.evaluateDeferred(evalRunnable);
-            if (myAutoUpdatable) {
-              myLastCalcTime=System.currentTimeMillis();
-              myLastTimeSpent=myLastCalcTime - startTime;
-            }
+        final ProgressIndicatorBase progress=new ProgressIndicatorBase();
+        final ApplicationAdapter listener=new ApplicationAdapter(){
+          @Override public void beforeWriteActionStart(          Object action){
+            progress.cancel();
           }
         }
+;
+        ApplicationManager.getApplication().invokeAndWait(new Runnable(){
+          @Override public void run(){
+            ApplicationManager.getApplication().addApplicationListener(listener);
+          }
+        }
+,ModalityState.any());
+        try {
+          final Ref<Boolean> cancelled=new Ref<Boolean>();
+          ProgressManager.getInstance().runProcess(new Runnable(){
+            @Override public void run(){
+              if (!ApplicationManagerEx.getApplicationEx().tryRunReadAction(new Runnable(){
+                @Override public void run(){
+                  IconDeferrerImpl.evaluateDeferred(evalRunnable);
+                  if (myAutoUpdatable) {
+                    myLastCalcTime=System.currentTimeMillis();
+                    myLastTimeSpent=myLastCalcTime - startTime;
+                  }
+                }
+              }
 )) {
-          myIsScheduled=false;
-          return;
+                myIsScheduled=false;
+                cancelled.set(Boolean.TRUE);
+              }
+            }
+          }
+,progress);
+          if (cancelled.get() == Boolean.TRUE)           return;
+        }
+ catch (        ProcessCanceledException e) {
+        }
+ finally {
+          ApplicationManager.getApplication().removeApplicationListener(listener);
         }
       }
  else {

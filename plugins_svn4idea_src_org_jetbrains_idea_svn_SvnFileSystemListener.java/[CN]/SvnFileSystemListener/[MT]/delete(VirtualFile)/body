@@ -1,4 +1,5 @@
 {
+  startOperation(file);
   final SvnVcs vcs=getVCS(file);
   if (vcs != null && SvnUtil.isAdminDirectory(file)) {
     return true;
@@ -7,10 +8,7 @@
   final VcsShowConfirmationOption.Value value=vcs.getDeleteConfirmation().getValue();
   if (VcsShowConfirmationOption.Value.DO_NOTHING_SILENTLY.equals(value))   return false;
   final File ioFile=getIOFile(file);
-  if (!SvnUtil.isSvnVersioned(vcs.getProject(),ioFile.getParentFile())) {
-    return false;
-  }
-  if (SvnUtil.isWorkingCopyRoot(ioFile)) {
+  if (!SvnUtil.isSvnVersioned(vcs,ioFile.getParentFile()) || SvnUtil.isWorkingCopyRoot(ioFile)) {
     return false;
   }
   Status status=getFileStatus(vcs,ioFile);
@@ -24,22 +22,20 @@
     return true;
   }
  else {
-    if (vcs != null) {
-      if (isAboveSourceOfCopyOrMove(vcs.getProject(),ioFile)) {
-        myDeletedFiles.putValue(vcs.getProject(),ioFile);
-        return true;
+    if (isAboveSourceOfCopyOrMove(vcs.getProject(),ioFile)) {
+      myDeletedFiles.putValue(vcs.getProject(),ioFile);
+      return true;
+    }
+    if (status.is(StatusType.STATUS_ADDED)) {
+      try {
+        createRevertAction(vcs,ioFile,false).execute();
       }
-      if (status.is(StatusType.STATUS_ADDED)) {
-        try {
-          createRevertAction(vcs,ioFile,false).execute();
-        }
- catch (        VcsException e) {
-        }
+ catch (      VcsException e) {
       }
+    }
  else {
-        myDeletedFiles.putValue(vcs.getProject(),ioFile);
-        if (file.isDirectory() || isUndo(vcs))         return true;
-      }
+      myDeletedFiles.putValue(vcs.getProject(),ioFile);
+      if (file.isDirectory() || isUndo(vcs))       return true;
     }
     return false;
   }
