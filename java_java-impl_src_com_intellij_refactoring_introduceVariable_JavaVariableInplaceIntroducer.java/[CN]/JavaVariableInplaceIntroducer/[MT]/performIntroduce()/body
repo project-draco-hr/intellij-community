@@ -1,0 +1,38 @@
+{
+  final PsiVariable psiVariable=getVariable();
+  if (psiVariable == null) {
+    return;
+  }
+  TypeSelectorManagerImpl.typeSelected(psiVariable.getType(),myTypeSelectorManager.getDefaultType());
+  if (myCanBeFinalCb != null) {
+    JavaRefactoringSettings.getInstance().INTRODUCE_LOCAL_CREATE_FINALS=psiVariable.hasModifierProperty(PsiModifier.FINAL);
+  }
+  final Document document=myEditor.getDocument();
+  LOG.assertTrue(psiVariable.isValid());
+  adjustLine(psiVariable,document);
+  int startOffset=getExprMarker() != null && getExprMarker().isValid() ? getExprMarker().getStartOffset() : psiVariable.getTextOffset();
+  final PsiFile file=psiVariable.getContainingFile();
+  final PsiReference referenceAt=file.findReferenceAt(startOffset);
+  if (referenceAt != null && referenceAt.resolve() instanceof PsiVariable) {
+    startOffset=referenceAt.getElement().getTextRange().getEndOffset();
+  }
+ else {
+    final PsiDeclarationStatement declarationStatement=PsiTreeUtil.getParentOfType(psiVariable,PsiDeclarationStatement.class);
+    if (declarationStatement != null) {
+      startOffset=declarationStatement.getTextRange().getEndOffset();
+    }
+  }
+  myEditor.getCaretModel().moveToOffset(startOffset);
+  myEditor.getScrollingModel().scrollToCaret(ScrollType.MAKE_VISIBLE);
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    public void run(){
+      if (psiVariable.getInitializer() != null) {
+        appendTypeCasts(getOccurrenceMarkers(),file,myProject,psiVariable);
+      }
+      if (myConflictResolver != null && myInsertedName != null && isIdentifier(myInsertedName,psiVariable.getLanguage())) {
+        myConflictResolver.apply(psiVariable.getName());
+      }
+    }
+  }
+);
+}
