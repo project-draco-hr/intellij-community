@@ -11,15 +11,21 @@ synchronized (NOTIFICATION_LOCK) {
   }
   Collection<VcsRootError> importantUnregisteredRoots=getImportantUnregisteredMappings(errors);
   Collection<VcsRootError> invalidRoots=getInvalidRoots(errors);
-  if (invalidRoots.isEmpty() && (importantUnregisteredRoots.isEmpty() || myReportedUnregisteredRoots.containsAll(importantUnregisteredRoots))) {
+  List<String> unregRootPaths=ContainerUtil.map(importantUnregisteredRoots,new Function<VcsRootError,String>(){
+    @Override public String fun(    @NotNull VcsRootError error){
+      return error.getMapping();
+    }
+  }
+);
+  if (invalidRoots.isEmpty() && (importantUnregisteredRoots.isEmpty() || myReportedUnregisteredRoots.containsAll(unregRootPaths))) {
     return;
   }
-  myReportedUnregisteredRoots.addAll(importantUnregisteredRoots);
+  myReportedUnregisteredRoots.addAll(unregRootPaths);
   String title=makeTitle(importantUnregisteredRoots,invalidRoots);
   String description=makeDescription(importantUnregisteredRoots,invalidRoots);
 synchronized (NOTIFICATION_LOCK) {
     expireNotification();
-    NotificationListener listener=new MyNotificationListener(myProject,mySettings);
+    NotificationListener listener=new MyNotificationListener(myProject,mySettings,unregRootPaths);
     VcsNotifier notifier=VcsNotifier.getInstance(myProject);
     myNotification=invalidRoots.isEmpty() ? notifier.notifyMinorInfo(title,description,listener) : notifier.notifyError(title,description,listener);
   }
