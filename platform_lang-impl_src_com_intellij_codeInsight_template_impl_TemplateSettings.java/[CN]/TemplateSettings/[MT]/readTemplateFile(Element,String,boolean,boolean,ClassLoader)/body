@@ -1,0 +1,41 @@
+{
+  if (!TEMPLATE_SET.equals(element.getName())) {
+    throw new InvalidDataException();
+  }
+  String groupName=element.getAttributeValue(GROUP);
+  if (groupName == null || groupName.isEmpty())   groupName=defGroupName;
+  TemplateGroup result=new TemplateGroup(groupName,element.getAttributeValue("REPLACE"));
+  Map<String,TemplateImpl> created=new LinkedHashMap<String,TemplateImpl>();
+  for (  Element child : element.getChildren(TEMPLATE)) {
+    TemplateImpl template=readTemplateFromElement(isDefault,groupName,child,classLoader);
+    TemplateImpl existing=getTemplate(template.getKey(),template.getGroupName());
+    boolean defaultTemplateModified=isDefault && (myState.deletedKeys.contains(TemplateKey.keyOf(template)) || myTemplatesById.containsKey(template.getId()) || existing != null);
+    if (!defaultTemplateModified) {
+      created.put(template.getKey(),template);
+    }
+    if (isDefault && existing != null) {
+      existing.getTemplateContext().setDefaultContext(template.getTemplateContext());
+    }
+  }
+  if (registerTemplate) {
+    TemplateGroup existingScheme=mySchemesManager.findSchemeByName(result.getName());
+    if (existingScheme != null) {
+      result=existingScheme;
+    }
+  }
+  for (  TemplateImpl template : created.values()) {
+    if (registerTemplate) {
+      clearPreviouslyRegistered(template);
+      addTemplateImpl(template);
+    }
+    addTemplateById(template);
+    result.addElement(template);
+  }
+  if (registerTemplate) {
+    TemplateGroup existingScheme=mySchemesManager.findSchemeByName(result.getName());
+    if (existingScheme == null && !result.isEmpty()) {
+      mySchemesManager.addNewScheme(result,false);
+    }
+  }
+  return result.isEmpty() ? null : result;
+}
