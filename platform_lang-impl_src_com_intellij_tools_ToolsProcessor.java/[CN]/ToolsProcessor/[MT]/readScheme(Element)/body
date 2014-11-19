@@ -1,0 +1,42 @@
+{
+  if (!TOOL_SET.equals(root.getName())) {
+    throw new InvalidDataException();
+  }
+  String attrName=root.getAttributeValue(ATTRIBUTE_NAME);
+  String groupName=StringUtil.isEmpty(attrName) ? Tool.DEFAULT_GROUP_NAME : attrName;
+  ToolsGroup<T> result=createToolsGroup(groupName);
+  final PathMacroManager macroManager=PathMacroManager.getInstance(ApplicationManager.getApplication());
+  for (  Element element : root.getChildren(TOOL)) {
+    T tool=createTool();
+    readToolAttributes(element,tool);
+    Element exec=element.getChild(EXEC);
+    if (exec != null) {
+      for (      final Object o1 : exec.getChildren(ELEMENT_OPTION)) {
+        Element optionElement=(Element)o1;
+        String name=optionElement.getAttributeValue(ATTRIBUTE_NAME);
+        String value=optionElement.getAttributeValue(ATTRIBUTE_VALUE);
+        if (WORKING_DIRECTORY.equals(name)) {
+          if (value != null) {
+            final String replace=macroManager.expandPath(value).replace('/',File.separatorChar);
+            tool.setWorkingDirectory(replace);
+          }
+        }
+        if (COMMAND.equals(name)) {
+          tool.setProgram(macroManager.expandPath(BaseToolManager.convertString(value)));
+        }
+        if (PARAMETERS.equals(name)) {
+          tool.setParameters(macroManager.expandPath(BaseToolManager.convertString(value)));
+        }
+      }
+    }
+    for (    final Object o2 : element.getChildren(FILTER)) {
+      Element childNode=(Element)o2;
+      FilterInfo filterInfo=new FilterInfo();
+      filterInfo.readExternal(childNode);
+      tool.addOutputFilter(filterInfo);
+    }
+    tool.setGroup(groupName);
+    result.addElement(tool);
+  }
+  return result;
+}

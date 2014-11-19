@@ -46,7 +46,10 @@
     }
   }
 ;
+  myTree.setUI(new MyTreeUi());
+  myTree.setBorder(new EmptyBorder(2,0,0,0));
   myTree.setEditable(true);
+  myTree.setHorizontalAutoScrollingEnabled(false);
   myTree.setShowsRootHandles(root.getChildCount() > 1);
   MyTreeCellEditor treeCellEditor=new MyTreeCellEditor();
   myTree.setCellEditor(treeCellEditor);
@@ -54,7 +57,14 @@
     @Override public void editingStopped(    ChangeEvent e){
       DefaultMutableTreeNode node=(DefaultMutableTreeNode)myTree.getLastSelectedPathComponent();
       if (node != null && node instanceof EditableTreeNode) {
-        ((EditableTreeNode)node).fireOnChange();
+        JComponent editedComponent=(JComponent)node.getUserObject();
+        InputVerifier verifier=editedComponent.getInputVerifier();
+        if (verifier != null && !verifier.verify(editedComponent)) {
+          ((EditableTreeNode)node).fireOnCancel();
+        }
+ else {
+          ((EditableTreeNode)node).fireOnChange();
+        }
       }
       myTree.firePropertyChange(PushLogTreeUtil.EDIT_MODE_PROP,true,false);
     }
@@ -67,6 +77,7 @@
     }
   }
 );
+  myTree.setInvokesStopCellEditing(true);
   myTree.setRootVisible(false);
   TreeUtil.collapseAll(myTree,1);
   final VcsBranchEditorListener linkMouseListener=new VcsBranchEditorListener(myTreeCellRenderer);
@@ -80,15 +91,19 @@
 );
   myTree.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_F2,0),START_EDITING);
   myTree.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER,0),"");
-  myTree.setRowHeight(0);
   ToolTipManager.sharedInstance().registerComponent(myTree);
+  PopupHandler.installPopupHandler(myTree,VcsLogUiImpl.POPUP_ACTION_GROUP,COMMIT_MENU);
   myChangesBrowser=new ChangesBrowser(project,null,Collections.<Change>emptyList(),null,false,true,null,ChangesBrowser.MyUseCase.LOCAL_CHANGES,null);
   myChangesBrowser.getDiffAction().registerCustomShortcutSet(CommonShortcuts.getDiff(),myTree);
-  myChangesBrowser.addToolbarAction(createEditSourceAction());
+  myChangesBrowser.addToolbarAction(ActionManager.getInstance().getAction(IdeActions.ACTION_EDIT_SOURCE));
   setDefaultEmptyText();
   Splitter splitter=new Splitter(false,0.7f);
-  splitter.setFirstComponent(ScrollPaneFactory.createScrollPane(myTree));
+  myScrollPane=ScrollPaneFactory.createScrollPane(myTree);
+  myScrollPane.setOpaque(false);
+  splitter.setFirstComponent(myScrollPane);
   splitter.setSecondComponent(myChangesBrowser);
   setLayout(new BorderLayout());
   add(splitter);
+  myTree.setMinimumSize(new Dimension(200,myTree.getPreferredSize().height));
+  myTree.setRowHeight(0);
 }

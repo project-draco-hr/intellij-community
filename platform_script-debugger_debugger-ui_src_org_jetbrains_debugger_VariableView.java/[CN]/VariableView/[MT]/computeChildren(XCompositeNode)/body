@@ -18,32 +18,29 @@
   final ObjectValue objectValue=(ObjectValue)value;
   final boolean hasNamedProperties=objectValue.hasProperties() != ThreeState.NO;
   boolean hasIndexedProperties=objectValue.hasIndexedProperties() != ThreeState.NO;
-  ActionCallback.Chunk chunk=new ActionCallback.Chunk();
-  ActionCallback additionalProperties=getViewSupport().computeAdditionalObjectProperties(objectValue,variable,this,node);
+  List<Promise<?>> promises=new SmartList<Promise<?>>();
+  Promise<Void> additionalProperties=getViewSupport().computeAdditionalObjectProperties(objectValue,variable,this,node);
   if (additionalProperties != null) {
-    chunk.add(additionalProperties);
+    promises.add(additionalProperties);
   }
   if (hasIndexedProperties) {
-    chunk.add(computeIndexedProperties((ArrayValue)objectValue,node,!hasNamedProperties && additionalProperties == null));
+    promises.add(computeIndexedProperties((ArrayValue)objectValue,node,!hasNamedProperties && additionalProperties == null));
   }
   if (hasNamedProperties) {
-    final ActionCallback namedPropertiesCallback;
     if (additionalProperties == null || additionalProperties.isProcessed()) {
-      namedPropertiesCallback=computeNamedProperties(objectValue,node,!hasIndexedProperties && additionalProperties == null);
+      promises.add(computeNamedProperties(objectValue,node,!hasIndexedProperties && additionalProperties == null));
     }
  else {
-      namedPropertiesCallback=new ActionCallback();
-      additionalProperties.doWhenDone(new Runnable(){
-        @Override public void run(){
-          computeNamedProperties(objectValue,node,true).notify(namedPropertiesCallback);
+      promises.add(additionalProperties.then(new AsyncFunction<Void,List<Variable>>(){
+        @NotNull @Override public Promise<List<Variable>> fun(        Void o){
+          return computeNamedProperties(objectValue,node,true);
         }
       }
-).notifyWhenRejected(namedPropertiesCallback);
+));
     }
-    chunk.add(namedPropertiesCallback);
   }
   if (hasIndexedProperties == hasNamedProperties || additionalProperties != null) {
-    chunk.create().doWhenProcessed(new Runnable(){
+    Promise.all(promises).processed(new ConsumerRunnable(){
       @Override public void run(){
         if (!node.isObsolete()) {
           node.addChildren(XValueChildrenList.EMPTY,true);

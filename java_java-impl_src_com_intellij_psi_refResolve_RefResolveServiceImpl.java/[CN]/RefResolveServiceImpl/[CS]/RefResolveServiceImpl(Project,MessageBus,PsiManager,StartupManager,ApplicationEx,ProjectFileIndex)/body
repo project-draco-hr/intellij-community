@@ -1,0 +1,47 @@
+{
+  super(project);
+  ((FutureTask)resolveProcess).run();
+  myApplication=application;
+  myProjectFileIndex=projectFileIndex;
+  if (ENABLED) {
+    File dataFile=new File(getStorageDirectory(),"data");
+    fileIsResolved=ConcurrentBitSet.readFrom(new File(getStorageDirectory(),"bitSet"));
+    int maxId=FSRecords.getMaxId();
+    PersistentIntList list=new PersistentIntList(dataFile,dataFile.exists() ? 0 : maxId);
+    if (list.getSize() == maxId) {
+      storage=list;
+    }
+ else {
+      list.dispose();
+      storage=new PersistentIntList(dataFile,maxId);
+      fileIsResolved.clear();
+    }
+    Disposer.register(this,storage);
+    if (!application.isUnitTestMode()) {
+      startupManager.runWhenProjectIsInitialized(new Runnable(){
+        @Override public void run(){
+          init(messageBus,psiManager);
+        }
+      }
+);
+    }
+    log=new FileWriter(new File(getStorageDirectory(),"log.txt"));
+    Disposer.register(this,new Disposable(){
+      @Override public void dispose(){
+        try {
+          save();
+          log.close();
+        }
+ catch (        IOException e) {
+          LOG.error(e);
+        }
+      }
+    }
+);
+  }
+ else {
+    log=null;
+    fileIsResolved=null;
+    storage=null;
+  }
+}

@@ -1,0 +1,22 @@
+{
+  ensureListening();
+  return projectTaskQueue.submit(new Callable<Pair<RequestFuture<PreloadedProcessMessageHandler>,OSProcessHandler>>(){
+    public Pair<RequestFuture<PreloadedProcessMessageHandler>,OSProcessHandler> call() throws Exception {
+      final RequestFuture<PreloadedProcessMessageHandler> future=new RequestFuture<PreloadedProcessMessageHandler>(new PreloadedProcessMessageHandler(),UUID.randomUUID(),new CancelBuildSessionAction<PreloadedProcessMessageHandler>());
+      try {
+        myMessageDispatcher.registerBuildMessageHandler(future,null);
+        final OSProcessHandler processHandler=launchBuildProcess(project,myListenPort,future.getRequestID(),true);
+        final StringBuffer errors=new StringBuffer();
+        processHandler.addProcessListener(new StdOutputCollector(errors));
+        STDERR_OUTPUT.set(processHandler,errors);
+        processHandler.startNotify();
+        return Pair.create(future,processHandler);
+      }
+ catch (      ExecutionException e) {
+        handleProcessExecutionFailure(future.getRequestID(),e);
+        throw e;
+      }
+    }
+  }
+);
+}

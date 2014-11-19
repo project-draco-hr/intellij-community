@@ -7,35 +7,77 @@
   if (!dataStorageRoot.exists()) {
     myBuildRunner.setForceCleanCaches(true);
   }
-  final DataInputStream fsStateStream=createFSDataStream(dataStorageRoot);
-  if (fsStateStream != null) {
-    final boolean hasWorkToDoWithModules=fsStateStream.readBoolean() || myInitialFSDelta == null;
+  final ProjectDescriptor preloadedProject=myPreloadedData != null ? myPreloadedData.getProjectDescriptor() : null;
+  final DataInputStream fsStateStream=preloadedProject != null || myInitialFSDelta == null ? null : createFSDataStream(dataStorageRoot,myInitialFSDelta.getOrdinal());
+  if (fsStateStream != null || myPreloadedData != null) {
+    final boolean hasWorkFlag=fsStateStream != null ? fsStateStream.readBoolean() : myPreloadedData.hasWorkToDo();
+    final boolean hasWorkToDoWithModules=hasWorkFlag || myInitialFSDelta == null;
     if (!myForceModelLoading && (myBuildType == BuildType.BUILD || myBuildType == BuildType.UP_TO_DATE_CHECK) && !hasWorkToDoWithModules&& scopeContainsModulesOnlyForIncrementalMake(myScopes)&& !containsChanges(myInitialFSDelta)) {
-      updateFsStateOnDisk(dataStorageRoot,fsStateStream,myInitialFSDelta.getOrdinal());
-      return;
+      final DataInputStream storedFsData;
+      if (myPreloadedData != null) {
+        storedFsData=createFSDataStream(dataStorageRoot,myInitialFSDelta.getOrdinal());
+        if (storedFsData != null) {
+          storedFsData.readBoolean();
+        }
+      }
+ else {
+        storedFsData=fsStateStream;
+      }
+      if (storedFsData != null) {
+        updateFsStateOnDisk(dataStorageRoot,storedFsData,myInitialFSDelta.getOrdinal());
+        LOG.info("No changes found since last build. Exiting.");
+        if (preloadedProject != null) {
+          preloadedProject.release();
+        }
+        return;
+      }
     }
   }
-  final BuildFSState fsState=new BuildFSState(false);
+  final BuildFSState fsState=preloadedProject != null ? preloadedProject.fsState : new BuildFSState(false);
   try {
-    final ProjectDescriptor pd=myBuildRunner.load(msgHandler,dataStorageRoot,fsState);
-    TimingLog.LOG.debug("Project descriptor loaded");
-    myProjectDescriptor=pd;
-    if (fsStateStream != null) {
-      try {
-        try {
-          fsState.load(fsStateStream,pd.getModel(),pd.getBuildRootIndex());
-          applyFSEvent(pd,myInitialFSDelta,false);
-          TimingLog.LOG.debug("FS Delta loaded");
-        }
-  finally {
-          fsStateStream.close();
+    final ProjectDescriptor pd;
+    if (preloadedProject != null) {
+      pd=preloadedProject;
+      final List<BuildMessage> preloadMessages=myPreloadedData.getLoadMessages();
+      if (!preloadMessages.isEmpty()) {
+        for (        BuildMessage message : preloadMessages) {
+          msgHandler.processMessage(message);
         }
       }
- catch (      Throwable e) {
-        LOG.error(e);
+      if (myInitialFSDelta == null || myPreloadedData.getFsEventOrdinal() + 1L != myInitialFSDelta.getOrdinal()) {
         fsState.clearAll();
       }
+ else {
+        try {
+          applyFSEvent(pd,myInitialFSDelta,false);
+        }
+ catch (        Throwable e) {
+          LOG.error(e);
+          fsState.clearAll();
+        }
+      }
     }
+ else {
+      pd=myBuildRunner.load(msgHandler,dataStorageRoot,fsState);
+      TimingLog.LOG.debug("Project descriptor loaded");
+      if (fsStateStream != null) {
+        try {
+          try {
+            fsState.load(fsStateStream,pd.getModel(),pd.getBuildRootIndex());
+            applyFSEvent(pd,myInitialFSDelta,false);
+            TimingLog.LOG.debug("FS Delta loaded");
+          }
+  finally {
+            fsStateStream.close();
+          }
+        }
+ catch (        Throwable e) {
+          LOG.error(e);
+          fsState.clearAll();
+        }
+      }
+    }
+    myProjectDescriptor=pd;
     myLastEventOrdinal=myInitialFSDelta != null ? myInitialFSDelta.getOrdinal() : 0L;
     myInitialFSDelta=null;
     myEventsProcessor.startProcessing();

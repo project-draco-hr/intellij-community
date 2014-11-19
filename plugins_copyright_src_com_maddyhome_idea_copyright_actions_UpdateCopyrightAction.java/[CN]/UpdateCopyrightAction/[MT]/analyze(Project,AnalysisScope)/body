@@ -1,7 +1,6 @@
 {
   PropertiesComponent.getInstance().setValue(UPDATE_EXISTING_COPYRIGHTS,String.valueOf(myUpdateExistingCopyrightsCb.isSelected()));
-  if (scope.checkScopeWritable(project))   return;
-  final List<Runnable> preparations=new ArrayList<Runnable>();
+  final Map<PsiFile,Runnable> preparations=new LinkedHashMap<PsiFile,Runnable>();
   Task.Backgroundable task=new Task.Backgroundable(project,"Prepare Copyright...",true){
     @Override public void run(    @NotNull final ProgressIndicator indicator){
       scope.accept(new PsiElementVisitor(){
@@ -9,13 +8,19 @@
           if (indicator.isCanceled()) {
             return;
           }
-          preparations.add(new UpdateCopyrightProcessor(project,ModuleUtilCore.findModuleForPsiElement(file),file).preprocessFile(file,myUpdateExistingCopyrightsCb.isSelected()));
+          final Module module=ModuleUtilCore.findModuleForPsiElement(file);
+          final UpdateCopyrightProcessor processor=new UpdateCopyrightProcessor(project,module,file);
+          final Runnable runnable=processor.preprocessFile(file,myUpdateExistingCopyrightsCb.isSelected());
+          if (runnable != EmptyRunnable.getInstance()) {
+            preparations.put(file,runnable);
+          }
         }
       }
 );
     }
     @Override public void onSuccess(){
       if (!preparations.isEmpty()) {
+        if (!FileModificationService.getInstance().preparePsiElementsForWrite(preparations.keySet()))         return;
         final SequentialModalProgressTask progressTask=new SequentialModalProgressTask(project,UpdateCopyrightProcessor.TITLE,true);
         progressTask.setMinIterationTime(200);
         progressTask.setTask(new UpdateCopyrightSequentialTask(preparations,progressTask));
