@@ -3,33 +3,13 @@
   final ChangesChecker checker=new ChangesChecker(mySvnVcs,collector);
   checker.gather(changes);
   exceptions.addAll(checker.getExceptions());
-  ProgressTracker revertHandler=new ProgressTracker(){
-    public void consume(    ProgressEvent event){
-      if (event.getAction() == EventAction.REVERT) {
-        final File file=event.getFile();
-        if (file != null) {
-          listener.accept(file);
-        }
-      }
-      if (event.getAction() == EventAction.FAILED_REVERT) {
-        exceptions.add(new VcsException("Revert failed"));
-      }
-    }
-    public void checkCancelled(){
-      listener.checkCanceled();
-    }
-  }
-;
-  final List<CopiedAsideInfo> fromToModified=new ArrayList<CopiedAsideInfo>();
-  final Map<File,PropertiesMap> properties=ContainerUtil.newHashMap();
-  moveRenamesToTmp(exceptions,fromToModified,properties,collector);
-  final Reverter reverter=new Reverter(mySvnVcs,revertHandler,exceptions);
+  final Reverter reverter=new Reverter(mySvnVcs,listener,exceptions);
+  reverter.moveRenamesToTmp(collector);
   reverter.revert(checker.getForAdds(),true);
   reverter.revert(checker.getForDeletes(),true);
   reverter.revert(checker.getForEdits(),false);
-  moveGroup(exceptions,fromToModified,properties);
-  final List<Couple<File>> toBeDeleted=collector.getToBeDeleted();
-  for (  Couple<File> pair : toBeDeleted) {
+  reverter.moveGroup();
+  for (  Couple<File> pair : collector.getToBeDeleted()) {
     if (pair.getFirst().exists()) {
       FileUtil.delete(pair.getSecond());
     }
