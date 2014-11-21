@@ -1,0 +1,24 @@
+{
+  final Project project=file.getProject();
+  final Document document=PsiDocumentManager.getInstance(project).getDocument(file);
+  if (document == null)   return;
+  final long stamp=document.getModificationStamp();
+  ApplicationManager.getApplication().invokeLater(new Runnable(){
+    @Override public void run(){
+      if (project.isDisposed() || document.getModificationStamp() != stamp)       return;
+      final UndoManager undoManager=UndoManager.getInstance(project);
+      if (undoManager.isUndoInProgress() || undoManager.isRedoInProgress())       return;
+      PsiDocumentManager.getInstance(project).commitAllDocuments();
+      String beforeText=file.getText();
+      final long oldStamp=document.getModificationStamp();
+      DocumentUtil.writeInRunUndoTransparentAction(runnable);
+      if (oldStamp != document.getModificationStamp()) {
+        String afterText=file.getText();
+        if (Comparing.strEqual(beforeText,afterText)) {
+          LOG.error(LogMessageEx.createEvent("Import optimizer  hasn't optimized any imports",file.getViewProvider().getVirtualFile().getPath(),AttachmentFactory.createAttachment(file.getViewProvider().getVirtualFile())));
+        }
+      }
+    }
+  }
+);
+}
