@@ -1,0 +1,43 @@
+{
+  ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+    @Override public void run(){
+      final List<PsiFile> chunk=new ArrayList<PsiFile>();
+      try {
+        scope.accept(new PsiElementVisitor(){
+          @Override public void visitFile(          final PsiFile file){
+            Document document=shouldProcess(file,headlessEnvironment,localScopeFiles);
+            if (document == null)             return;
+            document.getText();
+            chunk.add(file);
+            if (chunk.size() >= JobSchedulerImpl.CORES_COUNT) {
+              try {
+                chunksToInspect.put(new ArrayList<PsiFile>(chunk));
+              }
+ catch (              InterruptedException e) {
+                LOG.error(e);
+              }
+              chunk.clear();
+            }
+          }
+        }
+);
+        if (!chunk.isEmpty()) {
+          chunksToInspect.put(new ArrayList<PsiFile>(chunk));
+          chunk.clear();
+        }
+      }
+ catch (      InterruptedException e) {
+        LOG.error(e);
+      }
+ finally {
+        try {
+          chunksToInspect.put(Collections.<PsiFile>emptyList());
+        }
+ catch (        InterruptedException e) {
+          LOG.error(e);
+        }
+      }
+    }
+  }
+);
+}
