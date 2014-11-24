@@ -1,12 +1,16 @@
 {
-  ArrayList<UsageInfo> result=new ArrayList<UsageInfo>();
+  final ArrayList<UsageInfo> result=new ArrayList<UsageInfo>();
   ArrayList<UsageInfo> overridingMethods=new ArrayList<UsageInfo>();
+  ArrayList<UsageInfo> delegatingParams=new ArrayList<UsageInfo>();
   for (  UsageInfo usage : usages) {
     if (usage.isNonCodeUsage) {
       result.add(usage);
     }
  else     if (usage instanceof SafeDeleteOverridingMethodUsageInfo) {
       overridingMethods.add(usage);
+    }
+ else     if (usage instanceof SafeDeleteParameterCallHierarchyUsageInfo) {
+      delegatingParams.add(usage);
     }
  else {
       result.add(usage);
@@ -18,9 +22,25 @@
     }
  else {
       OverridingMethodsDialog dialog=new OverridingMethodsDialog(project,overridingMethods);
-      dialog.show();
-      if (!dialog.isOK())       return null;
+      if (!dialog.showAndGet()) {
+        return null;
+      }
       result.addAll(dialog.getSelected());
+    }
+  }
+  if (delegatingParams.size() == 1) {
+    final SafeDeleteParameterCallHierarchyUsageInfo parameterHierarchyUsageInfo=(SafeDeleteParameterCallHierarchyUsageInfo)delegatingParams.get(0);
+    if (ApplicationManager.getApplication().isUnitTestMode()) {
+      result.addAll(delegatingParams);
+    }
+ else {
+      final PsiMethod method=parameterHierarchyUsageInfo.getCalledMethod();
+      final PsiParameter parameter=parameterHierarchyUsageInfo.getReferencedElement();
+      final int parameterIndex=method.getParameterList().getParameterIndex(parameter);
+      final JavaCallerChooser chooser=new SafeDeleteJavaCallerChooser(method,project,parameterIndex,result);
+      if (!chooser.showAndGet()) {
+        return null;
+      }
     }
   }
   return result.toArray(new UsageInfo[result.size()]);
