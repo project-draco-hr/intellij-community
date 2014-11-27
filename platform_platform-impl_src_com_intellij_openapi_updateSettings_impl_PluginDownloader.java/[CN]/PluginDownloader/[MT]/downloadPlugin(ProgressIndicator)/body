@@ -6,26 +6,16 @@
   final File file=FileUtil.createTempFile(pluginsTemp,"plugin_","_download",true,false);
   progressIndicator.checkCanceled();
   progressIndicator.setText(IdeBundle.message("progress.downloading.plugin",getPluginName()));
-  return HttpRequests.request(myPluginUrl).supportGzip(false).effectiveUrlConsumer(new Consumer<String>(){
-    @Override public void consume(    String url){
-      myPluginUrl=url;
-    }
-  }
-).get(new ThrowableConvertor<URLConnection,File,IOException>(){
-    @Override public File convert(    URLConnection connection) throws IOException {
+  return HttpRequests.request(myPluginUrl).gzip(false).connect(new HttpRequests.RequestProcessor<File>(){
+    @Override public File process(    @NotNull HttpRequests.Request request) throws IOException {
       progressIndicator.checkCanceled();
-      InputStream input=HttpRequests.getInputStream(connection);
+      URLConnection connection=request.getConnection();
+      OutputStream fileOut=new FileOutputStream(file);
       try {
-        OutputStream fileOut=new FileOutputStream(file);
-        try {
-          NetUtils.copyStreamContent(progressIndicator,input,fileOut,connection.getContentLength());
-        }
-  finally {
-          fileOut.close();
-        }
+        NetUtils.copyStreamContent(progressIndicator,request.getInputStream(),fileOut,connection.getContentLength());
       }
   finally {
-        input.close();
+        fileOut.close();
       }
       if (myFileName == null) {
         myFileName=guessFileName(connection,file);

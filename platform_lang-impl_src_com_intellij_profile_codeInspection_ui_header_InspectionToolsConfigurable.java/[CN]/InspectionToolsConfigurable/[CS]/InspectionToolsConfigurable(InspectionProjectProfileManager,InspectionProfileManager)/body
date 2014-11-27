@@ -10,7 +10,7 @@
     @Override public void customize(    final JList list,    final Profile value,    final int index,    final boolean selected,    final boolean hasFocus){
       final String profileName=value.getName();
       final SingleInspectionProfilePanel singleInspectionProfilePanel=myPanels.get(value);
-      final boolean isShared=singleInspectionProfilePanel != null ? singleInspectionProfilePanel.isProfileShared() : false;
+      final boolean isShared=singleInspectionProfilePanel != null && singleInspectionProfilePanel.isProfileShared();
       setIcon(isShared ? AllIcons.General.ProjectSettings : AllIcons.General.Settings);
       setText(profileName);
     }
@@ -22,21 +22,33 @@
     }
   }
 ;
-  myProfilesHolder=new JPanel();
-  myProfilesHolder.setLayout(new CardLayout());
-  myManageButton=new ManageButton(new ManageButtonBuilder(){
+  JPanel profilesHolder=new JPanel();
+  profilesHolder.setLayout(new CardLayout());
+  JComponent manageButton=new ManageButton(new ManageButtonBuilder(){
     @Override public boolean isSharedToTeamMembers(){
       SingleInspectionProfilePanel panel=getSelectedPanel();
       return panel != null && panel.isProfileShared();
     }
-    @Override public void setShareToTeamMembers(    boolean share){
+    @Override public void setShareToTeamMembers(    boolean shared){
+      final InspectionProfileImpl inspectionProfile=getSelectedObject();
+      final String name=inspectionProfile.getName();
+      for (      Map.Entry<Profile,SingleInspectionProfilePanel> e : myPanels.entrySet()) {
+        final InspectionProfileImpl currentProfile=(InspectionProfileImpl)e.getKey();
+        if (currentProfile.getName().equals(name) && !currentProfile.equals(inspectionProfile)) {
+          final boolean curShared=e.getValue().isProfileShared();
+          if (curShared == shared) {
+            Messages.showErrorDialog((shared ? "Shared" : "Application level") + " profile with same name exists.","Inspections Settings");
+            return;
+          }
+        }
+      }
       final SingleInspectionProfilePanel panel=getSelectedPanel();
       LOG.assertTrue(panel != null,"No settings panel for: " + getSelectedObject());
-      panel.setProfileShared(share);
+      panel.setProfileShared(shared);
       myProfiles.repaint();
     }
     @Override public void copy(){
-      final InspectionProfileImpl newProfile=copyToNewProfile(0,getSelectedObject(),getProject());
+      final InspectionProfileImpl newProfile=copyToNewProfile(getSelectedObject(),getProject());
       if (newProfile != null) {
         final InspectionProfileImpl modifiableModel=(InspectionProfileImpl)newProfile.getModifiableModel();
         modifiableModel.setModified(true);
@@ -67,7 +79,7 @@
           myProfiles.showComboBoxCard();
         }
         @Override public boolean checkValid(        @NotNull String text){
-          final boolean isValid=text.equals(initialName) || !hasName(text);
+          final boolean isValid=text.equals(initialName) || !hasName(text,myPanels.get(inspectionProfile).isProfileShared());
           if (isValid) {
             myAuxiliaryRightPanel.showDescription(getSelectedObject().getDescription());
           }
@@ -92,6 +104,9 @@
     }
     @Override public void editDescription(){
       myAuxiliaryRightPanel.editDescription(getSelectedObject().getDescription());
+    }
+    @Override public boolean hasDescription(){
+      return !StringUtil.isEmpty(getSelectedObject().getDescription());
     }
     @Override public void export(){
       final FileChooserDescriptor descriptor=FileChooserDescriptorFactory.createSingleFolderDescriptor();
@@ -158,7 +173,7 @@ catch (          IOException e1) {
               if (Messages.showYesNoDialog(myWholePanel,"Undefined severities detected: " + StringUtil.join(levels,", ") + ". Do you want to create them?","Warning",Messages.getWarningIcon()) == Messages.YES) {
                 for (                String level : levels) {
                   final TextAttributes textAttributes=CodeInsightColors.WARNINGS_ATTRIBUTES.getDefaultAttributes();
-                  HighlightInfoType.HighlightInfoTypeImpl info=new HighlightInfoType.HighlightInfoTypeImpl(new HighlightSeverity(level,50),com.intellij.openapi.editor.colors.TextAttributesKey.createTextAttributesKey(level));
+                  HighlightInfoType.HighlightInfoTypeImpl info=new HighlightInfoType.HighlightInfoTypeImpl(new HighlightSeverity(level,50),TextAttributesKey.createTextAttributesKey(level));
                   myProfileManager.getOwnSeverityRegistrar().registerSeverity(new SeverityRegistrar.SeverityBasedTextAttributes(textAttributes.clone(),info),textAttributes.getErrorStripeColor());
                 }
               }
@@ -199,9 +214,9 @@ catch (          IOException e1) {
   }
 );
   toolbar.setLayout(new GridBagLayout());
-  toolbar.add(new JLabel(myHeaderTitle),new GridBagConstraints(0,0,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.VERTICAL,new Insets(10,5,0,0),0,0));
+  toolbar.add(new JLabel(HEADER_TITLE),new GridBagConstraints(0,0,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.VERTICAL,new Insets(10,5,0,0),0,0));
   toolbar.add(myProfiles,new GridBagConstraints(1,0,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.VERTICAL,new Insets(10,5,0,0),0,0));
-  toolbar.add(myManageButton,new GridBagConstraints(2,0,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.VERTICAL,new Insets(10,5,0,0),0,0));
+  toolbar.add(manageButton,new GridBagConstraints(2,0,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.VERTICAL,new Insets(10,5,0,0),0,0));
   toolbar.add(myAuxiliaryRightPanel,new GridBagConstraints(3,0,1,1,1.0,0,GridBagConstraints.CENTER,GridBagConstraints.BOTH,new Insets(10,5,0,0),0,0));
   ((InspectionManagerEx)InspectionManager.getInstance(projectProfileManager.getProject())).buildInspectionSearchIndexIfNecessary();
   myProjectProfileManager=projectProfileManager;
