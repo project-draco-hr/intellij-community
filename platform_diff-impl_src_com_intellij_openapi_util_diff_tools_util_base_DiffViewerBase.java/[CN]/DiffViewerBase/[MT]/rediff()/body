@@ -1,0 +1,43 @@
+{
+  if (myDisposed)   return;
+  abortRediff();
+  myModificationStamp++;
+  final int modificationStamp=myModificationStamp;
+  myProgressIndicator=new EmptyProgressIndicator();
+  final ProgressIndicator indicator=myProgressIndicator;
+  final Semaphore semaphore=new Semaphore(0);
+  final AtomicReference<Runnable> resultRef=new AtomicReference<Runnable>();
+  onBeforeRediff();
+  ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+    @Override public void run(){
+      final Runnable result=performRediff(indicator);
+      if (indicator.isCanceled()) {
+        semaphore.release();
+        return;
+      }
+      if (!resultRef.compareAndSet(null,result)) {
+        ApplicationManager.getApplication().invokeLater(new Runnable(){
+          @Override public void run(){
+            finishRediff(result,modificationStamp,indicator);
+          }
+        }
+,ModalityState.any());
+      }
+      semaphore.release();
+    }
+  }
+);
+  try {
+    if (tryRediffSynchronously()) {
+      semaphore.tryAcquire(ASYNC_REDIFF_POSTPONE_DELAY,TimeUnit.MILLISECONDS);
+    }
+  }
+ catch (  InterruptedException ignore) {
+  }
+  if (!resultRef.compareAndSet(null,TOO_SLOW_OPERATION)) {
+    finishRediff(resultRef.get(),modificationStamp,indicator);
+  }
+ else {
+    onSlowRediff();
+  }
+}
