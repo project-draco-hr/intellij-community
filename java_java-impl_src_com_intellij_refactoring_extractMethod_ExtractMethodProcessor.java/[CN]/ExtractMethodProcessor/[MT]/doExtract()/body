@@ -26,7 +26,7 @@
     if (!(lastElement instanceof PsiReturnStatement || lastElement instanceof PsiBreakStatement || lastElement instanceof PsiContinueStatement)) {
       hasNormalExit=true;
     }
-    PsiStatement exitStatementCopy=myControlFlowWrapper.getExitStatementCopy(returnStatement,myElements);
+    PsiStatement exitStatementCopy=myNotNullConditionalCheck ? null : myControlFlowWrapper.getExitStatementCopy(returnStatement,myElements);
     declareNecessaryVariablesInsideBody(body);
     if (myNeedChangeContext) {
       for (      PsiElement element : myElements) {
@@ -36,6 +36,9 @@
     body.addRange(myElements[0],myElements[myElements.length - 1]);
     if (myNullConditionalCheck) {
       body.add(myElementFactory.createStatementFromText("return " + myOutputVariable.getName() + ";",null));
+    }
+ else     if (myNotNullConditionalCheck) {
+      body.add(myElementFactory.createStatementFromText("return null;",null));
     }
  else     if (myGenerateConditionalExit) {
       body.add(myElementFactory.createStatementFromText("return false;",null));
@@ -88,6 +91,11 @@
       ifStatement=(PsiIfStatement)addToMethodCallLocation(ifStatement);
       CodeStyleManager.getInstance(myProject).reformat(ifStatement);
     }
+ else     if (myNotNullConditionalCheck) {
+      String varName=myOutputVariable.getName();
+      varName=declareVariableAtMethodCallLocation(varName,myReturnType instanceof PsiPrimitiveType ? ((PsiPrimitiveType)myReturnType).getBoxedType(myCodeFragmentMember) : myReturnType);
+      addToMethodCallLocation(myElementFactory.createStatementFromText("if (" + varName + " != null) return "+ varName+ ";",null));
+    }
  else     if (myGenerateConditionalExit) {
       PsiIfStatement ifStatement=(PsiIfStatement)myElementFactory.createStatementFromText("if (a) b;",null);
       ifStatement=(PsiIfStatement)addToMethodCallLocation(ifStatement);
@@ -126,7 +134,7 @@
  else     if (!myGenerateConditionalExit && exitStatementCopy != null) {
       addToMethodCallLocation(exitStatementCopy);
     }
-    if (!myNullConditionalCheck) {
+    if (!myNullConditionalCheck && !myNotNullConditionalCheck) {
       declareNecessaryVariablesAfterCall(myOutputVariable);
     }
     deleteExtracted();
@@ -179,6 +187,17 @@
             RedundantCastUtil.removeCast(typeCastExpression);
           }
         }
+      }
+    }
+  }
+  if (isNullabilityCheckApplicable() && !(newMethod.getReturnType() instanceof PsiPrimitiveType) && PsiUtil.isLanguageLevel5OrHigher(newMethod)&& Registry.is("annotate.extracted.method.nullable.when.applicable",true)) {
+    final NullableNotNullManager manager=NullableNotNullManager.getInstance(myProject);
+    final PsiClass nullableAnnotationClass=JavaPsiFacade.getInstance(myProject).findClass(manager.getDefaultNullable(),GlobalSearchScope.allScope(myProject));
+    if (nullableAnnotationClass != null) {
+      final Collection<PsiElement> nullableReturn=DataFlowInspectionBase.getNullableReturn(newMethod);
+      if (nullableReturn != null && !nullableReturn.isEmpty()) {
+        final AddNullableNotNullAnnotationFix annotationFix=new AddNullableAnnotationFix(newMethod);
+        annotationFix.invoke(myProject,myTargetClass.getContainingFile(),newMethod,newMethod);
       }
     }
   }
