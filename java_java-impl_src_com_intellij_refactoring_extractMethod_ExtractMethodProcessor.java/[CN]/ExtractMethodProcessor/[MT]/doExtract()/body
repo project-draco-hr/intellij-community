@@ -190,23 +190,33 @@
       }
     }
   }
-  if (isNullabilityCheckApplicable() && !(newMethod.getReturnType() instanceof PsiPrimitiveType) && PsiUtil.isLanguageLevel5OrHigher(newMethod)&& Registry.is("annotate.extracted.method.nullable.when.applicable",true)) {
+  if (isNullabilityCheckApplicable() && !(newMethod.getReturnType() instanceof PsiPrimitiveType) && PsiUtil.isLanguageLevel5OrHigher(newMethod)&& PropertiesComponent.getInstance(myProject).getBoolean(ExtractMethodDialog.EXTRACT_METHOD_GENERATE_ANNOTATIONS,true)) {
     final NullableNotNullManager manager=NullableNotNullManager.getInstance(myProject);
     final PsiClass nullableAnnotationClass=JavaPsiFacade.getInstance(myProject).findClass(manager.getDefaultNullable(),GlobalSearchScope.allScope(myProject));
     if (nullableAnnotationClass != null) {
-      final Collection<PsiElement> nullableReturn=DataFlowInspectionBase.getNullableReturn(newMethod);
-      if (nullableReturn != null && !nullableReturn.isEmpty()) {
-        final AddNullableNotNullAnnotationFix annotationFix=new AddNullableAnnotationFix(newMethod);
-        annotationFix.invoke(myProject,myTargetClass.getContainingFile(),newMethod,newMethod);
-      }
-    }
-  }
-  myExtractedMethod=(PsiMethod)myTargetClass.addAfter(newMethod,myAnchor);
-  if (isNeedToChangeCallContext() && myNeedChangeContext) {
-    ChangeContextUtil.decodeContextInfo(myExtractedMethod,myTargetClass,RefactoringChangeUtil.createThisExpression(myManager,null));
-    if (myMethodCall.resolveMethod() != myExtractedMethod) {
-      final PsiReferenceExpression methodExpression=myMethodCall.getMethodExpression();
-      methodExpression.setQualifierExpression(RefactoringChangeUtil.createThisExpression(myManager,myTargetClass));
-    }
-  }
+      final Nullness nullness=DfaUtil.inferMethodNullity(newMethod);
+      AddNullableNotNullAnnotationFix annotationFix;
+switch (nullness) {
+case NOT_NULL:
+        annotationFix=new AddNotNullAnnotationFix(newMethod);
+      break;
+case NULLABLE:
+    annotationFix=new AddNullableAnnotationFix(newMethod);
+  break;
+default :
+annotationFix=null;
+}
+if (annotationFix != null) {
+annotationFix.invoke(myProject,myTargetClass.getContainingFile(),newMethod,newMethod);
+}
+}
+}
+myExtractedMethod=(PsiMethod)myTargetClass.addAfter(newMethod,myAnchor);
+if (isNeedToChangeCallContext() && myNeedChangeContext) {
+ChangeContextUtil.decodeContextInfo(myExtractedMethod,myTargetClass,RefactoringChangeUtil.createThisExpression(myManager,null));
+if (myMethodCall.resolveMethod() != myExtractedMethod) {
+final PsiReferenceExpression methodExpression=myMethodCall.getMethodExpression();
+methodExpression.setQualifierExpression(RefactoringChangeUtil.createThisExpression(myManager,myTargetClass));
+}
+}
 }
