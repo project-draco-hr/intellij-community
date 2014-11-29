@@ -1,11 +1,18 @@
 {
+  VcsLogRootFilter rootFilter=filterCollection.getRootFilter();
+  VcsLogStructureFilter structureFilter=filterCollection.getStructureFilter();
+  Pair<Set<VirtualFile>,MultiMap<VirtualFile,VirtualFile>> selectedRootsAndFiles=VcsLogFileFilterUtil.collectRootsAndFiles(providers.keySet(),rootFilter,structureFilter);
   Collection<List<TimedVcsCommit>> logs=ContainerUtil.newArrayList();
   for (  Map.Entry<VirtualFile,VcsLogProvider> entry : providers.entrySet()) {
     VirtualFile root=entry.getKey();
-    if (filterCollection.getStructureFilter() != null && !filterCollection.getStructureFilter().getRoots().contains(root) || filterCollection.getUserFilter() != null && filterCollection.getUserFilter().getUserNames(root).isEmpty()) {
+    if (!selectedRootsAndFiles.first.contains(root) || filterCollection.getUserFilter() != null && filterCollection.getUserFilter().getUserNames(root).isEmpty()) {
       continue;
     }
-    List<TimedVcsCommit> matchingCommits=entry.getValue().getCommitsMatchingFilter(root,filterCollection,maxCount);
+    VcsLogFilterCollection rootSpecificCollection=filterCollection;
+    if (rootSpecificCollection.getStructureFilter() != null) {
+      rootSpecificCollection=replaceStructureFilter(filterCollection,new HashSet<VirtualFile>(selectedRootsAndFiles.second.get(root)));
+    }
+    List<TimedVcsCommit> matchingCommits=entry.getValue().getCommitsMatchingFilter(root,rootSpecificCollection,maxCount);
     logs.add(matchingCommits);
   }
   List<TimedVcsCommit> compoundLog=new VcsLogMultiRepoJoiner<Hash,TimedVcsCommit>().join(logs);
