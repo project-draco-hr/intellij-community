@@ -1,13 +1,14 @@
 {
   final SvnVcs vcs=SvnVcs.getInstance(myProject);
-  final Ref<String> ref=new Ref<String>();
+  final Ref<List<PropertyData>> ref=new Ref<List<PropertyData>>();
+  final Ref<VcsException> exceptionRef=new Ref<VcsException>();
   final Runnable runnable=new Runnable(){
     @Override public void run(){
       try {
         ref.set(AbstractShowPropertiesDiffAction.getPropertyList(vcs,myUrl,((SvnRevisionNumber)myNumber).getRevision()));
       }
  catch (      VcsException e) {
-        ref.set("Can not get properties: " + e.getMessage());
+        exceptionRef.set(e);
       }
     }
   }
@@ -15,11 +16,12 @@
   if (ApplicationManager.getApplication().isDispatchThread()) {
     final boolean completed=ProgressManager.getInstance().runProcessWithProgressSynchronously(runnable,SvnBundle.message("progress.title.loading.file.properties"),true,myProject);
     if (!completed) {
-      return "Properties load for revision " + getRevisionNumber().asString() + " was canceled.";
+      throw new VcsException("Properties load for revision " + getRevisionNumber().asString() + " was canceled.");
     }
   }
  else {
     runnable.run();
   }
+  if (!exceptionRef.isNull())   throw exceptionRef.get();
   return ref.get();
 }
