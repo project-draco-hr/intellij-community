@@ -1,2 +1,96 @@
 {
+  final List<DirCoverageInfo> dirs=new ArrayList<DirCoverageInfo>();
+  final ContentEntry[] contentEntries=ModuleRootManager.getInstance(module).getContentEntries();
+  for (  ContentEntry contentEntry : contentEntries) {
+    for (    SourceFolder folder : contentEntry.getSourceFolders(isTestHierarchy ? JavaSourceRootType.TEST_SOURCE : JavaSourceRootType.SOURCE)) {
+      final VirtualFile file=folder.getFile();
+      if (file == null)       continue;
+      final String prefix=folder.getPackagePrefix().replaceAll("\\.","/");
+      final VirtualFile relativeSrcRoot=file.findFileByRelativePath(StringUtil.trimStart(packageVMName,prefix));
+      dirs.add(new DirCoverageInfo(relativeSrcRoot));
+    }
+  }
+  final File[] children=packageOutputRoot.listFiles();
+  if (children == null)   return null;
+  Map<String,ClassCoverageInfo> toplevelClassCoverage=new HashMap<String,ClassCoverageInfo>();
+  for (  File child : children) {
+    if (child.isDirectory()) {
+      final String childName=child.getName();
+      final String childPackageVMName=packageVMName.length() > 0 ? packageVMName + "/" + childName : childName;
+      final DirCoverageInfo[] childCoverageInfo=collectCoverageInformation(child,packageCoverageMap,flattenPackageCoverageMap,projectInfo,childPackageVMName,annotator,module,trackTestFolders,isTestHierarchy);
+      if (childCoverageInfo != null) {
+        for (int i=0; i < childCoverageInfo.length; i++) {
+          DirCoverageInfo coverageInfo=childCoverageInfo[i];
+          final DirCoverageInfo parentDir=dirs.get(i);
+          parentDir.totalClassCount+=coverageInfo.totalClassCount;
+          parentDir.coveredClassCount+=coverageInfo.coveredClassCount;
+          parentDir.totalLineCount+=coverageInfo.totalLineCount;
+          parentDir.coveredLineCount+=coverageInfo.coveredLineCount;
+          parentDir.totalMethodCount+=coverageInfo.totalMethodCount;
+          parentDir.coveredMethodCount+=coverageInfo.coveredMethodCount;
+        }
+      }
+    }
+ else {
+      if (isClassFile(child)) {
+        final String childName=getClassName(child);
+        final String classFqVMName=packageVMName.length() > 0 ? packageVMName + "/" + childName : childName;
+        final String toplevelClassSrcFQName=getSourceToplevelFQName(classFqVMName);
+        final VirtualFile[] containingFile=new VirtualFile[1];
+        final Boolean isInSource=myCoverageManager.doInReadActionIfProjectOpen(new Computable<Boolean>(){
+          public Boolean compute(){
+            final PsiClass aClass=JavaPsiFacade.getInstance(myManager.getProject()).findClass(toplevelClassSrcFQName,GlobalSearchScope.moduleScope(module));
+            if (aClass == null || !aClass.isValid())             return Boolean.FALSE;
+            containingFile[0]=aClass.getContainingFile().getVirtualFile();
+            if (containingFile[0] == null) {
+              LOG.info("No virtual file found for: " + aClass);
+              return null;
+            }
+            final ModuleFileIndex fileIndex=ModuleRootManager.getInstance(module).getFileIndex();
+            return fileIndex.isUnderSourceRootOfType(containingFile[0],JavaModuleSourceRootTypes.SOURCES) && (trackTestFolders || !fileIndex.isInTestSourceContent(containingFile[0]));
+          }
+        }
+);
+        if (isInSource != null && isInSource.booleanValue()) {
+          for (          DirCoverageInfo dirCoverageInfo : dirs) {
+            if (dirCoverageInfo.sourceRoot != null && VfsUtil.isAncestor(dirCoverageInfo.sourceRoot,containingFile[0],false)) {
+              collectClassCoverageInformation(child,dirCoverageInfo,projectInfo,toplevelClassCoverage,classFqVMName.replace("/","."),toplevelClassSrcFQName);
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+  for (  Map.Entry<String,ClassCoverageInfo> entry : toplevelClassCoverage.entrySet()) {
+    final String toplevelClassName=entry.getKey();
+    final ClassCoverageInfo coverageInfo=entry.getValue();
+    annotator.annotateClass(toplevelClassName,coverageInfo);
+  }
+  PackageCoverageInfo flattenPackageCoverageInfo=getOrCreateCoverageInfo(flattenPackageCoverageMap,packageVMName);
+  for (  Map.Entry<String,ClassCoverageInfo> entry : toplevelClassCoverage.entrySet()) {
+    final ClassCoverageInfo coverageInfo=entry.getValue();
+    flattenPackageCoverageInfo.coveredClassCount+=coverageInfo.coveredClassCount;
+    flattenPackageCoverageInfo.totalClassCount+=coverageInfo.totalClassCount;
+    flattenPackageCoverageInfo.coveredLineCount+=coverageInfo.fullyCoveredLineCount + coverageInfo.partiallyCoveredLineCount;
+    flattenPackageCoverageInfo.totalLineCount+=coverageInfo.totalLineCount;
+    flattenPackageCoverageInfo.coveredMethodCount+=coverageInfo.coveredMethodCount;
+    flattenPackageCoverageInfo.totalMethodCount+=coverageInfo.totalMethodCount;
+  }
+  PackageCoverageInfo packageCoverageInfo=getOrCreateCoverageInfo(packageCoverageMap,packageVMName);
+  for (  DirCoverageInfo dir : dirs) {
+    packageCoverageInfo.totalClassCount+=dir.totalClassCount;
+    packageCoverageInfo.totalLineCount+=dir.totalLineCount;
+    packageCoverageInfo.coveredClassCount+=dir.coveredClassCount;
+    packageCoverageInfo.coveredLineCount+=dir.coveredLineCount;
+    packageCoverageInfo.coveredMethodCount+=dir.coveredMethodCount;
+    packageCoverageInfo.totalMethodCount+=dir.totalMethodCount;
+    if (isTestHierarchy) {
+      annotator.annotateTestDirectory(dir.sourceRoot,dir,module);
+    }
+ else {
+      annotator.annotateSourceDirectory(dir.sourceRoot,dir,module);
+    }
+  }
+  return dirs.toArray(new DirCoverageInfo[dirs.size()]);
 }
