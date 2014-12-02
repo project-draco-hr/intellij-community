@@ -9,6 +9,19 @@
     @Override public void visitClassInitializer(    PsiClassInitializer initializer){
       analyzeCodeBlock(initializer.getBody(),holder,isOnTheFly);
     }
+    @Override public void visitMethodReferenceExpression(    PsiMethodReferenceExpression expression){
+      super.visitMethodReferenceExpression(expression);
+      final PsiElement resolve=expression.resolve();
+      if (resolve instanceof PsiMethod) {
+        final PsiType methodReturnType=((PsiMethod)resolve).getReturnType();
+        if (TypeConversionUtil.isPrimitiveWrapper(methodReturnType) && NullableNotNullManager.isNullable((PsiMethod)resolve)) {
+          final PsiType returnType=LambdaUtil.getFunctionalInterfaceReturnType(expression);
+          if (TypeConversionUtil.isPrimitiveAndNotNull(returnType)) {
+            holder.registerProblem(expression,InspectionsBundle.message("dataflow.message.unboxing.method.reference"));
+          }
+        }
+      }
+    }
     @Override public void visitIfStatement(    PsiIfStatement statement){
       PsiExpression condition=statement.getCondition();
       if (BranchingInstruction.isBoolConst(condition)) {
