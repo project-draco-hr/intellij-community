@@ -8,11 +8,10 @@
   myWholePanel.add(myPanel,BorderLayout.CENTER);
   myProfiles=new ProfilesConfigurableComboBox(new ListCellRendererWrapper<Profile>(){
     @Override public void customize(    final JList list,    final Profile value,    final int index,    final boolean selected,    final boolean hasFocus){
-      final String profileName=value.getName();
       final SingleInspectionProfilePanel singleInspectionProfilePanel=myPanels.get(value);
-      final boolean isShared=singleInspectionProfilePanel != null && singleInspectionProfilePanel.isProfileShared();
+      final boolean isShared=singleInspectionProfilePanel.isProfileShared();
       setIcon(isShared ? AllIcons.General.ProjectSettings : AllIcons.General.Settings);
-      setText(profileName);
+      setText(singleInspectionProfilePanel.getCurrentProfileName());
     }
   }
 ){
@@ -30,21 +29,19 @@
       return panel != null && panel.isProfileShared();
     }
     @Override public void setShareToTeamMembers(    boolean shared){
-      final InspectionProfileImpl inspectionProfile=getSelectedObject();
-      final String name=inspectionProfile.getName();
-      for (      Map.Entry<Profile,SingleInspectionProfilePanel> e : myPanels.entrySet()) {
-        final InspectionProfileImpl currentProfile=(InspectionProfileImpl)e.getKey();
-        if (currentProfile.getName().equals(name) && !currentProfile.equals(inspectionProfile)) {
-          final boolean curShared=e.getValue().isProfileShared();
+      final SingleInspectionProfilePanel selectedPanel=getSelectedPanel();
+      LOG.assertTrue(selectedPanel != null,"No settings selectedPanel for: " + getSelectedObject());
+      final String name=getSelectedPanel().getCurrentProfileName();
+      for (      SingleInspectionProfilePanel p : myPanels.values()) {
+        if (p != selectedPanel && Comparing.equal(p.getCurrentProfileName(),name)) {
+          final boolean curShared=p.isProfileShared();
           if (curShared == shared) {
             Messages.showErrorDialog((shared ? "Shared" : "Application level") + " profile with same name exists.","Inspections Settings");
             return;
           }
         }
       }
-      final SingleInspectionProfilePanel panel=getSelectedPanel();
-      LOG.assertTrue(panel != null,"No settings panel for: " + getSelectedObject());
-      panel.setProfileShared(shared);
+      selectedPanel.setProfileShared(shared);
       myProfiles.repaint();
     }
     @Override public void copy(){
@@ -65,20 +62,20 @@
       rename(getSelectedObject());
     }
     private void rename(    @NotNull final InspectionProfileImpl inspectionProfile){
-      final String initialName=inspectionProfile.getName();
-      myProfiles.showEditCard(inspectionProfile.getName(),new SaveInputComponentValidator(){
+      final String initialName=getSelectedPanel().getCurrentProfileName();
+      myProfiles.showEditCard(initialName,new SaveInputComponentValidator(){
         @Override public void doSave(        @NotNull String text){
           if (!text.equals(initialName)) {
-            deleteProfile(inspectionProfile);
-            myProfiles.getModel().removeElement(inspectionProfile);
-            inspectionProfile.setName(text);
-            inspectionProfile.setModified(true);
-            addProfile(inspectionProfile);
+            getProfilePanel(inspectionProfile).setCurrentProfileName(text);
           }
           myProfiles.showComboBoxCard();
         }
         @Override public boolean checkValid(        @NotNull String text){
-          final boolean isValid=text.equals(initialName) || !hasName(text,myPanels.get(inspectionProfile).isProfileShared());
+          final SingleInspectionProfilePanel singleInspectionProfilePanel=myPanels.get(inspectionProfile);
+          if (singleInspectionProfilePanel == null) {
+            return false;
+          }
+          final boolean isValid=text.equals(initialName) || !hasName(text,singleInspectionProfilePanel.isProfileShared());
           if (isValid) {
             myAuxiliaryRightPanel.showDescription(getSelectedObject().getDescription());
           }
