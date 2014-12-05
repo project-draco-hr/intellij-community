@@ -1,0 +1,62 @@
+{
+  final PsiParameter[] parameters=myExtractedMethod.getParameterList().getParameters();
+  final List<PsiVariable> inputVariables=new ArrayList<PsiVariable>(Arrays.asList(parameters));
+  final PsiCodeBlock body=myExtractedMethod.getBody();
+  LOG.assertTrue(body != null);
+  final PsiStatement[] pattern=body.getStatements();
+  final List<PsiExpression> exprs=new ArrayList<PsiExpression>();
+  for (  PsiStatement statement : pattern) {
+    if (statement instanceof PsiExpressionStatement) {
+      final PsiExpression expression=((PsiExpressionStatement)statement).getExpression();
+      if (expression instanceof PsiIfStatement || expression instanceof PsiLoopStatement) {
+        continue;
+      }
+    }
+    statement.accept(new JavaRecursiveElementWalkingVisitor(){
+      @Override public void visitCallExpression(      PsiCallExpression callExpression){
+        final PsiExpressionList list=callExpression.getArgumentList();
+        if (list != null) {
+          for (          PsiExpression expression : list.getExpressions()) {
+            if (expression instanceof PsiReferenceExpression) {
+              final PsiElement resolve=((PsiReferenceExpression)expression).resolve();
+              if (resolve instanceof PsiField) {
+                exprs.add(expression);
+              }
+            }
+ else {
+              exprs.add(expression);
+            }
+          }
+        }
+      }
+    }
+);
+  }
+  if (exprs.isEmpty()) {
+    return null;
+  }
+  final UniqueNameGenerator uniqueNameGenerator=new UniqueNameGenerator();
+  for (  PsiParameter parameter : parameters) {
+    uniqueNameGenerator.addExistingName(parameter.getName());
+  }
+  final THashMap<PsiExpression,String> unique=new THashMap<PsiExpression,String>(ourEquivalenceStrategy);
+  final Map<PsiExpression,String> replacement=new HashMap<PsiExpression,String>();
+  for (  PsiExpression expr : exprs) {
+    String name=unique.get(expr);
+    if (name == null) {
+      final PsiType type=GenericsUtil.getVariableTypeByExpressionType(expr.getType());
+      if (type == null || type == PsiType.NULL || PsiUtil.resolveClassInType(type) instanceof PsiAnonymousClass)       return null;
+      copies.add(myElementFactory.createExpressionFromText(expr.getText(),body));
+      final SuggestedNameInfo info=JavaCodeStyleManager.getInstance(myProject).suggestVariableName(VariableKind.PARAMETER,null,expr,null);
+      name=uniqueNameGenerator.generateUniqueName(info.names[0]);
+      final PsiParameter parameter=(PsiParameter)myExtractedMethod.getParameterList().add(myElementFactory.createParameter(name,type));
+      inputVariables.add(parameter);
+      unique.put(expr,name);
+    }
+    replacement.put(expr,name);
+  }
+  for (  PsiExpression expression : replacement.keySet()) {
+    expression.replace(myElementFactory.createExpressionFromText(replacement.get(expression),null));
+  }
+  return new InputVariables(inputVariables,myExtractedMethod.getProject(),new LocalSearchScope(myExtractedMethod),false);
+}
