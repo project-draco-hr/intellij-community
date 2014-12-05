@@ -1,0 +1,30 @@
+{
+  final List<PsiExpression> copies=new ArrayList<PsiExpression>();
+  final InputVariables variables=detectTopLevelExpressionsToReplaceWithParameters(copies);
+  if (variables == null) {
+    return null;
+  }
+  final DuplicatesFinder defaultFinder=MethodDuplicatesHandler.createDuplicatesFinder(myExtractedMethod);
+  if (defaultFinder == null) {
+    return null;
+  }
+  final DuplicatesFinder finder=new DuplicatesFinder(defaultFinder.getPattern(),variables,defaultFinder.getReturnValue(),new ArrayList<PsiVariable>()){
+    @Override protected boolean isSelf(    PsiElement candidate){
+      return PsiTreeUtil.isAncestor(method,candidate,true);
+    }
+  }
+;
+  List<Match> duplicates=finder.findDuplicates(method.getContainingClass());
+  if (duplicates != null && !duplicates.isEmpty()) {
+    restoreRenamedParams(copies);
+    inlineSameArguments(method,copies,variables,duplicates);
+    myMethodCall=(PsiMethodCallExpression)myMethodCall.copy();
+    for (    PsiExpression expression : copies) {
+      myMethodCall.getArgumentList().add(expression);
+    }
+    return duplicates;
+  }
+ else {
+    return null;
+  }
+}
