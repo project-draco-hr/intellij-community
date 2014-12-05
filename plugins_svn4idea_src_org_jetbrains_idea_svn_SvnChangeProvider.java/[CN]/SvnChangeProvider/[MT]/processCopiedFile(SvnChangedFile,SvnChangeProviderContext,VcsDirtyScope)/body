@@ -2,21 +2,14 @@
   boolean foundRename=false;
   final Status copiedStatus=copiedFile.getStatus();
   final String copyFromURL=copiedFile.getCopyFromURL();
-  final FilePath copiedToPath=copiedFile.getFilePath();
   final Set<SvnChangedFile> deletedToDelete=new HashSet<SvnChangedFile>();
-  for (Iterator<SvnChangedFile> iterator=context.getDeletedFiles().iterator(); iterator.hasNext(); ) {
-    SvnChangedFile deletedFile=iterator.next();
+  for (  SvnChangedFile deletedFile : context.getDeletedFiles()) {
     final Status deletedStatus=deletedFile.getStatus();
-    if ((deletedStatus != null) && (deletedStatus.getURL() != null) && Comparing.equal(copyFromURL,deletedStatus.getURL().toString())) {
+    if (deletedStatus.getURL() != null && Comparing.equal(copyFromURL,deletedStatus.getURL().toString())) {
       final String clName=SvnUtil.getChangelistName(copiedFile.getStatus());
-      final Change newChange=context.createMovedChange(createBeforeRevision(deletedFile,true),CurrentContentRevision.create(copiedFile.getFilePath()),copiedStatus,deletedStatus);
-      applyMovedChange(copiedFile.getFilePath(),builder,dirtyScope,deletedToDelete,deletedFile,clName,newChange);
-      for (Iterator<SvnChangedFile> iterChild=context.getDeletedFiles().iterator(); iterChild.hasNext(); ) {
-        SvnChangedFile deletedChild=iterChild.next();
+      applyMovedChange(context,copiedFile.getFilePath(),dirtyScope,deletedToDelete,deletedFile,copiedStatus,clName);
+      for (      SvnChangedFile deletedChild : context.getDeletedFiles()) {
         final Status childStatus=deletedChild.getStatus();
-        if (childStatus == null) {
-          continue;
-        }
         final SVNURL childUrl=childStatus.getURL();
         if (childUrl == null) {
           continue;
@@ -27,8 +20,7 @@
           File newPath=new File(copiedFile.getFilePath().getIOFile(),relativePath);
           FilePath newFilePath=myFactory.createFilePathOn(newPath);
           if (!context.isDeleted(newFilePath)) {
-            final Change movedChange=context.createMovedChange(createBeforeRevision(deletedChild,true),CurrentContentRevision.create(newFilePath),context.getTreeConflictStatus(newPath),childStatus);
-            applyMovedChange(newFilePath,builder,dirtyScope,deletedToDelete,deletedChild,clName,movedChange);
+            applyMovedChange(context,newFilePath,dirtyScope,deletedToDelete,deletedChild,context.getTreeConflictStatus(newPath),clName);
           }
         }
       }
@@ -54,7 +46,7 @@
       final FilePath filePath=myFactory.createFilePathOnDeleted(wcPath,false);
       final SvnContentRevision beforeRevision=SvnContentRevision.createBaseRevision(myVcs,filePath,status.getRevision());
       final ContentRevision afterRevision=CurrentContentRevision.create(copiedFile.getFilePath());
-      builder.processChangeInList(context.createMovedChange(beforeRevision,afterRevision,copiedStatus,status),SvnUtil.getChangelistName(status),SvnVcs.getKey());
+      context.getBuilder().processChangeInList(context.createMovedChange(beforeRevision,afterRevision,copiedStatus,status),SvnUtil.getChangelistName(status),SvnVcs.getKey());
       foundRename=true;
     }
   }
