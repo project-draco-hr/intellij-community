@@ -1,0 +1,34 @@
+{
+  return new JavaElementVisitor(){
+    @Override public void visitNewExpression(    PsiNewExpression expression){
+      super.visitNewExpression(expression);
+      PsiMethod constructor=expression.resolveConstructor();
+      if (constructor != null && constructor.getParameterList().getParametersCount() == 0) {
+        checkSerializable(constructor,expression);
+      }
+    }
+    @Override public void visitReferenceExpression(    PsiReferenceExpression expression){
+      super.visitReferenceExpression(expression);
+      PsiElement resolved=expression.resolve();
+      if (resolved instanceof PsiField) {
+        PsiElement nameElement=expression.getReferenceNameElement();
+        if (nameElement != null) {
+          checkSerializable((PsiField)resolved,nameElement);
+        }
+      }
+    }
+    private void checkSerializable(    @NotNull PsiMember member,    @NotNull PsiElement place){
+      if (member.hasModifierProperty(PsiModifier.PUBLIC) && !isInInitializer(place)) {
+        PsiClass aClass=member.getContainingClass();
+        if (aClass != null && !PsiTreeUtil.isAncestor(aClass,place,true)) {
+          PsiModifierList modifierList=aClass.getModifierList();
+          if (modifierList != null && modifierList.findAnnotation(SERIALIZABLE) != null) {
+            String message=DevKitBundle.message("serialization.only.member.used.explicitly");
+            holder.registerProblem(place,message,ProblemHighlightType.GENERIC_ERROR_OR_WARNING);
+          }
+        }
+      }
+    }
+  }
+;
+}
