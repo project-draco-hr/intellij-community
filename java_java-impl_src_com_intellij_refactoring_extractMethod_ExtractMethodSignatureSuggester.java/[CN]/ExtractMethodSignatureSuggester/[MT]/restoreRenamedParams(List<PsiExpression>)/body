@@ -1,0 +1,31 @@
+{
+  final Map<String,PsiVariable> renameMap=new HashMap<String,PsiVariable>();
+  for (  VariableData data : myVariableData) {
+    if (!data.name.equals(data.variable.getName())) {
+      renameMap.put(data.name,data.variable);
+    }
+  }
+  if (!renameMap.isEmpty()) {
+    for (    PsiExpression currentExpression : copies) {
+      final Map<PsiReferenceExpression,PsiVariable> params=new HashMap<PsiReferenceExpression,PsiVariable>();
+      currentExpression.accept(new JavaRecursiveElementWalkingVisitor(){
+        @Override public void visitReferenceExpression(        PsiReferenceExpression expression){
+          super.visitReferenceExpression(expression);
+          final PsiElement resolve=expression.resolve();
+          if (resolve instanceof PsiParameter && myExtractedMethod.equals(((PsiParameter)resolve).getDeclarationScope())) {
+            final String name=((PsiParameter)resolve).getName();
+            final PsiVariable variable=renameMap.get(name);
+            if (renameMap.containsKey(name)) {
+              params.put(expression,variable);
+            }
+          }
+        }
+      }
+);
+      for (      PsiReferenceExpression expression : params.keySet()) {
+        final PsiVariable var=params.get(expression);
+        expression.replace(myElementFactory.createExpressionFromText(var.getName(),expression));
+      }
+    }
+  }
+}
