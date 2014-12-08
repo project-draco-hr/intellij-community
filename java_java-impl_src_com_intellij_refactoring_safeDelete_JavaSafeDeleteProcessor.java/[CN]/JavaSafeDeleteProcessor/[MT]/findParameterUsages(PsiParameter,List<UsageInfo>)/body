@@ -1,10 +1,23 @@
 {
   final PsiMethod method=(PsiMethod)parameter.getDeclarationScope();
+  final int parameterIndex=method.getParameterList().getParameterIndex(parameter);
   ReferencesSearch.search(method).forEach(new Processor<PsiReference>(){
     public boolean process(    final PsiReference reference){
       PsiElement element=reference.getElement();
       if (element != null) {
         JavaSafeDeleteDelegate.EP.forLanguage(element.getLanguage()).createUsageInfoForParameter(reference,usages,parameter,method);
+        if (!parameter.isVarArgs() && !RefactoringChangeUtil.isSuperMethodCall(element.getParent())) {
+          final PsiParameter paramInCaller=SafeDeleteJavaCallerChooser.isTheOnlyOneParameterUsage(element.getParent(),parameterIndex,method);
+          if (paramInCaller != null) {
+            final PsiMethod callerMethod=(PsiMethod)paramInCaller.getDeclarationScope();
+            if (ApplicationManager.getApplication().isUnitTestMode()) {
+              usages.add(new SafeDeleteParameterCallHierarchyUsageInfo(callerMethod,paramInCaller,callerMethod));
+            }
+ else {
+              usages.add(new SafeDeleteParameterCallHierarchyUsageInfo(method,parameter,callerMethod));
+            }
+          }
+        }
       }
       return true;
     }

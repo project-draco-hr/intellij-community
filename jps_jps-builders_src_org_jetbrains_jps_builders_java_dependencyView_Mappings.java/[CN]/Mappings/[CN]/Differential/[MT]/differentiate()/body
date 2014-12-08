@@ -6,41 +6,50 @@ synchronized (myLock) {
     }
     debug("Begin of Differentiate:");
     debug("Easy mode: ",myEasyMode);
-    processDisappearedClasses();
-    final List<FileClasses> newClasses=new ArrayList<FileClasses>();
-    myDelta.mySourceFileToClasses.forEachEntry(new TObjectObjectProcedure<File,Collection<ClassRepr>>(){
-      @Override public boolean execute(      File fileName,      Collection<ClassRepr> classes){
-        newClasses.add(new FileClasses(fileName,classes));
-        return true;
-      }
-    }
-);
-    for (    final FileClasses compiledFile : newClasses) {
-      final File fileName=compiledFile.myFileName;
-      final Set<ClassRepr> classes=compiledFile.myFileClasses;
-      final Set<ClassRepr> pastClasses=(Set<ClassRepr>)mySourceFileToClasses.get(fileName);
-      final DiffState state=new DiffState(Difference.make(pastClasses,classes));
-      if (!processChangedClasses(state)) {
-        if (!myEasyMode) {
-          return false;
+    try {
+      processDisappearedClasses();
+      final List<FileClasses> newClasses=new ArrayList<FileClasses>();
+      myDelta.mySourceFileToClasses.forEachEntry(new TObjectObjectProcedure<File,Collection<ClassRepr>>(){
+        @Override public boolean execute(        File fileName,        Collection<ClassRepr> classes){
+          if (myFilesToCompile == null || myFilesToCompile.contains(fileName)) {
+            newClasses.add(new FileClasses(fileName,classes));
+          }
+          return true;
         }
       }
-      processRemovedClases(state,fileName);
-      processAddedClasses(state,fileName);
-      if (!myEasyMode) {
-        calculateAffectedFiles(state);
+);
+      for (      final FileClasses compiledFile : newClasses) {
+        final File fileName=compiledFile.myFileName;
+        final Set<ClassRepr> classes=compiledFile.myFileClasses;
+        final Set<ClassRepr> pastClasses=(Set<ClassRepr>)mySourceFileToClasses.get(fileName);
+        final DiffState state=new DiffState(Difference.make(pastClasses,classes));
+        if (!processChangedClasses(state)) {
+          if (!myEasyMode) {
+            return false;
+          }
+        }
+        processRemovedClases(state,fileName);
+        processAddedClasses(state,fileName);
+        if (!myEasyMode) {
+          calculateAffectedFiles(state);
+        }
+      }
+      debug("End of Differentiate.");
+      if (myEasyMode) {
+        return false;
+      }
+      final Collection<String> removed=myDelta.myRemovedFiles;
+      if (removed != null) {
+        for (        final String r : removed) {
+          myAffectedFiles.remove(new File(r));
+        }
+      }
+      return myDelayedWorks.doWork(myAffectedFiles);
+    }
+  finally {
+      if (myFilesToCompile != null) {
+        myDelta.myChangedFiles.retainAll(myFilesToCompile);
       }
     }
-    debug("End of Differentiate.");
-    if (myEasyMode) {
-      return false;
-    }
-    final Collection<String> removed=myDelta.myRemovedFiles;
-    if (removed != null) {
-      for (      final String r : removed) {
-        myAffectedFiles.remove(new File(r));
-      }
-    }
-    return myDelayedWorks.doWork(myAffectedFiles);
   }
 }

@@ -1,0 +1,32 @@
+{
+  Promise<VALUE> promise=fieldUpdater.get(host);
+  if (promise == null) {
+    if (!fieldUpdater.compareAndSet(host,null,promise=new AsyncPromise<VALUE>())) {
+      return fieldUpdater.get(host);
+    }
+  }
+ else {
+    Promise.State state=promise.getState();
+    if (state == Promise.State.PENDING) {
+      return promise;
+    }
+ else     if (state == Promise.State.FULFILLED) {
+      if (!checkFreshness || isUpToDate(host,((Getter<VALUE>)promise).get())) {
+        return promise;
+      }
+      if (!fieldUpdater.compareAndSet(host,promise,promise=new AsyncPromise<VALUE>())) {
+        Promise<VALUE> valueFromAnotherThread=fieldUpdater.get(host);
+        while (valueFromAnotherThread == null) {
+          if (fieldUpdater.compareAndSet(host,null,promise)) {
+            return getPromise(host,load,promise);
+          }
+ else {
+            valueFromAnotherThread=fieldUpdater.get(host);
+          }
+        }
+        return valueFromAnotherThread;
+      }
+    }
+  }
+  return getPromise(host,load,promise);
+}

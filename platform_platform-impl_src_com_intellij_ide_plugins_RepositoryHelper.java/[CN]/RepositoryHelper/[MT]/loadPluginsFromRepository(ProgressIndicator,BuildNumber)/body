@@ -7,19 +7,22 @@
   final File pluginListFile=new File(PathManager.getPluginsPath(),PLUGIN_LIST_FILE);
   if (pluginListFile.length() > 0) {
     try {
-      url=url + "&crc32=" + Files.hash(pluginListFile,Hashing.crc32()).toString();
+      url+="&crc32=" + Files.hash(pluginListFile,Hashing.crc32()).toString();
     }
  catch (    NoSuchMethodError e) {
       String guavaPath=PathUtil.getJarPathForClass(Hashing.class);
       throw new RuntimeException(guavaPath,e);
     }
   }
-  return HttpRequests.request(url).get(new ThrowableConvertor<URLConnection,List<IdeaPluginDescriptor>,Exception>(){
-    @Override public List<IdeaPluginDescriptor> convert(    URLConnection connection) throws Exception {
+  if (indicator != null) {
+    indicator.setText2(IdeBundle.message("progress.waiting.for.reply.from.plugin.manager",appInfo.getPluginManagerUrl()));
+  }
+  return HttpRequests.request(url).connect(new HttpRequests.RequestProcessor<List<IdeaPluginDescriptor>>(){
+    @Override public List<IdeaPluginDescriptor> process(    @NotNull HttpRequests.Request request) throws IOException {
       if (indicator != null) {
         indicator.checkCanceled();
-        indicator.setText2(IdeBundle.message("progress.waiting.for.reply.from.plugin.manager",appInfo.getPluginManagerUrl()));
       }
+      URLConnection connection=request.getConnection();
       if (connection instanceof HttpURLConnection && ((HttpURLConnection)connection).getResponseCode() == HttpURLConnection.HTTP_NOT_MODIFIED) {
         return loadPluginList(pluginListFile);
       }
@@ -27,7 +30,17 @@
         indicator.checkCanceled();
         indicator.setText2(IdeBundle.message("progress.downloading.list.of.plugins"));
       }
-      return readPluginsStream(connection,indicator,PLUGIN_LIST_FILE);
+synchronized (RepositoryHelper.class) {
+        File localFile=createLocalPluginsDescriptions(PLUGIN_LIST_FILE);
+        OutputStream output=new FileOutputStream(localFile);
+        try {
+          NetUtils.copyStreamContent(indicator,request.getInputStream(),output,connection.getContentLength());
+          return loadPluginList(localFile);
+        }
+  finally {
+          output.close();
+        }
+      }
     }
   }
 );

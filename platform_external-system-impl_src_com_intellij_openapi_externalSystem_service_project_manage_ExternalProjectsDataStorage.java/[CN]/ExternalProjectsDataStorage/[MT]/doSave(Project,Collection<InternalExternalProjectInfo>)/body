@@ -1,0 +1,41 @@
+{
+  final File projectConfigurationFile=getProjectConfigurationFile(project);
+  if (!FileUtil.createParentDirs(projectConfigurationFile)) {
+    throw new IOException("Unable to save " + projectConfigurationFile);
+  }
+  for (Iterator<InternalExternalProjectInfo> iterator=externalProjects.iterator(); iterator.hasNext(); ) {
+    InternalExternalProjectInfo externalProject=iterator.next();
+    if (!validate(externalProject)) {
+      iterator.remove();
+      continue;
+    }
+    ExternalSystemApiUtil.visit(externalProject.getExternalProjectStructure(),new Consumer<DataNode>(){
+      @Override public void consume(      DataNode dataNode){
+        try {
+          dataNode.getDataBytes();
+        }
+ catch (        IOException e) {
+          dataNode.clear(true);
+        }
+      }
+    }
+);
+  }
+  DataOutputStream out=new DataOutputStream(new BufferedOutputStream(new FileOutputStream(projectConfigurationFile)));
+  try {
+    out.writeUTF(STORAGE_VERSION);
+    out.writeInt(externalProjects.size());
+    ObjectOutputStream os=new ObjectOutputStream(out);
+    try {
+      for (      InternalExternalProjectInfo externalProject : externalProjects) {
+        os.writeObject(externalProject);
+      }
+    }
+  finally {
+      os.close();
+    }
+  }
+  finally {
+    out.close();
+  }
+}

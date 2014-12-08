@@ -2,7 +2,7 @@
   try {
     final File file;
     String componentName;
-    State state=appComponent.getClass().getAnnotation(State.class);
+    State state=StoreUtil.getStateSpec(appComponent.getClass());
     if (state != null) {
       componentName=state.name();
       Storage lastStorage=state.storages()[state.storages().length - 1];
@@ -27,15 +27,21 @@
     root.addContent(element);
     Assert.assertTrue("Cannot create " + file,FileUtil.createIfDoesntExist(file));
     new WriteAction(){
-      protected void run(      @NotNull final Result result) throws IOException {
-        VirtualFile virtualFile=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file);
-        Assert.assertNotNull(file.getAbsolutePath(),virtualFile);
-        OutputStream stream=virtualFile.getOutputStream(new SaveSessionRequestor());
+      @Override protected void run(      @NotNull final Result result) throws IOException {
+        VfsRootAccess.allowRootAccess(file.getAbsolutePath());
         try {
-          JDOMUtil.writeParent(root,stream,SystemProperties.getLineSeparator());
+          VirtualFile virtualFile=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file);
+          Assert.assertNotNull(file.getAbsolutePath(),virtualFile);
+          OutputStream stream=virtualFile.getOutputStream(new SaveSessionRequestor());
+          try {
+            JDOMUtil.writeParent(root,stream,SystemProperties.getLineSeparator());
+          }
+  finally {
+            stream.close();
+          }
         }
   finally {
-          stream.close();
+          VfsRootAccess.disallowRootAccess(file.getAbsolutePath());
         }
       }
     }
