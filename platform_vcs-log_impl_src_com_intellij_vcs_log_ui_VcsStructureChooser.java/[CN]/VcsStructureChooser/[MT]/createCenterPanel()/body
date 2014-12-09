@@ -73,11 +73,14 @@
   myTree.addKeyListener(new KeyAdapter(){
     public void keyPressed(    KeyEvent e){
       if (e.getKeyCode() == KeyEvent.VK_SPACE) {
-        TreePath treePath=myTree.getLeadSelectionPath();
-        if (treePath == null)         return;
-        final Object o=treePath.getLastPathComponent();
-        if (myRoot == o || getFile(o) == null)         return;
-        mySelectionManager.toggleSelection((DefaultMutableTreeNode)o);
+        TreePath[] paths=myTree.getSelectionPaths();
+        if (paths == null)         return;
+        for (        TreePath path : paths) {
+          if (path == null)           continue;
+          final Object o=path.getLastPathComponent();
+          if (myRoot == o || getFile(o) == null)           return;
+          mySelectionManager.toggleSelection((DefaultMutableTreeNode)o);
+        }
         myTree.revalidate();
         myTree.repaint();
         e.consume();
@@ -85,35 +88,20 @@
     }
   }
 );
-  final Splitter splitter=new Splitter(true,0.7f);
-  Disposer.register(this.getDisposable(),new Disposable(){
-    public void dispose(){
-      splitter.dispose();
-    }
-  }
-);
-  splitter.setFirstComponent(new JBScrollPane(fileSystemTree.getTree()));
-  final JPanel wrapper=new JPanel(new BorderLayout());
-  mySelectedLabel=new JLabel(DEFAULT_TEXT);
+  JBPanel panel=new JBPanel(new BorderLayout());
+  panel.add(new JBScrollPane(fileSystemTree.getTree()),BorderLayout.CENTER);
+  mySelectedLabel=new JLabel("");
   mySelectedLabel.setBorder(BorderFactory.createEmptyBorder(2,0,2,0));
-  wrapper.add(mySelectedLabel,BorderLayout.NORTH);
-  mySelectedList=new JBList(new CollectionListModel(new ArrayList<VirtualFile>()));
-  mySelectedList.setCellRenderer(new WithModulesListCellRenderer(myProject,myModulesSet));
-  wrapper.add(ScrollPaneFactory.createScrollPane(mySelectedList),BorderLayout.CENTER);
-  splitter.setSecondComponent(wrapper);
+  panel.add(mySelectedLabel,BorderLayout.SOUTH);
   mySelectionManager.setSelectionChangeListener(new PlusMinus<VirtualFile>(){
     @Override public void plus(    VirtualFile virtualFile){
-      final CollectionListModel model=(CollectionListModel)mySelectedList.getModel();
-      model.add(virtualFile);
-      model.sort(FilePathComparator.getInstance());
+      mySelectedFiles.add(virtualFile);
       recalculateErrorText();
-      mySelectedList.revalidate();
-      mySelectedList.repaint();
     }
     private void recalculateErrorText(){
-      checkEmptyness();
+      checkEmpty();
       if (mySelectionManager.canAddSelection()) {
-        mySelectedLabel.setText(DEFAULT_TEXT);
+        mySelectedLabel.setText("");
       }
  else {
         mySelectedLabel.setText(CAN_NOT_ADD_TEXT);
@@ -121,40 +109,10 @@
       mySelectedLabel.revalidate();
     }
     @Override public void minus(    VirtualFile virtualFile){
-      final CollectionListModel defaultListModel=(CollectionListModel)mySelectedList.getModel();
-      for (int i=0; i < defaultListModel.getSize(); i++) {
-        final VirtualFile elementAt=(VirtualFile)defaultListModel.getElementAt(i);
-        if (virtualFile.equals(elementAt)) {
-          defaultListModel.remove(i);
-          break;
-        }
-      }
-      defaultListModel.sort(FilePathComparator.getInstance());
+      mySelectedFiles.remove(virtualFile);
       recalculateErrorText();
-      mySelectedList.revalidate();
-      mySelectedList.repaint();
     }
   }
 );
-  mySelectedList.addKeyListener(new KeyAdapter(){
-    @Override public void keyReleased(    KeyEvent e){
-      if (e.getModifiers() == 0 && e.getKeyCode() == KeyEvent.VK_DELETE) {
-        final int[] idx=mySelectedList.getSelectedIndices();
-        if (idx != null && idx.length > 0) {
-          final int answer=Messages.showYesNoDialog(myProject,"Remove selected paths from filter?","Remove from filter",Messages.getQuestionIcon());
-          if (Messages.YES == answer) {
-            Arrays.sort(idx);
-            for (int i=idx.length - 1; i >= 0; --i) {
-              int i1=idx[i];
-              mySelectionManager.removeSelection((VirtualFile)((CollectionListModel)mySelectedList.getModel()).getElementAt(i1));
-              myTree.revalidate();
-              myTree.repaint();
-            }
-          }
-        }
-      }
-    }
-  }
-);
-  return splitter;
+  return panel;
 }
