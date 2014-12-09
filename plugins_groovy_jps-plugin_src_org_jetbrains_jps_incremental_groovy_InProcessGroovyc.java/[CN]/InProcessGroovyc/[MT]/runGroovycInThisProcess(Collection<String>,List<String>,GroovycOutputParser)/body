@@ -1,0 +1,35 @@
+{
+  List<URL> urls=ContainerUtil.newArrayList();
+  for (  String s : compilationClassPath) {
+    urls.add(new File(s).toURI().toURL());
+  }
+  UrlClassLoader loader=UrlClassLoader.build().urls(urls).useCache().get();
+  PrintStream oldOut=System.out;
+  PrintStream oldErr=System.err;
+  ClassLoader oldLoader=Thread.currentThread().getContextClassLoader();
+  ByteArrayOutputStream out=new ByteArrayOutputStream();
+  ByteArrayOutputStream err=new ByteArrayOutputStream();
+  System.setOut(new PrintStream(out));
+  System.setErr(new PrintStream(err));
+  Thread.currentThread().setContextClassLoader(loader);
+  try {
+    Class<?> runnerClass=loader.loadClass("org.jetbrains.groovy.compiler.rt.GroovycRunner");
+    Method intMain=runnerClass.getDeclaredMethod("intMain",String[].class);
+    Integer exitCode=(Integer)intMain.invoke(null,new Object[]{ArrayUtil.toStringArray(programParams)});
+    parser.notifyFinished(exitCode);
+  }
+ catch (  Exception e) {
+    throw new RuntimeException(e);
+  }
+ finally {
+    System.setOut(oldOut);
+    System.setErr(oldErr);
+    Thread.currentThread().setContextClassLoader(oldLoader);
+  }
+  for (  String line : StringUtil.splitByLines(out.toString())) {
+    parser.notifyTextAvailable(line,ProcessOutputTypes.STDOUT);
+  }
+  for (  String line : StringUtil.splitByLines(err.toString())) {
+    parser.notifyTextAvailable(line,ProcessOutputTypes.STDERR);
+  }
+}
