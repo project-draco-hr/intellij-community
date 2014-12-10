@@ -1,12 +1,22 @@
 {
-  final PsiElement[] elements=processor.getElements();
-  final PsiElement commonParent=PsiTreeUtil.findCommonParent(elements);
-  final RangeMarker marker=editor.getDocument().createRangeMarker(elements[0].getTextOffset(),elements[elements.length - 1].getTextRange().getEndOffset());
+  final PsiElement commonParent=elements.length > 1 ? PsiTreeUtil.findCommonParent(elements) : elements[0].getParent();
+  if (commonParent == null) {
+    LOG.error("Should have common parent:" + Arrays.toString(elements));
+    return;
+  }
+  final RangeMarker marker=editor.getDocument().createRangeMarker(commonParent.getTextRange());
+  final PsiElement[] copyElements=processor.getElements();
+  final PsiElement containerCopy=copyElements.length > 1 ? PsiTreeUtil.findCommonParent(copyElements) : copyElements[0].getParent();
+  if (containerCopy == null) {
+    LOG.error("Should have common parent:" + Arrays.toString(copyElements));
+    return;
+  }
   final PsiClassType.ClassResolveResult resolveResult=PsiUtil.resolveGenericsClassInType(selectedType);
   final PsiClass wrapperClass=resolveResult.getElement();
   LOG.assertTrue(wrapperClass != null);
   final PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
-  final Ref<String> methodCallText=new Ref<String>();
+  final Ref<String> suffixText=new Ref<String>();
+  final Ref<String> prefixText=new Ref<String>();
   final Ref<String> methodText=new Ref<String>();
   WriteCommandAction.runWriteCommandAction(project,new Runnable(){
     @Override public void run(){
@@ -28,16 +38,16 @@
       }
       methodText.set(extractedMethod.getText());
       final PsiMethodCallExpression methodCall=processor.getMethodCall();
-      methodCallText.set(methodCall.getText());
-      methodCall.delete();
-      extractedMethod.delete();
+      prefixText.set(containerCopy.getText().substring(0,methodCall.getTextRange().getStartOffset() - containerCopy.getTextRange().getStartOffset()));
+      suffixText.set("." + methodCall.getText() + containerCopy.getText().substring(methodCall.getTextRange().getEndOffset() - containerCopy.getTextRange().getStartOffset()));
     }
   }
 );
   PsiExpression expression=factory.createExpressionFromText("new " + selectedType.getCanonicalText() + "() {"+ methodText.get()+ "}",methodToIntroduceParameter);
   expression=(PsiExpression)JavaCodeStyleManager.getInstance(project).shortenClassReferences(expression);
   expression.putUserData(ElementToWorkOn.PARENT,commonParent);
-  expression.putUserData(ElementToWorkOn.SUFFIX,"." + methodCallText.get() + ";");
+  expression.putUserData(ElementToWorkOn.PREFIX,prefixText.get());
+  expression.putUserData(ElementToWorkOn.SUFFIX,suffixText.get());
   expression.putUserData(ElementToWorkOn.TEXT_RANGE,marker);
   new Introducer(project,expression,null,editor).introduceParameter(methodToIntroduceParameter,methodToSearchFor);
 }
