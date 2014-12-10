@@ -1,0 +1,51 @@
+{
+  final SelectionModel selectionModel=editor.getSelectionModel();
+  if (selectionModel.hasSelection()) {
+    final PsiElement[] elements=CodeInsightUtil.findStatementsInRange(file,selectionModel.getSelectionStart(),selectionModel.getSelectionEnd());
+    if (elements.length > 0) {
+      final AbstractInplaceIntroducer inplaceIntroducer=AbstractInplaceIntroducer.getActiveIntroducer(editor);
+      if (inplaceIntroducer instanceof InplaceIntroduceParameterPopup) {
+        return false;
+      }
+      final List<PsiMethod> enclosingMethods=getEnclosingMethods(Util.getContainingMethod(elements[0]));
+      if (enclosingMethods.isEmpty()) {
+        return false;
+      }
+      final MyExtractMethodProcessor processor=new MyExtractMethodProcessor(project,editor,elements);
+      try {
+        processor.prepare();
+        processor.showDialog();
+        final PsiMethod emptyMethod=processor.generateEmptyMethod("name");
+        final Collection<? extends PsiType> types=FunctionalInterfaceSuggester.suggestFunctionalInterfaces(emptyMethod);
+        if (types.isEmpty()) {
+          return false;
+        }
+        if (types.size() == 1 || ApplicationManager.getApplication().isUnitTestMode()) {
+          final PsiType next=types.iterator().next();
+          functionalInterfaceSelected(next,enclosingMethods,project,editor,processor);
+        }
+ else {
+          final Map<PsiClass,PsiType> classes=new LinkedHashMap<PsiClass,PsiType>();
+          for (          PsiType type : types) {
+            classes.put(PsiUtil.resolveClassInType(type),type);
+          }
+          final PsiClass[] psiClasses=classes.keySet().toArray(new PsiClass[classes.size()]);
+          NavigationUtil.getPsiElementPopup(psiClasses,new PsiClassListCellRenderer(),"Choose From Applicable Functional Interfaces",new PsiElementProcessor<PsiClass>(){
+            @Override public boolean execute(            @NotNull PsiClass psiClass){
+              functionalInterfaceSelected(classes.get(psiClass),enclosingMethods,project,editor,processor);
+              return true;
+            }
+          }
+).showInBestPositionFor(editor);
+          return true;
+        }
+        return true;
+      }
+ catch (      IncorrectOperationException ignore) {
+      }
+catch (      PrepareFailedException ignore) {
+      }
+    }
+  }
+  return false;
+}
