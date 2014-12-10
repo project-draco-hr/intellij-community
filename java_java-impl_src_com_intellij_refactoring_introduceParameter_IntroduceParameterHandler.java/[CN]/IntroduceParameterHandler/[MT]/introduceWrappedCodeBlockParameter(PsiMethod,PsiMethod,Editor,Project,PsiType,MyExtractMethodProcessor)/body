@@ -1,0 +1,30 @@
+{
+  final PsiElement[] elements=processor.getElements();
+  final PsiElement commonParent=PsiTreeUtil.findCommonParent(elements);
+  final RangeMarker marker=editor.getDocument().createRangeMarker(elements[0].getTextOffset(),elements[elements.length - 1].getTextRange().getEndOffset());
+  final PsiClass wrapperClass=PsiUtil.resolveClassInType(selectedType);
+  LOG.assertTrue(wrapperClass != null);
+  final Ref<String> methodCallText=new Ref<String>();
+  final Ref<String> methodText=new Ref<String>();
+  WriteCommandAction.runWriteCommandAction(project,new Runnable(){
+    @Override public void run(){
+      final PsiMethod method=LambdaUtil.getFunctionalInterfaceMethod(wrapperClass);
+      LOG.assertTrue(method != null);
+      final String interfaceMethodName=method.getName();
+      processor.setMethodName(interfaceMethodName);
+      processor.doExtract();
+      final PsiMethod extractedMethod=processor.getExtractedMethod();
+      methodText.set(extractedMethod.getText());
+      final PsiMethodCallExpression methodCall=processor.getMethodCall();
+      methodCallText.set(methodCall.getText());
+      methodCall.delete();
+      extractedMethod.delete();
+    }
+  }
+);
+  final PsiExpression expression=JavaPsiFacade.getElementFactory(project).createExpressionFromText("new " + wrapperClass.getQualifiedName() + "() {"+ methodText.get()+ "}",methodToIntroduceParameter);
+  expression.putUserData(ElementToWorkOn.PARENT,commonParent);
+  expression.putUserData(ElementToWorkOn.SUFFIX,"." + methodCallText.get() + ";");
+  expression.putUserData(ElementToWorkOn.TEXT_RANGE,marker);
+  new Introducer(project,expression,null,editor).introduceParameter(methodToIntroduceParameter,methodToSearchFor);
+}
