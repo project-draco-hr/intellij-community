@@ -1,0 +1,48 @@
+{
+  final Project project=e.getRequiredData(CommonDataKeys.PROJECT);
+  ExecuteGradleTaskHistoryService historyService=ExecuteGradleTaskHistoryService.getInstance(project);
+  GradleRunTaskDialog dialog=new GradleRunTaskDialog(project,historyService.getHistory());
+  String lastWorkingDirectory=historyService.getWorkDirectory();
+  if (lastWorkingDirectory.length() == 0) {
+    lastWorkingDirectory=obtainAppropriateWorkingDirectory(e);
+  }
+  dialog.setWorkDirectory(lastWorkingDirectory);
+  if (StringUtil.isEmptyOrSpaces(historyService.getCanceledCommand())) {
+    if (historyService.getHistory().size() > 0) {
+      dialog.setCommandLine(historyService.getHistory().get(0));
+    }
+  }
+ else {
+    dialog.setCommandLine(historyService.getCanceledCommand());
+  }
+  if (!dialog.showAndGet()) {
+    historyService.setCanceledCommand(dialog.getCommandLine());
+    return;
+  }
+  historyService.setCanceledCommand(null);
+  String fullCommandLine=dialog.getCommandLine();
+  fullCommandLine=fullCommandLine.trim();
+  String workDirectory=dialog.getWorkDirectory();
+  historyService.addCommand(fullCommandLine,workDirectory);
+  final ExternalTaskExecutionInfo taskExecutionInfo;
+  try {
+    taskExecutionInfo=buildTaskInfo(workDirectory,fullCommandLine);
+  }
+ catch (  CommandLineArgumentException ex) {
+    final NotificationData notificationData=new NotificationData("<b>Command-line arguments cannot be parsed</b>","<i>" + fullCommandLine + "</i> \n"+ ex.getMessage(),NotificationCategory.WARNING,NotificationSource.TASK_EXECUTION);
+    notificationData.setBalloonNotification(true);
+    ExternalSystemNotificationManager.getInstance(project).showNotification(GradleConstants.SYSTEM_ID,notificationData);
+    return;
+  }
+  RunManagerEx runManager=RunManagerEx.getInstanceEx(project);
+  ExternalSystemUtil.runTask(taskExecutionInfo.getSettings(),taskExecutionInfo.getExecutorId(),project,GradleConstants.SYSTEM_ID);
+  RunnerAndConfigurationSettings configuration=ExternalSystemUtil.createExternalSystemRunnerAndConfigurationSettings(taskExecutionInfo.getSettings(),project,GradleConstants.SYSTEM_ID);
+  if (configuration == null)   return;
+  final RunnerAndConfigurationSettings existingConfiguration=runManager.findConfigurationByName(configuration.getName());
+  if (existingConfiguration == null) {
+    runManager.setTemporaryConfiguration(configuration);
+  }
+ else {
+    runManager.setSelectedConfiguration(existingConfiguration);
+  }
+}

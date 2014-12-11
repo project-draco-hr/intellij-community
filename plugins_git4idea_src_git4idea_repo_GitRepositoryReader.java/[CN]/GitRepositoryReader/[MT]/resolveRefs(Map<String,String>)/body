@@ -1,0 +1,41 @@
+{
+  final Map<String,Hash> resolved=getResolvedHashes(data);
+  Map<String,String> unresolved=ContainerUtil.filter(data,new Condition<String>(){
+    @Override public boolean value(    String refName){
+      return !resolved.containsKey(refName);
+    }
+  }
+);
+  boolean progressed=true;
+  while (progressed && !unresolved.isEmpty()) {
+    progressed=false;
+    for (Iterator<Map.Entry<String,String>> iterator=unresolved.entrySet().iterator(); iterator.hasNext(); ) {
+      Map.Entry<String,String> entry=iterator.next();
+      String refName=entry.getKey();
+      String refValue=entry.getValue();
+      String link=getTarget(refValue);
+      if (link != null) {
+        if (duplicateEntry(resolved,refName,refValue)) {
+          iterator.remove();
+        }
+ else         if (!resolved.containsKey(link)) {
+          LOG.debug("Unresolved symbolic link [" + refName + "] pointing to ["+ refValue+ "]");
+        }
+ else {
+          Hash targetValue=resolved.get(link);
+          resolved.put(refName,targetValue);
+          iterator.remove();
+          progressed=true;
+        }
+      }
+ else {
+        LOG.warn("Unexpected record [" + refName + "] -> ["+ refValue+ "]");
+        iterator.remove();
+      }
+    }
+  }
+  if (!unresolved.isEmpty()) {
+    LOG.warn("Cyclic symbolic links among .git/refs: " + unresolved);
+  }
+  return resolved;
+}
