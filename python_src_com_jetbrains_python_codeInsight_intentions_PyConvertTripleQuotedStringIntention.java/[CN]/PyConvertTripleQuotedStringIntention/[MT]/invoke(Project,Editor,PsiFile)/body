@@ -6,28 +6,34 @@
     String stringText=string.getText();
     final int prefixLength=PyStringLiteralExpressionImpl.getPrefixLength(stringText);
     final String prefix=stringText.substring(0,prefixLength);
-    final char firstQuote=stringText.substring(prefixLength).charAt(0);
-    stringText=string.getStringValue();
-    final List<String> subStrings=StringUtil.split(stringText,"\n",false,true);
+    stringText=stringText.substring(prefixLength);
+    final char firstQuote=stringText.charAt(0);
+    List<String> lines=StringUtil.split(stringText,"\n",true,false);
+    final String lastLine=lines.get(lines.size() - 1);
+    boolean lastLineExcluded=false;
+    if (lastLine.equals(TRIPLE_SINGLE_QUOTE) || lastLine.equals(TRIPLE_DOUBLE_QUOTE)) {
+      lastLineExcluded=true;
+      lines=lines.subList(0,lines.size() - 1);
+    }
     final StringBuilder result=new StringBuilder();
-    if (subStrings.size() != 1) {
+    if (lines.size() != 1) {
       result.append("(");
     }
-    boolean lastString=false;
-    for (    String s : subStrings) {
+    for (int i=0; i < lines.size(); i++) {
+      final String validSubstring=convertToValidSubString(lines.get(i),firstQuote);
+      final boolean isLastLine=i == lines.size() - 1;
       result.append(prefix);
       result.append(firstQuote);
-      final String validSubstring=convertToValidSubString(s,firstQuote);
-      if (s.endsWith("'''") || s.endsWith("\"\"\"")) {
-        lastString=true;
-      }
       result.append(validSubstring);
+      if (!isLastLine || lastLineExcluded) {
+        result.append("\\n");
+      }
       result.append(firstQuote);
-      if (!lastString) {
-        result.append(" ").append("\n");
+      if (!isLastLine) {
+        result.append("\n");
       }
     }
-    if (subStrings.size() != 1) {
+    if (lines.size() != 1) {
       result.append(")");
     }
     final PyExpressionStatement e=elementGenerator.createFromText(LanguageLevel.forElement(string),PyExpressionStatement.class,result.toString());
