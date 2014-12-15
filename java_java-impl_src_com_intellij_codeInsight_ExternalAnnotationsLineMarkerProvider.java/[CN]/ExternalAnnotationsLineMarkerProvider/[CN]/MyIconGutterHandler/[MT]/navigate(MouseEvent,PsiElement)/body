@@ -4,26 +4,19 @@
   final VirtualFile virtualFile=PsiUtilCore.getVirtualFile(listOwner);
   if (virtualFile != null && containingFile != null) {
     final Project project=listOwner.getProject();
-    Editor selectedEditor=FileEditorManager.getInstance(project).getSelectedTextEditor();
-    if (selectedEditor != null) {
-      selectedEditor.getCaretModel().moveToOffset(nameIdentifier.getTextOffset());
-      final PsiFile file=PsiDocumentManager.getInstance(project).getPsiFile(selectedEditor.getDocument());
-      if (file != null && virtualFile.equals(file.getVirtualFile())) {
-        final JBPopup popup=createActionGroupPopup(containingFile,project,selectedEditor);
-        if (popup != null) {
-          popup.show(new RelativePoint(e));
-        }
-        return;
-      }
-    }
     final OpenFileDescriptor openFileDescriptor=new OpenFileDescriptor(project,virtualFile,listOwner.getTextOffset());
     final Editor editor=FileEditorManager.getInstance(project).openTextEditor(openFileDescriptor,true);
     if (editor != null) {
-      final JBPopup popup=createActionGroupPopup(containingFile,project,editor);
-      if (popup != null) {
+      final DefaultActionGroup group=new DefaultActionGroup();
+      for (      final IntentionAction action : IntentionManager.getInstance().getAvailableIntentionActions()) {
+        if (action.isAvailable(project,editor,containingFile)) {
+          group.add(new ApplyIntentionAction(action,action.getText(),editor,containingFile));
+        }
+      }
+      if (group.getChildrenCount() > 0) {
         editor.getScrollingModel().runActionOnScrollingFinished(new Runnable(){
           @Override public void run(){
-            popup.showInBestPositionFor(editor);
+            JBPopupFactory.getInstance().createActionGroupPopup(null,group,SimpleDataContext.getProjectContext(null),JBPopupFactory.ActionSelectionAid.SPEEDSEARCH,true).showInBestPositionFor(editor);
           }
         }
 );
