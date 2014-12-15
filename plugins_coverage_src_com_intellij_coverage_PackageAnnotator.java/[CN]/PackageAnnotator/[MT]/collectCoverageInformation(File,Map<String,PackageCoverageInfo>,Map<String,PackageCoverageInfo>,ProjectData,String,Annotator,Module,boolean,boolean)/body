@@ -36,25 +36,27 @@
         final String childName=getClassName(child);
         final String classFqVMName=packageVMName.length() > 0 ? packageVMName + "/" + childName : childName;
         final String toplevelClassSrcFQName=getSourceToplevelFQName(classFqVMName);
-        final VirtualFile[] containingFile=new VirtualFile[1];
+        final Ref<VirtualFile> containingFileRef=new Ref<VirtualFile>();
+        final Ref<PsiClass> psiClassRef=new Ref<PsiClass>();
         final Boolean isInSource=myCoverageManager.doInReadActionIfProjectOpen(new Computable<Boolean>(){
           public Boolean compute(){
             final PsiClass aClass=JavaPsiFacade.getInstance(myManager.getProject()).findClass(toplevelClassSrcFQName,GlobalSearchScope.moduleScope(module));
             if (aClass == null || !aClass.isValid())             return Boolean.FALSE;
-            containingFile[0]=aClass.getContainingFile().getVirtualFile();
-            if (containingFile[0] == null) {
+            psiClassRef.set(aClass);
+            containingFileRef.set(aClass.getContainingFile().getVirtualFile());
+            if (containingFileRef.isNull()) {
               LOG.info("No virtual file found for: " + aClass);
               return null;
             }
             final ModuleFileIndex fileIndex=ModuleRootManager.getInstance(module).getFileIndex();
-            return fileIndex.isUnderSourceRootOfType(containingFile[0],JavaModuleSourceRootTypes.SOURCES) && (trackTestFolders || !fileIndex.isInTestSourceContent(containingFile[0]));
+            return fileIndex.isUnderSourceRootOfType(containingFileRef.get(),JavaModuleSourceRootTypes.SOURCES) && (trackTestFolders || !fileIndex.isInTestSourceContent(containingFileRef.get()));
           }
         }
 );
         if (isInSource != null && isInSource.booleanValue()) {
           for (          DirCoverageInfo dirCoverageInfo : dirs) {
-            if (dirCoverageInfo.sourceRoot != null && VfsUtil.isAncestor(dirCoverageInfo.sourceRoot,containingFile[0],false)) {
-              collectClassCoverageInformation(child,dirCoverageInfo,projectInfo,toplevelClassCoverage,classFqVMName.replace("/","."),toplevelClassSrcFQName);
+            if (dirCoverageInfo.sourceRoot != null && VfsUtil.isAncestor(dirCoverageInfo.sourceRoot,containingFileRef.get(),false)) {
+              collectClassCoverageInformation(child,psiClassRef.get(),dirCoverageInfo,projectInfo,toplevelClassCoverage,classFqVMName.replace("/","."),toplevelClassSrcFQName);
               break;
             }
           }
