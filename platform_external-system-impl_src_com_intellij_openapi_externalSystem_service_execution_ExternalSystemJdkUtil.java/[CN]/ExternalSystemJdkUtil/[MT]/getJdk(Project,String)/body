@@ -6,15 +6,11 @@
   if (USE_PROJECT_JDK.equals(jdkName)) {
     if (project != null) {
       Sdk res=ProjectRootManager.getInstance(project).getProjectSdk();
-      if (res != null) {
-        return res;
-      }
+      if (res != null)       return res;
       Module[] modules=ModuleManager.getInstance(project).getModules();
       for (      Module module : modules) {
         Sdk sdk=ModuleRootManager.getInstance(module).getSdk();
-        if (sdk != null && sdk.getSdkType() instanceof JavaSdkType) {
-          return sdk;
-        }
+        if (sdk != null && sdk.getSdkType() instanceof JavaSdkType)         return sdk;
       }
     }
     if (project == null) {
@@ -22,23 +18,33 @@
       if (recent != null)       return recent;
       return JavaAwareProjectJdkTableImpl.getInstanceEx().getInternalJdk();
     }
-    throw new ExternalSystemException(String.format("Project JDK is not specified. <a href='%s'>Configure</a>",OpenProjectJdkSettingsCallback.ID),OpenProjectJdkSettingsCallback.ID);
+    throw new ProjectJdkNotFoundException();
   }
   if (USE_JAVA_HOME.equals(jdkName)) {
     final String javaHome=System.getenv("JAVA_HOME");
     if (StringUtil.isEmptyOrSpaces(javaHome)) {
-      throw new ExternalSystemException(ExternalSystemBundle.message("external.system.java.home.undefined"));
+      throw new UndefinedJavaHomeException();
     }
-    final Sdk jdk=JavaSdk.getInstance().createJdk("",javaHome);
-    if (jdk == null) {
-      throw new ExternalSystemException(ExternalSystemBundle.message("external.system.java.home.invalid",javaHome));
+    if (JdkUtil.checkForJdk(new File(javaHome)) || JdkUtil.checkForJre(javaHome)) {
+      final Sdk jdk=JavaSdk.getInstance().createJdk("",javaHome);
+      if (jdk == null) {
+        throw new InvalidJavaHomeException(javaHome);
+      }
+      return jdk;
     }
-    return jdk;
+ else {
+      throw new InvalidJavaHomeException(javaHome);
+    }
   }
   for (  Sdk projectJdk : ProjectJdkTable.getInstance().getAllJdks()) {
     if (projectJdk.getName().equals(jdkName)) {
-      return projectJdk;
+      if (projectJdk.getHomePath() != null && (JdkUtil.checkForJdk(new File(projectJdk.getHomePath())) || JdkUtil.checkForJre(projectJdk.getHomePath()))) {
+        return projectJdk;
+      }
+ else {
+        throw new InvalidSdkException(projectJdk.getHomePath());
+      }
     }
   }
-  throw new ExternalSystemException(ExternalSystemBundle.message("external.system.java.home.invalid",jdkName));
+  return null;
 }
