@@ -11,12 +11,14 @@
         if (parameters.length != interfaceMethodParameters.length) {
           return null;
         }
-        final PsiType[] left=new PsiType[parameters.length];
-        final PsiType[] right=new PsiType[parameters.length];
+        final PsiType[] left=new PsiType[parameters.length + 1];
+        final PsiType[] right=new PsiType[parameters.length + 1];
         for (int i=0; i < parameters.length; i++) {
           left[i]=interfaceMethodParameters[i].getType();
           right[i]=parameters[i].getType();
         }
+        left[parameters.length]=method.getReturnType();
+        right[parameters.length]=interfaceMethod.getReturnType();
         final PsiTypeParameter[] typeParameters=aClass.getTypeParameters();
         final PsiSubstitutor substitutor=PsiResolveHelper.SERVICE.getInstance(aClass.getProject()).inferTypeArguments(typeParameters,left,right,PsiUtil.getLanguageLevel(method));
         if (PsiUtil.isRawSubstitutor(aClass,substitutor)) {
@@ -28,12 +30,24 @@
           }
         }
         final PsiType returnType=method.getReturnType();
-        if (!TypeConversionUtil.isAssignable(substitutor.substitute(interfaceMethod.getReturnType()),returnType)) {
+        if (returnType != null && !TypeConversionUtil.isAssignable(returnType,substitutor.substitute(interfaceMethod.getReturnType()))) {
           return null;
         }
+        final PsiClassType[] interfaceThrownTypes=interfaceMethod.getThrowsList().getReferencedTypes();
+        final PsiClassType[] thrownTypes=method.getThrowsList().getReferencedTypes();
+        for (        PsiClassType thrownType : thrownTypes) {
+          if (!ExceptionUtil.isHandledBy(thrownType,interfaceThrownTypes,substitutor)) {
+            return null;
+          }
+        }
+        for (        PsiClassType thrownType : interfaceThrownTypes) {
+          final PsiCodeBlock codeBlock=PsiTreeUtil.getContextOfType(method,PsiCodeBlock.class);
+          if (codeBlock == null || !ExceptionUtil.isHandled(thrownType,codeBlock)) {
+            return null;
+          }
+        }
         final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(aClass.getProject());
-        final PsiType type=elementFactory.createType(aClass,substitutor);
-        return type;
+        return elementFactory.createType(aClass,substitutor);
       }
       return null;
     }
