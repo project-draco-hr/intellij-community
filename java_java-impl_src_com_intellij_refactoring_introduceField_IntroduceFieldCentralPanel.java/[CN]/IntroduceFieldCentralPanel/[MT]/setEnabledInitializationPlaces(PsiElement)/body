@@ -1,0 +1,29 @@
+{
+  final Set<PsiField> fields=new HashSet<PsiField>();
+  final Ref<Boolean> refsLocal=new Ref<Boolean>(false);
+  initializer.accept(new JavaRecursiveElementWalkingVisitor(){
+    @Override public void visitReferenceExpression(    PsiReferenceExpression expression){
+      super.visitReferenceExpression(expression);
+      if (expression.getQualifierExpression() == null) {
+        final PsiElement resolve=expression.resolve();
+        if (resolve == null || resolve instanceof PsiVariable && !PsiTreeUtil.isAncestor(initializer,resolve,true)) {
+          if (resolve instanceof PsiField) {
+            if (!((PsiField)resolve).hasInitializer()) {
+              fields.add((PsiField)resolve);
+            }
+          }
+ else {
+            refsLocal.set(true);
+            stopWalking();
+          }
+        }
+      }
+    }
+  }
+);
+  final boolean locals=refsLocal.get();
+  if (!locals && fields.isEmpty()) {
+    return true;
+  }
+  return updateInitializationPlaceModel(!locals && initializedInSetUp(fields),!locals && initializedInConstructor(fields));
+}
