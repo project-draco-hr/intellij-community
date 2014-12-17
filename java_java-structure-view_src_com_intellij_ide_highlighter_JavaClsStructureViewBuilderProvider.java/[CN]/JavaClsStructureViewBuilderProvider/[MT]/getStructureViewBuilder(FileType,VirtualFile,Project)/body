@@ -1,7 +1,15 @@
 {
   final PsiFile psiFile=PsiManager.getInstance(project).findFile(file);
-  final ContentBasedFileSubstitutor[] processors=Extensions.getExtensions(ContentBasedFileSubstitutor.EP_NAME);
-  for (  ContentBasedFileSubstitutor processor : processors) {
+  if (fileType == JavaClassFileType.INSTANCE && psiFile != null) {
+    Language language=psiFile.getLanguage();
+    if (language != JavaLanguage.INSTANCE) {
+      PsiStructureViewFactory factory=LanguageStructureViewBuilder.INSTANCE.forLanguage(language);
+      if (factory != null) {
+        return factory.getStructureViewBuilder(psiFile);
+      }
+    }
+  }
+  for (  ContentBasedFileSubstitutor processor : Extensions.getExtensions(ContentBasedFileSubstitutor.EP_NAME)) {
     if (processor.isApplicable(project,file)) {
       final Language language=processor.obtainLanguageForFile(file);
       if (language != null) {
@@ -10,12 +18,13 @@
       }
     }
   }
-  final PsiJavaFile javaFile=(PsiJavaFile)psiFile;
-  if (javaFile == null)   return null;
-  return new TreeBasedStructureViewBuilder(){
-    @Override @NotNull public StructureViewModel createStructureViewModel(    @Nullable Editor editor){
-      return new JavaFileTreeModel(javaFile,editor);
+  if (psiFile instanceof PsiClassOwner) {
+    return new TreeBasedStructureViewBuilder(){
+      @Override @NotNull public StructureViewModel createStructureViewModel(      @Nullable Editor editor){
+        return new JavaFileTreeModel((PsiClassOwner)psiFile,editor);
+      }
     }
-  }
 ;
+  }
+  return null;
 }
