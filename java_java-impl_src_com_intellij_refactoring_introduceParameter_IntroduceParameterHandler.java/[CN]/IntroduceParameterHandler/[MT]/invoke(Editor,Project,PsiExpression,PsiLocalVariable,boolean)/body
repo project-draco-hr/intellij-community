@@ -28,7 +28,6 @@
     showErrorMessage(project,message,editor);
     return false;
   }
-  if (!CommonRefactoringUtil.checkReadOnlyStatus(project,method))   return false;
   final PsiType typeByExpression=invokedOnDeclaration ? null : RefactoringUtil.getTypeByExpressionWithExpectedType(expr);
   if (!invokedOnDeclaration && (typeByExpression == null || LambdaUtil.notInferredType(typeByExpression))) {
     String message=RefactoringBundle.getCannotRefactorMessage(RefactoringBundle.message("type.of.the.selected.expression.cannot.be.determined"));
@@ -44,15 +43,19 @@
   if (validEnclosingMethods.isEmpty()) {
     return false;
   }
+  if (!CommonRefactoringUtil.checkReadOnlyStatus(project,method))   return false;
   final Introducer introducer=new Introducer(project,expr,localVar,editor);
-  final boolean unitTestMode=ApplicationManager.getApplication().isUnitTestMode();
-  if (validEnclosingMethods.size() == 1 || unitTestMode) {
-    final PsiMethod methodToIntroduceParameterTo=validEnclosingMethods.get(0);
-    if (methodToIntroduceParameterTo.findDeepestSuperMethod() == null || unitTestMode) {
-      introducer.introduceParameter(methodToIntroduceParameterTo,methodToIntroduceParameterTo);
-      return true;
+  final AbstractInplaceIntroducer inplaceIntroducer=AbstractInplaceIntroducer.getActiveIntroducer(editor);
+  if (inplaceIntroducer instanceof InplaceIntroduceParameterPopup) {
+    final InplaceIntroduceParameterPopup introduceParameterPopup=(InplaceIntroduceParameterPopup)inplaceIntroducer;
+    introducer.introduceParameter(introduceParameterPopup.getMethodToIntroduceParameter(),introduceParameterPopup.getMethodToSearchFor());
+    return true;
+  }
+  chooseMethodToIntroduceParameter(editor,validEnclosingMethods,new PairConsumer<PsiMethod,PsiMethod>(){
+    @Override public void consume(    PsiMethod methodToSearchIn,    PsiMethod methodToSearchFor){
+      introducer.introduceParameter(methodToSearchIn,methodToSearchFor);
     }
   }
-  chooseMethodToIntroduceParameter(editor,validEnclosingMethods,introducer);
+);
   return true;
 }

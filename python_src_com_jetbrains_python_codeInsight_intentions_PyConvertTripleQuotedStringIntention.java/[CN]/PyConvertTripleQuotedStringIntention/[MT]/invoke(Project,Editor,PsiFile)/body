@@ -1,32 +1,43 @@
 {
-  PyStringLiteralExpression string=PsiTreeUtil.getParentOfType(file.findElementAt(editor.getCaretModel().getOffset()),PyStringLiteralExpression.class);
-  PyElementGenerator elementGenerator=PyElementGenerator.getInstance(project);
-  if (string != null) {
-    final PsiElement parent=string.getParent();
-    String stringText=string.getText();
-    final int prefixLength=PyStringLiteralExpressionImpl.getPrefixLength(stringText);
-    String prefix=stringText.substring(0,prefixLength);
-    Character firstQuote=stringText.substring(prefixLength).charAt(0);
-    stringText=string.getStringValue();
-    List<String> subStrings=StringUtil.split(stringText,"\n",false,true);
-    StringBuilder result=new StringBuilder();
-    if (subStrings.size() != 1)     result.append("(");
-    boolean lastString=false;
-    for (    String s : subStrings) {
-      result.append(prefix);
-      result.append(firstQuote);
-      String validSubstring=convertToValidSubString(s,firstQuote);
-      if (s.endsWith("'''") || s.endsWith("\"\"\"")) {
-        lastString=true;
+  final PyStringLiteralExpression pyString=PsiTreeUtil.getParentOfType(file.findElementAt(editor.getCaretModel().getOffset()),PyStringLiteralExpression.class);
+  final PyElementGenerator elementGenerator=PyElementGenerator.getInstance(project);
+  if (pyString != null) {
+    final StringBuilder result=new StringBuilder();
+    final List<StringNodeInfo> nodeInfos=extractStringNodesInfo(pyString);
+    for (int i=0; i < nodeInfos.size(); i++) {
+      final StringNodeInfo info=nodeInfos.get(i);
+      List<String> lines=StringUtil.split(info.content,"\n",true,false);
+      boolean lastLineExcluded=false;
+      if (lines.size() > 1 && lines.get(lines.size() - 1).isEmpty()) {
+        lastLineExcluded=true;
+        lines=lines.subList(0,lines.size() - 1);
       }
-      result.append(validSubstring);
-      result.append(firstQuote);
-      if (!lastString)       result.append(" ").append("\n");
+      final boolean inLastNode=i == nodeInfos.size() - 1;
+      for (int j=0; j < lines.size(); j++) {
+        final boolean inLastLine=j == lines.size() - 1;
+        result.append(info.prefix);
+        result.append(info.quote);
+        result.append(convertToValidSubString(lines.get(j),info.quote,info.isTripleQuoted));
+        if (!inLastLine || lastLineExcluded) {
+          result.append("\\n");
+        }
+        result.append(info.quote);
+        if (!(inLastNode && inLastLine)) {
+          result.append("\n");
+        }
+      }
     }
-    if (subStrings.size() != 1)     result.append(")");
-    PyExpressionStatement e=elementGenerator.createFromText(LanguageLevel.forElement(string),PyExpressionStatement.class,result.toString());
-    PyExpression expression=e.getExpression();
-    if ((parent instanceof PyParenthesizedExpression || parent instanceof PyTupleExpression) && expression instanceof PyParenthesizedExpression)     expression=((PyParenthesizedExpression)expression).getContainedExpression();
-    if (expression != null)     string.replace(expression);
+    if (result.indexOf("\n") >= 0) {
+      result.insert(0,"(");
+      result.append(")");
+    }
+    PyExpression expression=elementGenerator.createExpressionFromText(LanguageLevel.forElement(pyString),result.toString());
+    final PsiElement parent=pyString.getParent();
+    if ((parent instanceof PyParenthesizedExpression || parent instanceof PyTupleExpression) && expression instanceof PyParenthesizedExpression) {
+      expression=((PyParenthesizedExpression)expression).getContainedExpression();
+    }
+    if (expression != null) {
+      pyString.replace(expression);
+    }
   }
 }

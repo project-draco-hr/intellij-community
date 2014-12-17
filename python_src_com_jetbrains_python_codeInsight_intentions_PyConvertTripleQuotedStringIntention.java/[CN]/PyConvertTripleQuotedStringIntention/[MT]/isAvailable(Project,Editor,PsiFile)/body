@@ -2,18 +2,23 @@
   if (!(file instanceof PyFile)) {
     return false;
   }
-  PyStringLiteralExpression string=PsiTreeUtil.getParentOfType(file.findElementAt(editor.getCaretModel().getOffset()),PyStringLiteralExpression.class);
+  final int caretOffset=editor.getCaretModel().getOffset();
+  final PyStringLiteralExpression string=PsiTreeUtil.getParentOfType(file.findElementAt(caretOffset),PyStringLiteralExpression.class);
   if (string != null) {
     final PyDocStringOwner docStringOwner=PsiTreeUtil.getParentOfType(string,PyDocStringOwner.class);
     if (docStringOwner != null) {
       if (docStringOwner.getDocStringExpression() == string)       return false;
     }
-    String stringText=string.getText();
-    final int prefixLength=PyStringLiteralExpressionImpl.getPrefixLength(stringText);
-    stringText=stringText.substring(prefixLength);
-    if (stringText.length() >= 6) {
-      if (stringText.startsWith("'''") && stringText.endsWith("'''") || stringText.startsWith("\"\"\"") && stringText.endsWith("\"\"\""))       return true;
+    boolean insideTripleQuotedString=false;
+    for (    StringNodeInfo info : extractStringNodesInfo(string)) {
+      if (StringUtil.containsIgnoreCase(info.prefix,"r") && info.isTripleQuoted) {
+        return false;
+      }
+      if (info.isTripleQuoted && info.node.getTextRange().contains(caretOffset)) {
+        insideTripleQuotedString=true;
+      }
     }
+    return insideTripleQuotedString;
   }
   return false;
 }

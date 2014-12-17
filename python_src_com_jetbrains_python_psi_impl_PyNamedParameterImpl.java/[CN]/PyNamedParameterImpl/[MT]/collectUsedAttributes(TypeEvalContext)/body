@@ -1,0 +1,57 @@
+{
+  final Set<String> result=new LinkedHashSet<String>();
+  final ScopeOwner owner=ScopeUtil.getScopeOwner(this);
+  final String name=getName();
+  if (owner != null && name != null) {
+    owner.accept(new PyRecursiveElementVisitor(){
+      @Override public void visitPyElement(      PyElement node){
+        if (node instanceof ScopeOwner && node != owner) {
+          return;
+        }
+        if (node instanceof PyQualifiedExpression) {
+          final PyQualifiedExpression expr=(PyQualifiedExpression)node;
+          final PyExpression qualifier=expr.getQualifier();
+          if (qualifier != null) {
+            final String attributeName=expr.getReferencedName();
+            final PyExpression referencedExpr=node instanceof PyBinaryExpression && PyNames.isRightOperatorName(attributeName) ? ((PyBinaryExpression)node).getRightExpression() : qualifier;
+            if (referencedExpr != null) {
+              final PsiReference ref=referencedExpr.getReference();
+              if (ref != null && ref.isReferenceTo(PyNamedParameterImpl.this)) {
+                if (attributeName != null && !result.contains(attributeName)) {
+                  result.add(attributeName);
+                }
+              }
+            }
+          }
+ else {
+            final PsiReference ref=expr.getReference();
+            if (ref != null && ref.isReferenceTo(PyNamedParameterImpl.this)) {
+              final PyNamedParameter parameter=getParameterByCallArgument(expr,context);
+              if (parameter != null) {
+                final PyType type=context.getType(parameter);
+                if (type instanceof PyStructuralType) {
+                  result.addAll(((PyStructuralType)type).getAttributeNames());
+                }
+              }
+            }
+          }
+        }
+        super.visitPyElement(node);
+      }
+      @Override public void visitPyIfStatement(      PyIfStatement node){
+        final PyExpression ifCondition=node.getIfPart().getCondition();
+        if (ifCondition != null) {
+          ifCondition.accept(this);
+        }
+        for (        PyIfPart part : node.getElifParts()) {
+          final PyExpression elseIfCondition=part.getCondition();
+          if (elseIfCondition != null) {
+            elseIfCondition.accept(this);
+          }
+        }
+      }
+    }
+);
+  }
+  return result;
+}
