@@ -1,0 +1,68 @@
+{
+  final String defaultAttributeValue=attributes.get(XmlEmmetParser.DEFAULT_ATTRIBUTE_NAME);
+  if (defaultAttributeValue != null) {
+    attributes.remove(XmlEmmetParser.DEFAULT_ATTRIBUTE_NAME);
+    final List<XmlAttribute> xmlAttributes=ContainerUtil.filter(tag.getAttributes(),new Condition<XmlAttribute>(){
+      @Override public boolean value(      XmlAttribute attribute){
+        return !attributes.containsKey(attribute.getLocalName());
+      }
+    }
+);
+    XmlAttribute defaultAttribute=findDefaultAttribute(xmlAttributes);
+    if (defaultAttribute == null) {
+      defaultAttribute=findImpliedAttribute(xmlAttributes);
+    }
+    if (defaultAttribute == null) {
+      defaultAttribute=findEmptyAttribute(xmlAttributes);
+    }
+    if (defaultAttribute != null) {
+      String attributeName=defaultAttribute.getName();
+      if (attributeName.length() > 1) {
+        if (isImpliedAttribute(attributeName) || isDefaultAttribute(attributeName)) {
+          defaultAttribute.setName(attributeName.substring(1));
+        }
+        final String oldValue=defaultAttribute.getValue();
+        if (oldValue != null && StringUtil.containsChar(oldValue,'|')) {
+          defaultAttribute.setValue(StringUtil.replace(oldValue,"|",defaultAttributeValue));
+        }
+ else {
+          defaultAttribute.setValue(defaultAttributeValue);
+        }
+      }
+    }
+  }
+  for (  Map.Entry<String,String> attribute : attributes.entrySet()) {
+    final String attributeName=attribute.getKey();
+    final XmlAttribute xmlAttribute=tag.getAttribute(attributeName);
+    if (xmlAttribute != null) {
+      final String attributeValue=attribute.getValue();
+      if (ZenCodingUtil.containsSurroundedTextMarker(attributeValue)) {
+        myContainsSurroundedTextMarker=true;
+      }
+      final EmmetOptions emmetOptions=EmmetOptions.getInstance();
+      if (isBooleanAttribute(attributeName,attributeValue)) {
+        if (emmetOptions.isCompactBooleanAllowed() && ZenCodingUtil.isHtml(callback)) {
+          final XmlAttributeValue valueElement=xmlAttribute.getValueElement();
+          if (valueElement != null) {
+            final PsiElement prevSibling=valueElement.getPrevSibling();
+            if (prevSibling != null && prevSibling.textMatches("=")) {
+              xmlAttribute.deleteChildRange(prevSibling,valueElement);
+            }
+          }
+        }
+ else {
+          tag.setAttribute(attributeName,attributeName);
+        }
+      }
+ else {
+        tag.setAttribute(attributeName,Strings.isNullOrEmpty(attributeValue) ? "$" + prepareVariableName(attributeName) + "$" : ZenCodingUtil.getValue(attributeValue,myNumberInIteration,myTotalIterations,mySurroundedText));
+      }
+    }
+  }
+  for (  XmlAttribute xmlAttribute : tag.getAttributes()) {
+    final String xmlAttributeLocalName=xmlAttribute.getLocalName();
+    if (isImpliedAttribute(xmlAttributeLocalName) || isDefaultAttribute(xmlAttributeLocalName)) {
+      xmlAttribute.delete();
+    }
+  }
+}
