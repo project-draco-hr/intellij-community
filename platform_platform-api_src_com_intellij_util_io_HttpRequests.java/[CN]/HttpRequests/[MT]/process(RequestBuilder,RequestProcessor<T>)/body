@@ -29,6 +29,47 @@ class RequestImpl implements Request {
         ((HttpURLConnection)myConnection).disconnect();
       }
     }
+    @NotNull public byte[] toBytes(    @Nullable ProgressIndicator indicator) throws IOException {
+      int contentLength=getConnection().getContentLength();
+      BufferExposingByteArrayOutputStream out=new BufferExposingByteArrayOutputStream(contentLength > 0 ? contentLength : 32 * 1024);
+      NetUtils.copyStreamContent(indicator,getInputStream(),out,contentLength);
+      return ArrayUtil.realloc(out.getInternalBuffer(),out.size());
+    }
+    @NotNull public File saveToFile(    @NotNull File file,    @Nullable ProgressIndicator indicator) throws IOException {
+      OutputStream out=null;
+      boolean deleteFile=true;
+      try {
+        if (indicator != null) {
+          indicator.checkCanceled();
+        }
+        FileUtilRt.createParentDirs(file);
+        out=new FileOutputStream(file);
+        NetUtils.copyStreamContent(indicator,getInputStream(),out,getConnection().getContentLength());
+        deleteFile=false;
+      }
+ catch (      IOException e) {
+        URLConnection connection=getConnection();
+        String errorMessage="Cannot download '" + builder.myUrl + ", headers: "+ connection.getHeaderFields();
+        if (connection instanceof HttpURLConnection) {
+          HttpURLConnection httpConnection=(HttpURLConnection)connection;
+          errorMessage+="', response code: " + httpConnection.getResponseCode() + ", response message: "+ httpConnection.getResponseMessage();
+        }
+        throw new IOException(errorMessage,e);
+      }
+ finally {
+        try {
+          if (out != null) {
+            out.close();
+          }
+        }
+  finally {
+          if (deleteFile) {
+            FileUtilRt.delete(file);
+          }
+        }
+      }
+      return file;
+    }
   }
   RequestImpl request=new RequestImpl();
   try {
