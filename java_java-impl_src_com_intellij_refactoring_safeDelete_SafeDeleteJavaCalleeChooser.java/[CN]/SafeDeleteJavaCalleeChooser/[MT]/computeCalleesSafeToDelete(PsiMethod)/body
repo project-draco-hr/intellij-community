@@ -1,0 +1,29 @@
+{
+  final PsiCodeBlock body=psiMethod.getBody();
+  if (body != null) {
+    final PsiClass containingClass=psiMethod.getContainingClass();
+    if (containingClass != null) {
+      final Set<PsiMethod> methodsToCheck=new HashSet<PsiMethod>();
+      body.accept(new JavaRecursiveElementWalkingVisitor(){
+        @Override public void visitMethodCallExpression(        PsiMethodCallExpression expression){
+          super.visitMethodCallExpression(expression);
+          ContainerUtil.addAllNotNull(methodsToCheck,expression.resolveMethod());
+        }
+      }
+);
+      return ContainerUtil.filter(methodsToCheck,new Condition<PsiMethod>(){
+        @Override public boolean value(        final PsiMethod m){
+          return containingClass.equals(m.getContainingClass()) && !psiMethod.equals(m) && m.findDeepestSuperMethods().length == 0 && ReferencesSearch.search(m).forEach(new CommonProcessors.CollectProcessor<PsiReference>(){
+            @Override public boolean process(            PsiReference reference){
+              final PsiElement element=reference.getElement();
+              return PsiTreeUtil.isAncestor(psiMethod,element,true) || PsiTreeUtil.isAncestor(m,element,true);
+            }
+          }
+);
+        }
+      }
+);
+    }
+  }
+  return null;
+}
