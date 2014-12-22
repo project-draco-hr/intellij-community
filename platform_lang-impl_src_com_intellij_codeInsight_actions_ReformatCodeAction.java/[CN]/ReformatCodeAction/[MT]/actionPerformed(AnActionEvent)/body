@@ -1,2 +1,93 @@
 {
+  DataContext dataContext=event.getDataContext();
+  final Project project=CommonDataKeys.PROJECT.getData(dataContext);
+  if (project == null) {
+    return;
+  }
+  PsiDocumentManager.getInstance(project).commitAllDocuments();
+  final Editor editor=CommonDataKeys.EDITOR.getData(dataContext);
+  final VirtualFile[] files=CommonDataKeys.VIRTUAL_FILE_ARRAY.getData(dataContext);
+  PsiFile file=null;
+  final PsiDirectory dir;
+  boolean hasSelection=false;
+  if (editor != null) {
+    file=PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument());
+    if (file == null)     return;
+    dir=file.getContainingDirectory();
+    hasSelection=editor.getSelectionModel().hasSelection();
+  }
+ else   if (areFiles(files)) {
+    final ReadonlyStatusHandler.OperationStatus operationStatus=ReadonlyStatusHandler.getInstance(project).ensureFilesWritable(files);
+    if (!operationStatus.hasReadonlyFiles()) {
+      ReformatFilesOptions selectedFlags=getReformatFilesOptions(project,files);
+      if (selectedFlags == null)       return;
+      final boolean processOnlyChangedText=selectedFlags.isProcessOnlyChangedText();
+      final boolean shouldOptimizeImports=selectedFlags.isOptimizeImports() && !DumbService.getInstance(project).isDumb();
+      AbstractLayoutCodeProcessor processor=new ReformatCodeProcessor(project,convertToPsiFiles(files,project),null,processOnlyChangedText);
+      if (shouldOptimizeImports) {
+        processor=new OptimizeImportsProcessor(processor);
+      }
+      if (selectedFlags.isRearrangeEntries()) {
+        processor=new RearrangeCodeProcessor(processor);
+      }
+      processor.run();
+    }
+    return;
+  }
+ else {
+    Project projectContext=PlatformDataKeys.PROJECT_CONTEXT.getData(dataContext);
+    Module moduleContext=LangDataKeys.MODULE_CONTEXT.getData(dataContext);
+    if (projectContext != null || moduleContext != null) {
+      ReformatFilesOptions selectedFlags=getLayoutProjectOptions(project,moduleContext);
+      if (selectedFlags != null) {
+        reformatModule(project,moduleContext,selectedFlags);
+      }
+      return;
+    }
+    PsiElement element=CommonDataKeys.PSI_ELEMENT.getData(dataContext);
+    if (element == null)     return;
+    if (element instanceof PsiDirectoryContainer) {
+      dir=((PsiDirectoryContainer)element).getDirectories()[0];
+    }
+ else     if (element instanceof PsiDirectory) {
+      dir=(PsiDirectory)element;
+    }
+ else {
+      file=element.getContainingFile();
+      if (file == null)       return;
+      dir=file.getContainingDirectory();
+    }
+  }
+  boolean optimizeImports=ReformatFilesDialog.isOptmizeImportsOptionOn();
+  boolean processChangedTextOnly=PropertiesComponent.getInstance().getBoolean(LayoutCodeConstants.PROCESS_CHANGED_TEXT_KEY,false);
+  boolean rearrangeEntries=getLastSavedRearrangeCbState(project,file);
+  if (file == null && dir != null) {
+    DirectoryFormattingOptions options=getDirectoryFormattingOptions(project,dir);
+    if (options != null) {
+      reformatDirectory(project,dir,options);
+    }
+    return;
+  }
+  if (file == null || editor == null)   return;
+  TextRange range=null;
+  if (hasSelection) {
+    processChangedTextOnly=false;
+    SelectionModel model=editor.getSelectionModel();
+    range=TextRange.create(model.getSelectionStart(),model.getSelectionEnd());
+  }
+ else   if (processChangedTextOnly && isChangeNotTrackedForFile(project,file)) {
+    processChangedTextOnly=false;
+  }
+  AbstractLayoutCodeProcessor processor;
+  if (optimizeImports && range == null) {
+    processor=new OptimizeImportsProcessor(project,file);
+    processor=new ReformatCodeProcessor(processor,processChangedTextOnly);
+  }
+ else {
+    processor=new ReformatCodeProcessor(project,file,range,processChangedTextOnly);
+  }
+  if (rearrangeEntries) {
+    processor=new RearrangeCodeProcessor(processor);
+  }
+  processor.run();
 }
