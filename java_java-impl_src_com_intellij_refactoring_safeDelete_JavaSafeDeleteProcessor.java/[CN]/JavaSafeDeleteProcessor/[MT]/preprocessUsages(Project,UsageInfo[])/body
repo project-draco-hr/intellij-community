@@ -2,9 +2,13 @@
   final ArrayList<UsageInfo> result=new ArrayList<UsageInfo>();
   final ArrayList<UsageInfo> overridingMethods=new ArrayList<UsageInfo>();
   final ArrayList<SafeDeleteParameterCallHierarchyUsageInfo> delegatingParams=new ArrayList<SafeDeleteParameterCallHierarchyUsageInfo>();
+  final ArrayList<SafeDeleteMethodCalleeUsageInfo> calleesSafeToDelete=new ArrayList<SafeDeleteMethodCalleeUsageInfo>();
   for (  UsageInfo usage : usages) {
     if (usage.isNonCodeUsage) {
       result.add(usage);
+    }
+ else     if (usage instanceof SafeDeleteMethodCalleeUsageInfo) {
+      calleesSafeToDelete.add((SafeDeleteMethodCalleeUsageInfo)usage);
     }
  else     if (usage instanceof SafeDeleteOverridingMethodUsageInfo) {
       overridingMethods.add(usage);
@@ -29,7 +33,7 @@
     }
   }
   if (delegatingParams.size() == 1) {
-    final SafeDeleteParameterCallHierarchyUsageInfo parameterHierarchyUsageInfo=(SafeDeleteParameterCallHierarchyUsageInfo)delegatingParams.get(0);
+    final SafeDeleteParameterCallHierarchyUsageInfo parameterHierarchyUsageInfo=delegatingParams.get(0);
     if (ApplicationManager.getApplication().isUnitTestMode()) {
       result.addAll(delegatingParams);
     }
@@ -49,6 +53,35 @@
       TreeUtil.expand(chooser.getTree(),2);
       if (!chooser.showAndGet()) {
         return null;
+      }
+    }
+  }
+  if (!calleesSafeToDelete.isEmpty()) {
+    if (ApplicationManager.getApplication().isUnitTestMode()) {
+      result.addAll(calleesSafeToDelete);
+    }
+ else {
+      final PsiMethod method=calleesSafeToDelete.get(0).getCallerMethod();
+      final ArrayList<UsageInfo> list=new ArrayList<UsageInfo>();
+      JavaCallerChooser chooser=new SafeDeleteJavaCalleeChooser(method,project,list){
+        @Override protected ArrayList<SafeDeleteMethodCalleeUsageInfo> getTopLevelItems(){
+          return calleesSafeToDelete;
+        }
+      }
+;
+      TreeUtil.expand(chooser.getTree(),2);
+      if (!chooser.showAndGet()) {
+        return null;
+      }
+      result.addAll(list);
+      final List<PsiElement> methodsToDelete=new ArrayList<PsiElement>();
+      for (      UsageInfo info : list) {
+        methodsToDelete.add(info.getElement());
+      }
+      methodsToDelete.add(method);
+      final Condition<PsiElement> insideDeletedCondition=getUsageInsideDeletedFilter(methodsToDelete.toArray(new PsiElement[methodsToDelete.size()]));
+      for (      UsageInfo info : list) {
+        SafeDeleteProcessor.addNonCodeUsages(info.getElement(),result,insideDeletedCondition,JavaRefactoringSettings.getInstance().RENAME_SEARCH_FOR_TEXT_FOR_METHOD,JavaRefactoringSettings.getInstance().RENAME_SEARCH_IN_COMMENTS_FOR_METHOD);
       }
     }
   }
