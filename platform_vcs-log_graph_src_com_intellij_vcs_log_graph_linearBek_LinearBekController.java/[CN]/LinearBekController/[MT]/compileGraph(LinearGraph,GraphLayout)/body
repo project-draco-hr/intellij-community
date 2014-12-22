@@ -13,65 +13,43 @@
         return;
       }
       int firstChildIndex=workingGraph.getDownNodes(parent).get(0);
-      if (firstChildIndex == currentNodeIndex)       return;
+      boolean switchedOrder=false;
+      if (firstChildIndex == currentNodeIndex) {
+        switchedOrder=true;
+        firstChildIndex=workingGraph.getDownNodes(parent).get(1);
+      }
       int x=graphLayout.getLayoutIndex(firstChildIndex);
       int y=graphLayout.getLayoutIndex(currentNodeIndex);
-      final Map<Integer,Integer> magicMap=new HashMap<Integer,Integer>();
-      new GraphVisitorAlgorithm(false).visitSubgraph(workingGraph,new GraphVisitorAlgorithm.SimpleVisitor(){
-        @Override public void visitNode(        int nodeIndex){
-          int layoutIndex=graphLayout.getLayoutIndex(nodeIndex);
-          if (!magicMap.containsKey(layoutIndex) || magicMap.get(layoutIndex) > nodeIndex) {
-            magicMap.put(layoutIndex,nodeIndex);
-          }
-        }
-      }
-,firstChildIndex,100);
-      int k=1;
-      PriorityQueue<Integer> queue=new PriorityQueue<Integer>();
-      queue.addAll(workingGraph.getDownNodes(currentNodeIndex));
-      while (!queue.isEmpty()) {
-        Integer next=queue.poll();
-        if (next == firstChildIndex) {
-          break;
-        }
- else         if (next > currentNodeIndex + k || !visited.get(next)) {
-          break;
-        }
- else         if (next < currentNodeIndex + k) {
-          continue;
-        }
-        k++;
-        queue.addAll(workingGraph.getDownNodes(next));
-      }
-      if (visited.get(firstChildIndex)) {
-        if (firstChildIndex == currentNodeIndex + k) {
-          for (int i=currentNodeIndex; i < currentNodeIndex + k; i++) {
-            boolean isTail=true;
-            for (            int downNode : workingGraph.getDownNodes(i)) {
-              if (downNode > firstChildIndex) {
-                int li=graphLayout.getLayoutIndex(downNode);
-                if (li >= y) {
+      int k=calculateBlockSize(firstChildIndex,currentNodeIndex,workingGraph,visited);
+      if (firstChildIndex == currentNodeIndex + k) {
+        final Map<Integer,Integer> magicMap=createMagicMap(firstChildIndex,workingGraph,graphLayout);
+        for (int i=currentNodeIndex; i < currentNodeIndex + k; i++) {
+          boolean isTail=true;
+          for (          int downNode : workingGraph.getDownNodes(i)) {
+            if (downNode > firstChildIndex) {
+              int li=graphLayout.getLayoutIndex(downNode);
+              if (li >= y) {
+                return;
+              }
+              if (li < x) {
+                if (!magicMap.containsKey(li) || magicMap.get(li) > downNode) {
                   return;
                 }
-                if (li < x) {
-                  if (!magicMap.containsKey(li) || magicMap.get(li) > downNode) {
-                    return;
-                  }
-                }
-                workingGraph.removeEdge(i,downNode);
               }
- else {
-                isTail=false;
-              }
+              workingGraph.removeEdge(i,downNode);
             }
-            if (isTail) {
-              workingGraph.addEdge(i,firstChildIndex);
+ else {
+              isTail=false;
             }
           }
-          workingGraph.removeEdge(parent,firstChildIndex);
+          if (isTail) {
+            workingGraph.addEdge(i,firstChildIndex);
+          }
         }
+        workingGraph.removeEdge(parent,firstChildIndex);
       }
- else {
+ else       if (!switchedOrder) {
+        final Map<Integer,Integer> magicMap=createMagicMap(firstChildIndex,workingGraph,graphLayout);
         boolean hasTails=false;
         for (int i=currentNodeIndex; i < currentNodeIndex + k; i++) {
           List<Integer> downNodes=workingGraph.getDownNodes(i);
