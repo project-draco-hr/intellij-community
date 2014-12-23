@@ -4,33 +4,29 @@
     LOG.error("May block indefinitely: shouldn't be called from EDT or under write lock");
     return null;
   }
-  if (url == null) {
+  if (url == null || !MyJavadocFetcher.ourFree) {
     return null;
   }
-  if (MyJavadocFetcher.isFree()) {
-    final MyJavadocFetcher fetcher=new MyJavadocFetcher(url,new MyDocBuilder(){
-      @Override public void buildFromStream(      String url,      Reader input,      StringBuilder result) throws IOException {
-        doBuildFromStream(url,input,result);
-      }
+  MyJavadocFetcher fetcher=new MyJavadocFetcher(url,new MyDocBuilder(){
+    @Override public void buildFromStream(    String url,    Reader input,    StringBuilder result) throws IOException {
+      doBuildFromStream(url,input,result);
     }
-);
-    final Future<?> fetcherFuture=app.executeOnPooledThread(fetcher);
-    try {
-      fetcherFuture.get();
-    }
- catch (    Exception e) {
-      return null;
-    }
-    final Exception exception=fetcher.getException();
-    if (exception != null) {
-      fetcher.cleanup();
-      throw exception;
-    }
-    final String docText=correctRefs(ourAnchorSuffix.matcher(url).replaceAll(""),fetcher.getData());
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Filtered JavaDoc: " + docText + "\n");
-    }
-    return PlatformDocumentationUtil.fixupText(docText);
   }
-  return null;
+);
+  try {
+    app.executeOnPooledThread(fetcher).get();
+  }
+ catch (  Exception e) {
+    return null;
+  }
+  Exception exception=fetcher.myException;
+  if (exception != null) {
+    fetcher.myException=null;
+    throw exception;
+  }
+  final String docText=correctRefs(ourAnchorSuffix.matcher(url).replaceAll(""),fetcher.data.toString());
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Filtered JavaDoc: " + docText + "\n");
+  }
+  return PlatformDocumentationUtil.fixupText(docText);
 }

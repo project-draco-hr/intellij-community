@@ -3,21 +3,50 @@
     if (url == null) {
       return;
     }
-    try {
-      getReaderByUrl(url,new ThrowableConsumer<Reader,IOException>(){
-        @Override public void consume(        Reader reader) throws IOException {
-          myBuilder.buildFromStream(url,reader,data);
-        }
+    if (url.startsWith(JAR_PROTOCOL)) {
+      VirtualFile file=VirtualFileManager.getInstance().findFileByUrl(BrowserUtil.getDocURL(url));
+      if (file != null) {
+        myBuilder.buildFromStream(url,new StringReader(VfsUtilCore.loadText(file)),data);
       }
+    }
+ else {
+      URL parsedUrl=BrowserUtil.getURL(url);
+      if (parsedUrl != null) {
+        HttpRequests.request(parsedUrl.toString()).connect(new HttpRequests.RequestProcessor<Void>(){
+          @Override public Void process(          @NotNull HttpRequests.Request request) throws IOException {
+            byte[] bytes=request.readBytes(null);
+            String contentEncoding=null;
+            ByteArrayInputStream stream=new ByteArrayInputStream(bytes);
+            BufferedReader reader=new BufferedReader(new InputStreamReader(stream));
+            try {
+              for (String htmlLine=reader.readLine(); htmlLine != null; htmlLine=reader.readLine()) {
+                contentEncoding=parseContentEncoding(htmlLine);
+                if (contentEncoding != null) {
+                  break;
+                }
+              }
+            }
+  finally {
+              reader.close();
+              stream.reset();
+            }
+            if (contentEncoding == null) {
+              contentEncoding=request.getConnection().getContentEncoding();
+            }
+            myBuilder.buildFromStream(url,contentEncoding != null ? new MyReader(stream,contentEncoding) : new MyReader(stream),data);
+            return null;
+          }
+        }
 );
-    }
- catch (    ProcessCanceledException ignored) {
-    }
-catch (    IOException e) {
-      myException=e;
+      }
     }
   }
-  finally {
+ catch (  ProcessCanceledException ignored) {
+  }
+catch (  IOException e) {
+    myException=e;
+  }
+ finally {
     ourFree=true;
   }
 }
