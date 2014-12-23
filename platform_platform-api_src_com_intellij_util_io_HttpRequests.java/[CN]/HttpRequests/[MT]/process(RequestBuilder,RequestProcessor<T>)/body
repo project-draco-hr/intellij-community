@@ -2,6 +2,7 @@
 class RequestImpl implements Request {
     private URLConnection myConnection;
     private InputStream myInputStream;
+    private BufferedReader myReader;
     @NotNull @Override public URLConnection getConnection() throws IOException {
       if (myConnection == null) {
         myConnection=openConnection(builder);
@@ -17,14 +18,29 @@ class RequestImpl implements Request {
       }
       return myInputStream;
     }
+    @NotNull @Override public BufferedReader getReader() throws IOException {
+      return getReader(null);
+    }
+    @NotNull @Override public BufferedReader getReader(    @Nullable ProgressIndicator indicator) throws IOException {
+      if (myReader == null) {
+        InputStream inputStream=getInputStream();
+        if (indicator != null) {
+          int contentLength=getConnection().getContentLength();
+          if (contentLength > 0) {
+            inputStream=new ProgressMonitorInputStream(indicator,inputStream,contentLength);
+          }
+        }
+        myReader=new BufferedReader(new InputStreamReader(inputStream,getCharset(this)));
+      }
+      return myReader;
+    }
     @Override public boolean isSuccessful() throws IOException {
       URLConnection connection=getConnection();
       return !(connection instanceof HttpURLConnection) || ((HttpURLConnection)connection).getResponseCode() == 200;
     }
-    private void cleanup() throws IOException {
-      if (myInputStream != null) {
-        myInputStream.close();
-      }
+    private void cleanup(){
+      StreamUtil.closeStream(myInputStream);
+      StreamUtil.closeStream(myReader);
       if (myConnection instanceof HttpURLConnection) {
         ((HttpURLConnection)myConnection).disconnect();
       }
