@@ -1,0 +1,97 @@
+{
+  myWorkingGraph.clear();
+  List<Integer> upNodes=myWorkingGraph.getUpNodes(currentNodeIndex);
+  if (upNodes.size() != 1)   return;
+  int parent=upNodes.get(0);
+  if (myWorkingGraph.getDownNodes(parent).size() != 2) {
+    return;
+  }
+  int firstChildIndex=myWorkingGraph.getDownNodes(parent).get(0);
+  boolean switched=false;
+  if (firstChildIndex == currentNodeIndex) {
+    if (firstChildIndex > myWorkingGraph.getDownNodes(parent).get(1)) {
+      return;
+    }
+    switched=true;
+    firstChildIndex=myWorkingGraph.getDownNodes(parent).get(1);
+  }
+  int x=myGraphLayout.getLayoutIndex(firstChildIndex);
+  int y=myGraphLayout.getLayoutIndex(currentNodeIndex);
+  if (switched && x != y)   return;
+  int k=1;
+  int headNumber=myHeads.indexOf(currentHead);
+  int nextHeadIndex=headNumber == myHeads.size() - 1 ? Integer.MAX_VALUE : myGraphLayout.getLayoutIndex(myHeads.get(headNumber + 1));
+  int headIndex=myGraphLayout.getLayoutIndex(currentHead);
+  PriorityQueue<GraphEdge> queue=new PriorityQueue<GraphEdge>(MAX_BLOCK_SIZE,new Comparator<GraphEdge>(){
+    @Override public int compare(    @NotNull GraphEdge o1,    @NotNull GraphEdge o2){
+      if (o1.getDownNodeIndex() == null)       return -1;
+      if (o2.getDownNodeIndex() == null)       return 1;
+      return o1.getDownNodeIndex().compareTo(o2.getDownNodeIndex());
+    }
+  }
+);
+  addDownEdges(myWorkingGraph,currentNodeIndex,queue);
+  Set<Integer> definitelyNotTails=ContainerUtil.newHashSet(MAX_BLOCK_SIZE);
+  Set<Integer> tails=ContainerUtil.newHashSet(MAX_BLOCK_SIZE);
+  while (!queue.isEmpty()) {
+    GraphEdge nextEdge=queue.poll();
+    Integer next=nextEdge.getDownNodeIndex();
+    if (next == null)     return;
+    if (next == firstChildIndex) {
+    }
+ else     if (next <= currentNodeIndex + k) {
+      k++;
+      addDownEdges(myWorkingGraph,next,queue);
+      definitelyNotTails.add(nextEdge.getUpNodeIndex());
+    }
+ else     if (next > currentNodeIndex + k && next < firstChildIndex) {
+      int li=myGraphLayout.getLayoutIndex(next);
+      if (li > y) {
+        return;
+      }
+      if (li <= x) {
+        if (!(li >= headIndex && li < nextHeadIndex)) {
+          return;
+        }
+      }
+      k++;
+      addDownEdges(myWorkingGraph,next,queue);
+      if (visited.get(next)) {
+        definitelyNotTails.add(nextEdge.getUpNodeIndex());
+      }
+    }
+ else     if (next > firstChildIndex) {
+      int li=myGraphLayout.getLayoutIndex(next);
+      if (li > y) {
+        return;
+      }
+      if (li < x) {
+        if (!(li >= headIndex && li < nextHeadIndex)) {
+          return;
+        }
+      }
+ else {
+        if (!definitelyNotTails.contains(nextEdge.getUpNodeIndex())) {
+          tails.add(nextEdge.getUpNodeIndex());
+        }
+        myWorkingGraph.removeEdge(nextEdge.getUpNodeIndex(),nextEdge.getDownNodeIndex());
+      }
+    }
+    if (k >= MAX_BLOCK_SIZE) {
+      return;
+    }
+  }
+  boolean mergeWithOldCommit=currentNodeIndex + k == firstChildIndex && visited.get(firstChildIndex);
+  if (switched && !mergeWithOldCommit) {
+    return;
+  }
+  for (  Integer tail : tails) {
+    if (!myWorkingGraph.getDownNodes(tail).contains(firstChildIndex)) {
+      myWorkingGraph.addEdge(tail,firstChildIndex);
+    }
+  }
+  if (!tails.isEmpty() || mergeWithOldCommit) {
+    myWorkingGraph.removeEdge(parent,firstChildIndex);
+  }
+  myWorkingGraph.apply();
+}
