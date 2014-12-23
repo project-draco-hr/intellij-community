@@ -1,22 +1,27 @@
 {
   boolean fromList=false;
   String baseUrl;
-  if (myCurrentList != null) {
-    baseUrl=TRELLO_API_BASE_URL + "/lists/" + myCurrentList.getId()+ "/cards";
+  if (myCurrentList != null && myCurrentList != UNSPECIFIED_LIST) {
+    baseUrl=getRestApiUrl("lists",myCurrentList.getId(),"cards");
     fromList=true;
   }
- else   if (myCurrentBoard != null) {
-    baseUrl=TRELLO_API_BASE_URL + "/boards/" + myCurrentBoard.getId()+ "/cards";
+ else   if (myCurrentBoard != null && myCurrentBoard != UNSPECIFIED_BOARD) {
+    baseUrl=getRestApiUrl("boards",myCurrentBoard.getId(),"cards");
   }
  else   if (myCurrentUser != null) {
-    baseUrl=TRELLO_API_BASE_URL + "/members/me/cards";
+    baseUrl=getRestApiUrl("members","me","cards");
   }
  else {
     throw new IllegalStateException("Not configured");
   }
-  String fetchCardsUrl=baseUrl + "?fields=" + encodeUrl(TrelloCard.REQUIRED_FIELDS)+ "&limit"+ limit;
-  fetchCardsUrl+=withClosed || fromList ? "&filter=all" : "&filter=visible";
-  List<TrelloCard> cards=makeRequestAndDeserializeJsonResponse(fetchCardsUrl,TrelloUtil.LIST_OF_CARDS_TYPE);
+  final URIBuilder fetchCardUrl=new URIBuilder(baseUrl).addParameter("fields",TrelloCard.REQUIRED_FIELDS).addParameter("limit",String.valueOf(limit));
+  if (withClosed || fromList) {
+    fetchCardUrl.addParameter("filter","all");
+  }
+ else {
+    fetchCardUrl.addParameter("filter","visible");
+  }
+  List<TrelloCard> cards=makeRequestAndDeserializeJsonResponse(fetchCardUrl.build(),TrelloUtil.LIST_OF_CARDS_TYPE);
   LOG.debug("Total " + cards.size() + " cards downloaded");
   if (!myIncludeAllCards) {
     cards=ContainerUtil.filter(cards,new Condition<TrelloCard>(){
@@ -29,12 +34,12 @@
   }
   if (!cards.isEmpty()) {
     if (fromList) {
-      baseUrl=TRELLO_API_BASE_URL + "/boards/" + cards.get(0).getIdBoard()+ "/cards";
+      baseUrl=getRestApiUrl("boards",cards.get(0).getIdBoard(),"cards");
     }
-    String visibleCardsUrl=baseUrl + "?filter=visible&fields=none";
-    List<TrelloCard> visibleCards=makeRequestAndDeserializeJsonResponse(visibleCardsUrl,TrelloUtil.LIST_OF_CARDS_TYPE);
+    final URIBuilder visibleCardsUrl=new URIBuilder(baseUrl).addParameter("filter","visible").addParameter("fields","none");
+    final List<TrelloCard> visibleCards=makeRequestAndDeserializeJsonResponse(visibleCardsUrl.build(),TrelloUtil.LIST_OF_CARDS_TYPE);
     LOG.debug("Total " + visibleCards.size() + " visible cards");
-    Set<String> visibleCardsIDs=ContainerUtil.map2Set(visibleCards,new Function<TrelloCard,String>(){
+    final Set<String> visibleCardsIDs=ContainerUtil.map2Set(visibleCards,new Function<TrelloCard,String>(){
       @Override public String fun(      TrelloCard card){
         return card.getId();
       }
