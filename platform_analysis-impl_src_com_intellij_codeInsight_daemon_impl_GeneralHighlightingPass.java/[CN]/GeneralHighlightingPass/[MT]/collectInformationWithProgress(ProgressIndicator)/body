@@ -8,7 +8,7 @@
   try {
     List<ProperTextRange> insideRanges=new ArrayList<ProperTextRange>();
     List<ProperTextRange> outsideRanges=new ArrayList<ProperTextRange>();
-    Divider.divideInsideAndOutside(myFile,myStartOffset,myEndOffset,myPriorityRange,insideElements,insideRanges,outsideElements,outsideRanges,false,FILE_FILTER);
+    Divider.divideInsideAndOutside(myFile,myStartOffset,myEndOffset,myPriorityRange,insideElements,insideRanges,outsideElements,outsideRanges,false,SHOULD_HIGHIGHT_FILTER);
     if (!insideElements.isEmpty() && insideElements.get(insideElements.size() - 1) instanceof PsiFile) {
       PsiElement file=insideElements.remove(insideElements.size() - 1);
       outsideElements.add(file);
@@ -20,24 +20,20 @@
     if (!isDumbMode()) {
       highlightTodos(myFile,myDocument.getCharsSequence(),myStartOffset,myEndOffset,progress,myPriorityRange,insideResult,outsideResult);
     }
-    Runnable after1=new Runnable(){
-      @Override public void run(){
-        final TextRange priorityIntersection=myPriorityRange.intersection(myRestrictRange);
-        if ((!insideElements.isEmpty() || !insideResult.isEmpty()) && priorityIntersection != null) {
-          myHighlightInfoProcessor.highlightsInsideVisiblePartAreProduced(myHighlightingSession,insideResult,myPriorityRange,myRestrictRange);
-        }
+    boolean success=collectHighlights(insideElements,insideRanges,outsideElements,outsideRanges,progress,filteredVisitors,insideResult,outsideResult,forceHighlightParents);
+    if (success) {
+      myHighlightInfoProcessor.highlightsOutsideVisiblePartAreProduced(myHighlightingSession,outsideResult,myPriorityRange,myRestrictRange,getId());
+      if (myUpdateAll) {
+        daemonCodeAnalyzer.getFileStatusMap().setErrorFoundFlag(myProject,myDocument,myErrorFound);
       }
     }
-;
-    collectHighlights(insideElements,insideRanges,after1,outsideElements,outsideRanges,progress,filteredVisitors,insideResult,outsideResult,forceHighlightParents);
-    myHighlightInfoProcessor.highlightsOutsideVisiblePartAreProduced(myHighlightingSession,outsideResult,myPriorityRange,myRestrictRange);
-    if (myUpdateAll) {
-      daemonCodeAnalyzer.getFileStatusMap().setErrorFoundFlag(myDocument,myErrorFound);
+ else {
+      cancelAndRestartDaemonLater(progress,myProject);
     }
   }
   finally {
     incVisitorUsageCount(-1);
+    myHighlights.addAll(insideResult);
+    myHighlights.addAll(outsideResult);
   }
-  myHighlights.addAll(insideResult);
-  myHighlights.addAll(outsideResult);
 }

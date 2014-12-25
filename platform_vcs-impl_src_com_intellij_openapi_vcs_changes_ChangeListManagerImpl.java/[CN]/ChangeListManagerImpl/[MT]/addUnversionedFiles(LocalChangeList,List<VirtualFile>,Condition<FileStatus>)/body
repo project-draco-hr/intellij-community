@@ -5,21 +5,11 @@
     @Override public void process(    final AbstractVcs vcs,    final List<VirtualFile> items){
       final CheckinEnvironment environment=vcs.getCheckinEnvironment();
       if (environment != null) {
-        final Set<VirtualFile> descendant=new HashSet<VirtualFile>();
-        for (        VirtualFile item : items) {
-          final Processor<VirtualFile> addProcessor=new Processor<VirtualFile>(){
-            @Override public boolean process(            VirtualFile file){
-              if (statusChecker.value(getStatus(file))) {
-                descendant.add(file);
-              }
-              return true;
-            }
-          }
-;
-          VcsRootIterator.iterateVfUnderVcsRoot(myProject,item,addProcessor);
-        }
-        final List<VcsException> result=environment.scheduleUnversionedFilesForAddition(new ArrayList<VirtualFile>(descendant));
-        allProcessedFiles.addAll(descendant);
+        Set<VirtualFile> descendants=getUnversionedDescendantsRecursively(items,statusChecker);
+        Set<VirtualFile> parents=vcs.areDirectoriesVersionedItems() ? getUnversionedParents(items,statusChecker) : Collections.<VirtualFile>emptySet();
+        List<VcsException> result=environment.scheduleUnversionedFilesForAddition(ContainerUtil.newArrayList(descendants));
+        allProcessedFiles.addAll(descendants);
+        allProcessedFiles.addAll(parents);
         if (result != null) {
           exceptions.addAll(result);
         }

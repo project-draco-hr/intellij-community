@@ -1,0 +1,56 @@
+{
+  ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+    @Override public void run(){
+      final List<PsiFile> chunk=new ArrayList<PsiFile>();
+      try {
+        scope.accept(new Processor<VirtualFile>(){
+          @Override public boolean process(          final VirtualFile file){
+            Document document=ApplicationManager.getApplication().runReadAction(new Computable<Document>(){
+              @Override public Document compute(){
+                PsiFile psiFile=PsiManager.getInstance(getProject()).findFile(file);
+                Document document=psiFile == null ? null : shouldProcess(psiFile,headlessEnvironment,localScopeFiles);
+                if (document != null) {
+                  chunk.add(psiFile);
+                }
+                return document;
+              }
+            }
+);
+            if (document != null) {
+              document.getText();
+              if (chunk.size() >= JobSchedulerImpl.CORES_COUNT) {
+                try {
+                  LOG.assertTrue(!ApplicationManager.getApplication().isReadAccessAllowed());
+                  chunksToInspect.put(new ArrayList<PsiFile>(chunk));
+                }
+ catch (                InterruptedException e) {
+                  LOG.error(e);
+                }
+                chunk.clear();
+              }
+            }
+            return true;
+          }
+        }
+);
+        if (!chunk.isEmpty()) {
+          LOG.assertTrue(!ApplicationManager.getApplication().isReadAccessAllowed());
+          chunksToInspect.put(new ArrayList<PsiFile>(chunk));
+          chunk.clear();
+        }
+      }
+ catch (      InterruptedException e) {
+        LOG.error(e);
+      }
+ finally {
+        try {
+          chunksToInspect.put(Collections.<PsiFile>emptyList());
+        }
+ catch (        InterruptedException e) {
+          LOG.error(e);
+        }
+      }
+    }
+  }
+);
+}

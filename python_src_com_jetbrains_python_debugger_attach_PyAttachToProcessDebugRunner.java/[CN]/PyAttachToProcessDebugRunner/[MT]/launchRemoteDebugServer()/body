@@ -1,0 +1,31 @@
+{
+  final ServerSocket serverSocket;
+  try {
+    serverSocket=new ServerSocket(0);
+  }
+ catch (  IOException e) {
+    throw new ExecutionException("Failed to find free socket port",e);
+  }
+  PyAttachToProcessCommandLineState state=PyAttachToProcessCommandLineState.create(myProject,mySdkPath,serverSocket.getLocalPort(),myPid);
+  final ExecutionResult result=state.execute(state.getEnvironment().getExecutor(),this);
+  final XDebugSession session=XDebuggerManager.getInstance(myProject).startSessionAndShowTab(String.valueOf(myPid),null,new XDebugProcessStarter(){
+    @org.jetbrains.annotations.NotNull public XDebugProcess start(    @NotNull final XDebugSession session){
+      PyRemoteDebugProcess pyDebugProcess=new PyRemoteDebugProcess(session,serverSocket,result.getExecutionConsole(),result.getProcessHandler(),""){
+        @Override protected void printConsoleInfo(){
+        }
+        @Override protected String getConnectionMessage(){
+          return "Attaching to a process with PID=" + myPid;
+        }
+        @Override protected String getConnectionTitle(){
+          return "Attaching Debugger";
+        }
+      }
+;
+      pyDebugProcess.setPositionConverter(new PyLocalPositionConverter());
+      createConsoleCommunicationAndSetupActions(myProject,result,pyDebugProcess,session);
+      return pyDebugProcess;
+    }
+  }
+);
+  return serverSocket.getLocalPort();
+}

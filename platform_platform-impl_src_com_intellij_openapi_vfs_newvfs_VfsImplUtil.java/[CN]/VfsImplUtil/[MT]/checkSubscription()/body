@@ -3,35 +3,37 @@
   MessageBus bus=ApplicationManager.getApplication().getMessageBus();
   bus.connect().subscribe(VirtualFileManager.VFS_CHANGES,new BulkFileListener.Adapter(){
     @Override public void after(    @NotNull List<? extends VFileEvent> events){
-      Map<String,VirtualFile> rootsToRefresh=null;
+      InvalidationState state=null;
 synchronized (ourLock) {
-        String[] rootPaths=ArrayUtil.toStringArray(ourHandlers.keySet());
         for (        VFileEvent event : events) {
           if (!(event.getFileSystem() instanceof LocalFileSystem))           continue;
+          if (event instanceof VFileCreateEvent)           continue;
+          if (event instanceof VFilePropertyChangeEvent && !VirtualFile.PROP_NAME.equals(((VFilePropertyChangeEvent)event).getPropertyName())) {
+            continue;
+          }
+          VirtualFile file=event.getFile();
           String path=event.getPath();
-          for (int i=0; i < rootPaths.length; i++) {
-            String rootPath=rootPaths[i];
-            if (rootPath == null)             continue;
-            ArchiveFileSystem vfs=ourHandlers.get(rootPath).first;
-            String localPath=vfs.extractLocalPath(rootPath);
-            if (FileUtil.startsWith(localPath,path)) {
-              ourHandlers.remove(rootPath);
-              NewVirtualFile root=ManagingFS.getInstance().findRoot(rootPath,vfs);
-              if (root != null) {
-                root.markDirtyRecursively();
-                if (rootsToRefresh == null)                 rootsToRefresh=ContainerUtil.newHashMap();
-                rootsToRefresh.put(localPath,root);
-              }
-              rootPaths[i]=null;
+          if (event instanceof VFilePropertyChangeEvent) {
+            path=((VFilePropertyChangeEvent)event).getOldPath();
+          }
+ else           if (event instanceof VFileMoveEvent) {
+            path=((VFileMoveEvent)event).getOldPath();
+          }
+          if (file == null || !file.isDirectory()) {
+            if (state == null)             state=new InvalidationState();
+            state.invalidateHandlerForPath(path);
+          }
+ else {
+            Collection<String> affectedPaths=ourDominatorsMap.get(path);
+            if (affectedPaths != null) {
+              affectedPaths=new ArrayList<String>(affectedPaths);
+              if (state == null)               state=new InvalidationState();
+              for (              String affectedPath : affectedPaths)               state.invalidateHandlerForPath(affectedPath);
             }
           }
         }
       }
-      if (rootsToRefresh != null) {
-        ZipFileCache.reset(rootsToRefresh.keySet());
-        boolean async=!ApplicationManager.getApplication().isUnitTestMode();
-        RefreshQueue.getInstance().refresh(async,true,null,rootsToRefresh.values());
-      }
+      if (state != null)       state.scheduleRefresh();
     }
   }
 );

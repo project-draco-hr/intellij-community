@@ -1,23 +1,17 @@
 {
-  clear();
-  final Comparator<Element> comparator=new Comparator<Element>(){
+  clear(false);
+  List<Element> children=parentNode.getChildren(CONFIGURATION);
+  Element[] sortedElements=children.toArray(new Element[children.size()]);
+  Arrays.sort(sortedElements,new Comparator<Element>(){
     @Override public int compare(    @NotNull Element a,    @NotNull Element b){
       final boolean aDefault=Boolean.valueOf(a.getAttributeValue("default","false"));
       final boolean bDefault=Boolean.valueOf(b.getAttributeValue("default","false"));
       return aDefault == bDefault ? 0 : aDefault ? -1 : 1;
     }
   }
-;
-  final List children=parentNode.getChildren();
-  final List<Element> sortedElements=new ArrayList<Element>();
-  for (  final Object aChildren : children) {
-    final Element element=(Element)aChildren;
-    if (Comparing.strEqual(element.getName(),CONFIGURATION)) {
-      sortedElements.add(element);
-    }
-  }
-  Collections.sort(sortedElements,comparator);
-  for (  final Element element : sortedElements) {
+);
+  for (int i=0, length=sortedElements.length; i < length; i++) {
+    Element element=sortedElements[i];
     RunnerAndConfigurationSettings configurationSettings;
     try {
       configurationSettings=loadConfiguration(element,false);
@@ -27,8 +21,10 @@
       continue;
     }
     if (configurationSettings == null) {
-      if (myUnknownElements == null)       myUnknownElements=new ArrayList<Element>(2);
-      myUnknownElements.add(element);
+      if (myUnknownElements == null) {
+        myUnknownElements=new SmartList<Element>();
+      }
+      myUnknownElements.add((Element)element.detach());
     }
   }
   try {
@@ -37,16 +33,7 @@
  catch (  InvalidDataException e) {
     throw new RuntimeException(e);
   }
-  for (int i=0; i < myOrder.size(); i++) {
-    String id=myOrder.get(i);
-    for (    RunnerAndConfigurationSettings settings : myConfigurations.values()) {
-      RunConfiguration configuration=settings.getConfiguration();
-      if (configuration != null && id.equals(configuration.getType().getDisplayName() + "." + configuration.getName()+ (configuration instanceof UnknownRunConfiguration ? configuration.getUniqueID() : ""))) {
-        myOrder.set(i,settings.getUniqueID());
-        break;
-      }
-    }
-  }
+  readList(myOrder);
   myRecentlyUsedTemporaries.clear();
   Element recentNode=parentNode.getChild(RECENT);
   if (recentNode != null) {
@@ -57,19 +44,12 @@
  catch (    InvalidDataException e) {
       throw new RuntimeException(e);
     }
-    for (int i=0; i < list.size(); i++) {
-      String id=list.get(i);
-      for (      RunnerAndConfigurationSettings settings : myConfigurations.values()) {
-        RunConfiguration configuration=settings.getConfiguration();
-        if (configuration != null && id.equals(configuration.getType().getDisplayName() + "." + configuration.getName()+ (configuration instanceof UnknownRunConfiguration ? configuration.getUniqueID() : ""))) {
-          list.set(i,settings.getUniqueID());
-          break;
-        }
-      }
-    }
+    readList(list);
     for (    String name : list) {
       RunnerAndConfigurationSettings settings=myConfigurations.get(name);
-      if (settings != null)       myRecentlyUsedTemporaries.add(settings.getConfiguration());
+      if (settings != null) {
+        myRecentlyUsedTemporaries.add(settings.getConfiguration());
+      }
     }
   }
   myOrdered=false;

@@ -1,31 +1,23 @@
 {
   myMessageBus=bus;
   mySchemesManager=schemesManagerFactory.createSchemesManager(FILE_SPEC,new BaseSchemeProcessor<AbstractFileType>(){
-    @Override public AbstractFileType readScheme(    @NotNull final Document document) throws InvalidDataException {
-      Element root=document.getRootElement();
-      if (!ELEMENT_FILETYPE.equals(root.getName())) {
-        throw new InvalidDataException();
-      }
-      Element element=root.getChild(AbstractFileType.ELEMENT_HIGHLIGHTING);
-      if (element != null) {
-        final SyntaxTable table=AbstractFileType.readSyntaxTable(element);
-        if (table != null) {
-          ReadFileType type=new ReadFileType(table,root);
-          String fileTypeName=root.getAttributeValue(ATTRIBUTE_NAME);
-          String fileTypeDescr=root.getAttributeValue(ATTRIBUTE_DESCRIPTION);
-          String iconPath=root.getAttributeValue(ATTRIBUTE_ICON);
-          setFileTypeAttributes(fileTypeName,fileTypeDescr,iconPath,type);
-          return type;
-        }
-      }
-      return null;
+    @NotNull @Override public AbstractFileType readScheme(    @NotNull Element root){
+      ReadFileType type=new ReadFileType(AbstractFileType.readSyntaxTable(root.getChild(AbstractFileType.ELEMENT_HIGHLIGHTING)),root);
+      String fileTypeName=root.getAttributeValue(ATTRIBUTE_NAME);
+      String fileTypeDescr=root.getAttributeValue(ATTRIBUTE_DESCRIPTION);
+      String iconPath=root.getAttributeValue(ATTRIBUTE_ICON);
+      setFileTypeAttributes(fileTypeName,fileTypeDescr,iconPath,type);
+      return type;
     }
     @Override public boolean shouldBeSaved(    @NotNull final AbstractFileType fileType){
       return shouldBeSavedToFile(fileType);
     }
     @Override public Element writeScheme(    @NotNull final AbstractFileType fileType) throws WriteExternalException {
       Element root=new Element(ELEMENT_FILETYPE);
-      writeHeader(root,fileType);
+      root.setAttribute(ATTRIBUTE_BINARY,String.valueOf(fileType.isBinary()));
+      root.setAttribute(ATTRIBUTE_DEFAULT_EXTENSION,fileType.getDefaultExtension());
+      root.setAttribute(ATTRIBUTE_DESCRIPTION,fileType.getDescription());
+      root.setAttribute(ATTRIBUTE_NAME,fileType.getName());
       fileType.writeExternal(root);
       Element map=new Element(AbstractFileType.ELEMENT_EXTENSIONMAP);
       root.addContent(map);
@@ -53,7 +45,7 @@
 ,RoamingType.PER_USER);
   bus.connect().subscribe(VirtualFileManager.VFS_CHANGES,new BulkFileListener.Adapter(){
     @Override public void after(    @NotNull List<? extends VFileEvent> events){
-      Set<VirtualFile> files=ContainerUtil.map2Set(events,new Function<VFileEvent,VirtualFile>(){
+      Collection<VirtualFile> files=ContainerUtil.map2Set(events,new Function<VFileEvent,VirtualFile>(){
         @Override public VirtualFile fun(        VFileEvent event){
           VirtualFile file=event instanceof VFileCreateEvent ? null : event.getFile();
           return file != null && wasAutoDetectedBefore(file) && isDetectable(file) ? file : null;
@@ -61,10 +53,17 @@
       }
 );
       files.remove(null);
+      if (toLog()) {
+        log("F: VFS events: " + events);
+      }
       if (!files.isEmpty() && RE_DETECT_ASYNC) {
-        reDetectQueue.offer(files);
+        if (toLog()) {
+          log("F: queued to redetect: " + files);
+        }
+        reDetectQueue.offerIfAbsent(files);
       }
     }
   }
 );
+  initStandardFileTypes();
 }

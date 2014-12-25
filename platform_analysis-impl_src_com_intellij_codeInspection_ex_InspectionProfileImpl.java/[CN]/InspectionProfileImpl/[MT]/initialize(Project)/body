@@ -6,7 +6,7 @@
   try {
     tools=createTools(project);
   }
- catch (  ProcessCanceledException e) {
+ catch (  ProcessCanceledException ignored) {
     return false;
   }
   final Map<String,List<String>> dependencies=new HashMap<String,List<String>>();
@@ -32,14 +32,23 @@
     HighlightDisplayLevel level=myBaseProfile != null ? myBaseProfile.getErrorLevel(key,project) : toolWrapper.getDefaultLevel();
     boolean enabled=myBaseProfile != null ? myBaseProfile.isToolEnabled(key) : toolWrapper.isEnabledByDefault();
     final ToolsImpl toolsList=new ToolsImpl(toolWrapper,level,!myLockedProfile && enabled,enabled);
-    final Element element=myDeinstalledInspectionsSettings.remove(toolWrapper.getShortName());
-    if (element != null) {
-      try {
+    final Element element=myUninstalledInspectionsSettings.remove(shortName);
+    try {
+      if (element != null) {
         toolsList.readExternal(element,this,dependencies);
       }
- catch (      InvalidDataException e) {
-        LOG.error("Can't read settings for " + toolWrapper,e);
+ else       if (!myUninstalledInspectionsSettings.containsKey(InspectionElementsMerger.getMergedMarkerName(shortName))) {
+        final InspectionElementsMerger merger=getMergers().get(shortName);
+        if (merger != null) {
+          final Element merged=merger.merge(myUninstalledInspectionsSettings);
+          if (merged != null) {
+            toolsList.readExternal(merged,this,dependencies);
+          }
+        }
       }
+    }
+ catch (    InvalidDataException e) {
+      LOG.error("Can't read settings for " + toolWrapper,e);
     }
     myTools.put(toolWrapper.getShortName(),toolsList);
   }

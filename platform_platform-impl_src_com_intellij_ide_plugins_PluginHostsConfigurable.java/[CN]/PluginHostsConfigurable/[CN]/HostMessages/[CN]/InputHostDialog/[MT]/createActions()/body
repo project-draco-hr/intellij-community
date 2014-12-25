@@ -1,30 +1,31 @@
 {
-  final Action[] actions=super.createActions();
   final AbstractAction checkNowAction=new AbstractAction("Check Now"){
-    public void actionPerformed(    final ActionEvent e){
-      final boolean[] result=new boolean[1];
-      final Exception[] ex=new Exception[1];
-      if (ProgressManager.getInstance().runProcessWithProgressSynchronously(new Runnable(){
-        @Override public void run(){
+    @Override public void actionPerformed(    @Nullable ActionEvent e){
+      ProgressManager.getInstance().run(new Task.Modal(null,"Checking plugins repository...",true){
+        private int result;
+        private Exception error;
+        @Override public void run(        @NotNull ProgressIndicator indicator){
+          String host=correctRepositoryRule(getTextField().getText());
           try {
-            result[0]=UpdateChecker.checkPluginsHost(correctRepositoryRule(getTextField().getText()),new HashMap<PluginId,PluginDownloader>(),true,ProgressManager.getInstance().getProgressIndicator());
+            result=RepositoryHelper.loadPlugins(host,null,indicator).size();
           }
- catch (          Exception e1) {
-            ex[0]=e1;
+ catch (          Exception e) {
+            error=e;
           }
         }
-      }
-,"Checking plugins repository...",true,null,getPreferredFocusedComponent())) {
-        if (ex[0] != null) {
-          showErrorDialog(myField,"Connection failed: " + ex[0].getMessage());
-        }
- else         if (result[0]) {
-          showInfoMessage(myField,"Plugins repository was successfully checked","Check Plugins Repository");
-        }
+        @Override public void onSuccess(){
+          if (error != null) {
+            showErrorDialog(myField,"Connection failed: " + error.getMessage());
+          }
+ else           if (result == 0) {
+            showWarningDialog(myField,"No plugins found. Please check log file for possible errors.","Check Plugins Repository");
+          }
  else {
-          showErrorDialog(myField,"Plugin descriptions contain some errors. Please, check idea.log for details.");
+            showInfoMessage(myField,"Repository was successfully checked","Check Plugins Repository");
+          }
         }
       }
+);
     }
   }
 ;
@@ -35,5 +36,5 @@
   }
 );
   checkNowAction.setEnabled(!StringUtil.isEmptyOrSpaces(myField.getText()));
-  return ArrayUtil.append(actions,checkNowAction);
+  return ArrayUtil.append(super.createActions(),checkNowAction);
 }

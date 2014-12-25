@@ -1,29 +1,16 @@
 {
   TIntObjectHashMap<String> offsetToProperty=new TIntObjectHashMap<String>();
-  FileTemplate defaultTemplate=FileTemplateManager.getInstance().getDefaultTemplate(FileTemplateManager.FILE_HEADER_TEMPLATE_NAME);
+  FileTemplate defaultTemplate=FileTemplateManager.getInstance(file.getProject()).getDefaultTemplate(FileTemplateManager.FILE_HEADER_TEMPLATE_NAME);
   Pattern pattern=getTemplatePattern(defaultTemplate,file.getProject(),offsetToProperty);
   Matcher matcher=pattern.matcher(file.getViewProvider().getContents());
-  if (matcher.matches()) {
-    final int startOffset=matcher.start(1);
-    final int endOffset=matcher.end(1);
-    final Ref<PsiDocComment> docComment=new Ref<PsiDocComment>();
-    file.accept(new JavaRecursiveElementWalkingVisitor(){
-      @Override public void visitElement(      PsiElement element){
-        if (docComment.get() != null)         return;
-        TextRange range=element.getTextRange();
-        if (!range.contains(startOffset) && !range.contains(endOffset))         return;
-        super.visitElement(element);
-      }
-      @Override public void visitDocComment(      PsiDocComment comment){
-        docComment.set(comment);
-      }
-    }
-);
-    PsiDocComment element=docComment.get();
-    if (element == null)     return null;
-    LocalQuickFix[] quickFix=createQuickFix(matcher,offsetToProperty);
-    final String description=InspectionsBundle.message("default.file.template.description");
-    return manager.createProblemDescriptor(element,description,onTheFly,quickFix,ProblemHighlightType.GENERIC_ERROR_OR_WARNING);
+  if (!matcher.matches()) {
+    return null;
   }
-  return null;
+  PsiComment element=PsiTreeUtil.findElementOfClassAtRange(file,matcher.start(1),matcher.end(1),PsiComment.class);
+  if (element == null) {
+    return null;
+  }
+  LocalQuickFix[] fixes=createQuickFix(matcher,offsetToProperty,file.getProject());
+  String description=InspectionsBundle.message("default.file.template.description");
+  return manager.createProblemDescriptor(element,description,onTheFly,fixes,ProblemHighlightType.GENERIC_ERROR_OR_WARNING);
 }

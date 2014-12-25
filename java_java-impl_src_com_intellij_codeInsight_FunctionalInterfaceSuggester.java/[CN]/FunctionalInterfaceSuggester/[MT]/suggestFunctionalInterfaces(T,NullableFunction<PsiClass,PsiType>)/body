@@ -1,0 +1,36 @@
+{
+  final Project project=element.getProject();
+  final Set<PsiType> types=new HashSet<PsiType>();
+  final Processor<PsiMember> consumer=new Processor<PsiMember>(){
+    @Override public boolean process(    PsiMember member){
+      if (member instanceof PsiClass && !Java15APIUsageInspectionBase.isForbiddenApiUsage(member,PsiUtil.getLanguageLevel(element))) {
+        if (!JavaResolveUtil.isAccessible(member,null,member.getModifierList(),element,null,null)) {
+          return true;
+        }
+        ContainerUtil.addIfNotNull(types,acceptanceChecker.fun((PsiClass)member));
+      }
+      return true;
+    }
+  }
+;
+  final JavaPsiFacade psiFacade=JavaPsiFacade.getInstance(project);
+  final GlobalSearchScope allScope=GlobalSearchScope.allScope(project);
+  final PsiClass functionalInterfaceClass=psiFacade.findClass(CommonClassNames.JAVA_LANG_FUNCTIONAL_INTERFACE,allScope);
+  if (functionalInterfaceClass != null) {
+    AnnotatedMembersSearch.search(functionalInterfaceClass,element.getResolveScope()).forEach(consumer);
+  }
+  for (  String functionalInterface : FUNCTIONAL_INTERFACES) {
+    final PsiClass aClass=psiFacade.findClass(functionalInterface,allScope);
+    if (aClass != null) {
+      consumer.process(aClass);
+    }
+  }
+  final ArrayList<PsiType> typesToSuggest=new ArrayList<PsiType>(types);
+  Collections.sort(typesToSuggest,new Comparator<PsiType>(){
+    @Override public int compare(    PsiType o1,    PsiType o2){
+      return o1.getCanonicalText().compareTo(o2.getCanonicalText());
+    }
+  }
+);
+  return typesToSuggest;
+}

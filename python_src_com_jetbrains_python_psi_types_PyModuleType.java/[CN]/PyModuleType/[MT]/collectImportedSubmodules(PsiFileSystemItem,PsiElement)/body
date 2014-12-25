@@ -1,0 +1,33 @@
+{
+  final PsiElement parentAnchor;
+  if (pyPackage instanceof PyFile && PyUtil.isPackage(((PyFile)pyPackage))) {
+    parentAnchor=((PyFile)pyPackage).getContainingDirectory();
+  }
+ else   if (pyPackage instanceof PsiDirectory && PyUtil.isPackage(((PsiDirectory)pyPackage),location)) {
+    parentAnchor=pyPackage;
+  }
+ else {
+    throw new IllegalArgumentException("Package argument should be either standard Python package or namespace package");
+  }
+  final ScopeOwner scopeOwner=ScopeUtil.getScopeOwner(location);
+  if (scopeOwner == null) {
+    return Collections.emptyList();
+  }
+  final List<PsiElement> result=new ArrayList<PsiElement>();
+  nextImportElement:   for (  PyImportElement importElement : getVisibleImports(scopeOwner)) {
+    PsiElement resolvedChild=PyUtil.turnInitIntoDir(importElement.resolve());
+    if (resolvedChild == null || !PsiTreeUtil.isAncestor(parentAnchor,resolvedChild,true)) {
+      continue;
+    }
+    QualifiedName importedQName=importElement.getImportedQName();
+    while (resolvedChild != null && resolvedChild.getParent() != parentAnchor) {
+      if (importedQName == null || importedQName.getComponentCount() <= 1) {
+        continue nextImportElement;
+      }
+      importedQName=importedQName.removeTail(1);
+      resolvedChild=PyUtil.turnInitIntoDir(ResolveImportUtil.resolveImportElement(importElement,importedQName));
+    }
+    ContainerUtil.addIfNotNull(result,resolvedChild);
+  }
+  return result;
+}

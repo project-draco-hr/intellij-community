@@ -1,20 +1,26 @@
 {
   super(new BorderLayout());
-  final AnAction[] recentProjectActions=RecentProjectsManagerBase.getInstance().getRecentProjectsActions(false);
+  final AnAction[] recentProjectActions=RecentProjectsManager.getInstance().getRecentProjectsActions(false);
   myPathShortener=new UniqueNameBuilder<ReopenProjectAction>(SystemProperties.getUserHome(),File.separator,40);
   for (  AnAction action : recentProjectActions) {
     ReopenProjectAction item=(ReopenProjectAction)action;
     myPathShortener.addPath(item,item.getProjectPath());
   }
-  myList=new MyList(recentProjectActions);
-  myList.setCellRenderer(new RecentProjectItemRenderer());
+  myList=createList(recentProjectActions,getPreferredScrollableViewportSize());
+  myList.setCellRenderer(createRenderer(myPathShortener));
   new ClickListener(){
     @Override public boolean onClick(    @NotNull MouseEvent event,    int clickCount){
       int selectedIndex=myList.getSelectedIndex();
       if (selectedIndex >= 0) {
-        if (myList.getCellBounds(selectedIndex,selectedIndex).contains(event.getPoint())) {
+        Rectangle cellBounds=myList.getCellBounds(selectedIndex,selectedIndex);
+        if (cellBounds.contains(event.getPoint())) {
           Object selection=myList.getSelectedValue();
-          if (selection != null) {
+          Rectangle closeButtonRect=myCloseButtonForEditor.getBounds();
+          Rectangle rectInListCoordinates=new Rectangle(new Point(closeButtonRect.x + cellBounds.x,closeButtonRect.y + cellBounds.y),closeButtonRect.getSize());
+          if (Registry.is("removable.welcome.screen.projects") && rectInListCoordinates.contains(event.getPoint())) {
+            removeRecentProjectAction.actionPerformed(null);
+          }
+ else           if (selection != null) {
             ((AnAction)selection).actionPerformed(AnActionEvent.createFromInputEvent((AnAction)selection,event,ActionPlaces.WELCOME_SCREEN));
           }
         }
@@ -32,7 +38,7 @@
     }
   }
 ,KeyStroke.getKeyStroke(KeyEvent.VK_ENTER,0),WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
-  new AnAction(){
+  removeRecentProjectAction=new AnAction(){
     @Override public void actionPerformed(    AnActionEvent e){
       Object[] selection=myList.getSelectedValues();
       if (selection != null && selection.length > 0) {
@@ -43,7 +49,7 @@
         }
 ,"'\n'") + "' from recent projects list?","Remove Recent Project",Messages.getQuestionIcon());
         if (rc == Messages.OK) {
-          final RecentProjectsManagerBase manager=RecentProjectsManagerBase.getInstance();
+          RecentProjectsManager manager=RecentProjectsManagerBase.getInstance();
           for (          Object projectAction : selection) {
             manager.removePath(((ReopenProjectAction)projectAction).getProjectPath());
           }
@@ -51,29 +57,13 @@
         }
       }
     }
-  }
-.registerCustomShortcutSet(CustomShortcutSet.fromString("DELETE","BACK_SPACE"),myList,screen);
-  myList.addMouseMotionListener(new MouseMotionAdapter(){
-    boolean myIsEngaged=false;
-    public void mouseMoved(    MouseEvent e){
-      if (myIsEngaged && !UIUtil.isSelectionButtonDown(e)) {
-        Point point=e.getPoint();
-        int index=myList.locationToIndex(point);
-        myList.setSelectedIndex(index);
-        final Rectangle bounds=myList.getCellBounds(index,index);
-        if (bounds != null && bounds.contains(point)) {
-          myList.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        }
- else {
-          myList.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
-        }
-      }
- else {
-        myIsEngaged=true;
-      }
+    @Override public void update(    @NotNull AnActionEvent e){
+      e.getPresentation().setEnabled(!ListWithFilter.isSearchActive(myList));
     }
   }
-);
+;
+  removeRecentProjectAction.registerCustomShortcutSet(CustomShortcutSet.fromString("DELETE","BACK_SPACE"),myList,screen);
+  addMouseMotionListener();
   myList.setSelectedIndex(0);
   JBScrollPane scroll=new JBScrollPane(myList);
   scroll.setBorder(null);
@@ -90,18 +80,9 @@
   }
 );
   add(list,BorderLayout.CENTER);
-  JPanel title=new JPanel(){
-    @Override public Dimension getPreferredSize(){
-      return new Dimension(super.getPreferredSize().width,28);
-    }
+  JPanel title=createTitle();
+  if (title != null) {
+    add(title,BorderLayout.NORTH);
   }
-;
-  title.setBorder(new BottomLineBorder());
-  JLabel titleLabel=new JLabel("Recent Projects");
-  title.add(titleLabel);
-  titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
-  titleLabel.setForeground(WelcomeScreenColors.CAPTION_FOREGROUND);
-  title.setBackground(WelcomeScreenColors.CAPTION_BACKGROUND);
-  add(title,BorderLayout.NORTH);
   setBorder(new LineBorder(WelcomeScreenColors.BORDER_COLOR));
 }

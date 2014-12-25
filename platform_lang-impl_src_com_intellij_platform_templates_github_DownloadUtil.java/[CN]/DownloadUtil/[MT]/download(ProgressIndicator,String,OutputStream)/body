@@ -1,34 +1,26 @@
 {
-  String originalText=progress != null ? progress.getText() : null;
+  final String originalText=progress != null ? progress.getText() : null;
   substituteContentLength(progress,originalText,-1);
   if (progress != null) {
     progress.setText2("Downloading " + location);
   }
-  URLConnection urlConnection=HttpConfigurable.getInstance().openConnection(location);
-  HttpURLConnection httpURLConnection=ObjectUtils.tryCast(urlConnection,HttpURLConnection.class);
   try {
-    urlConnection.setRequestProperty("User-Agent",ApplicationInfoEx.getInstanceEx().getFullApplicationName());
-    urlConnection.connect();
-    InputStream in=urlConnection.getInputStream();
-    int contentLength=urlConnection.getContentLength();
-    substituteContentLength(progress,originalText,contentLength);
-    NetUtils.copyStreamContent(progress,in,output,contentLength);
+    HttpRequests.request(location).productNameAsUserAgent().connect(new HttpRequests.RequestProcessor<Object>(){
+      @Override public Object process(      @NotNull HttpRequests.Request request) throws IOException {
+        try {
+          int contentLength=request.getConnection().getContentLength();
+          substituteContentLength(progress,originalText,contentLength);
+          NetUtils.copyStreamContent(progress,request.getInputStream(),output,contentLength);
+        }
+ catch (        IOException e) {
+          throw new IOException(HttpRequests.createErrorMessage(e,request,true),e);
+        }
+        return null;
+      }
+    }
+);
   }
  catch (  IOException e) {
-    String errorMessage="Can not download '" + location + ", headers: "+ urlConnection.getHeaderFields();
-    if (httpURLConnection != null) {
-      errorMessage+="', response code: " + httpURLConnection.getResponseCode() + ", response message: "+ httpURLConnection.getResponseMessage();
-    }
-    throw new IOException(errorMessage,e);
-  }
- finally {
-    if (httpURLConnection != null) {
-      try {
-        httpURLConnection.disconnect();
-      }
- catch (      Exception e) {
-        LOG.warn("Exception at disconnect()",e);
-      }
-    }
+    throw new IOException("Cannot download " + location,e);
   }
 }

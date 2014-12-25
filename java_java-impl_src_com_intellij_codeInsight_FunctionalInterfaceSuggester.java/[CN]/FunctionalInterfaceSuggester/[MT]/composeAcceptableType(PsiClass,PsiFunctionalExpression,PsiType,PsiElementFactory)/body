@@ -1,0 +1,47 @@
+{
+  if (interface2Consider.hasTypeParameters()) {
+    final PsiMethod interfaceMethod=LambdaUtil.getFunctionalInterfaceMethod(interface2Consider);
+    if (interfaceMethod != null) {
+      final PsiParameter[] parameters=interfaceMethod.getParameterList().getParameters();
+      PsiParameter[] functionalExprParameters;
+      int offset=0;
+      final PsiType[] left;
+      final PsiType[] right;
+      if (expression instanceof PsiLambdaExpression && ((PsiLambdaExpression)expression).hasFormalParameterTypes()) {
+        left=new PsiType[parameters.length];
+        right=new PsiType[parameters.length];
+        functionalExprParameters=((PsiLambdaExpression)expression).getParameterList().getParameters();
+        if (parameters.length != functionalExprParameters.length) {
+          return null;
+        }
+      }
+ else       if (expression instanceof PsiMethodReferenceExpression) {
+        left=new PsiType[parameters.length + 1];
+        right=new PsiType[parameters.length + 1];
+        final PsiMethod method=getTargetMethod((PsiMethodReferenceExpression)expression,qualifierType,parameters,left,right);
+        if (method == null) {
+          return null;
+        }
+        functionalExprParameters=method.getParameterList().getParameters();
+        if (PsiMethodReferenceUtil.isStaticallyReferenced((PsiMethodReferenceExpression)expression) && !method.hasModifierProperty(PsiModifier.STATIC)) {
+          offset=1;
+        }
+        left[parameters.length]=method.getReturnType();
+        right[parameters.length]=interfaceMethod.getReturnType();
+      }
+ else {
+        return null;
+      }
+      for (int i=0; i < functionalExprParameters.length; i++) {
+        left[i + offset]=parameters[i + offset].getType();
+        right[i + offset]=functionalExprParameters[i].getType();
+      }
+      final PsiSubstitutor substitutor=PsiResolveHelper.SERVICE.getInstance(interface2Consider.getProject()).inferTypeArguments(interface2Consider.getTypeParameters(),left,right,PsiUtil.getLanguageLevel(expression));
+      PsiType type=elementFactory.createType(interface2Consider,substitutor);
+      if (expression.isAcceptable(type)) {
+        return type;
+      }
+    }
+  }
+  return null;
+}

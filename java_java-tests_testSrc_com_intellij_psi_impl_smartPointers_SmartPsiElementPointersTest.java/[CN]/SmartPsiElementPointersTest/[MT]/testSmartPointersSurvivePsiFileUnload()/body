@@ -1,0 +1,29 @@
+{
+  final VirtualFile vfile=myRoot.createChildData(this,"X.txt");
+  String xxx="xxx";
+  String text=xxx + " " + xxx+ " "+ xxx;
+  VfsUtil.saveText(vfile,text);
+  PsiFile psiFile=PsiManager.getInstance(getProject()).findFile(vfile);
+  assertTrue(String.valueOf(psiFile),psiFile instanceof PsiPlainTextFile);
+  SmartPointerManagerImpl manager=(SmartPointerManagerImpl)SmartPointerManager.getInstance(myProject);
+  TextRange range1=TextRange.from(text.indexOf(xxx),xxx.length());
+  SmartPsiFileRange pointer1=manager.createSmartPsiFileRangePointer(psiFile,range1);
+  TextRange range2=TextRange.from(text.lastIndexOf(xxx),xxx.length());
+  SmartPsiFileRange pointer2=manager.createSmartPsiFileRangePointer(psiFile,range2);
+  assertNotNull(FileDocumentManager.getInstance().getCachedDocument(vfile));
+  SoftReference<PsiFile> ref=new SoftReference<PsiFile>(psiFile);
+  psiFile=null;
+  while (ref.get() != null) {
+    PlatformTestUtil.tryGcSoftlyReachableObjects();
+  }
+  assertNull(FileDocumentManager.getInstance().getCachedDocument(vfile));
+  assertEquals(pointer1.getRange(),range1);
+  WriteCommandAction.runWriteCommandAction(getProject(),new Runnable(){
+    @Override public void run(){
+      FileDocumentManager.getInstance().getDocument(vfile).insertString(0," ");
+    }
+  }
+);
+  assertEquals(range1.shiftRight(1),pointer1.getRange());
+  assertEquals(range2.shiftRight(1),pointer2.getRange());
+}

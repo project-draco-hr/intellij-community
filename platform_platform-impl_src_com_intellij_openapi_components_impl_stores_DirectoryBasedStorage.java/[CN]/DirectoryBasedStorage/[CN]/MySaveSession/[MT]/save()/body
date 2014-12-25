@@ -1,47 +1,26 @@
 {
-  final VirtualFile dir=LocalFileSystem.getInstance().findFileByIoFile(myStorage.myDir);
-  final Set<String> existingFileNames=new SmartHashSet<String>();
-  for (  String componentName : myStorageData.getComponentNames()) {
-    myStorageData.processComponent(componentName,new TObjectObjectProcedure<File,Element>(){
-      @Override public boolean execute(      File file,      Element element){
-        String fileName=file.getName();
-        existingFileNames.add(fileName);
-        if (myStorage.myPathMacroSubstitutor != null) {
-          myStorage.myPathMacroSubstitutor.collapsePaths(element);
-        }
-        if (file.lastModified() <= myStorageData.getLastTimeStamp()) {
-          StorageUtil.save(file,element,MySaveSession.this,false,dir == null ? null : dir.findChild(fileName));
-          myStorageData.updateLastTimestamp(file);
-        }
-        return true;
+  VirtualFile dir=storage.getVirtualFile();
+  if (copiedStorageData.isEmpty()) {
+    if (dir != null && dir.exists()) {
+      try {
+        StorageUtil.deleteFile(this,dir);
+      }
+ catch (      IOException e) {
+        throw new StateStorageException(e);
       }
     }
-);
+    storage.myStorageData=copiedStorageData;
+    return;
   }
-  if (dir != null && dir.exists()) {
-    FileTypeManager fileTypeManager=FileTypeManager.getInstance();
-    AccessToken token=WriteAction.start();
-    try {
-      for (      VirtualFile file : dir.getChildren()) {
-        String fileName=file.getName();
-        if (fileTypeManager.isFileIgnored(fileName) || !DirectoryStorageData.isStorageFile(file) || existingFileNames.contains(fileName)) {
-          continue;
-        }
-        if (file.getTimeStamp() > myStorageData.getLastTimeStamp()) {
-          return;
-        }
-        try {
-          LOG.debug("Removing configuration file: " + file.getPresentableUrl());
-          file.delete(this);
-        }
- catch (        IOException e) {
-          LOG.error(e);
-        }
-      }
-    }
-  finally {
-      token.finish();
-    }
+  if (dir == null || !dir.isValid()) {
+    dir=createDir(storage.myDir,this);
   }
-  myStorage.myStorageData=myStorageData;
+  if (!dirtyFileNames.isEmpty()) {
+    saveStates(dir);
+  }
+  if (dir.exists() && !removedFileNames.isEmpty()) {
+    deleteFiles(dir);
+  }
+  storage.myVirtualFile=dir;
+  storage.myStorageData=copiedStorageData;
 }

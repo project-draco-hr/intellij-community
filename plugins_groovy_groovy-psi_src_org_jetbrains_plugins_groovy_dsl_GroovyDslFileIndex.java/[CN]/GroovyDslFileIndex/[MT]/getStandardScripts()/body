@@ -4,16 +4,15 @@
     return result;
   }
   final GroovyFrameworkConfigNotification[] extensions=GroovyFrameworkConfigNotification.EP_NAME.getExtensions();
-  final Semaphore semaphore=new Semaphore();
-  semaphore.down();
-  final AtomicReference<List<Pair<File,GroovyDslExecutor>>> ref=new AtomicReference<List<Pair<File,GroovyDslExecutor>>>();
-  ourPool.execute(new Runnable(){
-    @SuppressWarnings("AssignmentToStaticFieldFromInstanceMethod") @Override public void run(){
+  Callable<List<Pair<File,GroovyDslExecutor>>> action=new Callable<List<Pair<File,GroovyDslExecutor>>>(){
+    @Override public List<Pair<File,GroovyDslExecutor>> call() throws Exception {
+      if (GdslUtil.ourGdslStopped) {
+        return null;
+      }
       try {
         List<Pair<File,GroovyDslExecutor>> pairs=derefStandardScripts();
         if (pairs != null) {
-          ref.set(pairs);
-          return;
+          return pairs;
         }
         Set<Class> classes=new HashSet<Class>(ContainerUtil.map2Set(extensions,new Function<GroovyFrameworkConfigNotification,Class>(){
           @Override public Class fun(          GroovyFrameworkConfigNotification notification){
@@ -51,28 +50,27 @@
           }
         }
         ourStandardScripts=new SoftReference<List<Pair<File,GroovyDslExecutor>>>(executors);
-        ref.set(executors);
+        return executors;
       }
  catch (      Throwable e) {
-        ref.set(new ArrayList<Pair<File,GroovyDslExecutor>>());
         if (e instanceof Error) {
           GdslUtil.stopGdsl();
         }
         LOG.error(e);
-      }
- finally {
-        semaphore.up();
+        return null;
       }
     }
   }
-);
-  while (true) {
-    ProgressManager.checkCanceled();
-    if (GdslUtil.ourGdslStopped) {
-      return Collections.emptyList();
+;
+  try {
+    if (ApplicationManager.getApplication().isDispatchThread()) {
+      return action.call();
     }
-    if (ref.get() != null || semaphore.waitFor(20)) {
-      return ref.get();
-    }
+    return ApplicationUtil.runWithCheckCanceled(action,new EmptyProgressIndicator());
+  }
+ catch (  Exception e) {
+    ExceptionUtil.rethrowUnchecked(e);
+    LOG.error(e);
+    return null;
   }
 }

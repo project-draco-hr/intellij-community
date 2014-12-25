@@ -1,32 +1,32 @@
 {
   PropertiesComponent.getInstance().setValue(ANNOTATE_LOCAL_VARIABLES,String.valueOf(myAnnotateLocalVariablesCb.isSelected()));
   final ProgressManager progressManager=ProgressManager.getInstance();
-  final int totalFiles=scope.getFileCount();
   final Set<Module> modulesWithoutAnnotations=new HashSet<Module>();
   final Set<Module> modulesWithLL=new HashSet<Module>();
+  final JavaPsiFacade javaPsiFacade=JavaPsiFacade.getInstance(project);
+  final String defaultNullable=NullableNotNullManager.getInstance(project).getDefaultNullable();
+  final int[] fileCount=new int[]{0};
   if (!progressManager.runProcessWithProgressSynchronously(new Runnable(){
     @Override public void run(){
       scope.accept(new PsiElementVisitor(){
-        private int myFileCount=0;
         final private Set<Module> processed=new HashSet<Module>();
         @Override public void visitFile(        PsiFile file){
-          myFileCount++;
+          fileCount[0]++;
           final ProgressIndicator progressIndicator=ProgressManager.getInstance().getProgressIndicator();
           if (progressIndicator != null) {
             final VirtualFile virtualFile=file.getVirtualFile();
             if (virtualFile != null) {
               progressIndicator.setText2(ProjectUtil.calcRelativeToProjectPath(virtualFile,project));
             }
-            progressIndicator.setFraction(((double)myFileCount) / totalFiles);
+            progressIndicator.setText(AnalysisScopeBundle.message("scanning.scope.progress.title"));
           }
           final Module module=ModuleUtilCore.findModuleForPsiElement(file);
-          if (module != null && !processed.contains(module)) {
-            processed.add(module);
-            if (JavaPsiFacade.getInstance(project).findClass(NullableNotNullManager.getInstance(project).getDefaultNullable(),GlobalSearchScope.moduleWithDependenciesAndLibrariesScope(module)) == null) {
-              modulesWithoutAnnotations.add(module);
-            }
+          if (module != null && processed.add(module)) {
             if (PsiUtil.getLanguageLevel(file).compareTo(LanguageLevel.JDK_1_5) < 0) {
               modulesWithLL.add(module);
+            }
+ else             if (javaPsiFacade.findClass(defaultNullable,GlobalSearchScope.moduleWithDependenciesAndLibrariesScope(module)) == null) {
+              modulesWithoutAnnotations.add(module);
             }
           }
         }
@@ -42,7 +42,7 @@
     return;
   }
   if (!modulesWithoutAnnotations.isEmpty()) {
-    final Library annotationsLib=LibraryUtil.findLibraryByClass(NullableNotNullManager.getInstance(project).getDefaultNullable(),project);
+    final Library annotationsLib=LibraryUtil.findLibraryByClass(defaultNullable,project);
     if (annotationsLib != null) {
       String message="Module" + (modulesWithoutAnnotations.size() == 1 ? " " : "s ");
       message+=StringUtil.join(modulesWithoutAnnotations,new Function<Module,String>(){
@@ -70,8 +70,7 @@
       ApplicationManager.getApplication().invokeLater(new Runnable(){
         @Override public void run(){
           final LocateLibraryDialog dialog=new LocateLibraryDialog(modulesWithoutAnnotations.iterator().next(),PathManager.getLibPath(),"annotations.jar",QuickFixBundle.message("add.library.annotations.description"));
-          dialog.show();
-          if (dialog.isOK()) {
+          if (dialog.showAndGet()) {
             final String path=dialog.getResultingLibraryPath();
             new WriteCommandAction(project){
               @Override protected void run(              @NotNull final Result result) throws Throwable {
@@ -89,9 +88,8 @@
     }
     return;
   }
-  if (scope.checkScopeWritable(project))   return;
   PsiDocumentManager.getInstance(project).commitAllDocuments();
-  final UsageInfo[] usageInfos=findUsages(project,scope);
+  final UsageInfo[] usageInfos=findUsages(project,scope,fileCount[0]);
   if (usageInfos == null)   return;
   if (usageInfos.length < 5) {
     SwingUtilities.invokeLater(applyRunnable(project,new Computable<UsageInfo[]>(){

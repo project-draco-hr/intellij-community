@@ -5,20 +5,27 @@
     @Override protected PsiConflictResolver createResolver(    PsiMethodReferenceExpressionImpl referenceExpression,    PsiMethodReferenceUtil.QualifierResolveResult qualifierResolveResult,    PsiMethod interfaceMethod,    MethodSignature signature){
       return DuplicateConflictResolver.INSTANCE;
     }
-    @Override protected PsiType getInterfaceType(    PsiMethodReferenceExpression reference){
-      return functionalInterfaceType;
-    }
   }
 ;
-  final ResolveResult[] result=resolver.resolve(this,getContainingFile(),false);
+  final Map<PsiElement,PsiType> map=LambdaUtil.getFunctionalTypeMap();
+  final PsiType added=map.put(this,functionalInterfaceType);
+  final ResolveResult[] result;
+  try {
+    result=resolver.resolve(this,getContainingFile(),false);
+  }
+  finally {
+    if (added == null) {
+      map.remove(this);
+    }
+  }
   final PsiMethodReferenceUtil.QualifierResolveResult qualifierResolveResult=PsiMethodReferenceUtil.getQualifierResolveResult(this);
   final int interfaceArity=interfaceMethod.getParameterList().getParametersCount();
   for (  ResolveResult resolveResult : result) {
     final PsiElement element=resolveResult.getElement();
     if (element instanceof PsiMethod) {
       final boolean isStatic=((PsiMethod)element).hasModifierProperty(PsiModifier.STATIC);
+      final int parametersCount=((PsiMethod)element).getParameterList().getParametersCount();
       if (qualifierResolveResult.isReferenceTypeQualified() && getReferenceNameElement() instanceof PsiIdentifier) {
-        final int parametersCount=((PsiMethod)element).getParameterList().getParametersCount();
         if (parametersCount == interfaceArity && isStatic) {
           return true;
         }
@@ -28,7 +35,9 @@
         if (((PsiMethod)element).isVarArgs())         return true;
       }
  else       if (!isStatic) {
-        return true;
+        if (parametersCount == interfaceArity || ((PsiMethod)element).isVarArgs()) {
+          return true;
+        }
       }
     }
  else     if (element instanceof PsiClass) {

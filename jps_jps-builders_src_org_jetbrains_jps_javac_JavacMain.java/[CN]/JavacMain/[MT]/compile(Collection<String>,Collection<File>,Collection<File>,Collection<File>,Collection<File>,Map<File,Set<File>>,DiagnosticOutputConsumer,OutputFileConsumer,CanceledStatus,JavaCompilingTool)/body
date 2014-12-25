@@ -12,7 +12,7 @@
   }
   final List<JavaSourceTransformer> transformers=getSourceTransformers();
   final boolean usingJavac=compilingTool instanceof JavacCompilerTool;
-  final JavacFileManager fileManager=new JavacFileManager(new ContextImpl(compiler,diagnosticConsumer,outputSink,canceledStatus,usingJavac),transformers);
+  final JavacFileManager fileManager=new JavacFileManager(new ContextImpl(compiler,diagnosticConsumer,outputSink,canceledStatus,canUseOptimizedFileManager(compilingTool)),transformers);
   if (!platformClasspath.isEmpty()) {
     fileManager.handleOption("-bootclasspath",Collections.singleton("").iterator());
   }
@@ -77,7 +77,16 @@
     diagnosticConsumer.report(new PlainMessageDiagnostic(Diagnostic.Kind.ERROR,e.getMessage()));
   }
 catch (  CompilationCanceledException ignored) {
-    diagnosticConsumer.report(new PlainMessageDiagnostic(Diagnostic.Kind.OTHER,"Compilation was canceled"));
+    handleCancelException(diagnosticConsumer);
+  }
+catch (  RuntimeException e) {
+    final Throwable cause=e.getCause();
+    if (cause instanceof CompilationCanceledException) {
+      handleCancelException(diagnosticConsumer);
+    }
+ else {
+      throw e;
+    }
   }
  finally {
     fileManager.close();

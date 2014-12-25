@@ -3,7 +3,7 @@
     throw new HgCommandException(HgVcsMessages.message("hg4idea.commit.error.messageEmpty"));
   }
   if (myFiles.isEmpty()) {
-    commitChunkFiles(Collections.<String>emptyList(),myAmend);
+    commitChunkFiles(Collections.<String>emptyList(),myAmend,myCloseBranch);
   }
  else {
     List<String> relativePaths=ContainerUtil.map2List(myFiles,new Function<HgFile,String>(){
@@ -14,18 +14,15 @@
 );
     List<List<String>> chunkedCommits=VcsFileUtil.chunkRelativePaths(relativePaths);
     int size=chunkedCommits.size();
-    commitChunkFiles(chunkedCommits.get(0),myAmend,!mySubrepos.isEmpty());
+    commitChunkFiles(chunkedCommits.get(0),myAmend,!mySubrepos.isEmpty(),myCloseBranch && size == 1);
     HgVcs vcs=HgVcs.getInstance(myProject);
     boolean amendCommit=vcs != null && vcs.getVersion().isAmendSupported();
     for (int i=1; i < size; i++) {
       List<String> chunk=chunkedCommits.get(i);
-      commitChunkFiles(chunk,amendCommit);
+      commitChunkFiles(chunk,amendCommit,false,myCloseBranch && i == size - 1);
     }
   }
-  if (!myProject.isDisposed()) {
-    HgRepositoryManager manager=HgUtil.getRepositoryManager(myProject);
-    manager.updateRepository(myRoot);
-  }
+  myRepository.update();
   final MessageBus messageBus=myProject.getMessageBus();
   messageBus.syncPublisher(HgVcs.REMOTE_TOPIC).update(myProject,null);
   messageBus.syncPublisher(HgVcs.BRANCH_TOPIC).update(myProject,null);

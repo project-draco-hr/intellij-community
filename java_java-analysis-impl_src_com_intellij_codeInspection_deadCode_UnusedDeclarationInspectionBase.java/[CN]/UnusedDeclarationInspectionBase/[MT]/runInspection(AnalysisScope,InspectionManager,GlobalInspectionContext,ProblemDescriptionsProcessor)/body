@@ -1,0 +1,92 @@
+{
+  globalContext.getRefManager().iterate(new RefJavaVisitor(){
+    @Override public void visitElement(    @NotNull final RefEntity refEntity){
+      if (refEntity instanceof RefJavaElement) {
+        final RefElementImpl refElement=(RefElementImpl)refEntity;
+        if (!refElement.isSuspicious())         return;
+        PsiFile file=refElement.getContainingFile();
+        if (file == null)         return;
+        final boolean isSuppressed=refElement.isSuppressed(getShortName(),ALTERNATIVE_ID);
+        if (isSuppressed || !((GlobalInspectionContextBase)globalContext).isToCheckFile(file,UnusedDeclarationInspectionBase.this)) {
+          if (isSuppressed || !scope.contains(file)) {
+            getEntryPointsManager().addEntryPoint(refElement,false);
+          }
+          return;
+        }
+        refElement.accept(new RefJavaVisitor(){
+          @Override public void visitMethod(          @NotNull RefMethod method){
+            if (isAddMainsEnabled() && method.isAppMain()) {
+              getEntryPointsManager().addEntryPoint(method,false);
+            }
+          }
+          @Override public void visitClass(          @NotNull RefClass aClass){
+            if (isAddAppletEnabled() && aClass.isApplet() || isAddServletEnabled() && aClass.isServlet()) {
+              getEntryPointsManager().addEntryPoint(aClass,false);
+            }
+          }
+        }
+);
+      }
+    }
+  }
+);
+  if (isAddNonJavaUsedEnabled()) {
+    checkForReachables(globalContext);
+    final StrictUnreferencedFilter strictUnreferencedFilter=new StrictUnreferencedFilter(this,globalContext);
+    ProgressManager.getInstance().runProcess(new Runnable(){
+      @Override public void run(){
+        final RefManager refManager=globalContext.getRefManager();
+        final PsiSearchHelper helper=PsiSearchHelper.SERVICE.getInstance(refManager.getProject());
+        refManager.iterate(new RefJavaVisitor(){
+          @Override public void visitElement(          @NotNull final RefEntity refEntity){
+            if (refEntity instanceof RefClass && strictUnreferencedFilter.accepts((RefClass)refEntity)) {
+              findExternalClassReferences((RefClass)refEntity);
+            }
+ else             if (refEntity instanceof RefMethod) {
+              RefMethod refMethod=(RefMethod)refEntity;
+              if (refMethod.isConstructor() && strictUnreferencedFilter.accepts(refMethod)) {
+                findExternalClassReferences(refMethod.getOwnerClass());
+              }
+            }
+          }
+          private void findExternalClassReferences(          final RefClass refElement){
+            final PsiClass psiClass=refElement.getElement();
+            String qualifiedName=psiClass != null ? psiClass.getQualifiedName() : null;
+            if (qualifiedName != null) {
+              final GlobalSearchScope projectScope=GlobalSearchScope.projectScope(globalContext.getProject());
+              final PsiNonJavaFileReferenceProcessor processor=new PsiNonJavaFileReferenceProcessor(){
+                @Override public boolean process(                PsiFile file,                int startOffset,                int endOffset){
+                  getEntryPointsManager().addEntryPoint(refElement,false);
+                  return false;
+                }
+              }
+;
+              final DelegatingGlobalSearchScope globalSearchScope=new DelegatingGlobalSearchScope(projectScope){
+                @Override public boolean contains(                @NotNull VirtualFile file){
+                  return file.getFileType() != JavaFileType.INSTANCE && super.contains(file);
+                }
+              }
+;
+              if (helper.processUsagesInNonJavaFiles(qualifiedName,processor,globalSearchScope)) {
+                final PsiReference reference=ReferencesSearch.search(psiClass,globalSearchScope).findFirst();
+                if (reference != null) {
+                  getEntryPointsManager().addEntryPoint(refElement,false);
+                  for (                  PsiMethod method : psiClass.getMethods()) {
+                    final RefElement refMethod=refManager.getReference(method);
+                    if (refMethod != null) {
+                      getEntryPointsManager().addEntryPoint(refMethod,false);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+);
+      }
+    }
+,null);
+  }
+  myProcessedSuspicious=new HashSet<RefElement>();
+  myPhase=1;
+}

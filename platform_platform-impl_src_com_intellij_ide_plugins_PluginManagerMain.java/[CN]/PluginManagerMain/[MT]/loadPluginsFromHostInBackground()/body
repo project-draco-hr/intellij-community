@@ -1,63 +1,43 @@
 {
   setDownloadStatus(true);
-  new SwingWorker(){
-    List<IdeaPluginDescriptor> list=null;
-    List<String> errorMessages=new ArrayList<String>();
-    public Object construct(){
-      try {
-        list=RepositoryHelper.loadPluginsFromRepository(null);
-      }
- catch (      Exception e) {
-        LOG.info(e);
-        errorMessages.add(e.getMessage());
-      }
+  ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+    @Override public void run(){
+      final List<IdeaPluginDescriptor> list=ContainerUtil.newArrayList();
+      final List<String> errors=ContainerUtil.newSmartList();
+      ProgressIndicator indicator=new EmptyProgressIndicator();
       String builtinPluginsUrl=ApplicationInfoEx.getInstanceEx().getBuiltinPluginsUrl();
-      if (builtinPluginsUrl != null) {
-        processPluginHost(builtinPluginsUrl,true);
-      }
-      for (      String host : UpdateSettings.getInstance().getPluginHosts()) {
-        processPluginHost(host,false);
-      }
-      return list;
-    }
-    void processPluginHost(    @NotNull String host,    boolean builtIn){
-      if (!acceptHost(host))       return;
-      final Map<PluginId,PluginDownloader> downloaded=new HashMap<PluginId,PluginDownloader>();
-      try {
-        UpdateChecker.checkPluginsHost(host,downloaded,false,null);
-        for (        PluginDownloader downloader : downloaded.values()) {
-          final PluginNode pluginNode=PluginDownloader.createPluginNode(host,downloader);
-          if (pluginNode != null) {
-            if (list == null)             list=new ArrayList<IdeaPluginDescriptor>();
-            list.add(pluginNode);
+      List<String> hosts=ContainerUtil.newArrayList();
+      hosts.add(null);
+      if (builtinPluginsUrl != null)       hosts.add(builtinPluginsUrl);
+      hosts.addAll(UpdateSettings.getInstance().getPluginHosts());
+      for (      String host : hosts) {
+        try {
+          if (host == null || acceptHost(host)) {
+            list.addAll(RepositoryHelper.loadPlugins(host,null,indicator));
+          }
+        }
+ catch (        FileNotFoundException e) {
+          LOG.info(host,e);
+        }
+catch (        IOException e) {
+          LOG.info(host,e);
+          if (host != builtinPluginsUrl) {
+            errors.add(e.getMessage());
           }
         }
       }
- catch (      ProcessCanceledException ignore) {
-      }
-catch (      FileNotFoundException e) {
-        LOG.info(e);
-      }
-catch (      Exception e) {
-        if (builtIn) {
-          LOG.info("built-in repo failed: " + e.toString());
-        }
- else {
-          LOG.info(e);
-          errorMessages.add(e.getMessage());
-        }
-      }
-    }
-    public void finished(){
       UIUtil.invokeLaterIfNeeded(new Runnable(){
-        public void run(){
+        @Override public void run(){
           setDownloadStatus(false);
-          if (list != null) {
+          if (!list.isEmpty()) {
             modifyPluginsList(list);
             propagateUpdates(list);
           }
-          if (!errorMessages.isEmpty()) {
-            if (Messages.OK == Messages.showOkCancelDialog(IdeBundle.message("error.list.of.plugins.was.not.loaded",StringUtil.join(errorMessages,", ")),IdeBundle.message("title.plugins"),CommonBundle.message("button.retry"),CommonBundle.getCancelButtonText(),Messages.getErrorIcon())) {
+          if (!errors.isEmpty()) {
+            String message=IdeBundle.message("error.list.of.plugins.was.not.loaded",StringUtil.join(errors,", "));
+            String title=IdeBundle.message("title.plugins");
+            String ok=CommonBundle.message("button.retry"), cancel=CommonBundle.getCancelButtonText();
+            if (Messages.showOkCancelDialog(message,title,ok,cancel,Messages.getErrorIcon()) == Messages.OK) {
               loadPluginsFromHostInBackground();
             }
           }
@@ -66,5 +46,5 @@ catch (      Exception e) {
 );
     }
   }
-.start();
+);
 }

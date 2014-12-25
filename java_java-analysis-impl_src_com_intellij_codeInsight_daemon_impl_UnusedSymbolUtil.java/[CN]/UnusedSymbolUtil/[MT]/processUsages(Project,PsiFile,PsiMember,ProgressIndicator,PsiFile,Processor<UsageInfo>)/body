@@ -1,0 +1,60 @@
+{
+  String name=member.getName();
+  if (name == null) {
+    log("* " + member.getName() + " no name; false");
+    return false;
+  }
+  SearchScope useScope=member.getUseScope();
+  PsiSearchHelper searchHelper=PsiSearchHelper.SERVICE.getInstance(project);
+  if (useScope instanceof GlobalSearchScope) {
+    if (member instanceof PsiClass) {
+      useScope=GlobalSearchScope.projectScope(project).uniteWith((GlobalSearchScope)useScope);
+    }
+    PsiSearchHelper.SearchCostResult cheapEnough=RefResolveService.ENABLED && RefResolveService.getInstance(project).isUpToDate() ? PsiSearchHelper.SearchCostResult.FEW_OCCURRENCES : searchHelper.isCheapEnoughToSearch(name,(GlobalSearchScope)useScope,ignoreFile,progress);
+    if (cheapEnough == PsiSearchHelper.SearchCostResult.TOO_MANY_OCCURRENCES) {
+      log("* " + member.getName() + " too many usages; false");
+      return false;
+    }
+    if (cheapEnough == PsiSearchHelper.SearchCostResult.ZERO_OCCURRENCES && !canBeReferencedViaWeirdNames(member,containingFile)) {
+      log("* " + member.getName() + " 0 usages; true");
+      return true;
+    }
+    if (member instanceof PsiMethod) {
+      String propertyName=PropertyUtil.getPropertyName(member);
+      if (propertyName != null) {
+        SearchScope fileScope=containingFile.getUseScope();
+        if (fileScope instanceof GlobalSearchScope && searchHelper.isCheapEnoughToSearch(propertyName,(GlobalSearchScope)fileScope,ignoreFile,progress) == PsiSearchHelper.SearchCostResult.TOO_MANY_OCCURRENCES) {
+          log("* " + member.getName() + " too many prop usages; false");
+          return false;
+        }
+      }
+    }
+  }
+  FindUsagesOptions options;
+  if (member instanceof PsiPackage) {
+    options=new JavaPackageFindUsagesOptions(project);
+    options.isSearchForTextOccurrences=true;
+  }
+ else   if (member instanceof PsiClass) {
+    options=new JavaClassFindUsagesOptions(project);
+    options.isSearchForTextOccurrences=true;
+  }
+ else   if (member instanceof PsiMethod) {
+    PsiMethod method=(PsiMethod)member;
+    JavaMethodFindUsagesOptions o=new JavaMethodFindUsagesOptions(project);
+    options=o;
+    options.isSearchForTextOccurrences=method.isConstructor();
+    ;
+  }
+ else   if (member instanceof PsiVariable) {
+    options=new JavaVariableFindUsagesOptions(project);
+    options.isSearchForTextOccurrences=false;
+  }
+ else {
+    options=new FindUsagesOptions(project);
+    options.isSearchForTextOccurrences=true;
+  }
+  options.isUsages=true;
+  options.searchScope=useScope;
+  return JavaFindUsagesHelper.processElementUsages(member,options,usageInfoProcessor);
+}

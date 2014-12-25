@@ -4,7 +4,6 @@
   MethodWrapper methodWrapper=wrapper.getMethodWrapper(mt.getName(),mt.getDescriptor());
   boolean hideMethod=false;
   int start_index_method=buffer.length();
-  String lineSeparator=DecompilerContext.getNewLineSeparator();
   MethodWrapper outerWrapper=(MethodWrapper)DecompilerContext.getProperty(DecompilerContext.CURRENT_METHOD_WRAPPER);
   DecompilerContext.setProperty(DecompilerContext.CURRENT_METHOD_WRAPPER,methodWrapper);
   try {
@@ -13,13 +12,8 @@
     boolean isEnum=cl.hasModifier(CodeConstants.ACC_ENUM) && DecompilerContext.getOption(IFernflowerPreferences.DECOMPILE_ENUM);
     boolean isDeprecated=mt.getAttributes().containsKey("Deprecated");
     boolean clinit=false, init=false, dinit=false;
-    int startLine=-1;
-    if (DecompilerContext.getOption(IFernflowerPreferences.USE_DEBUG_LINE_NUMBERS)) {
-      StructLineNumberTableAttribute lineNumberTable=(StructLineNumberTableAttribute)mt.getAttributes().getWithKey(StructGeneralAttribute.ATTRIBUTE_LINE_NUMBER_TABLE);
-      if (lineNumberTable != null) {
-        startLine=lineNumberTable.getFirstLine();
-      }
-    }
+    StructLineNumberTableAttribute lineNumberTable=(StructLineNumberTableAttribute)mt.getAttributes().getWithKey(StructGeneralAttribute.ATTRIBUTE_LINE_NUMBER_TABLE);
+    tracer.setLineNumberTable(lineNumberTable);
     MethodDescriptor md=MethodDescriptor.parseDescriptor(mt.getDescriptor());
     int flags=mt.getAccessFlags();
     if ((flags & CodeConstants.ACC_NATIVE) != 0) {
@@ -29,21 +23,21 @@
       flags&=CodeConstants.ACC_STATIC;
     }
     if (isDeprecated) {
-      appendDeprecation(buffer,indent,lineSeparator);
+      appendDeprecation(buffer,indent);
     }
     if (interceptor != null) {
       String oldName=interceptor.getOldName(cl.qualifiedName + " " + mt.getName()+ " "+ mt.getDescriptor());
-      appendRenameComment(buffer,oldName,MType.METHOD,indent,lineSeparator);
+      appendRenameComment(buffer,oldName,MType.METHOD,indent);
     }
     boolean isSynthetic=(flags & CodeConstants.ACC_SYNTHETIC) != 0 || mt.getAttributes().containsKey("Synthetic");
     boolean isBridge=(flags & CodeConstants.ACC_BRIDGE) != 0;
     if (isSynthetic) {
-      appendComment(buffer,"synthetic method",indent,lineSeparator);
+      appendComment(buffer,"synthetic method",indent);
     }
     if (isBridge) {
-      appendComment(buffer,"bridge method",indent,lineSeparator);
+      appendComment(buffer,"bridge method",indent);
     }
-    appendAnnotations(buffer,mt,indent,lineSeparator);
+    appendAnnotations(buffer,mt,indent);
     buffer.appendIndent(indent);
     appendModifiers(buffer,flags,METHOD_ALLOWED,isInterface,METHOD_EXCLUDED);
     if (isInterface && mt.containsCode()) {
@@ -99,7 +93,7 @@
       }
       buffer.append(name);
       buffer.append('(');
-      List<VarVersionPaar> signFields=methodWrapper.signatureFields;
+      List<VarVersionPair> signFields=methodWrapper.signatureFields;
       int lastVisibleParameterIndex=-1;
       for (int i=0; i < md.params.length; i++) {
         if (signFields == null || signFields.get(i) == null) {
@@ -116,14 +110,14 @@
             buffer.append(", ");
           }
           appendParameterAnnotations(buffer,mt,paramCount);
-          if (methodWrapper.varproc.getVarFinal(new VarVersionPaar(index,0)) == VarTypeProcessor.VAR_FINALEXPLICIT) {
+          if (methodWrapper.varproc.getVarFinal(new VarVersionPair(index,0)) == VarTypeProcessor.VAR_EXPLICIT_FINAL) {
             buffer.append("final ");
           }
           if (descriptor != null) {
             GenericType parameterType=descriptor.params.get(i);
-            boolean isVarArg=(i == lastVisibleParameterIndex && mt.hasModifier(CodeConstants.ACC_VARARGS) && parameterType.arraydim > 0);
+            boolean isVarArg=(i == lastVisibleParameterIndex && mt.hasModifier(CodeConstants.ACC_VARARGS) && parameterType.arrayDim > 0);
             if (isVarArg) {
-              parameterType.arraydim--;
+              parameterType=parameterType.decreaseArrayDim();
             }
             String typeName=GenericMain.getGenericCastTypeName(parameterType);
             if (ExprProcessor.UNDEFINED_TYPE_STRING.equals(typeName) && DecompilerContext.getOption(IFernflowerPreferences.UNDEFINED_PARAM_TYPE_OBJECT)) {
@@ -135,10 +129,10 @@
             }
           }
  else {
-            VarType parameterType=md.params[i].copy();
-            boolean isVarArg=(i == lastVisibleParameterIndex && mt.hasModifier(CodeConstants.ACC_VARARGS) && parameterType.arraydim > 0);
+            VarType parameterType=md.params[i];
+            boolean isVarArg=(i == lastVisibleParameterIndex && mt.hasModifier(CodeConstants.ACC_VARARGS) && parameterType.arrayDim > 0);
             if (isVarArg) {
-              parameterType.decArrayDim();
+              parameterType=parameterType.decreaseArrayDim();
             }
             String typeName=ExprProcessor.getCastTypeName(parameterType);
             if (ExprProcessor.UNDEFINED_TYPE_STRING.equals(typeName) && DecompilerContext.getOption(IFernflowerPreferences.UNDEFINED_PARAM_TYPE_OBJECT)) {
@@ -150,12 +144,12 @@
             }
           }
           buffer.append(' ');
-          String parameterName=methodWrapper.varproc.getVarName(new VarVersionPaar(index,0));
+          String parameterName=methodWrapper.varproc.getVarName(new VarVersionPair(index,0));
           buffer.append(parameterName == null ? "param" + index : parameterName);
           firstParameter=false;
           paramCount++;
         }
-        index+=md.params[i].stack_size;
+        index+=md.params[i].stackSize;
       }
       buffer.append(')');
       StructExceptionsAttribute attr=(StructExceptionsAttribute)mt.getAttributes().getWithKey("Exceptions");
@@ -186,20 +180,27 @@
         }
       }
       buffer.append(';');
-      buffer.append(lineSeparator);
+      buffer.appendLineSeparator();
+      tracer.incrementCurrentSourceLine();
     }
  else {
       if (!clinit && !dinit) {
         buffer.append(' ');
       }
-      buffer.setCurrentLine(startLine - 1);
+      if (lineNumberTable != null && DecompilerContext.getOption(IFernflowerPreferences.USE_DEBUG_LINE_NUMBERS)) {
+        buffer.setCurrentLine(lineNumberTable.getFirstLine() - 1);
+      }
       buffer.append('{').appendLineSeparator();
       RootStatement root=wrapper.getMethodWrapper(mt.getName(),mt.getDescriptor()).root;
       if (root != null && !methodWrapper.decompiledWithErrors) {
         try {
-          tracer.incrementCurrentSourceLine(buffer.count(lineSeparator,start_index_method));
-          String code=root.toJava(indent + 1,tracer);
+          tracer.incrementCurrentSourceLine(buffer.countLines(start_index_method));
+          int startLine=tracer.getCurrentSourceLine();
+          TextBuffer code=root.toJava(indent + 1,tracer);
           hideMethod=(clinit || dinit || hideConstructor(wrapper,init,throwsExceptions,paramCount)) && code.length() == 0;
+          if (!hideMethod && lineNumberTable != null && DecompilerContext.getOption(IFernflowerPreferences.USE_DEBUG_LINE_NUMBERS)) {
+            mapLines(code,lineNumberTable,tracer,startLine);
+          }
           buffer.append(code);
         }
  catch (        Throwable ex) {
@@ -210,14 +211,15 @@
       if (methodWrapper.decompiledWithErrors) {
         buffer.appendIndent(indent + 1);
         buffer.append("// $FF: Couldn't be decompiled");
-        buffer.append(lineSeparator);
+        buffer.appendLineSeparator();
+        tracer.incrementCurrentSourceLine();
       }
       buffer.appendIndent(indent).append('}').appendLineSeparator();
+      tracer.incrementCurrentSourceLine();
     }
   }
   finally {
     DecompilerContext.setProperty(DecompilerContext.CURRENT_METHOD_WRAPPER,outerWrapper);
   }
-  tracer.setCurrentSourceLine(buffer.count(lineSeparator,start_index_method));
   return !hideMethod;
 }

@@ -2,6 +2,8 @@
   if ("package-info.class".equals(file.getName())) {
     return ClsFileImpl.decompile(file);
   }
+  ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
+  if (indicator != null)   myProgress.put(file,indicator);
   try {
     Map<String,VirtualFile> files=ContainerUtil.newLinkedHashMap();
     files.put(file.getPath(),file);
@@ -14,15 +16,33 @@
     }
     MyBytecodeProvider provider=new MyBytecodeProvider(files);
     MyResultSaver saver=new MyResultSaver();
-    myOptions.put(IFernflowerPreferences.USE_DEBUG_LINE_NUMBERS,Registry.is("decompiler.use.line.table") ? "1" : "0");
+    if (Registry.is("decompiler.use.line.mapping")) {
+      myOptions.put(IFernflowerPreferences.BYTECODE_SOURCE_MAPPING,"1");
+      myOptions.put(IFernflowerPreferences.USE_DEBUG_LINE_NUMBERS,"0");
+    }
+ else     if (Registry.is("decompiler.use.line.table")) {
+      myOptions.put(IFernflowerPreferences.BYTECODE_SOURCE_MAPPING,"0");
+      myOptions.put(IFernflowerPreferences.USE_DEBUG_LINE_NUMBERS,"1");
+    }
+ else {
+      myOptions.put(IFernflowerPreferences.BYTECODE_SOURCE_MAPPING,"0");
+      myOptions.put(IFernflowerPreferences.USE_DEBUG_LINE_NUMBERS,"0");
+    }
+    if (Registry.is("decompiler.dump.original.lines")) {
+      myOptions.put(IFernflowerPreferences.DUMP_ORIGINAL_LINES,"1");
+    }
     BaseDecompiler decompiler=new BaseDecompiler(provider,saver,myOptions,myLogger);
     for (    String path : files.keySet()) {
       decompiler.addSpace(new File(path),true);
     }
     decompiler.decompileContext();
+    file.putUserData(LineNumbersMapping.LINE_NUMBERS_MAPPING_KEY,new ExactMatchLineNumbersMapping(saver.myMapping));
     return saver.myResult;
   }
- catch (  Exception e) {
+ catch (  ProcessCanceledException e) {
+    throw e;
+  }
+catch (  Exception e) {
     if (ApplicationManager.getApplication().isUnitTestMode()) {
       AssertionError error=new AssertionError(file.getUrl());
       error.initCause(e);
@@ -31,5 +51,8 @@
  else {
       throw new CannotDecompileException(e);
     }
+  }
+ finally {
+    myProgress.remove(file);
   }
 }

@@ -6,29 +6,35 @@
   int commitCount=requirements.getCommitCount() * 2;
   String[] params=new String[]{"HEAD","--branches","--remotes","--max-count=" + commitCount};
   boolean refresh=requirements instanceof VcsLogProviderRequirementsEx && ((VcsLogProviderRequirementsEx)requirements).isRefresh();
-  DetailedLogData data=GitHistoryUtils.loadMetadata(myProject,root,refresh,params);
+  DetailedLogData data=GitHistoryUtils.loadMetadata(myProject,root,true,params);
   Set<VcsRef> safeRefs=data.getRefs();
-  Set<VcsRef> allRefs=new OpenTHashSet<VcsRef>(safeRefs,REF_ONLY_NAME_STRATEGY);
-  addNewElements(allRefs,readBranches(repository));
+  Set<VcsRef> allRefs=new OpenTHashSet<VcsRef>(safeRefs,DONT_CONSIDER_SHA);
+  Set<VcsRef> branches=readBranches(repository);
+  addNewElements(allRefs,branches);
   Collection<VcsCommitMetadata> allDetails;
+  Set<String> currentTagNames=null;
+  DetailedLogData commitsFromTags=null;
   if (!refresh) {
     allDetails=data.getCommits();
   }
  else {
     VcsLogProviderRequirementsEx rex=(VcsLogProviderRequirementsEx)requirements;
-    Set<String> currentTags=readCurrentTagNames(root);
-    addOldStillExistingTags(allRefs,currentTags,rex.getPreviousRefs());
-    allDetails=ContainerUtil.newHashSet(data.getCommits());
-    Set<String> previousTags=new HashSet<String>(ContainerUtil.mapNotNull(rex.getPreviousRefs(),GET_TAG_NAME));
-    Set<String> safeTags=new HashSet<String>(ContainerUtil.mapNotNull(safeRefs,GET_TAG_NAME));
-    Set<String> newUnmatchedTags=remove(currentTags,previousTags,safeTags);
+    currentTagNames=readCurrentTagNames(root);
+    addOldStillExistingTags(allRefs,currentTagNames,rex.getPreviousRefs());
+    allDetails=newHashSet(data.getCommits());
+    Set<String> previousTags=newHashSet(ContainerUtil.mapNotNull(rex.getPreviousRefs(),GET_TAG_NAME));
+    Set<String> safeTags=newHashSet(ContainerUtil.mapNotNull(safeRefs,GET_TAG_NAME));
+    Set<String> newUnmatchedTags=remove(currentTagNames,previousTags,safeTags);
     if (!newUnmatchedTags.isEmpty()) {
-      DetailedLogData commitsFromTags=loadSomeCommitsOnTaggedBranches(root,commitCount,newUnmatchedTags);
+      commitsFromTags=loadSomeCommitsOnTaggedBranches(root,commitCount,newUnmatchedTags);
       addNewElements(allDetails,commitsFromTags.getCommits());
       addNewElements(allRefs,commitsFromTags.getRefs());
     }
   }
   List<VcsCommitMetadata> sortedCommits=VcsLogSorter.sortByDateTopoOrder(allDetails);
   sortedCommits=sortedCommits.subList(0,Math.min(sortedCommits.size(),requirements.getCommitCount()));
+  if (LOG.isDebugEnabled()) {
+    validateDataAndReportError(root,allRefs,sortedCommits,data,branches,currentTagNames,commitsFromTags);
+  }
   return new LogDataImpl(allRefs,sortedCommits);
 }

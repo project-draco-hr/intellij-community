@@ -1,44 +1,21 @@
 {
-  final File pluginsTemp=new File(PathManager.getPluginTempPath());
+  File pluginsTemp=new File(PathManager.getPluginTempPath());
   if (!pluginsTemp.exists() && !pluginsTemp.mkdirs()) {
     throw new IOException(IdeBundle.message("error.cannot.create.temp.dir",pluginsTemp));
   }
   final File file=FileUtil.createTempFile(pluginsTemp,"plugin_","_download",true,false);
-  if (pi != null) {
-    pi.setText(IdeBundle.message("progress.connecting"));
-  }
-  URLConnection connection=null;
-  try {
-    connection=openConnection(myPluginUrl);
-    final InputStream is=(ApplicationManager.getApplication() != null) ? UrlConnectionUtil.getConnectionInputStream(connection,pi) : connection.getInputStream();
-    if (is == null) {
-      throw new IOException("Failed to open connection");
-    }
-    if (ApplicationManager.getApplication() != null && pi != null) {
-      pi.setText(IdeBundle.message("progress.downloading.plugin",getPluginName()));
-    }
-    try {
-      final OutputStream fos=new BufferedOutputStream(new FileOutputStream(file,false));
-      try {
-        NetUtils.copyStreamContent(pi,is,fos,connection.getContentLength());
+  indicator.checkCanceled();
+  indicator.setText2(IdeBundle.message("progress.downloading.plugin",getPluginName()));
+  return HttpRequests.request(myPluginUrl).gzip(false).forceHttps(myForceHttps).connect(new HttpRequests.RequestProcessor<File>(){
+    @Override public File process(    @NotNull HttpRequests.Request request) throws IOException {
+      request.saveToFile(file,indicator);
+      if (myFileName == null) {
+        myFileName=guessFileName(request.getConnection(),file);
       }
-  finally {
-        fos.close();
-      }
-    }
-  finally {
-      is.close();
-    }
-    if (myFileName == null) {
-      myFileName=guessFileName(connection,file);
-    }
-    final File newFile=new File(file.getParentFile(),myFileName);
-    FileUtil.rename(file,newFile);
-    return newFile;
-  }
-  finally {
-    if (connection instanceof HttpURLConnection) {
-      ((HttpURLConnection)connection).disconnect();
+      File newFile=new File(file.getParentFile(),myFileName);
+      FileUtil.rename(file,newFile);
+      return newFile;
     }
   }
+);
 }

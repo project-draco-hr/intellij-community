@@ -4,12 +4,9 @@
     availableIds.put(plugin.getPluginId().getIdString(),plugin);
   }
   final String pluginRepositoryUrl=FEATURE_IMPLEMENTATIONS_URL + "featureType=" + FileTypeFactory.FILE_TYPE_FACTORY_EP.getName();
-  try {
-    HttpURLConnection connection=HttpConfigurable.getInstance().openHttpConnection(pluginRepositoryUrl);
-    connection.connect();
-    final InputStreamReader streamReader=new InputStreamReader(connection.getInputStream());
-    try {
-      final JsonReader jsonReader=new JsonReader(streamReader);
+  return HttpRequests.request(pluginRepositoryUrl).connect(new HttpRequests.RequestProcessor<Map<String,Set<Plugin>>>(){
+    @Override public Map<String,Set<Plugin>> process(    @NotNull HttpRequests.Request request) throws IOException {
+      final JsonReader jsonReader=new JsonReader(request.getReader());
       jsonReader.setLenient(true);
       final JsonElement jsonRootElement=new JsonParser().parse(jsonReader);
       final Map<String,Set<Plugin>> result=new HashMap<String,Set<Plugin>>();
@@ -22,7 +19,9 @@
         if (fromServerPluginDescription == null && !isBundled)         continue;
         final IdeaPluginDescriptor loadedPlugin=PluginManager.getPlugin(PluginId.getId(pluginId));
         if (loadedPlugin != null && loadedPlugin.isEnabled())         continue;
-        if (loadedPlugin != null && fromServerPluginDescription != null && StringUtil.compareVersionNumbers(loadedPlugin.getVersion(),fromServerPluginDescription.getVersion()) >= 0)         continue;
+        if (loadedPlugin != null && fromServerPluginDescription != null && StringUtil.compareVersionNumbers(loadedPlugin.getVersion(),fromServerPluginDescription.getVersion()) >= 0) {
+          continue;
+        }
         if (fromServerPluginDescription != null && PluginManagerCore.isBrokenPlugin(fromServerPluginDescription))         continue;
         final JsonElement ext=jsonObject.get("implementationName");
         final String extension=StringUtil.unquoteString(ext.toString());
@@ -37,12 +36,6 @@
       saveExtensions(result);
       return result;
     }
-  finally {
-      streamReader.close();
-    }
   }
- catch (  Throwable e) {
-    LOG.info(e);
-    return null;
-  }
+,null,LOG);
 }
