@@ -1,27 +1,29 @@
 {
+  if (myProgress.isCanceled()) {
+    return NO_SUCH_PAGE;
+  }
+  final Graphics2D g2d=(Graphics2D)g;
+  if (myNumberOfPages < 0) {
+    myProgress.setText(CodeEditorBundle.message("print.file.calculating.number.of.pages.progress"));
+    myPerformActualDrawing=false;
+    if (!calculateNumberOfPages(g2d,pageFormat)) {
+      return NO_SUCH_PAGE;
+    }
+  }
+  myPerformActualDrawing=true;
   return ApplicationManager.getApplication().runReadAction(new Computable<Integer>(){
     @Override public Integer compute(){
-      if (myProgress.isCanceled() || myRangeToPrint == null || !myRangeToPrint.isValid()) {
-        return NO_SUCH_PAGE;
-      }
-      int startOffset=myRangeToPrint.getStartOffset();
-      myOffset=startOffset;
-      mySegmentEnd=myRangeToPrint.getEndOffset();
-      myLineNumber=myDocument.getLineNumber(myOffset) + 1;
-      if (myOffset >= mySegmentEnd) {
+      if (!isValidRange(myRangeToPrint)) {
         return NO_SUCH_PAGE;
       }
       isPrintingPass=!isPrintingPass;
       if (!isPrintingPass) {
         return PAGE_EXISTS;
       }
-      myProgress.setText(CodeEditorBundle.message("print.file.page.progress",myFileName,(pageIndex + 1)));
+      myProgress.setText(CodeEditorBundle.message("print.file.page.progress",myShortFileName,(pageIndex + 1),myNumberOfPages));
       myPageIndex=pageIndex;
-      Graphics2D g2D=(Graphics2D)g;
-      Rectangle2D.Double clip=new Rectangle2D.Double(pageFormat.getImageableX(),pageFormat.getImageableY(),pageFormat.getImageableWidth(),pageFormat.getImageableHeight());
-      draw(g2D,clip);
-      myRangeToPrint.dispose();
-      myRangeToPrint=myOffset > startOffset && myOffset < mySegmentEnd ? myDocument.createRangeMarker(myOffset,mySegmentEnd) : null;
+      RangeMarker newRange=printPage(g2d,pageFormat,myRangeToPrint);
+      setSegment(newRange);
       return PAGE_EXISTS;
     }
   }
