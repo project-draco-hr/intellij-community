@@ -31,32 +31,37 @@
       }
     }
   }
-  for (  Map.Entry<String,String> attribute : attributes.entrySet()) {
-    final String attributeName=attribute.getKey();
-    final XmlAttribute xmlAttribute=tag.getAttribute(attributeName);
-    if (xmlAttribute != null) {
-      final String attributeValue=attribute.getValue();
-      if (ZenCodingUtil.containsSurroundedTextMarker(attributeValue)) {
-        myContainsSurroundedTextMarker=true;
-      }
-      final EmmetOptions emmetOptions=EmmetOptions.getInstance();
-      if (isBooleanAttribute(attributeName,attributeValue)) {
-        if (emmetOptions.isCompactBooleanAllowed() && ZenCodingUtil.isHtml(callback)) {
-          final XmlAttributeValue valueElement=xmlAttribute.getValueElement();
-          if (valueElement != null) {
-            final PsiElement prevSibling=valueElement.getPrevSibling();
-            if (prevSibling != null && prevSibling.textMatches("=")) {
-              xmlAttribute.deleteChildRange(prevSibling,valueElement);
-            }
+  for (  XmlAttribute xmlAttribute : tag.getAttributes()) {
+    final String attributeName=xmlAttribute.getName();
+    final XmlAttributeValue xmlAttributeValueElement=xmlAttribute.getValueElement();
+    if (xmlAttributeValueElement != null && !attributes.containsKey(attributeName)) {
+      continue;
+    }
+    String attributeValue=StringUtil.notNullize(attributes.get(attributeName),StringUtil.notNullize(xmlAttribute.getValue()));
+    if (ZenCodingUtil.containsSurroundedTextMarker(attributeValue)) {
+      myContainsSurroundedTextMarker=true;
+    }
+    if (isBooleanAttribute(attributeValue,xmlAttribute,callback)) {
+      if (HtmlUtil.isShortNotationOfBooleanAttributePreferred()) {
+        if (xmlAttributeValueElement != null) {
+          final PsiElement prevSibling=xmlAttributeValueElement.getPrevSibling();
+          if (prevSibling != null && prevSibling.textMatches("=")) {
+            xmlAttribute.deleteChildRange(prevSibling,xmlAttributeValueElement);
           }
         }
+      }
  else {
-          tag.setAttribute(attributeName,attributeName);
+        if (xmlAttributeValueElement == null) {
+          xmlAttribute.delete();
         }
+        tag.setAttribute(attributeName,attributeName);
       }
+    }
  else {
-        tag.setAttribute(attributeName,Strings.isNullOrEmpty(attributeValue) ? "$" + prepareVariableName(attributeName) + "$" : ZenCodingUtil.getValue(attributeValue,myNumberInIteration,myTotalIterations,mySurroundedText));
+      if (xmlAttributeValueElement == null) {
+        xmlAttribute.delete();
       }
+      tag.setAttribute(attributeName,StringUtil.isEmpty(attributeValue) ? "$" + prepareVariableName(attributeName) + "$" : ZenCodingUtil.getValue(attributeValue,myNumberInIteration,myTotalIterations,mySurroundedText));
     }
   }
   for (  XmlAttribute xmlAttribute : tag.getAttributes()) {
