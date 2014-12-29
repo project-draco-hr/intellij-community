@@ -1,0 +1,70 @@
+{
+  final StringBuilder result=new StringBuilder();
+  StringBuilder markdown=new StringBuilder();
+  StringBuilder formula=new StringBuilder();
+  boolean inCode=false;
+  int inMultiStringCode=0;
+  boolean inEnd=false;
+  boolean escaped=false;
+  boolean backQuoted=false;
+  int imageIndex=0;
+  for (int i=0; i != source.length(); ++i) {
+    final char charAt=source.charAt(i);
+    if (charAt == '`') {
+      backQuoted=!backQuoted;
+      if (source.length() > i + 2 && source.charAt(i + 1) == '`' && source.charAt(i + 2) == '`') {
+        markdown.append(escaped ? "</code>" : "<code>");
+        escaped=!escaped;
+        i+=2;
+        continue;
+      }
+    }
+    if (escaped && charAt == '\n') {
+      markdown.append("<br/>");
+      continue;
+    }
+    if (!escaped && !backQuoted) {
+      if (charAt == '$' && source.length() > i + 1 && source.charAt(i + 1) != '$') {
+        inCode=!inCode;
+      }
+      if (charAt == '\\' && source.substring(i).startsWith("\\begin")) {
+        inMultiStringCode+=1;
+      }
+      if (charAt == '\\' && source.substring(i).startsWith("\\end")) {
+        inEnd=true;
+      }
+    }
+    final boolean doubleDollar=charAt == '$' && ((source.length() > i + 1 && source.charAt(i + 1) == '$') || (i >= 1 && source.charAt(i - 1) == '$'));
+    if (inCode || inMultiStringCode != 0 || (!backQuoted && doubleDollar)) {
+      if (markdown.length() != 0) {
+        result.append(markdown.toString());
+        markdown=new StringBuilder();
+      }
+      formula.append(charAt);
+    }
+ else {
+      if (formula.length() != 0 && charAt == '$') {
+        formula.append(charAt);
+      }
+ else {
+        markdown.append(charAt);
+      }
+      if (formula.length() != 0) {
+        addFormula(formula.toString(),document,imageIndex,result);
+        imageIndex+=1;
+        formula=new StringBuilder();
+      }
+    }
+    if (inEnd && charAt == '}') {
+      inMultiStringCode-=1;
+      inEnd=false;
+    }
+  }
+  if (formula.length() != 0) {
+    addFormula(formula.toString(),document,imageIndex,result);
+  }
+  if (markdown.length() != 0) {
+    result.append(markdown.toString());
+  }
+  return markdown2Html(result.toString());
+}
