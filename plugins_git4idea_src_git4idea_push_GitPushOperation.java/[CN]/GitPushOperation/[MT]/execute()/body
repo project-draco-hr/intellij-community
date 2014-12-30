@@ -3,6 +3,7 @@
   Label beforePushLabel=null;
   Label afterPushLabel=null;
   Map<GitRepository,String> preUpdatePositions=updateRootInfoAndRememberPositions();
+  Boolean rebaseOverMergeProblemDetected=null;
   final Map<GitRepository,GitPushRepoResult> results=ContainerUtil.newHashMap();
   Map<GitRepository,GitUpdateResult> updatedRoots=ContainerUtil.newHashMap();
   try {
@@ -20,7 +21,8 @@
           shouldUpdate=false;
         }
  else         if (pushAttempt == 0 && !mySettings.autoUpdateIfPushRejected()) {
-          updateSettings=showDialogAndGetExitCode(result.rejected.keySet(),updateSettings);
+          rebaseOverMergeProblemDetected=!findRootsWithMergeCommits(getRootsToUpdate(updateSettings,result.rejected.keySet())).isEmpty();
+          updateSettings=showDialogAndGetExitCode(result.rejected.keySet(),updateSettings,rebaseOverMergeProblemDetected.booleanValue());
           if (updateSettings != null) {
             savePushUpdateSettings(updateSettings);
           }
@@ -34,8 +36,8 @@
         if (beforePushLabel == null) {
           beforePushLabel=LocalHistory.getInstance().putSystemLabel(myProject,"Before push");
         }
-        Collection<GitRepository> rootsToUpdate=updateSettings.shouldUpdateAllRoots() ? myRepositoryManager.getRepositories() : result.rejected.keySet();
-        GitUpdateResult updateResult=update(rootsToUpdate,updateSettings.getUpdateMethod());
+        Collection<GitRepository> rootsToUpdate=getRootsToUpdate(updateSettings,result.rejected.keySet());
+        GitUpdateResult updateResult=update(rootsToUpdate,updateSettings.getUpdateMethod(),rebaseOverMergeProblemDetected == null);
         for (        GitRepository repository : rootsToUpdate) {
           updatedRoots.put(repository,updateResult);
         }
