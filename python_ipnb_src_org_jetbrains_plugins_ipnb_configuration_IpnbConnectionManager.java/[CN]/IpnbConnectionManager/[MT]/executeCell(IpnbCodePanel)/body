@@ -5,7 +5,12 @@
   if (!myKernels.containsKey(path)) {
     String url=IpnbSettings.getInstance(myProject).getURL();
     if (StringUtil.isEmptyOrSpaces(url)) {
-      showWarning(fileEditor,"Please, specify IPython Notebook URL in <a href=\"\">Settings->IPython Notebook</a>");
+      showWarning(fileEditor,"Please, specify IPython Notebook URL in <a href=\"\">Settings->Tools->IPython Notebook</a>",new HyperlinkAdapter(){
+        @Override protected void hyperlinkActivated(        HyperlinkEvent e){
+          ShowSettingsUtil.getInstance().showSettingsDialog(myProject,"IPython Notebook");
+        }
+      }
+);
       return;
     }
     if (startConnection(codePanel,path,url,false)) {
@@ -16,16 +21,30 @@
     IpnbSettings.getInstance(myProject).setURL(url);
     boolean connectionStarted=startConnection(codePanel,path,url,false);
     if (!connectionStarted) {
-      final boolean serverStarted=startIpythonServer(url,fileEditor);
-      if (!serverStarted) {
-        return;
+      final String finalUrl=url;
+      ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+        @Override public void run(){
+          final boolean serverStarted=startIpythonServer(finalUrl,fileEditor);
+          if (!serverStarted) {
+            return;
+          }
+          ApplicationManager.getApplication().invokeLater(new Runnable(){
+            @Override public void run(){
+              new Alarm(Alarm.ThreadToUse.SWING_THREAD).addRequest(new Runnable(){
+                @Override public void run(){
+                  final Notification notification=new Notification("IPythonNotebook","","<html>IPython notebook started at <a href=\"" + finalUrl + "\">"+ finalUrl+ "</a></html>",NotificationType.INFORMATION,NotificationListener.URL_OPENING_LISTENER);
+                  notification.notify(myProject);
+                  startConnection(codePanel,path,finalUrl,true);
+                }
+              }
+,3000);
+            }
+          }
+);
+        }
       }
-      waitForIpythonServer();
-      final Notification notification=new Notification("IPythonNotebook","","<html>IPython notebook started at <a href=\"" + url + "\">"+ url+ "</a></html>",NotificationType.INFORMATION,NotificationListener.URL_OPENING_LISTENER);
-      notification.notify(myProject);
-      IpnbSettings.getInstance(myProject).setURL(url);
+);
     }
-    startConnection(codePanel,path,url,true);
   }
  else {
     final IpnbConnection connection=myKernels.get(path);
