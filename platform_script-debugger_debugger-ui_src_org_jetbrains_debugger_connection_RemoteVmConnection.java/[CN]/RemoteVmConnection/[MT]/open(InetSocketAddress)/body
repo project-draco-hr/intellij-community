@@ -8,7 +8,7 @@
       final AsyncPromise<Vm> result=new AsyncPromise<Vm>();
       connectCancelHandler.set(new Runnable(){
         @Override public void run(){
-          result.setError("Closed explicitly");
+          result.setError(Promise.createError("Closed explicitly"));
         }
       }
 );
@@ -16,22 +16,23 @@
       NettyUtil.connectClient(createBootstrap(address,result),address,callback);
       callback.doWhenRejected(new Consumer<String>(){
         @Override public void consume(        String error){
-          result.setError(error);
+          result.setError(Promise.createError(error));
         }
       }
 );
       result.done(new Consumer<Vm>(){
         @Override public void consume(        @NotNull Vm vm){
           RemoteVmConnection.this.vm=vm;
-          setState(ConnectionStatus.CONNECTED,"Connected to " + address.getHostName() + ":"+ address.getPort());
+          setState(ConnectionStatus.CONNECTED,"Connected to " + connectedAddressToPresentation(address,vm));
           startProcessing();
         }
       }
-).rejected(new Consumer<String>(){
-        @Override public void consume(        String error){
-          if (getState().getStatus() == ConnectionStatus.WAITING_FOR_CONNECTION) {
-            setState(ConnectionStatus.CONNECTION_FAILED,error == null ? "Internal error" : error);
+).rejected(new Consumer<Throwable>(){
+        @Override public void consume(        Throwable error){
+          if (!(error instanceof Promise.MessageError)) {
+            CommandProcessor.LOG.error(error);
           }
+          setState(ConnectionStatus.CONNECTION_FAILED,error.getMessage());
         }
       }
 ).processed(new Consumer<Vm>(){
