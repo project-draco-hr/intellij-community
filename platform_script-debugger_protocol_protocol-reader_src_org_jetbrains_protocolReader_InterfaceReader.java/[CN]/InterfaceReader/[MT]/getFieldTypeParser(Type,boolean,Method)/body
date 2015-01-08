@@ -48,30 +48,30 @@
     }
     TypeRef<?> ref=getTypeRef(typeClass);
     if (ref != null) {
-      return createJsonParser(ref,isSubtyping);
+      JsonField jsonField=method == null ? null : method.getAnnotation(JsonField.class);
+      return new ObjectValueReader<>(ref,isSubtyping,jsonField == null ? null : jsonField.primitiveValue());
     }
-    throw new JsonProtocolModelParseException("Method return type " + type + " (simple class) not supported");
+    throw new UnsupportedOperationException("Method return type " + type + " (simple class) not supported");
   }
  else   if (type instanceof ParameterizedType) {
     ParameterizedType parameterizedType=(ParameterizedType)type;
-    if (parameterizedType.getRawType() == List.class) {
-      Type argumentType=parameterizedType.getActualTypeArguments()[0];
+    boolean isList=parameterizedType.getRawType() == List.class;
+    if (isList || parameterizedType.getRawType() == Map.class) {
+      Type argumentType=parameterizedType.getActualTypeArguments()[isList ? 0 : 1];
       if (argumentType instanceof WildcardType) {
         WildcardType wildcard=(WildcardType)argumentType;
         if (wildcard.getLowerBounds().length == 0 && wildcard.getUpperBounds().length == 1) {
           argumentType=wildcard.getUpperBounds()[0];
         }
       }
-      return new ArrayReader(getFieldTypeParser(argumentType,false,method),true);
-    }
- else     if (parameterizedType.getRawType() == Map.class) {
-      return MAP_PARSER;
+      ValueReader componentParser=getFieldTypeParser(argumentType,false,method);
+      return isList ? new ArrayReader(componentParser,true) : new MapReader(componentParser);
     }
  else {
-      throw new JsonProtocolModelParseException("Method return type " + type + " (generic) not supported");
+      throw new UnsupportedOperationException("Method return type " + type + " (generic) not supported");
     }
   }
  else {
-    throw new JsonProtocolModelParseException("Method return type " + type + " not supported");
+    throw new UnsupportedOperationException("Method return type " + type + " not supported");
   }
 }
