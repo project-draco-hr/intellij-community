@@ -1,9 +1,29 @@
 {
   final StringWriter stringWriter=new StringWriter();
   try {
-    Velocity.evaluate(context,stringWriter,"",templateContent);
+    Project project=null;
+    final Object projectName=context.get(FileTemplateManager.PROJECT_NAME_VARIABLE);
+    if (projectName instanceof String) {
+      Project[] projects=ProjectManager.getInstance().getOpenProjects();
+      project=ContainerUtil.find(projects,new Condition<Project>(){
+        @Override public boolean value(        Project project){
+          return projectName.equals(project.getName());
+        }
+      }
+);
+    }
+    try {
+      ourTemplateManager.set(project == null ? FileTemplateManager.getDefaultInstance() : FileTemplateManager.getInstance(project));
+      Velocity.evaluate(context,stringWriter,"",templateContent);
+    }
+  finally {
+      ourTemplateManager.set(null);
+    }
   }
  catch (  final VelocityException e) {
+    if (ApplicationManager.getApplication().isUnitTestMode()) {
+      LOG.error(e);
+    }
     LOG.info("Error evaluating template:\n" + templateContent,e);
     ApplicationManager.getApplication().invokeLater(new Runnable(){
       @Override public void run(){

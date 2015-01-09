@@ -1,42 +1,18 @@
 {
   super.doOKAction();
-  final Ref<Boolean> result=new Ref<Boolean>();
-  final Consumer<ProgressIndicator> runnable=new Consumer<ProgressIndicator>(){
-    @Override public void consume(    @NotNull ProgressIndicator indicator){
+  ProgressManager.getInstance().run(new Task.Modal(null,IdeBundle.message("progress.downloading.plugins"),true){
+    @Override public void run(    @NotNull ProgressIndicator indicator){
       UpdateChecker.saveDisabledToUpdatePlugins();
-      result.set(UpdateChecker.install(myUploadedPlugins,indicator));
-    }
-  }
-;
-  final String progressTitle="Download plugins...";
-  if (downloadModal()) {
-    ProgressManager.getInstance().run(new Task.Modal(null,progressTitle,true){
-      @Override public void run(      @NotNull ProgressIndicator indicator){
-        runnable.consume(indicator);
-      }
-    }
-);
-  }
- else {
-    ProgressManager.getInstance().run(new Task.Backgroundable(null,progressTitle,true){
-      @Override public void run(      @NotNull ProgressIndicator indicator){
-        runnable.consume(indicator);
-      }
-      @Override public void onSuccess(){
-        final Boolean installed=result.get();
-        if (installed != null && installed.booleanValue()) {
-          final String pluginName;
-          if (myUploadedPlugins.size() == 1) {
-            final PluginDownloader firstItem=ContainerUtil.getFirstItem(myUploadedPlugins);
-            pluginName=firstItem != null ? firstItem.getPluginName() : null;
+      boolean updated=UpdateChecker.installPluginUpdates(myUploadedPlugins,indicator);
+      if (updated && !myPlatformUpdate) {
+        ApplicationManager.getApplication().invokeLater(new Runnable(){
+          @Override public void run(){
+            PluginManagerMain.notifyPluginsUpdated(null);
           }
- else {
-            pluginName=null;
-          }
-          PluginManagerMain.notifyPluginsWereInstalled(pluginName,null);
         }
+,ModalityState.NON_MODAL);
       }
     }
-);
   }
+);
 }

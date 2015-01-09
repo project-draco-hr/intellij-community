@@ -1,0 +1,46 @@
+{
+  final Set<PluginId> notInstalled=new HashSet<PluginId>();
+  final Set<PluginId> disabledIds=new HashSet<PluginId>();
+  final PluginId[] dependentPluginIds=pluginDescriptor.getDependentPluginIds();
+  final PluginId[] optionalDependentPluginIds=pluginDescriptor.getOptionalDependentPluginIds();
+  for (  PluginId id : dependentPluginIds) {
+    if (ArrayUtilRt.find(optionalDependentPluginIds,id) > -1)     continue;
+    final boolean disabled=model.isDisabled(id);
+    final boolean enabled=model.isEnabled(id);
+    if (!enabled && !disabled && !PluginManagerCore.isModuleDependency(id)) {
+      notInstalled.add(id);
+    }
+ else     if (disabled) {
+      disabledIds.add(id);
+    }
+  }
+  if (!notInstalled.isEmpty()) {
+    String deps=StringUtil.join(notInstalled,new Function<PluginId,String>(){
+      @Override public String fun(      PluginId id){
+        return id.toString();
+      }
+    }
+,", ");
+    String message="Plugin " + pluginDescriptor.getName() + " depends on unknown plugin"+ (notInstalled.size() > 1 ? "s " : " ")+ deps;
+    MessagesEx.showWarningDialog(parent,message,CommonBundle.getWarningTitle());
+  }
+  if (!disabledIds.isEmpty()) {
+    final Set<IdeaPluginDescriptor> dependencies=new HashSet<IdeaPluginDescriptor>();
+    for (    IdeaPluginDescriptor ideaPluginDescriptor : model.getAllPlugins()) {
+      if (disabledIds.contains(ideaPluginDescriptor.getPluginId())) {
+        dependencies.add(ideaPluginDescriptor);
+      }
+    }
+    String part="disabled plugin" + (dependencies.size() > 1 ? "s " : " ");
+    String deps=StringUtil.join(dependencies,new Function<IdeaPluginDescriptor,String>(){
+      @Override public String fun(      IdeaPluginDescriptor descriptor){
+        return descriptor.getName();
+      }
+    }
+,", ");
+    String message="Plugin " + pluginDescriptor.getName() + " depends on "+ part+ deps+ ". Enable "+ part.trim()+ "?";
+    if (MessagesEx.showOkCancelDialog(parent,message,CommonBundle.getWarningTitle(),Messages.getWarningIcon()) == Messages.OK) {
+      model.enableRows(dependencies.toArray(new IdeaPluginDescriptor[dependencies.size()]),Boolean.TRUE);
+    }
+  }
+}

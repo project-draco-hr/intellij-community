@@ -1,0 +1,82 @@
+{
+  if (!propertiesComponent.getBoolean(CONFIGURED,false)) {
+    propertiesComponent.setValue(CONFIGURED,"true");
+    propertiesComponent.setValue("toolwindow.stripes.buttons.info.shown","true");
+    UISettings uiSettings=UISettings.getInstance();
+    uiSettings.HIDE_TOOL_STRIPES=false;
+    uiSettings.SHOW_MEMORY_INDICATOR=false;
+    uiSettings.SHOW_DIRECTORY_FOR_NON_UNIQUE_FILENAMES=true;
+    uiSettings.SHOW_MAIN_TOOLBAR=false;
+    codeInsightSettings.REFORMAT_ON_PASTE=CodeInsightSettings.NO_REFORMAT;
+    Registry.get("ide.new.settings.dialog").setValue(true);
+    GeneralSettings.getInstance().setShowTipsOnStartup(false);
+    EditorSettingsExternalizable.getInstance().setVirtualSpace(false);
+    EditorSettingsExternalizable.getInstance().getOptions().ARE_LINE_NUMBERS_SHOWN=true;
+    final CodeStyleSettings settings=CodeStyleSettingsManager.getInstance().getCurrentSettings();
+    settings.ALIGN_MULTILINE_PARAMETERS_IN_CALLS=true;
+    settings.getCommonSettings(PythonLanguage.getInstance()).ALIGN_MULTILINE_PARAMETERS_IN_CALLS=true;
+    uiSettings.SHOW_DIRECTORY_FOR_NON_UNIQUE_FILENAMES=true;
+    uiSettings.SHOW_MEMORY_INDICATOR=false;
+    final String ignoredFilesList=fileTypeManager.getIgnoredFilesList();
+    ApplicationManager.getApplication().invokeLater(new Runnable(){
+      @Override public void run(){
+        ApplicationManager.getApplication().runWriteAction(new Runnable(){
+          @Override public void run(){
+            FileTypeManager.getInstance().setIgnoredFilesList(ignoredFilesList + ";*$py.class");
+          }
+        }
+);
+      }
+    }
+);
+    PyCodeInsightSettings.getInstance().SHOW_IMPORT_POPUP=false;
+  }
+  if (!propertiesComponent.isValueSet(DISPLAYED_PROPERTY)) {
+    bus.connect().subscribe(AppLifecycleListener.TOPIC,new AppLifecycleListener.Adapter(){
+      @Override public void welcomeScreenDisplayed(){
+        ApplicationManager.getApplication().invokeLater(new Runnable(){
+          @Override public void run(){
+            if (!propertiesComponent.isValueSet(DISPLAYED_PROPERTY)) {
+              GeneralSettings.getInstance().setShowTipsOnStartup(false);
+              propertiesComponent.setValue(DISPLAYED_PROPERTY,"true");
+              patchKeymap();
+            }
+          }
+        }
+);
+      }
+    }
+);
+  }
+  bus.connect().subscribe(ProjectManager.TOPIC,new ProjectManagerAdapter(){
+    @Override public void projectOpened(    final Project project){
+      if (project.isDefault())       return;
+      if (FileChooserUtil.getLastOpenedFile(project) == null) {
+        FileChooserUtil.setLastOpenedFile(project,VfsUtil.getUserHomeDir());
+      }
+      patchProjectAreaExtensions(project);
+      StartupManager.getInstance(project).runWhenProjectIsInitialized(new DumbAwareRunnable(){
+        @Override public void run(){
+          if (project.isDisposed())           return;
+          ToolWindowManager.getInstance(project).invokeLater(new Runnable(){
+            int count=0;
+            public void run(){
+              if (project.isDisposed())               return;
+              if (count++ < 3) {
+                ToolWindowManager.getInstance(project).invokeLater(this);
+                return;
+              }
+              ToolWindow toolWindow=ToolWindowManager.getInstance(project).getToolWindow("Project");
+              if (toolWindow.getType() != ToolWindowType.SLIDING) {
+                toolWindow.activate(null);
+              }
+            }
+          }
+);
+        }
+      }
+);
+    }
+  }
+);
+}

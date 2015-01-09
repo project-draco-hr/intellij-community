@@ -1,0 +1,56 @@
+{
+  Map<PluginId,IdeaPluginDescriptor> updateable=ContainerUtil.newTroveMap();
+  for (  IdeaPluginDescriptor descriptor : PluginManagerCore.getPlugins()) {
+    if (!descriptor.isBundled()) {
+      updateable.put(descriptor.getPluginId(),descriptor);
+    }
+  }
+  File onceInstalled=new File(PathManager.getConfigPath(),PluginManager.INSTALLED_TXT);
+  if (onceInstalled.isFile()) {
+    try {
+      for (      String line : FileUtil.loadLines(onceInstalled)) {
+        PluginId id=PluginId.getId(line.trim());
+        if (!updateable.containsKey(id)) {
+          updateable.put(id,null);
+        }
+      }
+    }
+ catch (    IOException e) {
+      LOG.error(onceInstalled.getPath(),e);
+    }
+    onceInstalled.deleteOnExit();
+  }
+  if (updateable.isEmpty())   return null;
+  Map<PluginId,PluginDownloader> toUpdate=ContainerUtil.newTroveMap();
+  List<String> hosts=RepositoryHelper.getPluginHosts();
+  InstalledPluginsState state=InstalledPluginsState.getInstance();
+  outer:   for (  String host : hosts) {
+    try {
+      boolean forceHttps=host == null && updateSettings.SECURE_CONNECTION;
+      List<IdeaPluginDescriptor> list=RepositoryHelper.loadPlugins(host,buildNumber,forceHttps,indicator);
+      for (      IdeaPluginDescriptor descriptor : list) {
+        PluginId id=descriptor.getPluginId();
+        if (updateable.containsKey(id)) {
+          updateable.remove(id);
+          state.onDescriptorDownload(descriptor);
+          PluginDownloader downloader=PluginDownloader.createDownloader(descriptor,host,buildNumber);
+          downloader.setForceHttps(forceHttps);
+          checkAndPrepareToInstall(downloader,state,toUpdate,incompatiblePlugins,indicator);
+          if (updateable.isEmpty()) {
+            break outer;
+          }
+        }
+      }
+    }
+ catch (    IOException e) {
+      if (host != null) {
+        LOG.warn("failed to load plugin descriptions from " + host,e);
+      }
+ else {
+        LOG.warn(e);
+        showErrorMessage(manualCheck,e.getMessage());
+      }
+    }
+  }
+  return toUpdate.isEmpty() ? null : toUpdate.values();
+}

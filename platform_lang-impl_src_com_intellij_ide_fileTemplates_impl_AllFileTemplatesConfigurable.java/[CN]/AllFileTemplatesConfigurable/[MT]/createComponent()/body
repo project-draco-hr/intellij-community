@@ -12,22 +12,19 @@
     }
   }
 ;
-  myCurrentTab=myTemplatesList;
-  final List<FileTemplateTab> allTabs=new ArrayList<FileTemplateTab>(Arrays.asList(myTemplatesList,myIncludesList));
-  if (FileTemplateManager.getInstance().getAllCodeTemplates().length > 0) {
-    myCodeTemplatesList=new FileTemplateTabAsList(CODE_TITLE){
-      @Override public void onTemplateSelected(){
-        onListSelectionChanged();
-      }
+  myCodeTemplatesList=new FileTemplateTabAsList(CODE_TITLE){
+    @Override public void onTemplateSelected(){
+      onListSelectionChanged();
     }
-;
-    allTabs.add(myCodeTemplatesList);
   }
+;
+  myCurrentTab=myTemplatesList;
+  final List<FileTemplateTab> allTabs=new ArrayList<FileTemplateTab>(Arrays.asList(myTemplatesList,myIncludesList,myCodeTemplatesList));
   final Set<FileTemplateGroupDescriptorFactory> factories=new THashSet<FileTemplateGroupDescriptorFactory>();
   ContainerUtil.addAll(factories,ApplicationManager.getApplication().getComponents(FileTemplateGroupDescriptorFactory.class));
   ContainerUtil.addAll(factories,Extensions.getExtensions(FileTemplateGroupDescriptorFactory.EXTENSION_POINT_NAME));
   if (!factories.isEmpty()) {
-    myJ2eeTemplatesList=new FileTemplateTabAsTree(J2EE_TITLE){
+    myOtherTemplatesList=new FileTemplateTabAsTree(OTHER_TITLE){
       @Override public void onTemplateSelected(){
         onListSelectionChanged();
       }
@@ -50,13 +47,26 @@
       }
     }
 ;
-    allTabs.add(myJ2eeTemplatesList);
+    allTabs.add(myOtherTemplatesList);
   }
+  myEditor=new FileTemplateConfigurable(myProject);
+  myEditor.addChangeListener(new ChangeListener(){
+    @Override public void stateChanged(    ChangeEvent e){
+      onEditorChanged();
+    }
+  }
+);
+  myEditorComponent=myEditor.createComponent();
+  myEditorComponent.setBorder(BorderFactory.createEmptyBorder(0,10,10,10));
   myTabs=allTabs.toArray(new FileTemplateTab[allTabs.size()]);
   myTabbedPane=new TabbedPaneWrapper(myUIDisposable);
   myTabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+  myLeftPanel=new JPanel(new CardLayout());
   for (  FileTemplateTab tab : myTabs) {
-    myTabbedPane.addTab(tab.getTitle(),ScrollPaneFactory.createScrollPane(tab.getComponent()));
+    myLeftPanel.add(ScrollPaneFactory.createScrollPane(tab.getComponent(),SideBorder.TOP),tab.getTitle());
+    JPanel fakePanel=new JPanel();
+    fakePanel.setPreferredSize(new Dimension(0,0));
+    myTabbedPane.addTab(tab.getTitle(),fakePanel);
   }
   myTabbedPane.addChangeListener(new ChangeListener(){
     @Override public void stateChanged(    ChangeEvent e){
@@ -82,7 +92,7 @@
     }
     @Override public void update(    AnActionEvent e){
       super.update(e);
-      e.getPresentation().setEnabled(!(myCurrentTab == myCodeTemplatesList || myCurrentTab == myJ2eeTemplatesList));
+      e.getPresentation().setEnabled(!(myCurrentTab == myCodeTemplatesList || myCurrentTab == myOtherTemplatesList));
     }
   }
 ;
@@ -92,7 +102,7 @@
     }
     @Override public void update(    AnActionEvent e){
       super.update(e);
-      e.getPresentation().setEnabled(myCurrentTab != myCodeTemplatesList && myCurrentTab != myJ2eeTemplatesList && myCurrentTab.getSelectedTemplate() != null);
+      e.getPresentation().setEnabled(myCurrentTab != myCodeTemplatesList && myCurrentTab != myOtherTemplatesList && myCurrentTab.getSelectedTemplate() != null);
     }
   }
 ;
@@ -114,21 +124,26 @@
   addAction.registerCustomShortcutSet(CommonShortcuts.INSERT,myCurrentTab.getComponent());
   removeAction.registerCustomShortcutSet(CommonShortcuts.getDelete(),myCurrentTab.getComponent());
   myToolBar=ActionManager.getInstance().createActionToolbar(ActionPlaces.UNKNOWN,group,true).getComponent();
-  myEditor=new FileTemplateConfigurable();
-  myEditor.addChangeListener(new ChangeListener(){
-    @Override public void stateChanged(    ChangeEvent e){
-      onEditorChanged();
-    }
-  }
-);
-  myMainPanel=new JPanel(new BorderLayout());
-  Splitter splitter=new Splitter(false,0.3f);
-  JPanel leftPanel=new JPanel(new BorderLayout());
-  leftPanel.add(myToolBar,BorderLayout.NORTH);
-  leftPanel.add(myTabbedPane.getComponent(),BorderLayout.CENTER);
-  splitter.setFirstComponent(leftPanel);
-  myEditorComponent=myEditor.createComponent();
+  myToolBar.setBorder(IdeBorderFactory.createEmptyBorder());
+  JPanel toolbarPanel=new JPanel(new BorderLayout());
+  toolbarPanel.add(myToolBar,BorderLayout.WEST);
+  JComponent schemaComponent=ActionManager.getInstance().createActionToolbar(ActionPlaces.UNKNOWN,new DefaultCompactActionGroup(new ChangeSchemaCombo(this)),true).getComponent();
+  JPanel schemaPanel=new JPanel(new BorderLayout());
+  schemaPanel.add(schemaComponent,BorderLayout.EAST);
+  schemaPanel.add(new JLabel("Schema:"),BorderLayout.WEST);
+  toolbarPanel.add(schemaPanel,BorderLayout.EAST);
+  JPanel centerPanel=new JPanel(new BorderLayout());
+  centerPanel.add(myTabbedPane.getComponent(),BorderLayout.NORTH);
+  OnePixelSplitter splitter=new OnePixelSplitter(false,0.3f);
+  splitter.setFirstComponent(myLeftPanel);
   splitter.setSecondComponent(myEditorComponent);
-  myMainPanel.add(splitter,BorderLayout.CENTER);
+  centerPanel.add(splitter,BorderLayout.CENTER);
+  myMainPanel=new JPanel(new BorderLayout());
+  myMainPanel.add(toolbarPanel,BorderLayout.NORTH);
+  myMainPanel.add(centerPanel,BorderLayout.CENTER);
+  final PropertiesComponent propertiesComponent=PropertiesComponent.getInstance();
+  final String tabName=propertiesComponent.getValue(CURRENT_TAB);
+  if (selectTab(tabName)) {
+  }
   return myMainPanel;
 }

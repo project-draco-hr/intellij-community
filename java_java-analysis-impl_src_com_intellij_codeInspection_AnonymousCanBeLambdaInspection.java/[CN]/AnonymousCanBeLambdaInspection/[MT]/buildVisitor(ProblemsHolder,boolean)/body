@@ -1,25 +1,19 @@
 {
   return new JavaElementVisitor(){
-    @Override public void visitAnonymousClass(    PsiAnonymousClass aClass){
+    @Override public void visitAnonymousClass(    final PsiAnonymousClass aClass){
       super.visitAnonymousClass(aClass);
-      if (PsiUtil.getLanguageLevel(aClass).isAtLeast(LanguageLevel.JDK_1_8)) {
-        final PsiClassType baseClassType=aClass.getBaseClassType();
-        if (LambdaHighlightingUtil.checkInterfaceFunctional(baseClassType) == null) {
-          final PsiElement lambdaContext=aClass.getParent().getParent();
-          if (LambdaUtil.isValidLambdaContext(lambdaContext) || !(lambdaContext instanceof PsiExpressionStatement)) {
-            final PsiMethod[] methods=aClass.getMethods();
-            if (methods.length == 1 && aClass.getFields().length == 0) {
-              final PsiMethod psiMethod=methods[0];
-              final PsiCodeBlock body=psiMethod.getBody();
-              if (body != null && !hasForbiddenRefsInsideBody(psiMethod,aClass) && !hasRuntimeAnnotations(psiMethod)) {
-                final PsiElement lBrace=aClass.getLBrace();
-                LOG.assertTrue(lBrace != null);
-                final TextRange rangeInElement=new TextRange(0,aClass.getStartOffsetInParent() + lBrace.getStartOffsetInParent());
-                holder.registerProblem(aClass.getParent(),"Anonymous #ref #loc can be replaced with lambda",ProblemHighlightType.LIKE_UNUSED_SYMBOL,rangeInElement,new ReplaceWithLambdaFix());
-              }
-            }
-          }
+      final PsiElement parent=aClass.getParent();
+      final PsiElement lambdaContext=parent != null ? parent.getParent() : null;
+      if (lambdaContext != null && (LambdaUtil.isValidLambdaContext(lambdaContext) || !(lambdaContext instanceof PsiExpressionStatement)) && canBeConvertedToLambda(aClass,new Condition<PsiClassType>(){
+        @Override public boolean value(        PsiClassType type){
+          return LambdaHighlightingUtil.checkInterfaceFunctional(type) == null;
         }
+      }
+)) {
+        final PsiElement lBrace=aClass.getLBrace();
+        LOG.assertTrue(lBrace != null);
+        final TextRange rangeInElement=new TextRange(0,aClass.getStartOffsetInParent() + lBrace.getStartOffsetInParent());
+        holder.registerProblem(parent,"Anonymous #ref #loc can be replaced with lambda",ProblemHighlightType.LIKE_UNUSED_SYMBOL,rangeInElement,new ReplaceWithLambdaFix());
       }
     }
   }

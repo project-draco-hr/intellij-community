@@ -1,0 +1,57 @@
+{
+  final SelectionModel selectionModel=editor.getSelectionModel();
+  if (selectionModel.hasSelection()) {
+    final PsiElement[] elements=CodeInsightUtil.findStatementsInRange(file,selectionModel.getSelectionStart(),selectionModel.getSelectionEnd());
+    if (elements.length > 0) {
+      final AbstractInplaceIntroducer inplaceIntroducer=AbstractInplaceIntroducer.getActiveIntroducer(editor);
+      if (inplaceIntroducer instanceof InplaceIntroduceParameterPopup) {
+        return false;
+      }
+      final List<PsiMethod> enclosingMethods=getEnclosingMethods(Util.getContainingMethod(elements[0]));
+      if (enclosingMethods.isEmpty()) {
+        return false;
+      }
+      final PsiFile copy=PsiFileFactory.getInstance(project).createFileFromText(file.getName(),file.getFileType(),file.getText(),file.getModificationStamp(),false);
+      final PsiElement[] elementsCopy=CodeInsightUtil.findStatementsInRange(copy,elements[0].getTextRange().getStartOffset(),elements[elements.length - 1].getTextRange().getEndOffset());
+      final MyExtractMethodProcessor processor=new MyExtractMethodProcessor(project,editor,elementsCopy);
+      try {
+        if (!processor.prepare())         return false;
+        processor.showDialog();
+        final PsiMethod emptyMethod=JavaPsiFacade.getElementFactory(project).createMethodFromText(processor.generateEmptyMethod("name").getText(),elements[0]);
+        final Collection<? extends PsiType> types=FunctionalInterfaceSuggester.suggestFunctionalInterfaces(emptyMethod);
+        if (types.isEmpty()) {
+          return false;
+        }
+        if (types.size() == 1 || ApplicationManager.getApplication().isUnitTestMode()) {
+          final PsiType next=types.iterator().next();
+          functionalInterfaceSelected(next,enclosingMethods,project,editor,processor,elements);
+        }
+ else {
+          final Map<PsiClass,PsiType> classes=new LinkedHashMap<PsiClass,PsiType>();
+          for (          PsiType type : types) {
+            classes.put(PsiUtil.resolveClassInType(type),type);
+          }
+          final PsiClass[] psiClasses=classes.keySet().toArray(new PsiClass[classes.size()]);
+          final String methodSignature=PsiFormatUtil.formatMethod(emptyMethod,PsiSubstitutor.EMPTY,PsiFormatUtilBase.SHOW_PARAMETERS,PsiFormatUtilBase.SHOW_TYPE);
+          final PsiType returnType=emptyMethod.getReturnType();
+          LOG.assertTrue(returnType != null);
+          final String title="Choose Applicable Functional Interface: " + methodSignature + " -> "+ returnType.getPresentableText();
+          NavigationUtil.getPsiElementPopup(psiClasses,new PsiClassListCellRenderer(),title,new PsiElementProcessor<PsiClass>(){
+            @Override public boolean execute(            @NotNull PsiClass psiClass){
+              functionalInterfaceSelected(classes.get(psiClass),enclosingMethods,project,editor,processor,elements);
+              return true;
+            }
+          }
+).showInBestPositionFor(editor);
+          return true;
+        }
+        return true;
+      }
+ catch (      IncorrectOperationException ignore) {
+      }
+catch (      PrepareFailedException ignore) {
+      }
+    }
+  }
+  return false;
+}

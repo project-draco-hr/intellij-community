@@ -1,34 +1,26 @@
 {
-  Map<String,String> settings=ContainerUtil.newLinkedHashMap();
-  try {
-    String url=getSettingsUrl();
-    HttpConfigurable.getInstance().prepareURL(url);
-    String text=FileUtil.loadTextAndClose(getStream(new URL(url)));
-    if (text.startsWith("<html>") || text.startsWith("<!DOCTYPE html>")) {
-      LOG.info("HTML text obtained from " + url + ": "+ StringUtil.first(text,300,true));
-      return settings;
-    }
-    try {
-      Document document=JDOMUtil.loadDocument(text);
-      Element root=document.getRootElement();
-      for (      String s : attributes) {
-        String attributeValue=root.getAttributeValue(s);
-        if (StringUtil.isNotEmpty(attributeValue)) {
-          settings.put(s,attributeValue);
+  return HttpRequests.request(mySettingsUrl).productNameAsUserAgent().connect(new HttpRequests.RequestProcessor<Map<String,String>>(){
+    @Override public Map<String,String> process(    @NotNull HttpRequests.Request request) throws IOException {
+      if (!request.isSuccessful()) {
+        HttpURLConnection connection=(HttpURLConnection)request.getConnection();
+        LOG.warn(connection.getResponseCode() + " " + connection.getResponseMessage());
+        return Collections.emptyMap();
+      }
+      Map<String,String> settings=ContainerUtilRt.newLinkedHashMap();
+      try {
+        Element root=JDOMUtil.load(request.getReader());
+        for (        String s : attributes) {
+          String attributeValue=root.getAttributeValue(s);
+          if (StringUtil.isNotEmpty(attributeValue)) {
+            settings.put(s,attributeValue);
+          }
         }
       }
+ catch (      JDOMException e) {
+        LOG.error(e);
+      }
+      return settings;
     }
- catch (    JDOMException e) {
-      LOG.error("",e,text);
-    }
   }
- catch (  MalformedURLException e) {
-    LOG.error(e);
-  }
-catch (  IOException e) {
-  }
-catch (  Exception e) {
-    LOG.error(e);
-  }
-  return settings;
+,Collections.<String,String>emptyMap(),LOG);
 }

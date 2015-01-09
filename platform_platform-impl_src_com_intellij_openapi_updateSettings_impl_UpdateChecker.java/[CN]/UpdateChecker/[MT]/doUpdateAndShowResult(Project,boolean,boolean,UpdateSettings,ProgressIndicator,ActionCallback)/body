@@ -1,5 +1,8 @@
 {
-  final CheckForUpdateResult result=checkForUpdates(updateSettings);
+  if (indicator != null) {
+    indicator.setText(IdeBundle.message("updates.checking.platform"));
+  }
+  final CheckForUpdateResult result=checkPlatformUpdate(updateSettings);
   if (manualCheck && result.getState() == UpdateStrategy.State.LOADED) {
     UpdateSettings settings=UpdateSettings.getInstance();
     settings.saveLastCheckedInfo();
@@ -11,20 +14,30 @@
     showErrorMessage(manualCheck,IdeBundle.message(e instanceof InterruptedIOException ? "updates.timeout.error" : "updates.error.connection.failed"));
     return;
   }
-  final UpdateChannel updatedChannel=result.getUpdatedChannel();
-  boolean platformUpdate=newChannelReady(result.getChannelToPropose());
-  BuildNumber buildNumber=null;
-  if (updatedChannel != null) {
-    final BuildInfo latestBuild=updatedChannel.getLatestBuild();
-    if (latestBuild != null) {
-      buildNumber=latestBuild.getNumber();
-    }
+  if (indicator != null) {
+    indicator.setText(IdeBundle.message("updates.checking.plugins"));
   }
-  final Collection<IdeaPluginDescriptor> incompatiblePlugins=buildNumber != null ? new HashSet<IdeaPluginDescriptor>() : null;
-  final Collection<PluginDownloader> updatedPlugins=platformUpdate ? null : updatePlugins(manualCheck,incompatiblePlugins,indicator,buildNumber);
+  final Collection<PluginDownloader> updatedPlugins;
+  final Collection<IdeaPluginDescriptor> incompatiblePlugins;
+  if (newChannelReady(result.getChannelToPropose())) {
+    updatedPlugins=null;
+    incompatiblePlugins=null;
+  }
+ else {
+    BuildNumber buildNumber=null;
+    UpdateChannel updatedChannel=result.getUpdatedChannel();
+    if (updatedChannel != null) {
+      BuildInfo latestBuild=updatedChannel.getLatestBuild();
+      if (latestBuild != null) {
+        buildNumber=latestBuild.getNumber();
+      }
+    }
+    incompatiblePlugins=buildNumber != null ? new HashSet<IdeaPluginDescriptor>() : null;
+    updatedPlugins=checkPluginsUpdate(manualCheck,updateSettings,indicator,incompatiblePlugins,buildNumber);
+  }
   ApplicationManager.getApplication().invokeLater(new Runnable(){
     @Override public void run(){
-      showUpdateResult(project,result,updatedPlugins,incompatiblePlugins,enableLink,manualCheck);
+      showUpdateResult(project,result,updateSettings,updatedPlugins,incompatiblePlugins,enableLink,manualCheck);
       if (callback != null) {
         callback.setDone();
       }

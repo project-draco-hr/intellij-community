@@ -1,0 +1,73 @@
+{
+  final String defaultAttributeValue=attributes.get(XmlEmmetParser.DEFAULT_ATTRIBUTE_NAME);
+  if (defaultAttributeValue != null) {
+    attributes.remove(XmlEmmetParser.DEFAULT_ATTRIBUTE_NAME);
+    final List<XmlAttribute> xmlAttributes=ContainerUtil.filter(tag.getAttributes(),new Condition<XmlAttribute>(){
+      @Override public boolean value(      XmlAttribute attribute){
+        return !attributes.containsKey(attribute.getLocalName());
+      }
+    }
+);
+    XmlAttribute defaultAttribute=findDefaultAttribute(xmlAttributes);
+    if (defaultAttribute == null) {
+      defaultAttribute=findImpliedAttribute(xmlAttributes);
+    }
+    if (defaultAttribute == null) {
+      defaultAttribute=findEmptyAttribute(xmlAttributes);
+    }
+    if (defaultAttribute != null) {
+      String attributeName=defaultAttribute.getName();
+      if (attributeName.length() > 1) {
+        if (isImpliedAttribute(attributeName) || isDefaultAttribute(attributeName)) {
+          defaultAttribute.setName(attributeName.substring(1));
+        }
+        final String oldValue=defaultAttribute.getValue();
+        if (oldValue != null && StringUtil.containsChar(oldValue,'|')) {
+          defaultAttribute.setValue(StringUtil.replace(oldValue,"|",defaultAttributeValue));
+        }
+ else {
+          defaultAttribute.setValue(defaultAttributeValue);
+        }
+      }
+    }
+  }
+  for (  XmlAttribute xmlAttribute : tag.getAttributes()) {
+    final String attributeName=xmlAttribute.getName();
+    final XmlAttributeValue xmlAttributeValueElement=xmlAttribute.getValueElement();
+    if (xmlAttributeValueElement != null && !attributes.containsKey(attributeName)) {
+      continue;
+    }
+    String attributeValue=StringUtil.notNullize(attributes.get(attributeName),StringUtil.notNullize(xmlAttribute.getValue()));
+    if (ZenCodingUtil.containsSurroundedTextMarker(attributeValue)) {
+      myContainsSurroundedTextMarker=true;
+    }
+    if (isBooleanAttribute(attributeValue,xmlAttribute,callback)) {
+      if (HtmlUtil.isShortNotationOfBooleanAttributePreferred()) {
+        if (xmlAttributeValueElement != null) {
+          final PsiElement prevSibling=xmlAttributeValueElement.getPrevSibling();
+          if (prevSibling != null && prevSibling.textMatches("=")) {
+            xmlAttribute.deleteChildRange(prevSibling,xmlAttributeValueElement);
+          }
+        }
+      }
+ else {
+        if (xmlAttributeValueElement == null) {
+          xmlAttribute.delete();
+        }
+        tag.setAttribute(attributeName,attributeName);
+      }
+    }
+ else {
+      if (xmlAttributeValueElement == null) {
+        xmlAttribute.delete();
+      }
+      tag.setAttribute(attributeName,StringUtil.isEmpty(attributeValue) ? "$" + prepareVariableName(attributeName) + "$" : ZenCodingUtil.getValue(attributeValue,myNumberInIteration,myTotalIterations,mySurroundedText));
+    }
+  }
+  for (  XmlAttribute xmlAttribute : tag.getAttributes()) {
+    final String xmlAttributeLocalName=xmlAttribute.getLocalName();
+    if (isImpliedAttribute(xmlAttributeLocalName) || isDefaultAttribute(xmlAttributeLocalName)) {
+      xmlAttribute.delete();
+    }
+  }
+}

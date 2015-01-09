@@ -7,13 +7,19 @@
     return EMPTY_ARRAY;
   }
   final PyQualifiedExpression element=CompletionUtil.getOriginalOrSelf(myElement);
-  PyType qualifierType=TypeEvalContext.userInitiated(element.getProject(),element.getContainingFile()).getType(qualifier);
+  PyType qualifierType=TypeEvalContext.codeCompletion(element.getProject(),element.getContainingFile()).getType(qualifier);
   ProcessingContext ctx=new ProcessingContext();
   final Set<String> namesAlready=new HashSet<String>();
   ctx.put(PyType.CTX_NAMES,namesAlready);
+  final Collection<Object> variants=new ArrayList<Object>();
   if (qualifierType != null) {
-    Collection<Object> variants=new ArrayList<Object>();
     Collections.addAll(variants,getVariantFromHasAttr(qualifier));
+    if (qualifierType instanceof PyStructuralType && ((PyStructuralType)qualifierType).isInferredFromUsages()) {
+      final PyClassType guessedType=guessClassTypeByName();
+      if (guessedType != null) {
+        Collections.addAll(variants,getTypeCompletionVariants(myElement,guessedType));
+      }
+    }
     if (qualifier instanceof PyQualifiedExpression) {
       Collection<PyExpression> attrs=collectAssignedAttributes((PyQualifiedExpression)qualifier);
       for (      PyExpression ex : attrs) {
@@ -40,5 +46,14 @@
       return qualifierType.getCompletionVariants(element.getName(),element,ctx);
     }
   }
-  return getUntypedVariants();
+ else {
+    final PyClassType guessedType=guessClassTypeByName();
+    if (guessedType != null) {
+      Collections.addAll(variants,getTypeCompletionVariants(myElement,guessedType));
+    }
+    if (qualifier instanceof PyReferenceExpression) {
+      Collections.addAll(variants,collectSeenMembers(qualifier.getText()));
+    }
+    return variants.toArray();
+  }
 }

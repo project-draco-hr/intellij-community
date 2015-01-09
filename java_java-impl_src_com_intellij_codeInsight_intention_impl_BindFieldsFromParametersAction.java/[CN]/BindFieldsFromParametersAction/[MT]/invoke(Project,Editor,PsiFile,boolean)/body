@@ -4,7 +4,20 @@
   final PsiMethod method=myParameter != null ? (PsiMethod)myParameter.getDeclarationScope() : PsiTreeUtil.getParentOfType(file.findElementAt(editor.getCaretModel().getOffset()),PsiMethod.class);
   LOG.assertTrue(method != null);
   final HashSet<String> usedNames=new HashSet<String>();
-  for (  PsiParameter selected : selectParameters(project,method,copyUnboundedParamsAndClearOriginal(method),isInteractive)) {
-    processParameter(project,selected,usedNames);
+  final Iterable<PsiParameter> parameters=selectParameters(project,method,copyUnboundedParamsAndClearOriginal(method),isInteractive);
+  final MultiMap<PsiType,PsiParameter> types=new MultiMap<PsiType,PsiParameter>();
+  for (  PsiParameter parameter : parameters) {
+    types.putValue(parameter.getType(),parameter);
+  }
+  final CodeStyleSettings settings=CodeStyleSettingsManager.getSettings(project);
+  final boolean preferLongerNames=settings.PREFER_LONGER_NAMES;
+  for (  PsiParameter selected : parameters) {
+    try {
+      settings.PREFER_LONGER_NAMES=preferLongerNames || types.get(selected.getType()).size() > 1;
+      processParameter(project,selected,usedNames);
+    }
+  finally {
+      settings.PREFER_LONGER_NAMES=preferLongerNames;
+    }
   }
 }

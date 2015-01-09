@@ -1,2 +1,30 @@
 {
+  VirtualFile dotIdea=projectDir.findChild(Project.DIRECTORY_STORE_FOLDER);
+  if (dotIdea == null)   throw new FileNotFoundException("Missing '" + Project.DIRECTORY_STORE_FOLDER + "' in "+ projectDir.getPath());
+  VirtualFile modulesXml=dotIdea.findChild("modules.xml");
+  if (modulesXml == null)   throw new FileNotFoundException("Missing 'modules.xml' in " + dotIdea.getPath());
+  StorageData storageData=loadStorageFile(project,modulesXml);
+  final Element moduleManagerState=storageData.getState("ProjectModuleManager");
+  if (moduleManagerState == null) {
+    throw new JDOMException("cannot find ProjectModuleManager state in modules.xml");
+  }
+  final CoreModuleManager moduleManager=(CoreModuleManager)ModuleManager.getInstance(project);
+  moduleManager.loadState(moduleManagerState);
+  VirtualFile miscXml=dotIdea.findChild("misc.xml");
+  if (miscXml == null)   throw new FileNotFoundException("Missing 'misc.xml' in " + dotIdea.getPath());
+  storageData=loadStorageFile(project,miscXml);
+  final Element projectRootManagerState=storageData.getState("ProjectRootManager");
+  if (projectRootManagerState == null) {
+    throw new JDOMException("cannot find ProjectRootManager state in misc.xml");
+  }
+  ((ProjectRootManagerImpl)ProjectRootManager.getInstance(project)).readExternal(projectRootManagerState);
+  VirtualFile libraries=dotIdea.findChild("libraries");
+  if (libraries != null) {
+    DirectoryStorageData data=new DirectoryStorageData();
+    data.loadFrom(libraries,PathMacroManager.getInstance(project).createTrackingSubstitutor());
+    final Element libraryTable=DefaultStateSerializer.deserializeState(data.getCompositeStateAndArchive("libraryTable",new ProjectLibraryTable.LibraryStateSplitter()),Element.class,null);
+    ((LibraryTableBase)ProjectLibraryTable.getInstance(project)).loadState(libraryTable);
+  }
+  moduleManager.loadModules();
+  project.projectOpened();
 }

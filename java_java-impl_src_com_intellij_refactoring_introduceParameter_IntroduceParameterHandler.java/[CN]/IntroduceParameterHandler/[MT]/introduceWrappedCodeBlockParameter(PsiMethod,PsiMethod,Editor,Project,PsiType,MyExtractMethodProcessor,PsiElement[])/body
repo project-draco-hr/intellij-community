@@ -1,0 +1,53 @@
+{
+  final PsiElement commonParent=elements.length > 1 ? PsiTreeUtil.findCommonParent(elements) : elements[0].getParent();
+  if (commonParent == null) {
+    LOG.error("Should have common parent:" + Arrays.toString(elements));
+    return;
+  }
+  final RangeMarker marker=editor.getDocument().createRangeMarker(commonParent.getTextRange());
+  final PsiElement[] copyElements=processor.getElements();
+  final PsiElement containerCopy=copyElements.length > 1 ? PsiTreeUtil.findCommonParent(copyElements) : copyElements[0].getParent();
+  if (containerCopy == null) {
+    LOG.error("Should have common parent:" + Arrays.toString(copyElements));
+    return;
+  }
+  final PsiClassType.ClassResolveResult resolveResult=PsiUtil.resolveGenericsClassInType(selectedType);
+  final PsiClass wrapperClass=resolveResult.getElement();
+  LOG.assertTrue(wrapperClass != null);
+  final PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
+  final Ref<String> suffixText=new Ref<String>();
+  final Ref<String> prefixText=new Ref<String>();
+  final Ref<String> methodText=new Ref<String>();
+  WriteCommandAction.runWriteCommandAction(project,new Runnable(){
+    @Override public void run(){
+      final PsiMethod method=LambdaUtil.getFunctionalInterfaceMethod(wrapperClass);
+      LOG.assertTrue(method != null);
+      final String interfaceMethodName=method.getName();
+      processor.setMethodName(interfaceMethodName);
+      processor.doExtract();
+      final PsiMethod extractedMethod=processor.getExtractedMethod();
+      final PsiParameter[] parameters=extractedMethod.getParameterList().getParameters();
+      final PsiParameter[] interfaceParameters=method.getParameterList().getParameters();
+      final PsiSubstitutor substitutor=resolveResult.getSubstitutor();
+      for (int i=0; i < interfaceParameters.length; i++) {
+        final PsiTypeElement typeAfterInterface=factory.createTypeElement(substitutor.substitute(interfaceParameters[i].getType()));
+        final PsiTypeElement typeElement=parameters[i].getTypeElement();
+        if (typeElement != null) {
+          typeElement.replace(typeAfterInterface);
+        }
+      }
+      methodText.set(extractedMethod.getText());
+      final PsiMethodCallExpression methodCall=processor.getMethodCall();
+      prefixText.set(containerCopy.getText().substring(0,methodCall.getTextRange().getStartOffset() - containerCopy.getTextRange().getStartOffset()));
+      suffixText.set("." + methodCall.getText() + containerCopy.getText().substring(methodCall.getTextRange().getEndOffset() - containerCopy.getTextRange().getStartOffset()));
+    }
+  }
+);
+  PsiExpression expression=factory.createExpressionFromText("new " + selectedType.getCanonicalText() + "() {"+ methodText.get()+ "}",elements[0]);
+  expression=(PsiExpression)JavaCodeStyleManager.getInstance(project).shortenClassReferences(expression);
+  expression.putUserData(ElementToWorkOn.PARENT,commonParent);
+  expression.putUserData(ElementToWorkOn.PREFIX,prefixText.get());
+  expression.putUserData(ElementToWorkOn.SUFFIX,suffixText.get());
+  expression.putUserData(ElementToWorkOn.TEXT_RANGE,marker);
+  new Introducer(project,expression,null,editor).introduceParameter(methodToIntroduceParameter,methodToSearchFor);
+}

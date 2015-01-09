@@ -8,32 +8,36 @@
   myAllCardsCheckBox.setSelected(myRepository.isIncludeAllCards());
   myPasswordText.getDocument().addDocumentListener(new DocumentAdapter(){
     @Override protected void textChanged(    DocumentEvent e){
-      String password=String.valueOf(myPasswordText.getPassword());
+      final String password=String.valueOf(myPasswordText.getPassword());
       if (password.isEmpty() || password.equals(myRepository.getPassword())) {
         return;
       }
-      LOG.debug("Authentication token was changed");
       myRepository.setPassword(password);
-      new BoardsDownloader(UNSPECIFIED_BOARD){
-        @Override protected List<TrelloBoard> download() throws Exception {
+      new BoardsComboBoxUpdater(){
+        @Override @NotNull protected List<TrelloBoard> fetch(        @NotNull ProgressIndicator indicator) throws Exception {
           myRepository.setCurrentUser(myRepository.fetchUserByToken());
-          return super.download();
+          return super.fetch(indicator);
         }
       }
-.runOnPooledThread();
+.queue();
       doApply();
     }
   }
 );
   myBoardComboBox.addItemListener(new ItemListener(){
     @Override public void itemStateChanged(    ItemEvent e){
-      TrelloBoard board=(TrelloBoard)e.getItem();
+      final TrelloBoard board=(TrelloBoard)e.getItem();
       if (e.getStateChange() == ItemEvent.DESELECTED || board.equals(myRepository.getCurrentBoard())) {
         return;
       }
-      if (board != UNSPECIFIED_BOARD) {
+      if (board != TrelloRepository.UNSPECIFIED_BOARD) {
         myRepository.setCurrentBoard(board);
-        new ListsDownloader(UNSPECIFIED_LIST).runOnPooledThread();
+        new ListsComboBoxUpdater(){
+          @Nullable @Override public TrelloList getSelectedItem(){
+            return TrelloRepository.UNSPECIFIED_LIST;
+          }
+        }
+.queue();
       }
  else {
         myRepository.setCurrentBoard(null);
@@ -44,53 +48,43 @@
     }
   }
 );
-  myBoardComboBox.setRenderer(new TrelloBoardRenderer("Set token first"));
+  myBoardComboBox.setRenderer(new TaskUiUtil.SimpleComboBoxRenderer<TrelloBoard>("Set token first"){
+    @NotNull @Override protected String getDescription(    @NotNull TrelloBoard board){
+      return board.isClosed() ? board.getName() + " (closed)" : board.getName();
+    }
+  }
+);
   myListComboBox.addItemListener(new ItemListener(){
     @Override public void itemStateChanged(    ItemEvent e){
       if (e.getStateChange() == ItemEvent.SELECTED) {
-        TrelloList list=(TrelloList)e.getItem();
-        myRepository.setCurrentList(list != UNSPECIFIED_LIST ? list : null);
+        final TrelloList list=(TrelloList)e.getItem();
+        myRepository.setCurrentList(list);
         doApply();
       }
     }
   }
 );
-  myListComboBox.setRenderer(new TrelloListRenderer("Select board first"));
-  if (myRepository.getCurrentUser() != null) {
-    new BoardsDownloader(myRepository.getCurrentBoard()){
-      @Override protected List<TrelloBoard> download() throws Exception {
-        LOG.debug("Updating information about boards available to user when repository setting are shown");
-        List<TrelloBoard> boards=super.download();
-        if (myBoard == null) {
-          return boards;
-        }
-        int i=boards.indexOf(myBoard);
-        myBoard=i >= 0 ? boards.get(i) : myRepository.fetchBoardById(myBoard.getId());
-        myRepository.setCurrentBoard(myBoard);
-        return boards;
+  myListComboBox.setRenderer(new TaskUiUtil.SimpleComboBoxRenderer<TrelloList>("Select board first"){
+    @NotNull @Override protected String getDescription(    @NotNull TrelloList list){
+      String text=list.getName();
+      if (list.isClosed() && list.isMoved()) {
+        text+=" (archived,moved)";
       }
-    }
-.runOnPooledThread();
-  }
-  if (myRepository.getCurrentBoard() != null) {
-    new ListsDownloader(myRepository.getCurrentList()){
-      @Override protected List<TrelloList> download() throws Exception {
-        LOG.debug("Updating information about lists of board " + myRepository.getCurrentBoard() + " when repository setting are shown");
-        List<TrelloList> lists=super.download();
-        if (myList == null) {
-          return lists;
-        }
-        int i=lists.indexOf(myList);
-        myList=i >= 0 ? lists.get(i) : myRepository.fetchListById(myList.getId());
-        TrelloBoard currentBoard=myRepository.getCurrentBoard();
-        if (currentBoard != null && !myList.getIdBoard().equals(currentBoard.getId())) {
-          myList.setMoved(true);
-        }
-        myRepository.setCurrentList(myList);
-        return lists;
+ else       if (list.isMoved()) {
+        text+=" (moved)";
       }
+ else       if (list.isClosed()) {
+        text+=" (archived)";
+      }
+      return text;
     }
-.runOnPooledThread();
   }
+);
   installListener(myAllCardsCheckBox);
+  UIUtil.invokeLaterIfNeeded(new Runnable(){
+    public void run(){
+      initialize();
+    }
+  }
+);
 }

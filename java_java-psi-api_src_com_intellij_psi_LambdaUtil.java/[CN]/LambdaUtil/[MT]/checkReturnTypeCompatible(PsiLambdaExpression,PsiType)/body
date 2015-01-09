@@ -1,0 +1,36 @@
+{
+  if (functionalInterfaceReturnType == PsiType.VOID) {
+    final PsiElement body=lambdaExpression.getBody();
+    if (body instanceof PsiCodeBlock) {
+      if (!getReturnExpressions(lambdaExpression).isEmpty())       return "Unexpected return value";
+    }
+ else     if (body instanceof PsiExpression) {
+      final PsiType type=((PsiExpression)body).getType();
+      try {
+        if (!PsiUtil.isStatement(JavaPsiFacade.getElementFactory(body.getProject()).createStatementFromText(body.getText(),body))) {
+          return "Bad return type in lambda expression: " + (type == PsiType.NULL || type == null ? "<null>" : type.getPresentableText()) + " cannot be converted to void";
+        }
+      }
+ catch (      IncorrectOperationException ignore) {
+      }
+    }
+  }
+ else   if (functionalInterfaceReturnType != null) {
+    final List<PsiExpression> returnExpressions=getReturnExpressions(lambdaExpression);
+    for (    final PsiExpression expression : returnExpressions) {
+      final PsiType expressionType=PsiResolveHelper.ourGraphGuard.doPreventingRecursion(expression,true,new Computable<PsiType>(){
+        @Override public PsiType compute(){
+          return expression.getType();
+        }
+      }
+);
+      if (expressionType != null && !functionalInterfaceReturnType.isAssignableFrom(expressionType)) {
+        return "Bad return type in lambda expression: " + expressionType.getPresentableText() + " cannot be converted to "+ functionalInterfaceReturnType.getPresentableText();
+      }
+    }
+    if (getReturnStatements(lambdaExpression).length > returnExpressions.size() || returnExpressions.isEmpty() && !lambdaExpression.isVoidCompatible()) {
+      return "Missing return value";
+    }
+  }
+  return null;
+}

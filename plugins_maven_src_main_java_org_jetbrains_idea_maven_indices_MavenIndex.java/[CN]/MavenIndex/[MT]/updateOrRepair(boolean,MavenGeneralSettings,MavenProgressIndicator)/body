@@ -1,8 +1,20 @@
 {
   try {
+    final File newDataDir=createNewDataDir();
+    final File newDataContextDir=getDataContextDir(newDataDir);
+    final File currentDataContextDir=getCurrentDataContextDir();
+    boolean reuseExistingContext=fullUpdate ? myKind != Kind.LOCAL && hasValidContext(currentDataContextDir) : hasValidContext(currentDataContextDir);
+    fullUpdate=fullUpdate || !reuseExistingContext && myKind == Kind.LOCAL;
+    if (reuseExistingContext) {
+      try {
+        FileUtil.copyDir(currentDataContextDir,newDataContextDir);
+      }
+ catch (      IOException e) {
+        throw new MavenIndexException(e);
+      }
+    }
     if (fullUpdate) {
-      if (myKind == Kind.LOCAL)       FileUtil.delete(getUpdateDir());
-      int context=createContext(getUpdateDir(),"update");
+      int context=createContext(newDataContextDir,"update");
       try {
         updateContext(context,settings,progress);
       }
@@ -10,7 +22,7 @@
         myIndexer.releaseIndex(context);
       }
     }
-    updateData(progress);
+    updateData(progress,newDataDir,fullUpdate);
     isBroken=false;
     myFailureMessage=null;
   }

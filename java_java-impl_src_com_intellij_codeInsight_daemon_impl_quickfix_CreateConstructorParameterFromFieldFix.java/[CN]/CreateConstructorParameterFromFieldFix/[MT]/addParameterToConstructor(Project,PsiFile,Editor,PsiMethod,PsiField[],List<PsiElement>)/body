@@ -7,15 +7,27 @@
   Collections.sort(params,new FieldParameterComparator(parameterList));
   int i=0;
   final HashMap<PsiField,String> usedFields=new HashMap<PsiField,String>();
+  final MultiMap<PsiType,PsiVariable> types=new MultiMap<PsiType,PsiVariable>();
+  for (  PsiVariable param : params) {
+    types.putValue(param.getType(),param);
+  }
+  final CodeStyleSettings settings=CodeStyleSettingsManager.getSettings(project);
+  final boolean preferLongerNames=settings.PREFER_LONGER_NAMES;
   for (  PsiVariable param : params) {
     final PsiType paramType=param.getType();
     if (param instanceof PsiParameter) {
       newParamInfos[i++]=new ParameterInfoImpl(parameterList.getParameterIndex((PsiParameter)param),param.getName(),paramType,param.getName());
     }
  else {
-      final String uniqueParameterName=getUniqueParameterName(parameters,param,usedFields);
-      usedFields.put((PsiField)param,uniqueParameterName);
-      newParamInfos[i++]=new ParameterInfoImpl(-1,uniqueParameterName,paramType,uniqueParameterName);
+      try {
+        settings.PREFER_LONGER_NAMES=preferLongerNames || types.get(paramType).size() > 1;
+        final String uniqueParameterName=getUniqueParameterName(parameters,param,usedFields);
+        usedFields.put((PsiField)param,uniqueParameterName);
+        newParamInfos[i++]=new ParameterInfoImpl(-1,uniqueParameterName,paramType,uniqueParameterName);
+      }
+  finally {
+        settings.PREFER_LONGER_NAMES=preferLongerNames;
+      }
     }
   }
   final SmartPointerManager manager=SmartPointerManager.getInstance(project);
