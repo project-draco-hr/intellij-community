@@ -1,4 +1,34 @@
 {
   super.visitReferenceExpression(expression);
-  checkExpression(expression);
+  if (expression instanceof PsiMethodReferenceExpression) {
+    final PsiMethodReferenceExpression methodReferenceExpression=(PsiMethodReferenceExpression)expression;
+    if (methodReferenceExpression.isConstructor()) {
+      return;
+    }
+    final PsiElement referenceNameElement=methodReferenceExpression.getReferenceNameElement();
+    if (referenceNameElement == null) {
+      return;
+    }
+    final PsiElement target=methodReferenceExpression.resolve();
+    if (!(target instanceof PsiMethod)) {
+      return;
+    }
+    final PsiMethod method=(PsiMethod)target;
+    final PsiType returnType=method.getReturnType();
+    if (!TypeConversionUtil.isAssignableFromPrimitiveWrapper(returnType)) {
+      return;
+    }
+    final PsiPrimitiveType unboxedType=PsiPrimitiveType.getUnboxedType(returnType);
+    if (unboxedType == null) {
+      return;
+    }
+    final PsiType functionalInterfaceReturnType=LambdaUtil.getFunctionalInterfaceReturnType(methodReferenceExpression);
+    if (functionalInterfaceReturnType == null || !ClassUtils.isPrimitive(functionalInterfaceReturnType) || !functionalInterfaceReturnType.isAssignableFrom(unboxedType)) {
+      return;
+    }
+    registerError(referenceNameElement);
+  }
+ else {
+    checkExpression(expression);
+  }
 }
