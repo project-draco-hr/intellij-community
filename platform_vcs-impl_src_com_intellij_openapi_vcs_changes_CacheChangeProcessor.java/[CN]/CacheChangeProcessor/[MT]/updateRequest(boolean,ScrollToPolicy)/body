@@ -1,0 +1,30 @@
+{
+  if (myProgressIndicator != null)   myProgressIndicator.cancel();
+  myProgressIndicator=null;
+  myModificationStamp++;
+  final Change change=myCurrentChange;
+  DiffRequest cachedRequest=loadRequestFast(change);
+  if (cachedRequest != null) {
+    applyRequest(cachedRequest,force,scrollToChangePolicy);
+    return;
+  }
+  applyRequest(new ErrorDiffRequest("Loading..."),force,scrollToChangePolicy);
+  myProgressIndicator=new EmptyProgressIndicator();
+  final ProgressIndicator indicator=myProgressIndicator;
+  final int modificationStamp=myModificationStamp;
+  ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+    @Override public void run(){
+      final DiffRequest request=loadRequest(change,indicator);
+      indicator.checkCanceled();
+      ApplicationManager.getApplication().invokeLater(new Runnable(){
+        @Override public void run(){
+          if (myModificationStamp != modificationStamp)           return;
+          myRequestCache.put(change,Pair.create(change,request));
+          applyRequest(request,force,scrollToChangePolicy);
+        }
+      }
+,ModalityState.any());
+    }
+  }
+);
+}
