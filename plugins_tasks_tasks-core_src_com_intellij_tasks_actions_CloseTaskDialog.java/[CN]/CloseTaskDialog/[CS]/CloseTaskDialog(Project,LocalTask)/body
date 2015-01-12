@@ -3,11 +3,37 @@
   setTitle("Close Task");
   myTaskLabel.setText(TaskUtil.getTrimmedSummary(task));
   myTaskLabel.setIcon(task.getIcon());
-  TaskRepository repository=task.getRepository();
-  boolean visible=task.isIssue() && TaskUtil.isStateSupported(repository,TaskState.RESOLVED);
-  myCloseIssue.setVisible(visible);
+  final TaskRepository repository=task.getRepository();
+  myStateComboBox.setRenderer(new ListCellRendererWrapper<CustomTaskState>(){
+    @Override public void customize(    JList list,    CustomTaskState value,    int index,    boolean selected,    boolean hasFocus){
+      if (value != null) {
+        setText(value.getPresentableName());
+      }
+ else {
+        setText("-- no states available --");
+      }
+    }
+  }
+);
+  if (task.isIssue() && repository != null && repository.isSupported(TaskRepository.STATE_UPDATING)) {
+    new TaskUiUtil.ComboBoxUpdater<CustomTaskState>(project,"Fetching available task states...",myStateComboBox){
+      @NotNull @Override protected Set<CustomTaskState> fetch(      @NotNull ProgressIndicator indicator) throws Exception {
+        return repository.getAvailableTaskStates(task);
+      }
+      @Nullable @Override public CustomTaskState getSelectedItem(){
+        return repository.getPreferredCloseTaskState();
+      }
+      @Nullable @Override public CustomTaskState getExtraItem(){
+        return DO_NOT_UPDATE_STATE;
+      }
+    }
+.queue();
+  }
+ else {
+    myStateComboBoxLabel.setVisible(false);
+    myStateComboBox.setVisible(false);
+  }
   myTaskManager=(TaskManagerImpl)TaskManager.getManager(project);
-  myCloseIssue.setSelected(visible && myTaskManager.getState().closeIssue);
   if (myTaskManager.isVcsEnabled()) {
     myCommitChanges.setEnabled(!task.getChangeLists().isEmpty());
     myCommitChanges.setSelected(myTaskManager.getState().commitChanges);
