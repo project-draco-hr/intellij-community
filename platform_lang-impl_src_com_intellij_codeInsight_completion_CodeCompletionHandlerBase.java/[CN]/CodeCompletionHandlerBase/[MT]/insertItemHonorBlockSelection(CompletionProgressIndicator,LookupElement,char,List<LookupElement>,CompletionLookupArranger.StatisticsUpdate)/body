@@ -1,2 +1,46 @@
 {
+  final Editor editor=indicator.getEditor();
+  final int caretOffset=indicator.getCaret().getOffset();
+  int idEndOffset=indicator.getIdentifierEndOffset();
+  if (idEndOffset < 0) {
+    idEndOffset=CompletionInitializationContext.calcDefaultIdentifierEnd(editor,caretOffset);
+  }
+  final int idEndOffsetDelta=idEndOffset - caretOffset;
+  CompletionAssertions.WatchingInsertionContext context;
+  if (editor.getCaretModel().supportsMultipleCarets()) {
+    final List<CompletionAssertions.WatchingInsertionContext> contexts=new ArrayList<CompletionAssertions.WatchingInsertionContext>();
+    final Editor hostEditor=InjectedLanguageUtil.getTopLevelEditor(editor);
+    final PsiFile originalFile=indicator.getParameters().getOriginalFile();
+    final PsiFile hostFile=InjectedLanguageUtil.getTopLevelFile(originalFile);
+    final OffsetMap hostMap=translateOffsetMapToHost(originalFile,hostFile,hostEditor,indicator.getOffsetMap());
+    hostEditor.getCaretModel().runForEachCaret(new CaretAction(){
+      @Override public void perform(      Caret caret){
+        PsiDocumentManager.getInstance(hostFile.getProject()).commitDocument(hostEditor.getDocument());
+        PsiFile targetFile=InjectedLanguageUtil.findInjectedPsiNoCommit(hostFile,caret.getOffset());
+        Editor targetEditor=InjectedLanguageUtil.getInjectedEditorForInjectedFile(hostEditor,targetFile);
+        int targetCaretOffset=targetEditor.getCaretModel().getOffset();
+        OffsetMap injectedMap=translateOffsetMapToInjected(hostMap,targetEditor.getDocument());
+        CompletionAssertions.WatchingInsertionContext currentContext=insertItem(indicator,item,completionChar,items,update,targetEditor,targetFile == null ? hostFile : targetFile,targetCaretOffset,targetCaretOffset + idEndOffsetDelta,injectedMap);
+        contexts.add(currentContext);
+      }
+    }
+,true);
+    context=contexts.get(contexts.size() - 1);
+    if (context.shouldAddCompletionChar() && context.getCompletionChar() != Lookup.COMPLETE_STATEMENT_SELECT_CHAR) {
+      ApplicationManager.getApplication().runWriteAction(new Runnable(){
+        @Override public void run(){
+          DataContext dataContext=DataManager.getInstance().getDataContext(editor.getContentComponent());
+          EditorActionManager.getInstance().getTypedAction().getHandler().execute(editor,completionChar,dataContext);
+        }
+      }
+);
+    }
+    for (    CompletionAssertions.WatchingInsertionContext insertionContext : contexts) {
+      insertionContext.stopWatching();
+    }
+  }
+ else {
+    context=insertItem(indicator,item,completionChar,items,update,editor,indicator.getParameters().getOriginalFile(),caretOffset,idEndOffset,indicator.getOffsetMap());
+  }
+  return context;
 }
