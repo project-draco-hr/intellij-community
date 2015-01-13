@@ -10,61 +10,20 @@
     pathRest=pathRest.substring(dot + 1);
     cur=child;
   }
-  String className=pathRest.replace('.','$');
-  int bucks=className.indexOf('$');
-  String rootClassName;
-  if (bucks < 0) {
-    rootClassName=className;
+  String classNameWithInnerClasses=pathRest;
+  String topLevelClassName=substringBeforeFirstDot(classNameWithInnerClasses);
+  VirtualFile vFile=cur.findChild(topLevelClassName + ".class");
+  if (vFile == null)   vFile=cur.findChild(topLevelClassName + ".java");
+  if (vFile == null) {
+    return null;
   }
- else {
-    rootClassName=className.substring(0,bucks);
-    className=className.substring(bucks + 1);
+  if (!vFile.isValid()) {
+    LOG.error("Invalid child of valid parent: " + vFile.getPath() + "; "+ root.isValid()+ " path="+ root.getPath());
+    return null;
   }
-  VirtualFile vFile=cur.findChild(rootClassName + ".class");
-  if (vFile == null)   vFile=cur.findChild(rootClassName + ".java");
-  if (vFile != null) {
-    if (!vFile.isValid()) {
-      LOG.error("Invalid child of valid parent: " + vFile.getPath() + "; "+ root.isValid()+ " path="+ root.getPath());
-      return null;
-    }
-    final PsiFile file=psiManager.findFile(vFile);
-    if (file instanceof PsiClassOwner) {
-      final PsiClass[] classes=((PsiClassOwner)file).getClasses();
-      if (classes.length == 1) {
-        PsiClass curClass=classes[0];
-        if (bucks > 0) {
-          Stack<ClassAndOffsets> currentPath=new Stack<ClassAndOffsets>();
-          currentPath.add(new ClassAndOffsets(curClass,0,0));
-          currentPath.add(currentPath.peek());
-          while (currentPath.size() > 1) {
-            ClassAndOffsets classAndOffset=currentPath.pop();
-            int newComponentStart=classAndOffset.componentStart;
-            int lookupStart=classAndOffset.lookupStart;
-            curClass=currentPath.peek().clazz;
-            while (lookupStart <= className.length()) {
-              int bucksIndex=className.indexOf("$",lookupStart);
-              bucksIndex=bucksIndex < 0 ? className.length() : bucksIndex;
-              String component=className.substring(newComponentStart,bucksIndex);
-              PsiClass inner=curClass.findInnerClassByName(component,false);
-              lookupStart=bucksIndex + 1;
-              if (inner == null) {
-                continue;
-              }
-              currentPath.add(new ClassAndOffsets(inner,newComponentStart,lookupStart));
-              newComponentStart=lookupStart;
-              curClass=inner;
-            }
-            if (lookupStart == newComponentStart) {
-              return curClass;
-            }
-          }
-          return null;
-        }
- else {
-          return curClass;
-        }
-      }
-    }
+  final PsiFile file=psiManager.findFile(vFile);
+  if (!(file instanceof PsiClassOwner)) {
+    return null;
   }
-  return null;
+  return findClassInPsiFile(classNameWithInnerClasses,(PsiClassOwner)file);
 }
