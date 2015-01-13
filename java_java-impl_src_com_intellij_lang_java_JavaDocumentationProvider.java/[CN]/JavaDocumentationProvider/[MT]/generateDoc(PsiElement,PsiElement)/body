@@ -1,6 +1,44 @@
 {
+  if (element instanceof PsiExpressionList) {
+    element=element.getParent();
+    originalElement=null;
+  }
   if (element instanceof PsiMethodCallExpression) {
     return getMethodCandidateInfo((PsiMethodCallExpression)element);
+  }
+  PsiElement elt=originalElement != null ? PsiTreeUtil.prevLeaf(originalElement) : element;
+  if (elt instanceof PsiErrorElement)   elt=elt.getPrevSibling();
+ else   if (elt != null && !(elt instanceof PsiNewExpression)) {
+    elt=elt.getParent();
+  }
+  if (elt instanceof PsiNewExpression) {
+    PsiClass targetClass=null;
+    if (element instanceof PsiJavaCodeReferenceElement) {
+      PsiElement resolve=((PsiJavaCodeReferenceElement)element).resolve();
+      if (resolve instanceof PsiClass)       targetClass=(PsiClass)resolve;
+    }
+ else     if (element instanceof PsiClass) {
+      targetClass=(PsiClass)element;
+    }
+ else     if (element instanceof PsiNewExpression) {
+      PsiJavaCodeReferenceElement reference=((PsiNewExpression)element).getClassReference();
+      if (reference != null) {
+        PsiElement resolve=reference.resolve();
+        if (resolve instanceof PsiClass)         targetClass=(PsiClass)resolve;
+      }
+    }
+    if (targetClass != null) {
+      PsiMethod[] constructors=targetClass.getConstructors();
+      if (constructors.length > 0) {
+        if (constructors.length == 1)         return generateDoc(constructors[0],originalElement);
+        @NonNls final StringBuilder sb=new StringBuilder();
+        for (        PsiMethod constructor : constructors) {
+          final String str=PsiFormatUtil.formatMethod(constructor,PsiSubstitutor.EMPTY,PsiFormatUtilBase.SHOW_NAME | PsiFormatUtilBase.SHOW_TYPE | PsiFormatUtilBase.SHOW_PARAMETERS,PsiFormatUtilBase.SHOW_TYPE | PsiFormatUtilBase.SHOW_NAME);
+          createElementLink(sb,constructor,StringUtil.escapeXml(str));
+        }
+        return CodeInsightBundle.message("javadoc.constructor.candidates",targetClass.getName(),sb);
+      }
+    }
   }
   return generateExternalJavadoc(element);
 }

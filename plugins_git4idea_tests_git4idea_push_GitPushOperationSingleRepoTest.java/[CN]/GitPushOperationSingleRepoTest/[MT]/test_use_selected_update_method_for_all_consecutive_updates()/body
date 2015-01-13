@@ -1,0 +1,35 @@
+{
+  pushCommitFromBro();
+  cd(myRepository);
+  makeCommit("afile.txt");
+  agreeToUpdate(GitRejectedPushUpdateDialog.REBASE_EXIT_CODE);
+  refresh();
+  PushSpec<GitPushSource,GitPushTarget> pushSpec=makePushSpec(myRepository,"master","origin/master");
+  GitPushResult result=new GitPushOperation(myProject,myPushSupport,singletonMap(myRepository,pushSpec),null,false){
+    boolean updateHappened;
+    @NotNull @Override protected GitUpdateResult update(    @NotNull Collection<GitRepository> rootsToUpdate,    @NotNull UpdateMethod updateMethod,    boolean checkForRebaseOverMergeProblem){
+      GitUpdateResult updateResult=super.update(rootsToUpdate,updateMethod,checkForRebaseOverMergeProblem);
+      try {
+        if (!updateHappened) {
+          updateHappened=true;
+          pushCommitFromBro();
+        }
+      }
+ catch (      IOException e) {
+        throw new RuntimeException(e);
+      }
+      return updateResult;
+    }
+  }
+.execute();
+  assertResult(SUCCESS,1,"master","origin/master",GitUpdateResult.SUCCESS,result.getResults().get(myRepository));
+  cd(myRepository);
+  String[] commitMessages=StringUtil.splitByLines(log("--pretty=%s"));
+  boolean mergeCommitsInTheLog=ContainerUtil.exists(commitMessages,new Condition<String>(){
+    @Override public boolean value(    String s){
+      return s.toLowerCase().contains("merge");
+    }
+  }
+);
+  assertFalse("Unexpected merge commits when rebase method is selected",mergeCommitsInTheLog);
+}
