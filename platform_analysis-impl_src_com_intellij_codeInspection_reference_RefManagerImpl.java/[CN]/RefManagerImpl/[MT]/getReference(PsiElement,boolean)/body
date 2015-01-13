@@ -7,39 +7,35 @@
 )) {
     return null;
   }
-  RefElement ref=getFromRefTable(elem);
-  if (ref != null)   return ref;
-  if (!isValidPointForReference()) {
-    return null;
+  return getFromRefTableOrCache(elem,new NullableFactory<RefElementImpl>(){
+    @Override public RefElementImpl create(){
+      return ApplicationManager.getApplication().runReadAction(new Computable<RefElementImpl>(){
+        @Override @Nullable public RefElementImpl compute(){
+          final RefManagerExtension extension=getExtension(elem.getLanguage());
+          if (extension != null) {
+            final RefElement refElement=extension.createRefElement(elem);
+            if (refElement != null)             return (RefElementImpl)refElement;
+          }
+          if (elem instanceof PsiFile) {
+            return new RefFileImpl((PsiFile)elem,RefManagerImpl.this);
+          }
+          if (elem instanceof PsiDirectory) {
+            return new RefDirectoryImpl((PsiDirectory)elem,RefManagerImpl.this);
+          }
+          return null;
+        }
+      }
+);
+    }
   }
-  final RefElementImpl refElement=ApplicationManager.getApplication().runReadAction(new Computable<RefElementImpl>(){
-    @Override @Nullable public RefElementImpl compute(){
-      final RefManagerExtension extension=getExtension(elem.getLanguage());
-      if (extension != null) {
-        final RefElement refElement=extension.createRefElement(elem);
-        if (refElement != null)         return (RefElementImpl)refElement;
+,new Consumer<RefElementImpl>(){
+    @Override public void consume(    RefElementImpl element){
+      element.initialize();
+      for (      RefManagerExtension each : myExtensions.values()) {
+        each.onEntityInitialized(element,elem);
       }
-      if (elem instanceof PsiFile) {
-        return new RefFileImpl((PsiFile)elem,RefManagerImpl.this);
-      }
-      if (elem instanceof PsiDirectory) {
-        return new RefDirectoryImpl((PsiDirectory)elem,RefManagerImpl.this);
-      }
-      return null;
+      fireNodeInitialized(element);
     }
   }
 );
-  if (refElement == null)   return null;
-  putToRefTable(elem,refElement);
-  ApplicationManager.getApplication().runReadAction(new Runnable(){
-    @Override public void run(){
-      refElement.initialize();
-      for (      RefManagerExtension extension : myExtensions.values()) {
-        extension.onEntityInitialized(refElement,elem);
-      }
-      fireNodeInitialized(refElement);
-    }
-  }
-);
-  return refElement;
 }
