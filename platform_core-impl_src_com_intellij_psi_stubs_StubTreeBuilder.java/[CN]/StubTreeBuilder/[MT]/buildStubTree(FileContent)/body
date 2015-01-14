@@ -11,19 +11,18 @@ synchronized (inputData) {
     }
  else {
       final LanguageFileType languageFileType=(LanguageFileType)fileType;
-      Language l=languageFileType.getLanguage();
-      final IFileElementType type=LanguageParserDefinitions.INSTANCE.forLanguage(l).getFileNodeType();
       CharSequence contentAsText=inputData.getContentAsText();
       FileContentImpl fileContent=(FileContentImpl)inputData;
       PsiFile psi=fileContent.getPsiFileForPsiDependentIndex();
       final FileViewProvider viewProvider=psi.getViewProvider();
       psi=viewProvider.getStubBindingRoot();
       psi.putUserData(IndexingDataKeys.FILE_TEXT_CONTENT_KEY,contentAsText);
+      final IStubFileElementType type=((PsiFileImpl)psi).getElementTypeForStubBuilder();
       psi.getManager().startBatchFilesProcessingMode();
       try {
         IStubFileElementType stubFileElementType;
-        if (type instanceof IStubFileElementType) {
-          stubFileElementType=(IStubFileElementType)type;
+        if (type != null) {
+          stubFileElementType=type;
         }
  else         if (languageFileType instanceof SubstitutedFileType) {
           SubstitutedFileType substituted=(SubstitutedFileType)languageFileType;
@@ -46,7 +45,11 @@ synchronized (inputData) {
             stubs.add((PsiFileStub)data);
             for (            Pair<IStubFileElementType,PsiFile> stubbedRoot : stubbedRoots) {
               if (psi == stubbedRoot.second)               continue;
-              final StubElement element=stubbedRoot.first.getBuilder().buildStubTree(stubbedRoot.second);
+              final StubBuilder stubbedRootBuilder=stubbedRoot.first.getBuilder();
+              if (stubbedRootBuilder instanceof LightStubBuilder) {
+                LightStubBuilder.FORCED_AST.set(new TreeBackedLighterAST(psi.getNode()));
+              }
+              final StubElement element=stubbedRootBuilder.buildStubTree(stubbedRoot.second);
               if (element instanceof PsiFileStub) {
                 stubs.add((PsiFileStub)element);
               }

@@ -5,30 +5,38 @@
       if (Thread.interrupted()) {
         return;
       }
-      final AsyncResult<Vm> result=new AsyncResult<Vm>();
+      final AsyncPromise<Vm> result=new AsyncPromise<Vm>();
       connectCancelHandler.set(new Runnable(){
         @Override public void run(){
-          result.reject("Closed explicitly");
+          result.setError(Promise.createError("Closed explicitly"));
         }
       }
 );
-      createVmAndConnect(address,result);
-      result.doWhenDone(new Consumer<Vm>(){
+      ActionCallback callback=new ActionCallback();
+      NettyUtil.connectClient(createBootstrap(address,result),address,callback);
+      callback.doWhenRejected(new Consumer<String>(){
+        @Override public void consume(        String error){
+          result.setError(Promise.createError(error));
+        }
+      }
+);
+      result.done(new Consumer<Vm>(){
         @Override public void consume(        @NotNull Vm vm){
           RemoteVmConnection.this.vm=vm;
-          setState(ConnectionStatus.CONNECTED,"Connected to " + address.getHostName() + ":"+ address.getPort());
+          setState(ConnectionStatus.CONNECTED,"Connected to " + connectedAddressToPresentation(address,vm));
           startProcessing();
         }
       }
-).doWhenRejected(new Consumer<String>(){
-        @Override public void consume(        String error){
-          if (getState().getStatus() == ConnectionStatus.WAITING_FOR_CONNECTION) {
-            setState(ConnectionStatus.CONNECTION_FAILED,error == null ? "Internal error" : error);
+).rejected(new Consumer<Throwable>(){
+        @Override public void consume(        Throwable error){
+          if (ApplicationManager.getApplication().isUnitTestMode() || !(error instanceof Promise.MessageError)) {
+            CommandProcessor.LOG.error(error);
           }
+          setState(ConnectionStatus.CONNECTION_FAILED,error.getMessage());
         }
       }
-).doWhenProcessed(new Runnable(){
-        @Override public void run(){
+).processed(new Consumer<Vm>(){
+        @Override public void consume(        Vm vm){
           connectCancelHandler.set(null);
         }
       }
