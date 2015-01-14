@@ -1,0 +1,45 @@
+{
+  abort();
+  myModificationStamp++;
+  final int modificationStamp=myModificationStamp;
+  myProgressIndicator=new EmptyProgressIndicator();
+  final ProgressIndicator indicator=myProgressIndicator;
+  final Semaphore semaphore=new Semaphore(0);
+  final AtomicReference<Runnable> resultRef=new AtomicReference<Runnable>();
+  if (forceEDT) {
+    Runnable result=backgroundTask.convert(indicator);
+    finish(result,modificationStamp,indicator);
+  }
+ else {
+    ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+      @Override public void run(){
+        final Runnable result=backgroundTask.convert(indicator);
+        if (indicator.isCanceled()) {
+          semaphore.release();
+          return;
+        }
+        if (!resultRef.compareAndSet(null,result)) {
+          ApplicationManager.getApplication().invokeLater(new Runnable(){
+            @Override public void run(){
+              finish(result,modificationStamp,indicator);
+            }
+          }
+,ModalityState.any());
+        }
+        semaphore.release();
+      }
+    }
+);
+    try {
+      semaphore.tryAcquire(waitMillis,TimeUnit.MILLISECONDS);
+    }
+ catch (    InterruptedException ignore) {
+    }
+    if (!resultRef.compareAndSet(null,TOO_SLOW_OPERATION)) {
+      finish(resultRef.get(),modificationStamp,indicator);
+    }
+ else {
+      if (onSlowAction != null)       onSlowAction.run();
+    }
+  }
+}
