@@ -1,5 +1,7 @@
 {
-  if (myEditor == null || myFile == null)   return;
+  final PsiFile psiFile=myFile;
+  final Editor editor=myEditor;
+  if (editor == null || psiFile == null)   return;
   final MarkupModel markupModel=DocumentMarkupModel.forDocument(myDocument,myProject,true);
   final List<RangeHighlighter> highlighters=new ArrayList<RangeHighlighter>();
   final ProjectData data=suite.getCoverageData();
@@ -8,9 +10,10 @@
     return;
   }
   final CoverageEngine engine=suite.getCoverageEngine();
-  final Set<String> qualifiedNames=engine.getQualifiedNames(myFile);
+  final Set<String> qualifiedNames=engine.getQualifiedNames(psiFile);
   final ProjectFileIndex projectFileIndex=ProjectRootManager.getInstance(myProject).getFileIndex();
-  final VirtualFile file=getVirtualFile();
+  final VirtualFile file=psiFile.getVirtualFile();
+  LOG.assertTrue(file != null);
   final long fileTimeStamp=file.getTimeStamp();
   final long coverageTimeStamp=suite.getLastCoverageTimeStamp();
   final TIntIntHashMap oldToNewLineMapping;
@@ -33,12 +36,12 @@
       }
     }
   }
-  if (myEditor.getUserData(COVERAGE_HIGHLIGHTERS) != null) {
+  if (editor.getUserData(COVERAGE_HIGHLIGHTERS) != null) {
     return;
   }
   final Module module=ApplicationManager.getApplication().runReadAction(new Computable<Module>(){
     @Nullable @Override public Module compute(){
-      return ModuleUtilCore.findModuleForPsiElement(myFile);
+      return ModuleUtilCore.findModuleForPsiElement(psiFile);
     }
   }
 );
@@ -52,7 +55,7 @@
       return;
     }
   }
-  final Set<File> outputFiles=engine.getCorrespondingOutputFiles(myFile,module,suite);
+  final Set<File> outputFiles=engine.getCorrespondingOutputFiles(psiFile,module,suite);
   final boolean subCoverageActive=CoverageDataManager.getInstance(myProject).isSubCoverageActive();
   final boolean coverageByTestApplicable=suite.isCoverageByTestApplicable() && !(subCoverageActive && suite.isCoverageByTestEnabled());
   final TreeMap<Integer,LineData> executableLines=new TreeMap<Integer,LineData>();
@@ -64,7 +67,7 @@ class HighlightersCollector {
       if (fileData != null) {
         final Object[] lines=fileData.getLines();
         if (lines != null) {
-          final Object[] postProcessedLines=suite.getCoverageEngine().postProcessExecutableLines(lines,myEditor);
+          final Object[] postProcessedLines=suite.getCoverageEngine().postProcessExecutableLines(lines,editor);
           for (          Object lineData : postProcessedLines) {
             if (lineData instanceof LineData) {
               final int line=((LineData)lineData).getLineNumber() - 1;
@@ -94,7 +97,7 @@ class HighlightersCollector {
           }
         }
       }
- else       if (outputFile != null && !subCoverageActive && engine.includeUntouchedFileInCoverage(qualifiedName,outputFile,myFile,suite)) {
+ else       if (outputFile != null && !subCoverageActive && engine.includeUntouchedFileInCoverage(qualifiedName,outputFile,psiFile,suite)) {
         collectNonCoveredFileInfo(outputFile,highlighters,markupModel,executableLines,coverageByTestApplicable);
       }
     }
@@ -102,7 +105,7 @@ class HighlightersCollector {
   final HighlightersCollector collector=new HighlightersCollector();
   if (!outputFiles.isEmpty()) {
     for (    File outputFile : outputFiles) {
-      final String qualifiedName=engine.getQualifiedName(outputFile,myFile);
+      final String qualifiedName=engine.getQualifiedName(outputFile,psiFile);
       if (qualifiedName != null) {
         collector.collect(outputFile,qualifiedName);
       }
@@ -116,7 +119,7 @@ class HighlightersCollector {
   ApplicationManager.getApplication().invokeLater(new Runnable(){
     public void run(){
       if (myEditor != null && highlighters.size() > 0) {
-        myEditor.putUserData(COVERAGE_HIGHLIGHTERS,highlighters);
+        editor.putUserData(COVERAGE_HIGHLIGHTERS,highlighters);
       }
     }
   }
@@ -125,7 +128,7 @@ class HighlightersCollector {
     @Override public void documentChanged(    final DocumentEvent e){
       myNewToOldLines=null;
       myOldToNewLines=null;
-      List<RangeHighlighter> rangeHighlighters=myEditor.getUserData(COVERAGE_HIGHLIGHTERS);
+      List<RangeHighlighter> rangeHighlighters=editor.getUserData(COVERAGE_HIGHLIGHTERS);
       if (rangeHighlighters == null)       rangeHighlighters=new ArrayList<RangeHighlighter>();
       int offset=e.getOffset();
       final int lineNumber=myDocument.getLineNumber(offset);
@@ -156,7 +159,7 @@ class HighlightersCollector {
                       highlighters.add(rangeHighlighter);
                     }
                   }
-                  myEditor.putUserData(COVERAGE_HIGHLIGHTERS,highlighters.size() > 0 ? highlighters : null);
+                  editor.putUserData(COVERAGE_HIGHLIGHTERS,highlighters.size() > 0 ? highlighters : null);
                 }
               }
 );
@@ -169,5 +172,5 @@ class HighlightersCollector {
   }
 ;
   myDocument.addDocumentListener(documentListener);
-  myEditor.putUserData(COVERAGE_DOCUMENT_LISTENER,documentListener);
+  editor.putUserData(COVERAGE_DOCUMENT_LISTENER,documentListener);
 }

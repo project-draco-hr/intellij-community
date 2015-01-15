@@ -1,0 +1,57 @@
+{
+  if (ApplicationManager.getApplication().isUnitTestMode()) {
+    if (ourTestingAbbreviation == null) {
+      throw new RuntimeException("Testing abbreviation is not set. See EmmetAbbreviationBalloon#setTestingAbbreviation");
+    }
+    myCallback.onEnter(ourTestingAbbreviation);
+    return;
+  }
+  final TextFieldWithStoredHistory field=new TextFieldWithStoredHistory(myAbbreviationsHistoryKey);
+  final Dimension fieldPreferredSize=field.getPreferredSize();
+  field.setPreferredSize(new Dimension(Math.max(220,fieldPreferredSize.width),fieldPreferredSize.height));
+  field.setHistorySize(10);
+  final JBPopupFactory popupFactory=JBPopupFactory.getInstance();
+  final BalloonImpl balloon=(BalloonImpl)popupFactory.createDialogBalloonBuilder(field,myTitle).setCloseButtonEnabled(false).setBlockClicksThroughBalloon(true).setAnimationCycle(0).setHideOnKeyOutside(true).setHideOnClickOutside(true).createBalloon();
+  field.addDocumentListener(new DocumentAdapter(){
+    @Override protected void textChanged(    DocumentEvent e){
+      validateTemplateKey(field,balloon,field.getText(),customTemplateCallback);
+    }
+  }
+);
+  field.addKeyboardListener(new KeyAdapter(){
+    @Override public void keyPressed(    @NotNull KeyEvent e){
+      if (!field.isPopupVisible()) {
+switch (e.getKeyCode()) {
+case KeyEvent.VK_ENTER:
+          final String abbreviation=field.getText();
+        if (validateTemplateKey(field,balloon,abbreviation,customTemplateCallback)) {
+          myCallback.onEnter(abbreviation);
+          PropertiesComponent.getInstance().setValue(myLastAbbreviationKey,abbreviation);
+          field.addCurrentTextToHistory();
+          balloon.hide();
+        }
+      break;
+case KeyEvent.VK_ESCAPE:
+    balloon.hide(false);
+  break;
+}
+}
+}
+}
+);
+balloon.addListener(new JBPopupListener.Adapter(){
+@Override public void beforeShown(LightweightWindowEvent event){
+field.setText(PropertiesComponent.getInstance().getValue(myLastAbbreviationKey,""));
+}
+}
+);
+balloon.show(popupFactory.guessBestPopupLocation(customTemplateCallback.getEditor()),Balloon.Position.below);
+final IdeFocusManager focusManager=IdeFocusManager.getInstance(customTemplateCallback.getProject());
+focusManager.doWhenFocusSettlesDown(new Runnable(){
+@Override public void run(){
+focusManager.requestFocus(field,true);
+field.selectText();
+}
+}
+);
+}

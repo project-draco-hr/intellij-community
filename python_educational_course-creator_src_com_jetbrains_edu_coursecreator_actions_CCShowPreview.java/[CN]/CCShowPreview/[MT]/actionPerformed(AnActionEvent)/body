@@ -1,0 +1,72 @@
+{
+  final Project project=e.getProject();
+  if (project == null) {
+    return;
+  }
+  final PsiFile file=CommonDataKeys.PSI_FILE.getData(e.getDataContext());
+  if (file == null || !file.getName().contains(".answer")) {
+    return;
+  }
+  final PsiDirectory taskDir=file.getContainingDirectory();
+  if (taskDir == null) {
+    return;
+  }
+  PsiDirectory lessonDir=taskDir.getParentDirectory();
+  if (lessonDir == null) {
+    return;
+  }
+  Course course=CCProjectService.getInstance(project).getCourse();
+  if (course == null) {
+    return;
+  }
+  Lesson lesson=course.getLesson(lessonDir.getName());
+  Task task=lesson.getTask(taskDir.getName());
+  TaskFile taskFile=task.getTaskFile(file.getName());
+  final Map<TaskFile,TaskFile> taskFilesCopy=new HashMap<TaskFile,TaskFile>();
+  for (  final Map.Entry<String,TaskFile> entry : task.getTaskFiles().entrySet()) {
+    if (entry.getValue() == taskFile) {
+      ApplicationManager.getApplication().runWriteAction(new Runnable(){
+        @Override public void run(){
+          CCCreateCourseArchive.createUserFile(project,taskFilesCopy,taskDir.getVirtualFile(),taskDir.getVirtualFile(),entry);
+        }
+      }
+);
+    }
+  }
+  String userFileName=FileUtil.getNameWithoutExtension(file.getName()) + ".py";
+  VirtualFile userFile=taskDir.getVirtualFile().findChild(userFileName);
+  if (userFile == null) {
+    LOG.info("Generated file " + userFileName + "was not found");
+    return;
+  }
+  FrameWrapper showPreviewFrame=new FrameWrapper(project);
+  showPreviewFrame.setTitle(userFileName);
+  LabeledEditor labeledEditor=new LabeledEditor(null);
+  final EditorFactory factory=EditorFactory.getInstance();
+  Document document=FileDocumentManager.getInstance().getDocument(userFile);
+  if (document == null) {
+    return;
+  }
+  final EditorEx createdEditor=(EditorEx)factory.createEditor(document,project,userFile,true);
+  Disposer.register(project,new Disposable(){
+    public void dispose(){
+      factory.releaseEditor(createdEditor);
+    }
+  }
+);
+  for (  TaskWindow taskWindow : taskFile.getTaskWindows()) {
+    taskWindow.drawHighlighter(createdEditor,true);
+  }
+  JPanel header=new JPanel();
+  header.setLayout(new BoxLayout(header,BoxLayout.Y_AXIS));
+  header.setBorder(new EmptyBorder(10,10,10,10));
+  header.add(new JLabel("Read-only preview."));
+  String timeStamp=new SimpleDateFormat("yyyy/MM/dd HH:mm:ss").format(Calendar.getInstance().getTime());
+  header.add(new JLabel(String.format("Created %s.",timeStamp)));
+  labeledEditor.setComponent(createdEditor.getComponent(),header);
+  createdEditor.setCaretVisible(false);
+  createdEditor.setCaretEnabled(false);
+  showPreviewFrame.setComponent(labeledEditor);
+  showPreviewFrame.show();
+  CCCreateCourseArchive.resetTaskFiles(taskFilesCopy);
+}

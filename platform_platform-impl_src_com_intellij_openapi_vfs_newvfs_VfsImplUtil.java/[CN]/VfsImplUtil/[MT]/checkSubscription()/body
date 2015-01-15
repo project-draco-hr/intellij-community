@@ -1,7 +1,7 @@
 {
   if (ourSubscribed.getAndSet(true))   return;
-  MessageBus bus=ApplicationManager.getApplication().getMessageBus();
-  bus.connect().subscribe(VirtualFileManager.VFS_CHANGES,new BulkFileListener.Adapter(){
+  Application app=ApplicationManager.getApplication();
+  app.getMessageBus().connect(app).subscribe(VirtualFileManager.VFS_CHANGES,new BulkFileListener.Adapter(){
     @Override public void after(    @NotNull List<? extends VFileEvent> events){
       InvalidationState state=null;
 synchronized (ourLock) {
@@ -11,7 +11,6 @@ synchronized (ourLock) {
           if (event instanceof VFilePropertyChangeEvent && !VirtualFile.PROP_NAME.equals(((VFilePropertyChangeEvent)event).getPropertyName())) {
             continue;
           }
-          VirtualFile file=event.getFile();
           String path=event.getPath();
           if (event instanceof VFilePropertyChangeEvent) {
             path=((VFilePropertyChangeEvent)event).getOldPath();
@@ -19,16 +18,17 @@ synchronized (ourLock) {
  else           if (event instanceof VFileMoveEvent) {
             path=((VFileMoveEvent)event).getOldPath();
           }
+          VirtualFile file=event.getFile();
           if (file == null || !file.isDirectory()) {
-            if (state == null)             state=new InvalidationState();
-            state.invalidateHandlerForPath(path);
+            state=InvalidationState.invalidate(state,path);
           }
  else {
             Collection<String> affectedPaths=ourDominatorsMap.get(path);
             if (affectedPaths != null) {
-              affectedPaths=new ArrayList<String>(affectedPaths);
-              if (state == null)               state=new InvalidationState();
-              for (              String affectedPath : affectedPaths)               state.invalidateHandlerForPath(affectedPath);
+              affectedPaths=ContainerUtil.newArrayList(affectedPaths);
+              for (              String affectedPath : affectedPaths) {
+                state=InvalidationState.invalidate(state,affectedPath);
+              }
             }
           }
         }
