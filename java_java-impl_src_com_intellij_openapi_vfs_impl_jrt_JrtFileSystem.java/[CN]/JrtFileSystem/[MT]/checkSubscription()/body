@@ -1,0 +1,30 @@
+{
+  if (mySubscribed.getAndSet(true))   return;
+  Application app=ApplicationManager.getApplication();
+  app.getMessageBus().connect(app).subscribe(VirtualFileManager.VFS_CHANGES,new BulkFileListener.Adapter(){
+    @Override public void after(    @NotNull List<? extends VFileEvent> events){
+      Set<VirtualFile> toRefresh=null;
+      for (      VFileEvent event : events) {
+        if (event.getFileSystem() instanceof LocalFileSystem && event instanceof VFileContentChangeEvent) {
+          VirtualFile file=event.getFile();
+          if (file != null && "jimage".equals(file.getExtension())) {
+            String homePath=file.getParent().getParent().getParent().getPath();
+            if (myHandlers.remove(homePath) != null) {
+              VirtualFile root=findFileByPath(composeRootPath(homePath));
+              if (root != null) {
+                ((NewVirtualFile)root).markDirtyRecursively();
+                if (toRefresh == null)                 toRefresh=ContainerUtil.newHashSet();
+                toRefresh.add(root);
+              }
+            }
+          }
+        }
+      }
+      if (toRefresh != null) {
+        boolean async=!ApplicationManager.getApplication().isUnitTestMode();
+        RefreshQueue.getInstance().refresh(async,true,null,toRefresh);
+      }
+    }
+  }
+);
+}
