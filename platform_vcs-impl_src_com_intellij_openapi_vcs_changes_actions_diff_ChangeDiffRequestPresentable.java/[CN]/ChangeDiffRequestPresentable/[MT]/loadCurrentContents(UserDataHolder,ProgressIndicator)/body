@@ -1,13 +1,44 @@
 {
-  DiffRequest request=null;
-  for (  ChangeDiffRequestProvider provider : ChangeDiffRequestProvider.EP_NAME.getExtensions()) {
-    if (provider.canCreate(myProject,myChange)) {
-      request=provider.process(this,context,indicator);
-      break;
+  DiffRequestPresentableException wrapperException=null;
+  DiffRequestPresentableException requestException=null;
+  DiffViewerWrapper wrapper=null;
+  try {
+    for (    ChangeDiffViewerWrapperProvider provider : ChangeDiffViewerWrapperProvider.EP_NAME.getExtensions()) {
+      if (provider.canCreate(myProject,myChange)) {
+        wrapper=provider.process(this,context,indicator);
+        break;
+      }
     }
   }
-  if (request == null)   request=createRequest(myProject,myChange,context,indicator);
+ catch (  DiffRequestPresentableException e) {
+    wrapperException=e;
+  }
+  DiffRequest request=null;
+  try {
+    for (    ChangeDiffRequestProvider provider : ChangeDiffRequestProvider.EP_NAME.getExtensions()) {
+      if (provider.canCreate(myProject,myChange)) {
+        request=provider.process(this,context,indicator);
+        break;
+      }
+    }
+    if (request == null)     request=createRequest(myProject,myChange,context,indicator);
+  }
+ catch (  DiffRequestPresentableException e) {
+    requestException=e;
+  }
+  if (requestException != null && wrapperException != null) {
+    String message=requestException.getMessage() + "\n\n" + wrapperException.getMessage();
+    throw new DiffRequestPresentableException(message);
+  }
+  if (requestException != null) {
+    request=new ErrorDiffRequest(getRequestTitle(myChange),requestException);
+    LOG.info("Request: " + requestException.getMessage());
+  }
+  if (wrapperException != null) {
+    LOG.info("Wrapper: " + wrapperException.getMessage());
+  }
   request.putUserData(CONTENT_REVISIONS,new ContentRevision[]{myChange.getBeforeRevision(),myChange.getAfterRevision()});
+  request.putUserData(DiffViewerWrapper.KEY,wrapper);
   for (  Map.Entry<Key,Object> entry : myChangeContext.entrySet()) {
     request.putUserData(entry.getKey(),entry.getValue());
   }
