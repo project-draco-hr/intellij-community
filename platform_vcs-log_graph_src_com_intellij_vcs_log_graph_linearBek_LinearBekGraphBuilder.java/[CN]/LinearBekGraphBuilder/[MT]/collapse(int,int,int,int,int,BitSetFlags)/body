@@ -1,0 +1,80 @@
+{
+  int x=myGraphLayout.getLayoutIndex(firstChildIndex);
+  int y=myGraphLayout.getLayoutIndex(currentNodeIndex);
+  int k=1;
+  PriorityQueue<GraphEdge> queue=new PriorityQueue<GraphEdge>(MAX_BLOCK_SIZE,new GraphEdgeComparator());
+  addDownEdges(myWorkingGraph,currentNodeIndex,queue);
+  Set<Integer> definitelyNotTails=ContainerUtil.newHashSet(MAX_BLOCK_SIZE);
+  Set<Integer> tails=ContainerUtil.newHashSet(MAX_BLOCK_SIZE);
+  while (!queue.isEmpty()) {
+    GraphEdge nextEdge=queue.poll();
+    Integer next=nextEdge.getDownNodeIndex();
+    if (next == null)     return;
+    Integer upNodeIndex=nextEdge.getUpNodeIndex();
+    if (next == firstChildIndex) {
+      tails.add(upNodeIndex);
+    }
+ else     if (next < currentNodeIndex + k) {
+    }
+ else     if (next == currentNodeIndex + k) {
+      k++;
+      addDownEdges(myWorkingGraph,next,queue);
+      definitelyNotTails.add(upNodeIndex);
+    }
+ else     if (next > currentNodeIndex + k && next < firstChildIndex) {
+      int li=myGraphLayout.getLayoutIndex(next);
+      if (li > y) {
+        return;
+      }
+      if (li <= x) {
+        if (!(li >= headIndex && li < nextHeadIndex)) {
+          return;
+        }
+      }
+      k++;
+      addDownEdges(myWorkingGraph,next,queue);
+      if (visited.get(next)) {
+        definitelyNotTails.add(upNodeIndex);
+      }
+    }
+ else     if (next > firstChildIndex) {
+      int li=myGraphLayout.getLayoutIndex(next);
+      if (li > y) {
+        return;
+      }
+      if (li < x) {
+        if (!(li >= headIndex && li < nextHeadIndex)) {
+          return;
+        }
+      }
+ else {
+        if (!definitelyNotTails.contains(upNodeIndex)) {
+          tails.add(upNodeIndex);
+          if (li != y) {
+            myWorkingGraph.removeEdge(upNodeIndex,next);
+          }
+        }
+      }
+    }
+    if (k >= MAX_BLOCK_SIZE) {
+      return;
+    }
+    if (Math.abs(myTimestampGetter.getTimestamp(currentNodeIndex) - myTimestampGetter.getTimestamp(currentNodeIndex + k - 1)) > MAX_DELTA_TIME) {
+      return;
+    }
+  }
+  boolean mergeWithOldCommit=currentNodeIndex + k == firstChildIndex && visited.get(firstChildIndex);
+  for (  Integer tail : tails) {
+    if (!LinearGraphUtils.getDownNodes(myWorkingGraph,tail).contains(firstChildIndex)) {
+      myWorkingGraph.addEdge(tail,firstChildIndex);
+    }
+ else     if (mergeWithOldCommit) {
+      myWorkingGraph.removeEdge(tail,firstChildIndex);
+      myWorkingGraph.addEdge(tail,firstChildIndex);
+    }
+  }
+  if (!tails.isEmpty() || mergeWithOldCommit) {
+    myWorkingGraph.removeEdge(parent,firstChildIndex);
+  }
+  myWorkingGraph.apply();
+}
