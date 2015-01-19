@@ -1,2 +1,44 @@
 {
+  final Project project=e.getProject();
+  if (project == null)   return;
+  FeatureUsageTracker.getInstance().triggerFeatureUsed("navigation.popup.class");
+  PsiDocumentManager.getInstance(project).commitAllDocuments();
+  final GotoClassModel2 model=new GotoClassModel2(project);
+  showNavigationPopup(e,model,new GotoActionCallback<Language>(){
+    @Override protected ChooseByNameFilter<Language> createFilter(    @NotNull ChooseByNamePopup popup){
+      return new ChooseByNameLanguageFilter(popup,model,GotoClassSymbolConfiguration.getInstance(project),project);
+    }
+    @Override public void elementChosen(    ChooseByNamePopup popup,    Object element){
+      AccessToken token=ReadAction.start();
+      try {
+        if (element instanceof PsiElement) {
+          final PsiElement psiElement=getElement(((PsiElement)element),popup);
+          final VirtualFile file=PsiUtilCore.getVirtualFile(psiElement);
+          if (file != null && popup.getLinePosition() != -1) {
+            OpenFileDescriptor descriptor=new OpenFileDescriptor(project,file,popup.getLinePosition(),popup.getColumnPosition());
+            Navigatable n=descriptor.setUseCurrentWindow(popup.isOpenInCurrentWindowRequested());
+            if (n.canNavigate()) {
+              n.navigate(true);
+              return;
+            }
+          }
+          if (psiElement != null && file != null && popup.getMemberPattern() != null) {
+            NavigationUtil.activateFileWithPsiElement(psiElement,!popup.isOpenInCurrentWindowRequested());
+            Navigatable member=findMember(popup.getMemberPattern(),psiElement,file);
+            if (member != null) {
+              member.navigate(true);
+            }
+          }
+          NavigationUtil.activateFileWithPsiElement(psiElement,!popup.isOpenInCurrentWindowRequested());
+        }
+ else {
+          EditSourceUtil.navigate(((NavigationItem)element),true,popup.isOpenInCurrentWindowRequested());
+        }
+      }
+  finally {
+        token.finish();
+      }
+    }
+  }
+,IdeBundle.message("go.to.class.toolwindow.title"),true);
 }
