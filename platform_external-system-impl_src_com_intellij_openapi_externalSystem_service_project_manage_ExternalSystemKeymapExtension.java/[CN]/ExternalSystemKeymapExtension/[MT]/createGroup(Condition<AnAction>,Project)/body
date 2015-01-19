@@ -1,0 +1,39 @@
+{
+  KeymapGroup result=KeymapGroupFactory.getInstance().createGroup(ExternalSystemBundle.message("external.system.keymap.group"),ExternalSystemIcons.TaskGroup);
+  if (project == null)   return result;
+  MultiMap<Pair<ProjectSystemId,String>,String> projectToActionsMapping=MultiMap.create();
+  ActionManager actionManager=ActionManager.getInstance();
+  for (  String eachId : actionManager.getActionIds(getActionPrefix(project,null))) {
+    AnAction eachAction=actionManager.getAction(eachId);
+    if (!(eachAction instanceof MyExternalSystemAction))     continue;
+    if (condition != null && !condition.value(actionManager.getActionOrStub(eachId)))     continue;
+    MyExternalSystemAction taskAction=(MyExternalSystemAction)eachAction;
+    projectToActionsMapping.putValue(Pair.create(taskAction.getSystemId(),taskAction.getGroup()),eachId);
+  }
+  Map<ProjectSystemId,KeymapGroup> keymapGroupMap=ContainerUtil.newHashMap();
+  for (  Pair<ProjectSystemId,String> pair : projectToActionsMapping.keySet()) {
+    if (!keymapGroupMap.containsKey(pair.first)) {
+      final Icon projectIcon=ExternalSystemUiUtil.getUiAware(pair.first).getProjectIcon();
+      KeymapGroup group=KeymapGroupFactory.getInstance().createGroup(pair.first.getReadableName(),projectIcon);
+      result.addGroup(group);
+      keymapGroupMap.put(pair.first,group);
+    }
+  }
+  for (  Map.Entry<Pair<ProjectSystemId,String>,Collection<String>> each : projectToActionsMapping.entrySet()) {
+    String groupName=each.getKey().second;
+    Collection<String> tasks=each.getValue();
+    if (tasks.isEmpty())     continue;
+    KeymapGroup group=KeymapGroupFactory.getInstance().createGroup(groupName,ExternalSystemIcons.TaskGroup);
+    final KeymapGroup systemGroup=keymapGroupMap.get(each.getKey().first);
+    if (systemGroup != null) {
+      systemGroup.addGroup(group);
+    }
+ else {
+      result.addGroup(group);
+    }
+    for (    String actionId : tasks) {
+      group.addActionId(actionId);
+    }
+  }
+  return result;
+}

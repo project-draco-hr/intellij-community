@@ -1,0 +1,24 @@
+{
+  List<LookupElement> cachedElements=myCachedElements;
+  final String projectPath=myProjectPathAccessor.getText();
+  if (cachedElements == null || !StringUtil.equals(myCachedWorkingDir,projectPath)) {
+    final ExternalProjectSettings linkedProjectSettings=ExternalSystemApiUtil.getSettings(myProject,mySystemId).getLinkedProjectSettings(projectPath);
+    if (linkedProjectSettings == null)     return;
+    final ExternalProjectInfo projectData=ProjectDataManager.getInstance().getExternalProjectData(myProject,mySystemId,linkedProjectSettings.getExternalProjectPath());
+    if (projectData == null || projectData.getExternalProjectStructure() == null)     return;
+    final DataNode<?> node=ExternalSystemApiUtil.findFirstRecursively(projectData.getExternalProjectStructure(),new BooleanFunction<DataNode<?>>(){
+      @Override public boolean fun(      DataNode<?> node){
+        return node.getKey().equals(ProjectKeys.MODULE) && node.getData() instanceof ModuleData && ((ModuleData)node.getData()).getLinkedExternalProjectPath().equals(projectPath);
+      }
+    }
+);
+    final Collection<DataNode<TaskData>> tasks=ExternalSystemApiUtil.getChildren(node,ProjectKeys.TASK);
+    cachedElements=ContainerUtil.newArrayListWithCapacity(tasks.size());
+    for (    DataNode<TaskData> taskDataNode : tasks) {
+      cachedElements.add(LookupElementBuilder.create(taskDataNode.getData().getName()).withIcon(ExternalSystemIcons.Task));
+    }
+    myCachedElements=cachedElements;
+    myCachedWorkingDir=projectPath;
+  }
+  result.addAllElements(cachedElements);
+}

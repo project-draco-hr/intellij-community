@@ -7,17 +7,7 @@
   Editor editor=parameters.getEditor();
   ZenCodingGenerator generator=findApplicableDefaultGenerator(CustomTemplateCallback.getContext(file,offset),false);
   if (generator != null && generator.hasCompletionItem()) {
-    final Ref<TemplateImpl> generatedTemplate=new Ref<TemplateImpl>();
-    final CustomTemplateCallback callback=new CustomTemplateCallback(editor,file){
-      @Override public void deleteTemplateKey(      @NotNull String key){
-      }
-      @Override public void startTemplate(      @NotNull Template template,      Map<String,String> predefinedValues,      TemplateEditingListener listener){
-        if (template instanceof TemplateImpl && !((TemplateImpl)template).isDeactivated()) {
-          generatedTemplate.set((TemplateImpl)template);
-        }
-      }
-    }
-;
+    final CollectCustomTemplateCallback callback=new CollectCustomTemplateCallback(editor,file);
     final String templatePrefix=computeTemplateKeyWithoutContextChecking(callback);
     if (templatePrefix != null) {
       List<TemplateImpl> regularTemplates=TemplateManagerImpl.listApplicableTemplates(file,offset,false);
@@ -27,21 +17,27 @@
         }
       }
 ).isEmpty();
-      CompletionResultSet resultSet=result.withPrefixMatcher(result.getPrefixMatcher().cloneWithPrefix(templatePrefix));
-      resultSet.restartCompletionOnPrefixChange(StandardPatterns.string().startsWith(templatePrefix));
+      result=result.withPrefixMatcher(result.getPrefixMatcher().cloneWithPrefix(templatePrefix));
+      result.restartCompletionOnPrefixChange(StandardPatterns.string().startsWith(templatePrefix));
       if (!regularTemplateWithSamePrefixExists) {
         final Collection<SingleLineEmmetFilter> extraFilters=ContainerUtil.newLinkedList(new SingleLineEmmetFilter());
         try {
           expand(templatePrefix,callback,generator,extraFilters,false,0);
         }
- catch (        EmmetException e) {
-          generatedTemplate.set(null);
+ catch (        EmmetException ignore) {
         }
-        if (!generatedTemplate.isNull()) {
-          final TemplateImpl template=generatedTemplate.get();
+        final TemplateImpl template=callback.getGeneratedTemplate();
+        if (template != null) {
           template.setKey(templatePrefix);
           template.setDescription(template.getTemplateText());
-          resultSet.addElement(new CustomLiveTemplateLookupElement(this,template.getKey(),template.getKey(),template.getDescription(),!LiveTemplateCompletionContributor.shouldShowAllTemplates(),true));
+          final CustomLiveTemplateLookupElement lookupElement=new CustomLiveTemplateLookupElement(this,template.getKey(),template.getKey(),template.getDescription(),!LiveTemplateCompletionContributor.shouldShowAllTemplates(),true){
+            @Override public void renderElement(            LookupElementPresentation presentation){
+              super.renderElement(presentation);
+              presentation.setTailText("\tEmmet abbreviation",true);
+            }
+          }
+;
+          result.addElement(lookupElement);
         }
       }
     }

@@ -2,16 +2,17 @@
   ClassNode outerNode=(ClassNode)DecompilerContext.getProperty(DecompilerContext.CURRENT_CLASS_NODE);
   DecompilerContext.setProperty(DecompilerContext.CURRENT_CLASS_NODE,node);
   int startLine=tracer != null ? tracer.getCurrentSourceLine() : 0;
-  BytecodeMappingTracer dummy_tracer=new BytecodeMappingTracer();
+  BytecodeMappingTracer dummy_tracer=new BytecodeMappingTracer(startLine);
   try {
     invokeProcessors(node);
-    ClassWrapper wrapper=node.wrapper;
+    ClassWrapper wrapper=node.getWrapper();
     StructClass cl=wrapper.getClassStruct();
     DecompilerContext.getLogger().startWriteClass(cl.qualifiedName);
     int start_class_def=buffer.length();
     writeClassDefinition(node,buffer,indent);
     boolean hasContent=false;
     boolean enumFields=false;
+    dummy_tracer.incrementCurrentSourceLine(buffer.countLines(start_class_def));
     for (    StructField fd : cl.getFields()) {
       boolean hide=fd.isSynthetic() && DecompilerContext.getOption(IFernflowerPreferences.REMOVE_SYNTHETIC) || wrapper.getHiddenMembers().contains(InterpreterUtil.makeUniqueKey(fd.getName(),fd.getDescriptor()));
       if (hide)       continue;
@@ -19,6 +20,7 @@
       if (isEnum) {
         if (enumFields) {
           buffer.append(',').appendLineSeparator();
+          dummy_tracer.incrementCurrentSourceLine();
         }
         enumFields=true;
       }
@@ -26,6 +28,7 @@
         buffer.append(';');
         buffer.appendLineSeparator();
         buffer.appendLineSeparator();
+        dummy_tracer.incrementCurrentSourceLine(2);
         enumFields=false;
       }
       fieldToJava(wrapper,cl,fd,buffer,indent + 1,dummy_tracer);
@@ -33,6 +36,7 @@
     }
     if (enumFields) {
       buffer.append(';').appendLineSeparator();
+      dummy_tracer.incrementCurrentSourceLine();
     }
     startLine+=buffer.countLines(start_class_def);
     for (    StructMethod mt : cl.getMethods()) {

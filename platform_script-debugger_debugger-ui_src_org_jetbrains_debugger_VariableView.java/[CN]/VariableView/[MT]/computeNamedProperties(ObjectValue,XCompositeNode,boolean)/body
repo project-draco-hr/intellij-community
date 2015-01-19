@@ -1,21 +1,28 @@
 {
-  return ObsolescentAsyncResults.consume(value.getProperties(),node,new PairConsumer<List<Variable>,XCompositeNode>(){
-    @Override public void consume(    List<Variable> variables,    XCompositeNode node){
-      if (value.getType() == ValueType.ARRAY && !(value instanceof ArrayValue)) {
-        computeArrayRanges(variables,node);
-        return;
+  final Promise<List<Variable>> properties=value.getProperties();
+  return createMemberFilter().then(new ValueNodeAsyncFunction<MemberFilter,Void>(node){
+    @NotNull @Override public Promise<Void> fun(    final MemberFilter memberFilter){
+      return properties.then(new ValueNodeAsyncFunction<List<Variable>,Void>(node){
+        @NotNull @Override public Promise<Void> fun(        List<Variable> variables){
+          if (value.getType() == ValueType.ARRAY && !(value instanceof ArrayValue)) {
+            computeArrayRanges(variables,node,memberFilter);
+            return Promise.DONE;
+          }
+          FunctionValue functionValue=value instanceof FunctionValue ? (FunctionValue)value : null;
+          if (functionValue != null && functionValue.hasScopes() == ThreeState.NO) {
+            functionValue=null;
+          }
+          remainingChildren=Variables.sortFilterAndAddValueList(variables,node,VariableView.this,memberFilter,XCompositeNode.MAX_CHILDREN_TO_SHOW,isLastChildren && functionValue == null);
+          if (remainingChildren != null) {
+            remainingChildrenOffset=XCompositeNode.MAX_CHILDREN_TO_SHOW;
+          }
+          if (functionValue != null) {
+            node.addChildren(XValueChildrenList.bottomGroup(new FunctionScopesValueGroup(functionValue,context)),isLastChildren);
+          }
+          return Promise.DONE;
+        }
       }
-      FunctionValue functionValue=value instanceof FunctionValue ? (FunctionValue)value : null;
-      if (functionValue != null && functionValue.hasScopes() == ThreeState.NO) {
-        functionValue=null;
-      }
-      remainingChildren=Variables.sortFilterAndAddValueList(variables,node,VariableView.this,XCompositeNode.MAX_CHILDREN_TO_SHOW,isLastChildren && functionValue == null);
-      if (remainingChildren != null) {
-        remainingChildrenOffset=XCompositeNode.MAX_CHILDREN_TO_SHOW;
-      }
-      if (functionValue != null) {
-        node.addChildren(XValueChildrenList.bottomGroup(new FunctionScopesValueGroup(functionValue,context)),isLastChildren);
-      }
+);
     }
   }
 );

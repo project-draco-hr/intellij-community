@@ -1,0 +1,21 @@
+{
+  final Pair<ProjectSystemId,ExternalSystemTaskExecutionSettings> pair=tasksQueue.poll();
+  if (pair == null)   return true;
+  final ProjectSystemId systemId=pair.first;
+  final ExternalSystemTaskExecutionSettings executionSettings=pair.getSecond();
+  final Semaphore targetDone=new Semaphore();
+  targetDone.down();
+  final Ref<Boolean> result=new Ref<Boolean>(false);
+  ExternalSystemUtil.runTask(executionSettings,DefaultRunExecutor.EXECUTOR_ID,myProject,systemId,new TaskCallback(){
+    @Override public void onSuccess(){
+      result.set(runTasksQueue(tasksQueue));
+      targetDone.up();
+    }
+    @Override public void onFailure(){
+      targetDone.up();
+    }
+  }
+,ProgressExecutionMode.IN_BACKGROUND_ASYNC);
+  targetDone.waitFor();
+  return result.get();
+}

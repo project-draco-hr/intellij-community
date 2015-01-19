@@ -6,35 +6,39 @@
     }
  else {
       expressionType=RefactoringUtil.getTypeByExpressionWithExpectedType(myExpression);
+      if (expressionType == null && !(myExpression.getParent() instanceof PsiExpressionStatement)) {
+        expressionType=PsiType.getJavaLangObject(myExpression.getManager(),GlobalSearchScope.allScope(myProject));
+      }
     }
   }
   if (expressionType == null) {
     expressionType=PsiType.VOID;
   }
   myHasExpressionOutput=expressionType != PsiType.VOID;
-  PsiType returnStatementType=null;
-  if (myHasReturnStatement) {
-    returnStatementType=myCodeFragmentMember instanceof PsiMethod ? ((PsiMethod)myCodeFragmentMember).getReturnType() : myCodeFragmentMember instanceof PsiLambdaExpression ? LambdaUtil.getFunctionalInterfaceReturnType((PsiLambdaExpression)myCodeFragmentMember) : null;
-  }
-  myHasReturnStatementOutput=returnStatementType != null && returnStatementType != PsiType.VOID;
+  final PsiType returnStatementType=getExpectedReturnType();
+  myHasReturnStatementOutput=myHasReturnStatement && returnStatementType != null && returnStatementType != PsiType.VOID;
   if (myGenerateConditionalExit && myOutputVariables.length == 1) {
     if (!(myOutputVariables[0].getType() instanceof PsiPrimitiveType)) {
       myNullConditionalCheck=true;
       for (      PsiStatement exitStatement : myExitStatements) {
         if (exitStatement instanceof PsiReturnStatement) {
           final PsiExpression returnValue=((PsiReturnStatement)exitStatement).getReturnValue();
-          myNullConditionalCheck&=returnValue == null || returnValue instanceof PsiLiteralExpression && PsiType.NULL.equals(returnValue.getType());
+          myNullConditionalCheck&=returnValue == null || isNullInferred(returnValue.getText(),true);
         }
       }
-      myNullConditionalCheck&=isNotNull(myOutputVariables[0]);
+      myNullConditionalCheck&=isNullInferred(myOutputVariables[0].getName(),false);
     }
+    myNotNullConditionalCheck=areAllExitPointsAreNotNull(returnStatementType);
   }
-  if (!myHasReturnStatementOutput && checkOutputVariablesCount() && !myNullConditionalCheck) {
+  if (!myHasReturnStatementOutput && checkOutputVariablesCount() && !myNullConditionalCheck&& !myNotNullConditionalCheck) {
     showMultipleOutputMessage(expressionType);
     return false;
   }
   myOutputVariable=myOutputVariables.length > 0 ? myOutputVariables[0] : null;
-  if (myHasReturnStatementOutput) {
+  if (myNotNullConditionalCheck) {
+    myReturnType=returnStatementType instanceof PsiPrimitiveType ? ((PsiPrimitiveType)returnStatementType).getBoxedType(myCodeFragmentMember) : returnStatementType;
+  }
+ else   if (myHasReturnStatementOutput) {
     myReturnType=returnStatementType;
   }
  else   if (myOutputVariable != null) {

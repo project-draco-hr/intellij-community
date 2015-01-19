@@ -1,0 +1,32 @@
+{
+  if (body instanceof PsiCodeBlock) {
+    PsiExpression psiExpression=LambdaUtil.extractSingleExpressionFromBody(body);
+    if (psiExpression != null && !findCommentsOutsideExpression(body,psiExpression)) {
+      if (LambdaUtil.isExpressionStatementExpression(psiExpression)) {
+        final PsiElement parent=PsiUtil.skipParenthesizedExprUp(expression.getParent());
+        if (parent instanceof PsiExpressionList) {
+          final PsiElement gParent=parent.getParent();
+          if (gParent instanceof PsiCallExpression) {
+            final CandidateInfo[] candidates=PsiResolveHelper.SERVICE.getInstance(gParent.getProject()).getReferencedMethodCandidates((PsiCallExpression)gParent,false);
+            if (candidates.length > 1) {
+              final List<CandidateInfo> info=new ArrayList<CandidateInfo>(Arrays.asList(candidates));
+              final LanguageLevel level=PsiUtil.getLanguageLevel(parent);
+              final JavaMethodsConflictResolver conflictResolver=new JavaMethodsConflictResolver((PsiExpressionList)parent,level);
+              final PsiExpressionList argumentList=((PsiCallExpression)gParent).getArgumentList();
+              if (argumentList == null) {
+                return null;
+              }
+              JavaMethodsConflictResolver.checkParametersNumber(info,argumentList.getExpressions().length,false);
+              conflictResolver.checkSpecifics(info,MethodCandidateInfo.ApplicabilityLevel.VARARGS,level);
+              if (info.size() > 1) {
+                return null;
+              }
+            }
+          }
+        }
+      }
+      return psiExpression;
+    }
+  }
+  return null;
+}

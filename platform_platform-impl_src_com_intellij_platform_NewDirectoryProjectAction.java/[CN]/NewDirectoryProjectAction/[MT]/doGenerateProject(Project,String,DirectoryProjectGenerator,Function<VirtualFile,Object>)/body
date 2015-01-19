@@ -1,0 +1,47 @@
+{
+  final File location=new File(FileUtil.toSystemDependentName(locationString));
+  if (!location.exists() && !location.mkdirs()) {
+    String message=ActionsBundle.message("action.NewDirectoryProject.cannot.create.dir",location.getAbsolutePath());
+    Messages.showErrorDialog(project,message,ActionsBundle.message("action.NewDirectoryProject.title"));
+    return null;
+  }
+  final VirtualFile baseDir=ApplicationManager.getApplication().runWriteAction(new Computable<VirtualFile>(){
+    public VirtualFile compute(){
+      return LocalFileSystem.getInstance().refreshAndFindFileByIoFile(location);
+    }
+  }
+);
+  if (baseDir == null) {
+    LOG.error("Couldn't find '" + location + "' in VFS");
+    return null;
+  }
+  baseDir.refresh(false,true);
+  if (baseDir.getChildren().length > 0) {
+    String message=ActionsBundle.message("action.NewDirectoryProject.not.empty",location.getAbsolutePath());
+    int rc=Messages.showYesNoDialog(project,message,ActionsBundle.message("action.NewDirectoryProject.title"),Messages.getQuestionIcon());
+    if (rc == Messages.YES) {
+      return PlatformProjectOpenProcessor.getInstance().doOpenProject(baseDir,null,false);
+    }
+  }
+  String generatorName=generator == null ? "empty" : ConvertUsagesUtil.ensureProperKey(generator.getName());
+  UsageTrigger.trigger("NewDirectoryProjectAction." + generatorName);
+  Object settings=null;
+  if (generator != null) {
+    try {
+      settings=settingsComputable.fun(baseDir);
+    }
+ catch (    ProcessCanceledException e) {
+      return null;
+    }
+  }
+  RecentProjectsManager.getInstance().setLastProjectCreationLocation(location.getParent());
+  final Object finalSettings=settings;
+  return PlatformProjectOpenProcessor.doOpenProject(baseDir,null,false,-1,new ProjectOpenedCallback(){
+    @Override public void projectOpened(    Project project,    Module module){
+      if (generator != null) {
+        generator.generateProject(project,baseDir,finalSettings,module);
+      }
+    }
+  }
+,false);
+}

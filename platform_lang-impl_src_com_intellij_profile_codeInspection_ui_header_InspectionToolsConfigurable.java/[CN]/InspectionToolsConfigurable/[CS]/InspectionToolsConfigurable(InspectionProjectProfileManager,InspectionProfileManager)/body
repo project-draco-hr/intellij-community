@@ -8,35 +8,44 @@
   myWholePanel.add(myPanel,BorderLayout.CENTER);
   myProfiles=new ProfilesConfigurableComboBox(new ListCellRendererWrapper<Profile>(){
     @Override public void customize(    final JList list,    final Profile value,    final int index,    final boolean selected,    final boolean hasFocus){
-      final String profileName=value.getName();
       final SingleInspectionProfilePanel singleInspectionProfilePanel=myPanels.get(value);
-      final boolean isShared=singleInspectionProfilePanel != null ? singleInspectionProfilePanel.isProfileShared() : false;
+      final boolean isShared=singleInspectionProfilePanel.isProfileShared();
       setIcon(isShared ? AllIcons.General.ProjectSettings : AllIcons.General.Settings);
-      setText(profileName);
+      setText(singleInspectionProfilePanel.getCurrentProfileName());
     }
   }
 ){
     @Override public void onProfileChosen(    InspectionProfileImpl inspectionProfile){
-      myLayout.show(myPanel,inspectionProfile.getName());
+      myLayout.show(myPanel,getCardName(inspectionProfile));
       myAuxiliaryRightPanel.showDescription(inspectionProfile.getDescription());
     }
   }
 ;
-  myProfilesHolder=new JPanel();
-  myProfilesHolder.setLayout(new CardLayout());
-  myManageButton=new ManageButton(new ManageButtonBuilder(){
+  JPanel profilesHolder=new JPanel();
+  profilesHolder.setLayout(new CardLayout());
+  JComponent manageButton=new ManageButton(new ManageButtonBuilder(){
     @Override public boolean isSharedToTeamMembers(){
       SingleInspectionProfilePanel panel=getSelectedPanel();
       return panel != null && panel.isProfileShared();
     }
-    @Override public void setShareToTeamMembers(    boolean share){
-      final SingleInspectionProfilePanel panel=getSelectedPanel();
-      LOG.assertTrue(panel != null,"No settings panel for: " + getSelectedObject());
-      panel.setProfileShared(share);
+    @Override public void setShareToTeamMembers(    boolean shared){
+      final SingleInspectionProfilePanel selectedPanel=getSelectedPanel();
+      LOG.assertTrue(selectedPanel != null,"No settings selectedPanel for: " + getSelectedObject());
+      final String name=getSelectedPanel().getCurrentProfileName();
+      for (      SingleInspectionProfilePanel p : myPanels.values()) {
+        if (p != selectedPanel && Comparing.equal(p.getCurrentProfileName(),name)) {
+          final boolean curShared=p.isProfileShared();
+          if (curShared == shared) {
+            Messages.showErrorDialog((shared ? "Shared" : "Application level") + " profile with same name exists.","Inspections Settings");
+            return;
+          }
+        }
+      }
+      selectedPanel.setProfileShared(shared);
       myProfiles.repaint();
     }
     @Override public void copy(){
-      final InspectionProfileImpl newProfile=copyToNewProfile(0,getSelectedObject(),getProject());
+      final InspectionProfileImpl newProfile=copyToNewProfile(getSelectedObject(),getProject());
       if (newProfile != null) {
         final InspectionProfileImpl modifiableModel=(InspectionProfileImpl)newProfile.getModifiableModel();
         modifiableModel.setModified(true);
@@ -53,21 +62,20 @@
       rename(getSelectedObject());
     }
     private void rename(    @NotNull final InspectionProfileImpl inspectionProfile){
-      final String initialName=inspectionProfile.getName();
-      myProfiles.showEditCard(inspectionProfile.getName(),new SaveInputComponentValidator(){
+      final String initialName=getSelectedPanel().getCurrentProfileName();
+      myProfiles.showEditCard(initialName,new SaveInputComponentValidator(){
         @Override public void doSave(        @NotNull String text){
           if (!text.equals(initialName)) {
-            deleteProfile(inspectionProfile);
-            myProfiles.getModel().removeElement(inspectionProfile);
-            inspectionProfile.setName(text);
-            inspectionProfile.setModified(true);
-            putProfile(inspectionProfile,myPanels.remove(inspectionProfile));
-            addProfile(inspectionProfile);
+            getProfilePanel(inspectionProfile).setCurrentProfileName(text);
           }
           myProfiles.showComboBoxCard();
         }
         @Override public boolean checkValid(        @NotNull String text){
-          final boolean isValid=text.equals(initialName) || !hasName(text);
+          final SingleInspectionProfilePanel singleInspectionProfilePanel=myPanels.get(inspectionProfile);
+          if (singleInspectionProfilePanel == null) {
+            return false;
+          }
+          final boolean isValid=text.equals(initialName) || !hasName(text,singleInspectionProfilePanel.isProfileShared());
           if (isValid) {
             myAuxiliaryRightPanel.showDescription(getSelectedObject().getDescription());
           }
@@ -75,6 +83,10 @@
             myAuxiliaryRightPanel.showError("Name is already in use. Please change name to unique.");
           }
           return isValid;
+        }
+        @Override public void cancel(){
+          myProfiles.showComboBoxCard();
+          myAuxiliaryRightPanel.showDescription(getSelectedObject().getDescription());
         }
       }
 );
@@ -85,13 +97,16 @@
     @Override public void delete(){
       final InspectionProfileImpl selectedProfile=myProfiles.getSelectedProfile();
       myProfiles.getModel().removeElement(selectedProfile);
-      myDeletedProfiles.add(selectedProfile.getName());
+      myDeletedProfiles.add(selectedProfile);
     }
     @Override public boolean canEditDescription(){
       return true;
     }
     @Override public void editDescription(){
       myAuxiliaryRightPanel.editDescription(getSelectedObject().getDescription());
+    }
+    @Override public boolean hasDescription(){
+      return !StringUtil.isEmpty(getSelectedObject().getDescription());
     }
     @Override public void export(){
       final FileChooserDescriptor descriptor=FileChooserDescriptorFactory.createSingleFolderDescriptor();
@@ -158,7 +173,7 @@ catch (          IOException e1) {
               if (Messages.showYesNoDialog(myWholePanel,"Undefined severities detected: " + StringUtil.join(levels,", ") + ". Do you want to create them?","Warning",Messages.getWarningIcon()) == Messages.YES) {
                 for (                String level : levels) {
                   final TextAttributes textAttributes=CodeInsightColors.WARNINGS_ATTRIBUTES.getDefaultAttributes();
-                  HighlightInfoType.HighlightInfoTypeImpl info=new HighlightInfoType.HighlightInfoTypeImpl(new HighlightSeverity(level,50),com.intellij.openapi.editor.colors.TextAttributesKey.createTextAttributesKey(level));
+                  HighlightInfoType.HighlightInfoTypeImpl info=new HighlightInfoType.HighlightInfoTypeImpl(new HighlightSeverity(level,50),TextAttributesKey.createTextAttributesKey(level));
                   myProfileManager.getOwnSeverityRegistrar().registerSeverity(new SeverityRegistrar.SeverityBasedTextAttributes(textAttributes.clone(),info),textAttributes.getErrorStripeColor());
                 }
               }
@@ -174,7 +189,7 @@ catch (          IOException e1) {
             final ModifiableModel model=profile.getModifiableModel();
             model.setModified(true);
             addProfile((InspectionProfileImpl)model);
-            myDeletedProfiles.remove(profile.getName());
+            myDeletedProfiles.remove(profile);
           }
  catch (          InvalidDataException e1) {
             LOG.error(e1);
@@ -193,17 +208,25 @@ catch (          IOException e1) {
 ).build();
   myAuxiliaryRightPanel=new AuxiliaryRightPanel(new AuxiliaryRightPanel.DescriptionSaveListener(){
     @Override public void saveDescription(    @NotNull String description){
-      getSelectedObject().setDescription(description);
+      final InspectionProfileImpl inspectionProfile=getSelectedObject();
+      if (!Comparing.strEqual(description,inspectionProfile.getDescription())) {
+        inspectionProfile.setDescription(description);
+        inspectionProfile.setModified(true);
+      }
       myAuxiliaryRightPanel.showDescription(description);
+    }
+    @Override public void cancel(){
+      myAuxiliaryRightPanel.showDescription(getSelectedObject().getDescription());
     }
   }
 );
   toolbar.setLayout(new GridBagLayout());
-  toolbar.add(new JLabel(myHeaderTitle),new GridBagConstraints(0,0,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.VERTICAL,new Insets(10,5,0,0),0,0));
-  toolbar.add(myProfiles,new GridBagConstraints(1,0,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.VERTICAL,new Insets(10,5,0,0),0,0));
-  toolbar.add(myManageButton,new GridBagConstraints(2,0,1,1,0,0,GridBagConstraints.WEST,GridBagConstraints.VERTICAL,new Insets(10,5,0,0),0,0));
-  toolbar.add(myAuxiliaryRightPanel,new GridBagConstraints(3,0,1,1,1.0,0,GridBagConstraints.CENTER,GridBagConstraints.BOTH,new Insets(10,5,0,0),0,0));
-  ((InspectionManagerEx)InspectionManager.getInstance(projectProfileManager.getProject())).buildInspectionSearchIndexIfNecessary();
+  final JLabel headerTitleLabel=new JLabel(HEADER_TITLE);
+  headerTitleLabel.setBorder(IdeBorderFactory.createEmptyBorder(10,0,0,0));
+  toolbar.add(headerTitleLabel,new GridBagConstraints(0,0,1,1,0,0,GridBagConstraints.CENTER,GridBagConstraints.NONE,new Insets(0,0,0,0),0,0));
+  toolbar.add(myProfiles,new GridBagConstraints(1,0,1,1,0,1.0,GridBagConstraints.CENTER,GridBagConstraints.VERTICAL,new Insets(0,6,0,0),0,0));
+  toolbar.add(withBorderOnTop(manageButton),new GridBagConstraints(2,0,1,1,0,0,GridBagConstraints.CENTER,GridBagConstraints.VERTICAL,new Insets(0,10,0,0),0,0));
+  toolbar.add(myAuxiliaryRightPanel,new GridBagConstraints(3,0,1,1,1.0,1.0,GridBagConstraints.CENTER,GridBagConstraints.HORIZONTAL,new Insets(0,15,0,0),0,0));
   myProjectProfileManager=projectProfileManager;
   myProfileManager=profileManager;
 }

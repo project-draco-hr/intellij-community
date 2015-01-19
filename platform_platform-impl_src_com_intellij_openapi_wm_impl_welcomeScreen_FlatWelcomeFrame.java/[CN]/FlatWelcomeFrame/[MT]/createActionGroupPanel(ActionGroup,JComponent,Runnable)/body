@@ -1,0 +1,80 @@
+{
+  JPanel actionsListPanel=new JPanel(new BorderLayout());
+  actionsListPanel.setBackground(getProjectsBackground());
+  final JBList list=new JBList(action.getChildren(null));
+  list.setBackground(getProjectsBackground());
+  list.installCellRenderer(new NotNullFunction<AnAction,JComponent>(){
+    final JLabel label=new JLabel();
+    Map<Icon,Icon> scaled=new HashMap<Icon,Icon>();
+{
+      label.setBorder(JBUI.Borders.empty(3,7,3,7));
+    }
+    @NotNull @Override public JComponent fun(    AnAction action){
+      label.setText(action.getTemplatePresentation().getText());
+      Icon icon=action.getTemplatePresentation().getIcon();
+      if (icon.getIconHeight() == 32) {
+        Icon scaledIcon=scaled.get(icon);
+        if (scaledIcon == null) {
+          scaledIcon=IconUtil.scale(icon,0.5);
+          scaled.put(icon,scaledIcon);
+        }
+        icon=scaledIcon;
+      }
+      label.setIcon(icon);
+      return label;
+    }
+  }
+);
+  JScrollPane pane=ScrollPaneFactory.createScrollPane(list,true);
+  pane.setBackground(getProjectsBackground());
+  actionsListPanel.add(pane,BorderLayout.CENTER);
+  if (backAction != null) {
+    final JLabel back=new JLabel(AllIcons.Actions.Back);
+    back.setBorder(JBUI.Borders.empty(3,7,10,7));
+    back.setHorizontalAlignment(SwingConstants.LEFT);
+    new ClickListener(){
+      @Override public boolean onClick(      @NotNull MouseEvent event,      int clickCount){
+        backAction.run();
+        return true;
+      }
+    }
+.installOn(back);
+    actionsListPanel.add(back,BorderLayout.SOUTH);
+  }
+  final Ref<Component> selected=Ref.create();
+  final JPanel main=new JPanel(new BorderLayout());
+  main.add(actionsListPanel,BorderLayout.WEST);
+  ListSelectionListener selectionListener=new ListSelectionListener(){
+    @Override public void valueChanged(    ListSelectionEvent e){
+      if (!selected.isNull()) {
+        main.remove(selected.get());
+      }
+      Object value=list.getSelectedValue();
+      if (value instanceof AbstractActionWithPanel) {
+        JPanel panel=((AbstractActionWithPanel)value).createPanel();
+        panel.setBorder(JBUI.Borders.empty(7,10,7,10));
+        selected.set(panel);
+        main.add(selected.get());
+        for (        JButton button : UIUtil.findComponentsOfType(main,JButton.class)) {
+          if (button.getClientProperty(DialogWrapper.DEFAULT_ACTION) == Boolean.TRUE) {
+            parent.getRootPane().setDefaultButton(button);
+            break;
+          }
+        }
+        main.revalidate();
+        main.repaint();
+      }
+    }
+  }
+;
+  list.addListSelectionListener(selectionListener);
+  if (backAction != null) {
+    new AnAction(){
+      @Override public void actionPerformed(      @NotNull AnActionEvent e){
+        backAction.run();
+      }
+    }
+.registerCustomShortcutSet(KeyEvent.VK_ESCAPE,0,main);
+  }
+  return Pair.create(main,list);
+}

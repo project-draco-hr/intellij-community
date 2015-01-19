@@ -1,0 +1,45 @@
+{
+  Result result=new Result();
+  result.commonFiles=collect(oldChecksums,newChecksums,critical,true);
+  result.filesToDelete=withAllRemoved(oldChecksums,newChecksums);
+  Map<String,Long> toUpdate=collect(oldChecksums,newChecksums,critical,false);
+  Map<String,Long> toCreate=withAllRemoved(newChecksums,oldChecksums);
+  result.filesToCreate=new LinkedHashMap<String,Long>();
+  result.filesToUpdate=new LinkedHashMap<String,Update>();
+  for (  Map.Entry<String,Long> update : toUpdate.entrySet()) {
+    result.filesToUpdate.put(update.getKey(),new Update(update.getKey(),update.getValue(),false));
+  }
+  if (move) {
+    Map<Long,String> byContent=inverse(result.filesToDelete);
+    Map<String,List<String>> byName=groupFilesByName(result.filesToDelete);
+    for (    Map.Entry<String,Long> create : toCreate.entrySet()) {
+      boolean isDir=create.getKey().endsWith("/");
+      String source=byContent.get(create.getValue());
+      boolean found=false;
+      if (source != null && !isDir) {
+        if (!critical.contains(source)) {
+          result.filesToUpdate.put(create.getKey(),new Update(source,result.filesToDelete.get(source),true));
+          found=true;
+        }
+      }
+ else {
+        File fileToCreate=new File(create.getKey());
+        List<String> sameName=byName.get(fileToCreate.getName());
+        if (sameName != null && !isDir) {
+          String best=findBestCandidateForMove(sameName,create.getKey());
+          if (!critical.contains(best)) {
+            result.filesToUpdate.put(create.getKey(),new Update(best,result.filesToDelete.get(best),false));
+            found=true;
+          }
+        }
+      }
+      if (!found) {
+        result.filesToCreate.put(create.getKey(),create.getValue());
+      }
+    }
+  }
+ else {
+    result.filesToCreate=toCreate;
+  }
+  return result;
+}

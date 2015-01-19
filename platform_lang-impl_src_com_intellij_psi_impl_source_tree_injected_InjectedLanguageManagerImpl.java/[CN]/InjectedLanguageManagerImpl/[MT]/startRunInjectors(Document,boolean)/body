@@ -9,29 +9,23 @@
   if (myProgress.isCanceled()) {
     myProgress=new DaemonProgressIndicator();
   }
+  final Set<DocumentWindow> newDocuments=Collections.synchronizedSet(new THashSet());
   final Processor<DocumentWindow> commitProcessor=new Processor<DocumentWindow>(){
     @Override public boolean process(    DocumentWindow documentWindow){
       if (myProject.isDisposed())       return false;
       ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
       if (indicator != null && indicator.isCanceled())       return false;
       if (documentManager.isUncommited(hostDocument) || !hostPsiFile.isValid())       return false;
-      final DocumentWindow[] stillInjectedDocument={null};
       InjectedLanguageUtil.enumerate(documentWindow,hostPsiFile,new PsiLanguageInjectionHost.InjectedPsiVisitor(){
         @Override public void visit(        @NotNull PsiFile injectedPsi,        @NotNull List<PsiLanguageInjectionHost.Shred> places){
-          stillInjectedDocument[0]=(DocumentWindow)injectedPsi.getViewProvider().getDocument();
-          PsiDocumentManagerBase.checkConsistency(injectedPsi,stillInjectedDocument[0]);
+          DocumentWindow newDocument=(DocumentWindow)injectedPsi.getViewProvider().getDocument();
+          if (newDocument != null) {
+            PsiDocumentManagerBase.checkConsistency(injectedPsi,newDocument);
+            newDocuments.add(newDocument);
+          }
         }
       }
 );
-synchronized (PsiLock.LOCK) {
-        if (stillInjectedDocument[0] == null) {
-          injected.remove(documentWindow);
-        }
- else         if (stillInjectedDocument[0] != documentWindow) {
-          injected.remove(documentWindow);
-          injected.addIfAbsent(stillInjectedDocument[0]);
-        }
-      }
       return true;
     }
   }
@@ -40,6 +34,10 @@ synchronized (PsiLock.LOCK) {
     @Override public void run(){
       if (myProgress.isCanceled())       return;
       JobLauncher.getInstance().invokeConcurrentlyUnderProgress(new ArrayList<DocumentWindow>(injected),myProgress,true,commitProcessor);
+synchronized (PsiLock.LOCK) {
+        injected.clear();
+        injected.addAll(newDocuments);
+      }
     }
   }
 ;

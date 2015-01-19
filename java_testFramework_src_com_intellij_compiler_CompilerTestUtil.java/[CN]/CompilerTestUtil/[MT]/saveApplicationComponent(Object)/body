@@ -5,9 +5,9 @@
     State state=StoreUtil.getStateSpec(appComponent.getClass());
     if (state != null) {
       componentName=state.name();
-      Storage lastStorage=state.storages()[state.storages().length - 1];
+      Storage storageToWrite=findNonDeprecated(state.storages());
       StateStorageManager storageManager=((ApplicationImpl)ApplicationManager.getApplication()).getStateStore().getStateStorageManager();
-      file=new File(storageManager.expandMacros(lastStorage.file()));
+      file=new File(storageManager.expandMacros(storageToWrite.file()));
     }
  else     if (appComponent instanceof ExportableApplicationComponent && appComponent instanceof NamedJDOMExternalizable) {
       componentName=((ExportableApplicationComponent)appComponent).getComponentName();
@@ -28,14 +28,20 @@
     Assert.assertTrue("Cannot create " + file,FileUtil.createIfDoesntExist(file));
     new WriteAction(){
       @Override protected void run(      @NotNull final Result result) throws IOException {
-        VirtualFile virtualFile=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file);
-        Assert.assertNotNull(file.getAbsolutePath(),virtualFile);
-        OutputStream stream=virtualFile.getOutputStream(new SaveSessionRequestor());
+        VfsRootAccess.allowRootAccess(file.getAbsolutePath());
         try {
-          JDOMUtil.writeParent(root,stream,SystemProperties.getLineSeparator());
+          VirtualFile virtualFile=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file);
+          Assert.assertNotNull(file.getAbsolutePath(),virtualFile);
+          OutputStream stream=virtualFile.getOutputStream(new SaveSessionRequestor());
+          try {
+            JDOMUtil.writeParent(root,stream,SystemProperties.getLineSeparator());
+          }
+  finally {
+            stream.close();
+          }
         }
   finally {
-          stream.close();
+          VfsRootAccess.disallowRootAccess(file.getAbsolutePath());
         }
       }
     }

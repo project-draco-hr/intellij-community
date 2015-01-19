@@ -1,0 +1,44 @@
+{
+  filePath=toCanonicalName(filePath);
+  if (ApplicationManager.getApplication().isUnitTestMode()) {
+    TEST_PROJECTS_CREATED++;
+    if (LOG_PROJECT_LEAKAGE_IN_TESTS) {
+      for (int i=0; i < 42; i++) {
+        if (myProjects.size() < MAX_LEAKY_PROJECTS)         break;
+        System.gc();
+        TimeoutUtil.sleep(100);
+        System.gc();
+      }
+      if (myProjects.size() >= MAX_LEAKY_PROJECTS) {
+        List<Project> copy=new ArrayList<Project>(myProjects.keySet());
+        myProjects.clear();
+        throw new TooManyProjectLeakedException(copy);
+      }
+    }
+  }
+  File projectFile=new File(filePath);
+  if (projectFile.isFile()) {
+    FileUtil.delete(projectFile);
+  }
+ else {
+    File[] files=new File(projectFile,Project.DIRECTORY_STORE_FOLDER).listFiles();
+    if (files != null) {
+      for (      File file : files) {
+        FileUtil.delete(file);
+      }
+    }
+  }
+  ProjectImpl project=createProject(projectName,filePath,false,optimiseTestLoadSpeed);
+  try {
+    initProject(project,useDefaultProjectSettings ? (ProjectImpl)getDefaultProject() : null);
+    if (LOG_PROJECT_LEAKAGE_IN_TESTS) {
+      myProjects.put(project,null);
+    }
+    return project;
+  }
+ catch (  Throwable t) {
+    LOG.info(t);
+    Messages.showErrorDialog(message(t),ProjectBundle.message("project.load.default.error"));
+    return null;
+  }
+}

@@ -1,16 +1,20 @@
 {
-  String headContent=DvcsUtil.tryLoadFile(myHeadFile);
-  Matcher matcher=BRANCH_PATTERN.matcher(headContent);
-  if (matcher.matches()) {
-    return new Head(true,matcher.group(1));
+  String headContent;
+  try {
+    headContent=DvcsUtil.tryLoadFile(myHeadFile);
   }
-  if (COMMIT_PATTERN.matcher(headContent).matches()) {
-    return new Head(false,headContent);
+ catch (  RepoStateException e) {
+    LOG.error(e);
+    return new HeadInfo(false,null);
   }
-  matcher=BRANCH_WEAK_PATTERN.matcher(headContent);
-  if (matcher.matches()) {
-    LOG.info(".git/HEAD has not standard format: [" + headContent + "]. We've parsed branch ["+ matcher.group(1)+ "]");
-    return new Head(true,matcher.group(1));
+  Hash hash=parseHash(headContent);
+  if (hash != null) {
+    return new HeadInfo(false,headContent);
   }
-  throw new RepoStateException("Invalid format of the .git/HEAD file: [" + headContent + "]");
+  String target=getTarget(headContent);
+  if (target != null) {
+    return new HeadInfo(true,target);
+  }
+  LOG.error(new RepoStateException("Invalid format of the .git/HEAD file: [" + headContent + "]"));
+  return new HeadInfo(false,null);
 }

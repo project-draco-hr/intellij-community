@@ -82,6 +82,43 @@ synchronized (myLock) {
           }
         }
 );
+        final THashSet<File> unchangedSources=new THashSet<File>(FileUtil.FILE_HASHING_STRATEGY);
+        delta.mySourceFileToClasses.forEachEntry(new TObjectObjectProcedure<File,Collection<ClassRepr>>(){
+          @Override public boolean execute(          File source,          Collection<ClassRepr> b){
+            unchangedSources.add(source);
+            return true;
+          }
+        }
+);
+        unchangedSources.removeAll(delta.getChangedFiles());
+        if (!unchangedSources.isEmpty()) {
+          unchangedSources.forEach(new TObjectProcedure<File>(){
+            @Override public boolean execute(            File unchangedSource){
+              final Collection<ClassRepr> updatedClasses=delta.mySourceFileToClasses.get(unchangedSource);
+              if (updatedClasses != null && !updatedClasses.isEmpty()) {
+                final List<ClassRepr> classesToPut=new ArrayList<ClassRepr>();
+                final TIntHashSet updatedClassNames=new TIntHashSet();
+                for (                ClassRepr aClass : updatedClasses) {
+                  if (delta.getChangedClasses().contains(aClass.name)) {
+                    classesToPut.add(aClass);
+                    updatedClassNames.add(aClass.name);
+                  }
+                }
+                Collection<ClassRepr> currentClasses=mySourceFileToClasses.get(unchangedSource);
+                if (currentClasses != null) {
+                  for (                  ClassRepr aClass : currentClasses) {
+                    if (!updatedClassNames.contains(aClass.name)) {
+                      classesToPut.add(aClass);
+                    }
+                  }
+                }
+                mySourceFileToClasses.replace(unchangedSource,classesToPut);
+              }
+              return true;
+            }
+          }
+);
+        }
       }
  else {
         myClassToSubclasses.putAll(delta.myClassToSubclasses);

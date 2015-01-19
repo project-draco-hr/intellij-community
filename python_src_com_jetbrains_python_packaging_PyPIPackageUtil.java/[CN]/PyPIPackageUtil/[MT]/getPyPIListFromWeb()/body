@@ -1,42 +1,27 @@
 {
-  final List<String> packages=new ArrayList<String>();
-  HTMLEditorKit.ParserCallback callback=new HTMLEditorKit.ParserCallback(){
-    HTML.Tag myTag;
-    boolean inTable=false;
-    @Override public void handleStartTag(    HTML.Tag tag,    MutableAttributeSet set,    int i){
-      if ("table".equals(tag.toString()))       inTable=!inTable;
-      if (inTable && "a".equals(tag.toString())) {
-        packages.add(String.valueOf(set.getAttribute(HTML.Attribute.HREF)));
+  return HttpRequests.request(PYPI_LIST_URL).connect(new HttpRequests.RequestProcessor<List<String>>(){
+    @Override public List<String> process(    @NotNull HttpRequests.Request request) throws IOException {
+      final List<String> packages=new ArrayList<String>();
+      Reader reader=request.getReader();
+      new ParserDelegator().parse(reader,new HTMLEditorKit.ParserCallback(){
+        boolean inTable=false;
+        @Override public void handleStartTag(        HTML.Tag tag,        MutableAttributeSet set,        int i){
+          if ("table".equals(tag.toString())) {
+            inTable=!inTable;
+          }
+          if (inTable && "a".equals(tag.toString())) {
+            packages.add(String.valueOf(set.getAttribute(HTML.Attribute.HREF)));
+          }
+        }
+        @Override public void handleEndTag(        HTML.Tag tag,        int i){
+          if ("table".equals(tag.toString())) {
+            inTable=!inTable;
+          }
+        }
       }
-    }
-    @Override public void handleEndTag(    HTML.Tag tag,    int i){
-      if ("table".equals(tag.toString()))       inTable=!inTable;
-    }
-  }
-;
-  TrustManager[] trustAllCerts=new TrustManager[]{new PyPITrustManager()};
-  try {
-    SSLContext sslContext=SSLContext.getInstance("TLS");
-    sslContext.init(null,trustAllCerts,new SecureRandom());
-    final HttpConfigurable settings=HttpConfigurable.getInstance();
-    final URLConnection connection=settings.openConnection(PYPI_LIST_URL);
-    if (connection instanceof HttpsURLConnection) {
-      ((HttpsURLConnection)connection).setSSLSocketFactory(sslContext.getSocketFactory());
-    }
-    InputStream is=connection.getInputStream();
-    Reader reader=new InputStreamReader(is);
-    try {
-      new ParserDelegator().parse(reader,callback,true);
-    }
- catch (    IOException e) {
-      LOG.warn(e);
-    }
- finally {
-      reader.close();
+,true);
+      return packages;
     }
   }
- catch (  Exception e) {
-    LOG.warn(e);
-  }
-  return packages;
+,Collections.<String>emptyList(),LOG);
 }

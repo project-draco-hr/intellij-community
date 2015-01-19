@@ -1,0 +1,33 @@
+{
+  List<String> classpath=new ArrayList<String>();
+  if (optimizeClassLoading) {
+    classpath.add(getGroovyRtRoot().getPath());
+    classpath.add(ClasspathBootstrap.getResourcePath(Function.class));
+    classpath.add(ClasspathBootstrap.getResourcePath(UrlClassLoader.class));
+    classpath.add(ClasspathBootstrap.getResourceFile(THashMap.class).getPath());
+  }
+ else {
+    classpath.addAll(compilationClassPath);
+  }
+  List<String> vmParams=ContainerUtilRt.newArrayList();
+  vmParams.add("-Xmx" + settings.heapSize + "m");
+  vmParams.add("-Dfile.encoding=" + System.getProperty("file.encoding"));
+  String grapeRoot=System.getProperty(GroovycOutputParser.GRAPE_ROOT);
+  if (grapeRoot != null) {
+    vmParams.add("-D" + GroovycOutputParser.GRAPE_ROOT + "="+ grapeRoot);
+  }
+  final List<String> cmd=ExternalProcessUtil.buildJavaCommandLine(getJavaExecutable(chunk),"org.jetbrains.groovy.compiler.rt.GroovycRunner",Collections.<String>emptyList(),classpath,vmParams,programParams);
+  final Process process=Runtime.getRuntime().exec(ArrayUtil.toStringArray(cmd));
+  ProcessHandler handler=new BaseOSProcessHandler(process,null,null){
+    @Override protected Future<?> executeOnPooledThread(    Runnable task){
+      return SharedThreadPool.getInstance().executeOnPooledThread(task);
+    }
+    @Override public void notifyTextAvailable(    String text,    Key outputType){
+      parser.notifyTextAvailable(text,outputType);
+    }
+  }
+;
+  handler.startNotify();
+  handler.waitFor();
+  parser.notifyFinished(process.exitValue());
+}

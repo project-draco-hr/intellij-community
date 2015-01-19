@@ -1,0 +1,39 @@
+{
+  if (!SystemInfo.isJavaVersionAtLeast(target)) {
+    throw new EvaluateException("Unable to compile for target level " + target + ". Need to run IDEA on java version at least "+ target+ ", currently running on "+ SystemInfo.JAVA_RUNTIME_VERSION);
+  }
+  JavaCompiler compiler=ToolProvider.getSystemJavaCompiler();
+  MemoryFileManager manager=new MemoryFileManager(compiler);
+  DiagnosticCollector<JavaFileObject> diagnostic=new DiagnosticCollector<JavaFileObject>();
+  Module module=ApplicationManager.getApplication().runReadAction(new Computable<Module>(){
+    @Override public Module compute(){
+      return ModuleUtilCore.findModuleForPsiElement(myPsiContext);
+    }
+  }
+);
+  List<String> options=new ArrayList<String>();
+  if (module != null) {
+    options.add("-cp");
+    PathsList cp=ModuleRootManager.getInstance(module).orderEntries().compileOnly().recursively().exportedOnly().withoutSdk().getPathsList();
+    options.add(cp.getPathsString());
+  }
+  if (!StringUtil.isEmpty(target)) {
+    options.add("-source");
+    options.add(target);
+    options.add("-target");
+    options.add(target);
+  }
+  try {
+    if (!compiler.getTask(null,manager,diagnostic,options,null,Collections.singletonList(new SourceFileObject(getMainClassName(),JavaFileObject.Kind.SOURCE,getClassCode()))).call()) {
+      StringBuilder res=new StringBuilder("Compilation failed:\n");
+      for (      Diagnostic<? extends JavaFileObject> d : diagnostic.getDiagnostics()) {
+        res.append(d);
+      }
+      throw new EvaluateException(res.toString());
+    }
+  }
+ catch (  Exception e) {
+    throw new EvaluateException(e.getMessage());
+  }
+  return manager.classes;
+}

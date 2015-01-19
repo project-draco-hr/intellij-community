@@ -1,6 +1,6 @@
 {
-  super(new BorderLayout());
   myInternalTable=t;
+  myOnRemoveDisposable=Disposer.newDisposable();
   final JBListTableModel model=new JBListTableModel(t.getModel()){
     @Override public JBTableRow getRow(    int index){
       return getRowAt(index);
@@ -9,7 +9,7 @@
       return isRowEditable(rowIndex);
     }
     @Override public void addRow(){
-      myLastEditorIndex.set(null);
+      myLastFocusedEditorComponentIdx=-1;
       super.addRow();
     }
   }
@@ -47,9 +47,10 @@
       super.processMouseEvent(e);
     }
     @Override public TableCellRenderer getCellRenderer(    int row,    int column){
-      return new DefaultTableCellRenderer(){
-        @Override public Component getTableCellRendererComponent(        JTable table,        Object value,        boolean selected,        boolean hasFocus,        int row,        int col){
-          return getRowRenderer(t,row,selected,hasFocus);
+      final JBTableRowRenderer rowRenderer=getRowRenderer(row);
+      return new TableCellRenderer(){
+        @Override public Component getTableCellRendererComponent(        JTable table,        Object value,        boolean selected,        boolean focused,        int row,        int col){
+          return rowRenderer.getRowRendererComponent(t,row,selected,focused);
         }
       }
 ;
@@ -120,6 +121,13 @@
       }
       return super.processKeyBinding(ks,e,condition,pressed);
     }
+    @Override public void columnMarginChanged(    ChangeEvent e){
+      TableColumn resizingColumn=tableHeader != null ? tableHeader.getResizingColumn() : null;
+      if (resizingColumn != null && autoResizeMode == AUTO_RESIZE_OFF) {
+        resizingColumn.setPreferredWidth(resizingColumn.getWidth());
+      }
+      resizeAndRepaint();
+    }
     @Override public TableCellEditor getCellEditor(    final int row,    int column){
       final JBTableRowEditor editor=getRowEditor(row);
       if (editor != null) {
@@ -140,7 +148,16 @@
       boolean isSelected=isCellSelected(row,column);
       return editor.getTableCellEditorComponent(this,value,isSelected,row,column);
     }
+    @Override public void addNotify(){
+      super.addNotify();
+      Disposer.register(myOnRemoveDisposable,myRowResizeAnimator);
+    }
+    @Override public void removeNotify(){
+      super.removeNotify();
+      Disposer.dispose(myOnRemoveDisposable);
+    }
   }
 ;
   mainTable.setStriped(true);
+  myRowResizeAnimator=new RowResizeAnimator(mainTable);
 }

@@ -3,14 +3,23 @@
   if (contracts.isEmpty())   return contracts;
   PsiTypeElement typeElement=myMethod.getReturnTypeElement();
   final PsiType returnType=typeElement == null ? null : typeElement.getType();
-  final boolean notNull=!(returnType instanceof PsiPrimitiveType) && NullableNotNullManager.getInstance(myMethod.getProject()).isNotNull(myMethod,false);
-  return ContainerUtil.filter(contracts,new Condition<MethodContract>(){
+  boolean referenceTypeReturned=!(returnType instanceof PsiPrimitiveType);
+  final boolean notNull=referenceTypeReturned && NullableNotNullManager.getInstance(myMethod.getProject()).isNotNull(myMethod,false);
+  if (referenceTypeReturned) {
+    contracts=boxReturnValues(contracts);
+  }
+  List<MethodContract> compatible=ContainerUtil.filter(contracts,new Condition<MethodContract>(){
     @Override public boolean value(    MethodContract contract){
       if (notNull && contract.returnValue == NOT_NULL_VALUE) {
         return false;
       }
-      return ContractInspection.isReturnTypeCompatible(returnType,contract.returnValue);
+      return InferenceFromSourceUtil.isReturnTypeCompatible(returnType,contract.returnValue);
     }
   }
 );
+  if (compatible.size() > ContractInference.MAX_CONTRACT_COUNT) {
+    LOG.debug("Too many contracts for " + PsiUtil.getMemberQualifiedName(myMethod) + ", shrinking the list");
+    return compatible.subList(0,ContractInference.MAX_CONTRACT_COUNT);
+  }
+  return compatible;
 }

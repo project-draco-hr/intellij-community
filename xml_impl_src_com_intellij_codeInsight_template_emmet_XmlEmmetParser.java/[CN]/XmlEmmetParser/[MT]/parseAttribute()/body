@@ -1,36 +1,27 @@
 {
-  ZenCodingToken token=getToken();
-  if (!(token instanceof IdentifierToken)) {
-    return null;
-  }
-  String name=((IdentifierToken)token).getText();
-  if (name.isEmpty()) {
-    return null;
-  }
-  final XmlTag tag=XmlElementFactory.getInstance(myCallback.getProject()).createTagFromText("<tag " + name + "=''/>");
-  XmlAttribute[] attributes=tag.getAttributes();
-  if (attributes.length == 1) {
-    name=attributes[0].getName();
-  }
+  final int position=getCurrentPosition();
+  String attributeName=parseAttributeName();
+  if (attributeName != null && !attributeName.isEmpty()) {
+    if (getToken() == ZenCodingTokens.DOT) {
+      if (isEndOfAttribute(nextToken(1))) {
+        advance();
+        return Couple.of(attributeName,BOOLEAN_ATTRIBUTE_VALUE);
+      }
+    }
  else {
-    return null;
-  }
-  advance();
-  token=getToken();
-  if (token != ZenCodingTokens.EQ) {
-    return Couple.of(name,"");
-  }
-  advance();
-  final StringBuilder attrValueBuilder=new StringBuilder();
-  String value;
-  do {
-    token=getToken();
-    value=getAttributeValueByToken(token);
-    attrValueBuilder.append(value);
-    if (token != null && token != ZenCodingTokens.CLOSING_SQ_BRACKET && token != ZenCodingTokens.SPACE && token != ZenCodingTokens.COMMA) {
-      advance();
+      if (getToken() == ZenCodingTokens.EQ) {
+        advance();
+        return Couple.of(attributeName,parseAttributeValue());
+      }
+ else {
+        return Couple.of(attributeName,"");
+      }
     }
   }
- while (token != null && token != ZenCodingTokens.CLOSING_SQ_BRACKET && token != ZenCodingTokens.SPACE && token != ZenCodingTokens.COMMA);
-  return Couple.of(name,attrValueBuilder.toString());
+  restorePosition(position);
+  final String impliedValue=parseAttributeValue();
+  if (!impliedValue.isEmpty()) {
+    return Couple.of(DEFAULT_ATTRIBUTE_NAME,impliedValue);
+  }
+  return null;
 }

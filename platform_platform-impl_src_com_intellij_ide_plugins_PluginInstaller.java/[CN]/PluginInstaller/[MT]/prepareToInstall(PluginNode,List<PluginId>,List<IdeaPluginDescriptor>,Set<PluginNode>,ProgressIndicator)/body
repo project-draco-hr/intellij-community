@@ -6,7 +6,7 @@
     final List<PluginNode> optionalDeps=new ArrayList<PluginNode>();
     for (int i=0; i < pluginNode.getDepends().size(); i++) {
       PluginId depPluginId=pluginNode.getDepends().get(i);
-      if (PluginManager.isPluginInstalled(depPluginId) || PluginManagerCore.isModuleDependency(depPluginId) || PluginManagerUISettings.getInstance().getInstalledPlugins().contains(depPluginId.getIdString())|| (pluginIds != null && pluginIds.contains(depPluginId))) {
+      if (PluginManager.isPluginInstalled(depPluginId) || PluginManagerCore.isModuleDependency(depPluginId) || InstalledPluginsState.getInstance().wasInstalled(depPluginId)|| (pluginIds != null && pluginIds.contains(depPluginId))) {
         continue;
       }
       PluginNode depPlugin=new PluginNode(depPluginId);
@@ -23,15 +23,17 @@
     }
     if (depends.size() > 0) {
       final boolean[] proceed=new boolean[1];
-      final StringBuffer buf=new StringBuffer();
-      for (      PluginNode depend : depends) {
-        buf.append(depend.getName()).append(",");
-      }
       try {
         GuiUtils.runOrInvokeAndWait(new Runnable(){
           @Override public void run(){
             String title=IdeBundle.message("plugin.manager.dependencies.detected.title");
-            String message=IdeBundle.message("plugin.manager.dependencies.detected.message",depends.size(),buf.substring(0,buf.length() - 1));
+            String deps=StringUtil.join(depends,new Function<PluginNode,String>(){
+              @Override public String fun(              PluginNode node){
+                return node.getName();
+              }
+            }
+,", ");
+            String message=IdeBundle.message("plugin.manager.dependencies.detected.message",depends.size(),deps);
             proceed[0]=Messages.showYesNoDialog(message,title,Messages.getWarningIcon()) == Messages.YES;
           }
         }
@@ -40,25 +42,24 @@
  catch (      Exception e) {
         return false;
       }
-      if (proceed[0]) {
-        if (!prepareToInstall(depends,allPlugins,installedDependant,progressIndicator)) {
-          return false;
-        }
-      }
- else {
+      if (!proceed[0] || !prepareToInstall(depends,allPlugins,installedDependant,indicator)) {
         return false;
       }
     }
     if (optionalDeps.size() > 0) {
-      final StringBuffer buf=new StringBuffer();
-      for (      PluginNode depend : optionalDeps) {
-        buf.append(depend.getName()).append(",");
-      }
       final boolean[] proceed=new boolean[1];
       try {
         GuiUtils.runOrInvokeAndWait(new Runnable(){
           @Override public void run(){
-            proceed[0]=Messages.showYesNoDialog(IdeBundle.message("plugin.manager.optional.dependencies.detected.message",optionalDeps.size(),buf.substring(0,buf.length() - 1)),IdeBundle.message("plugin.manager.dependencies.detected.title"),Messages.getWarningIcon()) == Messages.YES;
+            String title=IdeBundle.message("plugin.manager.dependencies.detected.title");
+            String deps=StringUtil.join(optionalDeps,new Function<PluginNode,String>(){
+              @Override public String fun(              PluginNode node){
+                return node.getName();
+              }
+            }
+,", ");
+            String message=IdeBundle.message("plugin.manager.optional.dependencies.detected.message",optionalDeps.size(),deps);
+            proceed[0]=Messages.showYesNoDialog(message,title,Messages.getWarningIcon()) == Messages.YES;
           }
         }
 );
@@ -66,33 +67,14 @@
  catch (      Exception e) {
         return false;
       }
-      if (proceed[0]) {
-        if (!prepareToInstall(optionalDeps,allPlugins,installedDependant,progressIndicator)) {
-          return false;
-        }
-      }
-    }
-  }
-  PluginDownloader downloader;
-  final String repositoryName=pluginNode.getRepositoryName();
-  if (repositoryName != null) {
-    try {
-      Map<PluginId,PluginDownloader> downloaders=new THashMap<PluginId,PluginDownloader>();
-      if (!UpdateChecker.checkPluginsHost(repositoryName,downloaders,progressIndicator)) {
+      if (proceed[0] && !prepareToInstall(optionalDeps,allPlugins,installedDependant,indicator)) {
         return false;
       }
-      downloader=downloaders.get(pluginNode.getPluginId());
-      if (downloader == null)       return false;
-    }
- catch (    Exception e) {
-      return false;
     }
   }
- else {
-    downloader=PluginDownloader.createDownloader(pluginNode);
-  }
-  if (downloader.prepareToInstall(progressIndicator)) {
-synchronized (myLock) {
+  PluginDownloader downloader=PluginDownloader.createDownloader(pluginNode,pluginNode.getRepositoryName(),null);
+  if (downloader.prepareToInstall(indicator)) {
+synchronized (ourLock) {
       downloader.install();
     }
     pluginNode.setStatus(PluginNode.STATUS_DOWNLOADED);

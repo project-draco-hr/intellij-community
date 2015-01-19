@@ -3,51 +3,46 @@
   if (!WorkingCopyFormat.UNKNOWN.equals(format) && format.less(WorkingCopyFormat.ONE_DOT_SEVEN)) {
     loadEntriesFile(filePath);
   }
-  if (status != null) {
-    FileStatus fStatus=SvnStatusConvertor.convertStatus(status);
-    final StatusType statusType=status.getContentsStatus();
-    final StatusType propStatus=status.getPropertiesStatus();
-    if (status.is(StatusType.STATUS_UNVERSIONED,StatusType.UNKNOWN)) {
-      final VirtualFile file=filePath.getVirtualFile();
-      if (file != null) {
-        myChangelistBuilder.processUnversionedFile(file);
-      }
+  FileStatus fStatus=SvnStatusConvertor.convertStatus(status);
+  final StatusType statusType=status.getContentsStatus();
+  if (status.is(StatusType.STATUS_UNVERSIONED,StatusType.UNKNOWN)) {
+    final VirtualFile file=filePath.getVirtualFile();
+    if (file != null) {
+      myChangelistBuilder.processUnversionedFile(file);
     }
- else     if (status.is(StatusType.STATUS_ADDED)) {
-      myChangelistBuilder.processChangeInList(createChange(null,CurrentContentRevision.create(filePath),fStatus,status),SvnUtil.getChangelistName(status),SvnVcs.getKey());
+  }
+ else   if (status.is(StatusType.STATUS_ADDED)) {
+    processChangeInList(null,CurrentContentRevision.create(filePath),fStatus,status);
+  }
+ else   if (status.is(StatusType.STATUS_CONFLICTED,StatusType.STATUS_MODIFIED,StatusType.STATUS_REPLACED) || status.isProperty(StatusType.STATUS_MODIFIED,StatusType.STATUS_CONFLICTED)) {
+    processChangeInList(SvnContentRevision.createBaseRevision(myVcs,filePath,status),CurrentContentRevision.create(filePath),fStatus,status);
+    checkSwitched(filePath,status,fStatus);
+  }
+ else   if (status.is(StatusType.STATUS_DELETED)) {
+    processChangeInList(SvnContentRevision.createBaseRevision(myVcs,filePath,status),null,fStatus,status);
+  }
+ else   if (status.is(StatusType.STATUS_MISSING)) {
+    myChangelistBuilder.processLocallyDeletedFile(new SvnLocallyDeletedChange(filePath,getState(status)));
+  }
+ else   if (status.is(StatusType.STATUS_IGNORED)) {
+    if (filePath.getVirtualFile() == null) {
+      filePath.hardRefresh();
     }
- else     if (status.is(StatusType.STATUS_CONFLICTED,StatusType.STATUS_MODIFIED,StatusType.STATUS_REPLACED) || propStatus == StatusType.STATUS_MODIFIED || propStatus == StatusType.STATUS_CONFLICTED) {
-      myChangelistBuilder.processChangeInList(createChange(SvnContentRevision.createBaseRevision(myVcs,filePath,status),CurrentContentRevision.create(filePath),fStatus,status),SvnUtil.getChangelistName(status),SvnVcs.getKey());
-      checkSwitched(filePath,myChangelistBuilder,status,fStatus);
+    if (filePath.getVirtualFile() == null) {
+      LOG.error("No virtual file for ignored file: " + filePath.getPresentableUrl() + ", isNonLocal: "+ filePath.isNonLocal());
     }
- else     if (status.is(StatusType.STATUS_DELETED)) {
-      myChangelistBuilder.processChangeInList(createChange(SvnContentRevision.createBaseRevision(myVcs,filePath,status),null,fStatus,status),SvnUtil.getChangelistName(status),SvnVcs.getKey());
+ else     if (!myVcs.isWcRoot(filePath)) {
+      myChangelistBuilder.processIgnoredFile(filePath.getVirtualFile());
     }
- else     if (status.is(StatusType.STATUS_MISSING)) {
-      myChangelistBuilder.processLocallyDeletedFile(createLocallyDeletedChange(filePath,status));
+  }
+ else   if ((fStatus == FileStatus.NOT_CHANGED || fStatus == FileStatus.SWITCHED) && statusType != StatusType.STATUS_NONE) {
+    VirtualFile file=filePath.getVirtualFile();
+    if (file != null && FileDocumentManager.getInstance().isFileModified(file)) {
+      processChangeInList(SvnContentRevision.createBaseRevision(myVcs,filePath,status),CurrentContentRevision.create(filePath),FileStatus.MODIFIED,status);
     }
- else     if (status.is(StatusType.STATUS_IGNORED)) {
-      if (filePath.getVirtualFile() == null) {
-        filePath.hardRefresh();
-      }
-      if (filePath.getVirtualFile() == null) {
-        LOG.error("No virtual file for ignored file: " + filePath.getPresentableUrl() + ", isNonLocal: "+ filePath.isNonLocal());
-      }
- else       if (!myVcs.isWcRoot(filePath)) {
-        myChangelistBuilder.processIgnoredFile(filePath.getVirtualFile());
-      }
+ else     if (status.getTreeConflict() != null) {
+      myChangelistBuilder.processChange(createChange(SvnContentRevision.createBaseRevision(myVcs,filePath,status),CurrentContentRevision.create(filePath),FileStatus.MODIFIED,status),SvnVcs.getKey());
     }
- else     if (status.isCopied()) {
-    }
- else     if ((fStatus == FileStatus.NOT_CHANGED || fStatus == FileStatus.SWITCHED) && statusType != StatusType.STATUS_NONE) {
-      VirtualFile file=filePath.getVirtualFile();
-      if (file != null && FileDocumentManager.getInstance().isFileModified(file)) {
-        myChangelistBuilder.processChangeInList(createChange(SvnContentRevision.createBaseRevision(myVcs,filePath,status),CurrentContentRevision.create(filePath),FileStatus.MODIFIED,status),SvnUtil.getChangelistName(status),SvnVcs.getKey());
-      }
- else       if (status.getTreeConflict() != null) {
-        myChangelistBuilder.processChange(createChange(SvnContentRevision.createBaseRevision(myVcs,filePath,status),CurrentContentRevision.create(filePath),FileStatus.MODIFIED,status),SvnVcs.getKey());
-      }
-      checkSwitched(filePath,myChangelistBuilder,status,fStatus);
-    }
+    checkSwitched(filePath,status,fStatus);
   }
 }

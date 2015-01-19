@@ -1,0 +1,51 @@
+{
+  final FileChooserDescriptor descriptor=new FileChooserDescriptor(false,false,true,true,false,false){
+    @Override public boolean isFileSelectable(    VirtualFile file){
+      final String extension=file.getExtension();
+      return Comparing.strEqual(extension,"jar") || Comparing.strEqual(extension,"zip");
+    }
+  }
+;
+  descriptor.setTitle("Choose Plugin File");
+  descriptor.setDescription("JAR and ZIP archives are accepted");
+  final String oldPath=PropertiesComponent.getInstance().getValue(PLUGINS_PRESELECTION_PATH);
+  final VirtualFile toSelect=oldPath == null ? null : VfsUtil.findFileByIoFile(new File(FileUtil.toSystemDependentName(oldPath)),false);
+  FileChooser.chooseFile(descriptor,null,parent,toSelect,new Consumer<VirtualFile>(){
+    @Override public void consume(    @NotNull VirtualFile virtualFile){
+      File file=VfsUtilCore.virtualToIoFile(virtualFile);
+      PropertiesComponent.getInstance().setValue(PLUGINS_PRESELECTION_PATH,FileUtil.toSystemIndependentName(file.getParent()));
+      try {
+        IdeaPluginDescriptorImpl pluginDescriptor=PluginDownloader.loadDescriptionFromJar(file);
+        if (pluginDescriptor == null) {
+          MessagesEx.showErrorDialog(parent,"Fail to load plugin descriptor from file " + file.getName(),CommonBundle.getErrorTitle());
+          return;
+        }
+        if (ourState.wasInstalled(pluginDescriptor.getPluginId())) {
+          String message="Plugin '" + pluginDescriptor.getName() + "' was already installed";
+          MessagesEx.showWarningDialog(parent,message,CommonBundle.getWarningTitle());
+          return;
+        }
+        if (PluginManagerCore.isIncompatible(pluginDescriptor)) {
+          String message="Plugin '" + pluginDescriptor.getName() + "' is incompatible with this installation";
+          MessagesEx.showErrorDialog(parent,message,CommonBundle.getErrorTitle());
+          return;
+        }
+        IdeaPluginDescriptor installedPlugin=PluginManager.getPlugin(pluginDescriptor.getPluginId());
+        if (installedPlugin != null) {
+          File oldFile=installedPlugin.getPath();
+          if (oldFile != null) {
+            StartupActionScriptManager.addActionCommand(new StartupActionScriptManager.DeleteCommand(oldFile));
+          }
+        }
+        PluginInstaller.install(file,file.getName(),false);
+        ourState.onPluginInstall(pluginDescriptor);
+        checkInstalledPluginDependencies(model,pluginDescriptor,parent);
+        callback.consume(pair(file,(IdeaPluginDescriptor)pluginDescriptor));
+      }
+ catch (      IOException ex) {
+        MessagesEx.showErrorDialog(parent,ex.getMessage(),CommonBundle.getErrorTitle());
+      }
+    }
+  }
+);
+}

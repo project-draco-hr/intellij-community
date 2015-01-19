@@ -9,7 +9,26 @@
   if (canRestart) {
     options[3]="Just Restart";
   }
-  int result=Messages.showDialog(e.getData(CommonDataKeys.PROJECT),"The caches will be invalidated and rebuilt on the next startup.\n" + "WARNING: Local History will be also cleared.\n\n" + "Would you like to continue?\n\n","Invalidate Caches",options,0,Messages.getWarningIcon());
+  List<String> descriptions=new SmartList<String>();
+  descriptions.add("Local History");
+  for (  CachesInvalidator invalidater : CachesInvalidator.EP_NAME.getExtensions()) {
+    ContainerUtil.addIfNotNull(descriptions,invalidater.getDescription());
+  }
+  Collections.sort(descriptions);
+  String warnings="WARNING: ";
+  if (descriptions.size() == 1) {
+    warnings+=descriptions.get(0) + " will be also cleared.";
+  }
+ else {
+    warnings+="The following items will also be cleared:\n" + StringUtil.join(descriptions,new Function<String,String>(){
+      @Override public String fun(      String s){
+        return "  " + s;
+      }
+    }
+,"\n");
+  }
+  String message="<html>The caches will be invalidated and rebuilt on the next startup.\n\n" + warnings + "\n\n"+ "Would you like to continue?\n";
+  int result=Messages.showDialog(e.getData(CommonDataKeys.PROJECT),message,"Invalidate Caches",options,0,Messages.getWarningIcon());
   if (result == -1 || result == (mac ? 1 : 2)) {
     return;
   }
@@ -19,5 +38,8 @@
   }
   UsageTrigger.trigger(ApplicationManagerEx.getApplicationEx().getName() + ".caches.invalidated");
   FSRecords.invalidateCaches();
+  for (  CachesInvalidator invalidater : CachesInvalidator.EP_NAME.getExtensions()) {
+    invalidater.invalidateCaches();
+  }
   if (result == 0)   app.restart(true);
 }

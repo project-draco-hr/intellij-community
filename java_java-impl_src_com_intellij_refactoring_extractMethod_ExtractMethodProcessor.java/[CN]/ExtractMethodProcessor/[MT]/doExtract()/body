@@ -1,62 +1,16 @@
 {
-  PsiMethod newMethod=generateEmptyMethod(getThrownExceptions(),isStatic());
+  PsiMethod newMethod=generateEmptyMethod();
   myExpression=myInputVariables.replaceWrappedReferences(myElements,myExpression);
   renameInputVariables();
   LOG.assertTrue(myElements[0].isValid());
   PsiCodeBlock body=newMethod.getBody();
   myMethodCall=generateMethodCall(null,true);
   LOG.assertTrue(myElements[0].isValid());
+  final PsiStatement exitStatementCopy=prepareMethodBody(newMethod,true);
   if (myExpression == null) {
-    String outVariableName=myOutputVariable != null ? getNewVariableName(myOutputVariable) : null;
-    PsiReturnStatement returnStatement;
-    if (myNullConditionalCheck) {
-      returnStatement=(PsiReturnStatement)myElementFactory.createStatementFromText("return null;",null);
-    }
- else     if (myOutputVariable != null) {
-      returnStatement=(PsiReturnStatement)myElementFactory.createStatementFromText("return " + outVariableName + ";",null);
-    }
- else     if (myGenerateConditionalExit) {
-      returnStatement=(PsiReturnStatement)myElementFactory.createStatementFromText("return true;",null);
-    }
- else {
-      returnStatement=(PsiReturnStatement)myElementFactory.createStatementFromText("return;",null);
-    }
-    boolean hasNormalExit=false;
-    PsiElement lastElement=myElements[myElements.length - 1];
-    if (!(lastElement instanceof PsiReturnStatement || lastElement instanceof PsiBreakStatement || lastElement instanceof PsiContinueStatement)) {
-      hasNormalExit=true;
-    }
-    PsiStatement exitStatementCopy=myControlFlowWrapper.getExitStatementCopy(returnStatement,myElements);
-    declareNecessaryVariablesInsideBody(body);
     if (myNeedChangeContext) {
       for (      PsiElement element : myElements) {
         ChangeContextUtil.encodeContextInfo(element,false);
-      }
-    }
-    body.addRange(myElements[0],myElements[myElements.length - 1]);
-    if (myNullConditionalCheck) {
-      body.add(myElementFactory.createStatementFromText("return " + myOutputVariable.getName() + ";",null));
-    }
- else     if (myGenerateConditionalExit) {
-      body.add(myElementFactory.createStatementFromText("return false;",null));
-    }
- else     if (!myHasReturnStatement && hasNormalExit && myOutputVariable != null) {
-      final PsiReturnStatement insertedReturnStatement=(PsiReturnStatement)body.add(returnStatement);
-      if (myOutputVariables.length == 1) {
-        final PsiExpression returnValue=insertedReturnStatement.getReturnValue();
-        if (returnValue instanceof PsiReferenceExpression) {
-          final PsiElement resolved=((PsiReferenceExpression)returnValue).resolve();
-          if (resolved instanceof PsiLocalVariable && Comparing.strEqual(((PsiVariable)resolved).getName(),outVariableName)) {
-            final PsiStatement statement=PsiTreeUtil.getPrevSiblingOfType(insertedReturnStatement,PsiStatement.class);
-            if (statement instanceof PsiDeclarationStatement) {
-              final PsiElement[] declaredElements=((PsiDeclarationStatement)statement).getDeclaredElements();
-              if (ArrayUtil.find(declaredElements,resolved) != -1) {
-                InlineUtil.inlineVariable((PsiVariable)resolved,((PsiVariable)resolved).getInitializer(),(PsiReferenceExpression)returnValue);
-                resolved.delete();
-              }
-            }
-          }
-        }
       }
     }
     if (myNullConditionalCheck) {
@@ -88,6 +42,11 @@
       ifStatement=(PsiIfStatement)addToMethodCallLocation(ifStatement);
       CodeStyleManager.getInstance(myProject).reformat(ifStatement);
     }
+ else     if (myNotNullConditionalCheck) {
+      String varName=myOutputVariable != null ? myOutputVariable.getName() : "x";
+      varName=declareVariableAtMethodCallLocation(varName,myReturnType instanceof PsiPrimitiveType ? ((PsiPrimitiveType)myReturnType).getBoxedType(myCodeFragmentMember) : myReturnType);
+      addToMethodCallLocation(myElementFactory.createStatementFromText("if (" + varName + " != null) return "+ varName+ ";",null));
+    }
  else     if (myGenerateConditionalExit) {
       PsiIfStatement ifStatement=(PsiIfStatement)myElementFactory.createStatementFromText("if (a) b;",null);
       ifStatement=(PsiIfStatement)addToMethodCallLocation(ifStatement);
@@ -95,9 +54,9 @@
       myFirstExitStatementCopy=(PsiStatement)ifStatement.getThenBranch().replace(myFirstExitStatementCopy);
       CodeStyleManager.getInstance(myProject).reformat(ifStatement);
     }
- else     if (myOutputVariable != null) {
-      String name=myOutputVariable.getName();
-      boolean toDeclare=isDeclaredInside(myOutputVariable);
+ else     if (myOutputVariable != null || isArtificialOutputUsed()) {
+      boolean toDeclare=isArtificialOutputUsed() ? !(myArtificialOutputVariable instanceof PsiField) : isDeclaredInside(myOutputVariable);
+      String name=isArtificialOutputUsed() ? myArtificialOutputVariable.getName() : myOutputVariable.getName();
       if (!toDeclare) {
         PsiExpressionStatement statement=(PsiExpressionStatement)myElementFactory.createStatementFromText(name + "=x;",null);
         statement=(PsiExpressionStatement)myStyleManager.reformat(statement);
@@ -119,31 +78,19 @@
       statement=(PsiStatement)addToMethodCallLocation(statement);
       myMethodCall=(PsiMethodCallExpression)((PsiExpressionStatement)statement).getExpression().replace(myMethodCall);
     }
-    if (myHasReturnStatement && !myHasReturnStatementOutput && !hasNormalExit) {
+    if (myHasReturnStatement && !myHasReturnStatementOutput && !hasNormalExit()) {
       PsiStatement statement=myElementFactory.createStatementFromText("return;",null);
       addToMethodCallLocation(statement);
     }
  else     if (!myGenerateConditionalExit && exitStatementCopy != null) {
       addToMethodCallLocation(exitStatementCopy);
     }
-    if (!myNullConditionalCheck) {
+    if (!myNullConditionalCheck && !myNotNullConditionalCheck) {
       declareNecessaryVariablesAfterCall(myOutputVariable);
     }
     deleteExtracted();
   }
  else {
-    declareNecessaryVariablesInsideBody(body);
-    if (myHasExpressionOutput) {
-      PsiReturnStatement returnStatement=(PsiReturnStatement)myElementFactory.createStatementFromText("return x;",null);
-      final PsiExpression returnValue=RefactoringUtil.convertInitializerToNormalExpression(myExpression,myForcedReturnType);
-      returnStatement.getReturnValue().replace(returnValue);
-      body.add(returnStatement);
-    }
- else {
-      PsiExpressionStatement statement=(PsiExpressionStatement)myElementFactory.createStatementFromText("x;",null);
-      statement.getExpression().replace(myExpression);
-      body.add(statement);
-    }
     PsiExpression expression2Replace=myExpression;
     if (myExpression instanceof PsiAssignmentExpression) {
       expression2Replace=((PsiAssignmentExpression)myExpression).getRExpression();
@@ -182,12 +129,28 @@
       }
     }
   }
-  myExtractedMethod=(PsiMethod)myTargetClass.addAfter(newMethod,myAnchor);
-  if (isNeedToChangeCallContext() && myNeedChangeContext) {
-    ChangeContextUtil.decodeContextInfo(myExtractedMethod,myTargetClass,RefactoringChangeUtil.createThisExpression(myManager,null));
-    if (myMethodCall.resolveMethod() != myExtractedMethod) {
-      final PsiReferenceExpression methodExpression=myMethodCall.getMethodExpression();
-      methodExpression.setQualifierExpression(RefactoringChangeUtil.createThisExpression(myManager,myTargetClass));
-    }
-  }
+  if (myNullness != null && PsiUtil.resolveClassInType(newMethod.getReturnType()) != null && PropertiesComponent.getInstance(myProject).getBoolean(ExtractMethodDialog.EXTRACT_METHOD_GENERATE_ANNOTATIONS,true)) {
+    AddNullableNotNullAnnotationFix annotationFix;
+switch (myNullness) {
+case NOT_NULL:
+      annotationFix=new AddNotNullAnnotationFix(newMethod);
+    break;
+case NULLABLE:
+  annotationFix=new AddNullableAnnotationFix(newMethod);
+break;
+default :
+annotationFix=null;
+}
+if (annotationFix != null) {
+annotationFix.invoke(myProject,myTargetClass.getContainingFile(),newMethod,newMethod);
+}
+}
+myExtractedMethod=(PsiMethod)myTargetClass.addAfter(newMethod,myAnchor);
+if (isNeedToChangeCallContext() && myNeedChangeContext) {
+ChangeContextUtil.decodeContextInfo(myExtractedMethod,myTargetClass,RefactoringChangeUtil.createThisExpression(myManager,null));
+if (myMethodCall.resolveMethod() != myExtractedMethod) {
+final PsiReferenceExpression methodExpression=myMethodCall.getMethodExpression();
+methodExpression.setQualifierExpression(RefactoringChangeUtil.createThisExpression(myManager,myTargetClass));
+}
+}
 }

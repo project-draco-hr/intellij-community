@@ -1,10 +1,47 @@
 {
-  return new ExtractMethodDialog(myProject,myTargetClass,myInputVariables,myReturnType,getTypeParameterList(),getThrownExceptions(),isStatic(),isCanBeStatic(),myCanBeChainedConstructor,suggestInitialMethodName(),myRefactoringName,myHelpId,myElements){
+  final List<VariableData> variables=myInputVariables.getInputVariables();
+  myVariableDatum=variables.toArray(new VariableData[variables.size()]);
+  myNullness=initNullness();
+  myArtificialOutputVariable=PsiType.VOID.equals(myReturnType) ? getArtificialOutputVariable() : null;
+  final PsiType returnType=myArtificialOutputVariable != null ? myArtificialOutputVariable.getType() : myReturnType;
+  return new ExtractMethodDialog(myProject,myTargetClass,myInputVariables,returnType,getTypeParameterList(),getThrownExceptions(),isStatic(),isCanBeStatic(),myCanBeChainedConstructor,myRefactoringName,myHelpId,myNullness,myElements){
     protected boolean areTypesDirected(){
       return direct;
     }
+    @Override protected String[] suggestMethodNames(){
+      return suggestInitialMethodName();
+    }
+    @Override protected PsiExpression[] findOccurrences(){
+      return ExtractMethodProcessor.this.findOccurrences();
+    }
     @Override protected boolean isOutputVariable(    PsiVariable var){
       return ExtractMethodProcessor.this.isOutputVariable(var);
+    }
+    protected boolean isVoidReturn(){
+      return myArtificialOutputVariable != null && !(myArtificialOutputVariable instanceof PsiField);
+    }
+    @Override protected void checkMethodConflicts(    MultiMap<PsiElement,String> conflicts){
+      super.checkMethodConflicts(conflicts);
+      final VariableData[] parameters=getChosenParameters();
+      final Map<String,PsiLocalVariable> vars=new HashMap<String,PsiLocalVariable>();
+      for (      PsiElement element : myElements) {
+        element.accept(new JavaRecursiveElementWalkingVisitor(){
+          @Override public void visitLocalVariable(          PsiLocalVariable variable){
+            super.visitLocalVariable(variable);
+            vars.put(variable.getName(),variable);
+          }
+          @Override public void visitClass(          PsiClass aClass){
+          }
+        }
+);
+      }
+      for (      VariableData parameter : parameters) {
+        final String paramName=parameter.name;
+        final PsiLocalVariable variable=vars.get(paramName);
+        if (variable != null) {
+          conflicts.putValue(variable,"Variable with name " + paramName + " is already defined in the selected scope");
+        }
+      }
     }
   }
 ;
