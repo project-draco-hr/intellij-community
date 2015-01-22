@@ -1,9 +1,7 @@
 {
   final File pathFile=new File(path);
-  if (targetRevision == -1) {
-    if (!pathFile.exists()) {
-      return goUp(revisionAsked,targetRevision,branchRootPath,path,trunkUrl);
-    }
+  if (targetRevision == -1 && !pathFile.exists()) {
+    return goUp(revisionAsked,targetRevision,branchRootPath,path,trunkUrl);
   }
   final Info svnInfo=myVcs.getInfo(pathFile);
   if (svnInfo == null || svnInfo.getURL() == null) {
@@ -19,24 +17,26 @@
     final boolean merged=mergeInfo != null && mergeInfo.contains(revisionAsked) || selfInfo != null && selfInfo.contains(revisionAsked);
     return SvnMergeInfoCache.MergeCheckResult.getInstance(merged);
   }
-  final PropertyValue mergeinfoProperty;
-  try {
-    if (actualRevision == targetRevisionCorrected) {
-      SvnTarget target=SvnTarget.fromFile(pathFile,SVNRevision.WORKING);
-      mergeinfoProperty=myVcs.getFactory(target).createPropertyClient().getProperty(target,SvnPropertyKeys.MERGE_INFO,false,SVNRevision.WORKING);
-    }
+  if (actualRevision != targetRevisionCorrected) {
+    myMixedRevisionsFound=true;
+  }
+  SvnTarget target;
+  SVNRevision revision;
+  if (actualRevision == targetRevisionCorrected) {
+    target=SvnTarget.fromFile(pathFile,SVNRevision.WORKING);
+    revision=SVNRevision.WORKING;
+  }
  else {
-      myMixedRevisionsFound=true;
-      SvnTarget target=SvnTarget.fromURL(svnInfo.getURL());
-      mergeinfoProperty=myVcs.getFactory(target).createPropertyClient().getProperty(target,SvnPropertyKeys.MERGE_INFO,false,SVNRevision.create(targetRevisionCorrected));
-    }
+    target=SvnTarget.fromURL(svnInfo.getURL());
+    revision=SVNRevision.create(targetRevisionCorrected);
+  }
+  PropertyValue mergeinfoProperty;
+  try {
+    mergeinfoProperty=myVcs.getFactory(target).createPropertyClient().getProperty(target,SvnPropertyKeys.MERGE_INFO,false,revision);
   }
  catch (  VcsException e) {
     LOG.info(e);
     return SvnMergeInfoCache.MergeCheckResult.NOT_MERGED;
   }
-  if (mergeinfoProperty == null) {
-    return goUp(revisionAsked,targetRevisionCorrected,branchRootPath,path,trunkUrl);
-  }
-  return processMergeinfoProperty(keyString,revisionAsked,mergeinfoProperty,trunkUrl,self);
+  return mergeinfoProperty == null ? goUp(revisionAsked,targetRevisionCorrected,branchRootPath,path,trunkUrl) : processMergeinfoProperty(keyString,revisionAsked,mergeinfoProperty,trunkUrl,self);
 }
