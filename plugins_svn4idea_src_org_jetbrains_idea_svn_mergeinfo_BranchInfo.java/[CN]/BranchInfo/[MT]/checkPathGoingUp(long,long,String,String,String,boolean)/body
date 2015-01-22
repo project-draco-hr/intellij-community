@@ -1,35 +1,43 @@
 {
+  SvnMergeInfoCache.MergeCheckResult result;
   final File pathFile=new File(path);
   if (targetRevision == -1 && !pathFile.exists()) {
-    return goUp(revisionAsked,targetRevision,branchRootPath,path,trunkUrl);
-  }
-  final Info svnInfo=myVcs.getInfo(pathFile);
-  if (svnInfo == null || svnInfo.getURL() == null) {
-    LOG.info("Svninfo for " + pathFile + " is null or not full.");
-    return SvnMergeInfoCache.MergeCheckResult.NOT_MERGED;
-  }
-  final long actualRevision=svnInfo.getRevision().getNumber();
-  final long targetRevisionCorrected=(targetRevision == -1) ? actualRevision : targetRevision;
-  final String keyString=path + "@" + targetRevisionCorrected;
-  final Set<Long> selfInfo=self ? myNonInheritablePathMergedMap.get(keyString) : null;
-  final Set<Long> mergeInfo=myPathMergedMap.get(keyString);
-  if (mergeInfo != null || selfInfo != null) {
-    final boolean merged=mergeInfo != null && mergeInfo.contains(revisionAsked) || selfInfo != null && selfInfo.contains(revisionAsked);
-    return SvnMergeInfoCache.MergeCheckResult.getInstance(merged);
-  }
-  if (actualRevision != targetRevisionCorrected) {
-    myMixedRevisionsFound=true;
-  }
-  SvnTarget target;
-  SVNRevision revision;
-  if (actualRevision == targetRevisionCorrected) {
-    target=SvnTarget.fromFile(pathFile,SVNRevision.WORKING);
-    revision=SVNRevision.WORKING;
+    result=goUp(revisionAsked,targetRevision,branchRootPath,path,trunkUrl);
   }
  else {
-    target=SvnTarget.fromURL(svnInfo.getURL());
-    revision=SVNRevision.create(targetRevisionCorrected);
+    final Info svnInfo=myVcs.getInfo(pathFile);
+    if (svnInfo == null || svnInfo.getURL() == null) {
+      LOG.info("Svninfo for " + pathFile + " is null or not full.");
+      result=SvnMergeInfoCache.MergeCheckResult.NOT_MERGED;
+    }
+ else {
+      final long actualRevision=svnInfo.getRevision().getNumber();
+      final long targetRevisionCorrected=(targetRevision == -1) ? actualRevision : targetRevision;
+      final String keyString=path + "@" + targetRevisionCorrected;
+      final Set<Long> selfInfo=self ? myNonInheritablePathMergedMap.get(keyString) : null;
+      final Set<Long> mergeInfo=myPathMergedMap.get(keyString);
+      if (mergeInfo != null || selfInfo != null) {
+        boolean merged=mergeInfo != null && mergeInfo.contains(revisionAsked) || selfInfo != null && selfInfo.contains(revisionAsked);
+        result=SvnMergeInfoCache.MergeCheckResult.getInstance(merged);
+      }
+ else {
+        if (actualRevision != targetRevisionCorrected) {
+          myMixedRevisionsFound=true;
+        }
+        SvnTarget target;
+        SVNRevision revision;
+        if (actualRevision == targetRevisionCorrected) {
+          target=SvnTarget.fromFile(pathFile,SVNRevision.WORKING);
+          revision=SVNRevision.WORKING;
+        }
+ else {
+          target=SvnTarget.fromURL(svnInfo.getURL());
+          revision=SVNRevision.create(targetRevisionCorrected);
+        }
+        PropertyValue mergeinfoProperty=myVcs.getFactory(target).createPropertyClient().getProperty(target,SvnPropertyKeys.MERGE_INFO,false,revision);
+        result=mergeinfoProperty == null ? goUp(revisionAsked,targetRevisionCorrected,branchRootPath,path,trunkUrl) : processMergeinfoProperty(keyString,revisionAsked,mergeinfoProperty,trunkUrl,self);
+      }
+    }
   }
-  PropertyValue mergeinfoProperty=myVcs.getFactory(target).createPropertyClient().getProperty(target,SvnPropertyKeys.MERGE_INFO,false,revision);
-  return mergeinfoProperty == null ? goUp(revisionAsked,targetRevisionCorrected,branchRootPath,path,trunkUrl) : processMergeinfoProperty(keyString,revisionAsked,mergeinfoProperty,trunkUrl,self);
+  return result;
 }
