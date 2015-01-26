@@ -1,3 +1,32 @@
 {
-  applyRequest(loadRequest(),force,scrollToChangePolicy);
+  List<? extends DiffRequestPresentable> requests=myRequestChain.getRequests();
+  int index=myRequestChain.getIndex();
+  if (index < 0 || index >= requests.size()) {
+    applyRequest(new NoDiffRequest(),force,scrollToChangePolicy);
+    return;
+  }
+  final DiffRequestPresentable presentable=requests.get(index);
+  DiffRequest request=loadRequestFast(presentable);
+  if (request != null) {
+    applyRequest(request,force,scrollToChangePolicy);
+    return;
+  }
+  myTaskExecutor.execute(new Convertor<ProgressIndicator,Runnable>(){
+    @Override public Runnable convert(    ProgressIndicator indicator){
+      final DiffRequest request=loadRequest(presentable,indicator);
+      return new Runnable(){
+        @Override public void run(){
+          myRequestCache.put(presentable,request);
+          applyRequest(request,force,scrollToChangePolicy);
+        }
+      }
+;
+    }
+  }
+,new Runnable(){
+    @Override public void run(){
+      applyRequest(new LoadingDiffRequest(presentable.getName()),force,scrollToChangePolicy);
+    }
+  }
+,ProgressWindow.DEFAULT_PROGRESS_DIALOG_POSTPONE_TIME_MILLIS);
 }
