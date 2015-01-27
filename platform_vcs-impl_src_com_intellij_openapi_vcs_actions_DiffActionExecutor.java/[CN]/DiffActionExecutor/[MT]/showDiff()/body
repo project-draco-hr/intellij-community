@@ -12,28 +12,35 @@
         if (content1 == null)         return;
         DiffContent content2=DiffContentFactory.create(myProject,mySelectedFile);
         String title=mySelectedFile.getPresentableUrl();
+        boolean inverted=false;
         String title1;
         String title2;
         final FileStatus status=FileStatusManager.getInstance(myProject).getStatus(mySelectedFile);
         if (status == null || FileStatus.NOT_CHANGED.equals(status) || FileStatus.UNKNOWN.equals(status) || FileStatus.IGNORED.equals(status)) {
           final VcsRevisionNumber currentRevision=myDiffProvider.getCurrentRevision(mySelectedFile);
-          if (revisionNumber.compareTo(currentRevision) > 0) {
-            DiffContent tmp=content2;
-            content2=content1;
-            content1=tmp;
-            title1=VcsBundle.message("diff.title.local.with.number",currentRevision.asString());
-            title2=revisionNumber.asString();
-          }
- else {
-            title1=revisionNumber.asString();
-            title2=VcsBundle.message("diff.title.local.with.number",currentRevision.asString());
-          }
+          inverted=revisionNumber.compareTo(currentRevision) > 0;
+          title1=revisionNumber.asString();
+          title2=VcsBundle.message("diff.title.local.with.number",currentRevision.asString());
         }
  else {
           title1=revisionNumber.asString();
           title2=VcsBundle.message("diff.title.local");
         }
-        requestRef.set(new SimpleDiffRequest(title,content1,content2,title1,title2));
+        Integer line=null;
+        if (content2 instanceof DocumentContent) {
+          Editor[] editors=EditorFactory.getInstance().getEditors(((DocumentContent)content2).getDocument(),myProject);
+          if (editors.length != 0)           line=editors[0].getCaretModel().getLogicalPosition().line;
+        }
+        if (inverted) {
+          SimpleDiffRequest request=new SimpleDiffRequest(title,content2,content1,title2,title1);
+          if (line != null)           request.putUserData(DiffUserDataKeys.SCROLL_TO_LINE,Pair.create(Side.LEFT,line));
+          requestRef.set(request);
+        }
+ else {
+          SimpleDiffRequest request=new SimpleDiffRequest(title,content1,content2,title1,title2);
+          if (line != null)           request.putUserData(DiffUserDataKeys.SCROLL_TO_LINE,Pair.create(Side.RIGHT,line));
+          requestRef.set(request);
+        }
       }
  catch (      ProcessCanceledException e) {
       }
