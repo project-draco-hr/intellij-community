@@ -1,16 +1,17 @@
 {
   final long processStart=System.currentTimeMillis();
-  System.out.println("Build process started. Classpath: " + System.getProperty("java.class.path"));
+  final String startMessage="Build process started. Classpath: " + System.getProperty("java.class.path");
+  System.out.println(startMessage);
+  LOG.info(startMessage);
   final String host=args[HOST_ARG];
   final int port=Integer.parseInt(args[PORT_ARG]);
   final UUID sessionId=UUID.fromString(args[SESSION_ID_ARG]);
   @SuppressWarnings("ConstantConditions") final File systemDir=new File(FileUtil.toCanonicalPath(args[SYSTEM_DIR_ARG]));
   Utils.setSystemRoot(systemDir);
-  final long eventLoopStart=System.currentTimeMillis();
+  final long connectStart=System.currentTimeMillis();
   for (int attempt=0; attempt < 3; attempt++) {
     try {
       ourEventLoopGroup=new NioEventLoopGroup(1,SharedThreadPool.getInstance());
-      System.out.println("Created event loop in " + attempt + " attempts for "+ (System.currentTimeMillis() - eventLoopStart)+ " ms");
       break;
     }
  catch (    IllegalStateException e) {
@@ -28,19 +29,16 @@
       }
     }
   }
-  final long nettyBootstrapStart=System.currentTimeMillis();
   final Bootstrap bootstrap=new Bootstrap().group(ourEventLoopGroup).channel(NioSocketChannel.class).handler(new ChannelInitializer(){
     @Override protected void initChannel(    Channel channel) throws Exception {
       channel.pipeline().addLast(new ProtobufVarint32FrameDecoder(),new ProtobufDecoder(CmdlineRemoteProto.Message.getDefaultInstance()),new ProtobufVarint32LengthFieldPrepender(),new ProtobufEncoder(),new MyMessageHandler(sessionId));
     }
   }
 ).option(ChannelOption.TCP_NODELAY,true).option(ChannelOption.SO_KEEPALIVE,true);
-  final long nettyBootstrapEnd=System.currentTimeMillis();
-  System.out.println("Netty bootstrap created in " + (nettyBootstrapEnd - nettyBootstrapStart) + " ms");
   final ChannelFuture future=bootstrap.connect(new InetSocketAddress(host,port)).awaitUninterruptibly();
-  System.out.println("Connection to IDE established in " + (System.currentTimeMillis() - nettyBootstrapEnd) + " ms");
   final boolean success=future.isSuccess();
   if (success) {
+    LOG.info("Connection to IDE established in " + (System.currentTimeMillis() - connectStart) + " ms");
     final String projectPathToPreload=System.getProperty(PRELOAD_PROJECT_PATH,null);
     final String globalsPathToPreload=System.getProperty(PRELOAD_CONFIG_PATH,null);
     if (projectPathToPreload != null && globalsPathToPreload != null) {
