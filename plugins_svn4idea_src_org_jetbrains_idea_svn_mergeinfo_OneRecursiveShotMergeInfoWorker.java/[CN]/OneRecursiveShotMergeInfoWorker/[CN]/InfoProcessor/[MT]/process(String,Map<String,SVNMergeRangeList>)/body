@@ -3,32 +3,25 @@
   final boolean self=relativeFileSubpath.equals(myFilePathAsked);
   if (map.isEmpty()) {
     myMerged=false;
-    return true;
-  }
-  for (  Map.Entry<String,SVNMergeRangeList> entry : map.entrySet()) {
-    String relativeUrl=entry.getKey();
-    boolean urlMatches=false;
-    if (".".equals(relativeUrl) || "".equals(relativeUrl)) {
-      urlMatches=true;
-    }
- else {
-      relativeUrl=(relativeUrl.startsWith("/")) ? relativeUrl : "/" + relativeUrl;
-      urlMatches=SVNPathUtil.isAncestor(myWcLevelRelativeSourceUrl,relativeUrl);
-    }
-    if (!urlMatches)     continue;
     processed=true;
-    final SVNMergeRangeList rangesList=entry.getValue();
-    for (    SVNMergeRange range : rangesList.getRanges()) {
-      final long startRevision=range.getStartRevision() + 1;
-      final long endRevision=range.getEndRevision();
-      final boolean isInheritable=range.isInheritable();
-      final boolean inInterval=(myRevisionAsked >= startRevision) && (myRevisionAsked <= endRevision);
-      if ((isInheritable || self) && inInterval) {
-        myMerged=true;
-        break;
+  }
+ else {
+    String mergedPathAffectingSourcePath=ContainerUtil.find(map.keySet(),new Condition<String>(){
+      @Override public boolean value(      String path){
+        return ".".equals(path) || path.isEmpty() || SVNPathUtil.isAncestor(myWcLevelRelativeSourceUrl,SvnUtil.ensureStartSlash(path));
       }
     }
-    break;
+);
+    if (mergedPathAffectingSourcePath != null) {
+      SVNMergeRangeList mergeRangeList=map.get(mergedPathAffectingSourcePath);
+      processed=true;
+      myMerged=ContainerUtil.or(mergeRangeList.getRanges(),new Condition<SVNMergeRange>(){
+        @Override public boolean value(        @NotNull SVNMergeRange range){
+          return BranchInfo.isInRange(range,myRevisionAsked) && (range.isInheritable() || self);
+        }
+      }
+);
+    }
   }
   return processed;
 }
