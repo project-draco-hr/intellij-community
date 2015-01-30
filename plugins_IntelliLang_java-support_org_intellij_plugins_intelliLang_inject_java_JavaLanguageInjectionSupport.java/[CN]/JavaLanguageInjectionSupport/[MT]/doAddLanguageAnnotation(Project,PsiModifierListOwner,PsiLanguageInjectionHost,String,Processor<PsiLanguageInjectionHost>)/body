@@ -1,2 +1,33 @@
 {
+  final boolean addAnnotation=OrderEntryFix.isAnnotationsJarInPath(ModuleUtilCore.findModuleForPsiElement(modifierListOwner)) && PsiUtil.isLanguageLevel5OrHigher(modifierListOwner) && modifierListOwner.getModifierList() != null;
+  final PsiStatement statement=PsiTreeUtil.getParentOfType(host,PsiStatement.class);
+  if (!addAnnotation && statement == null)   return false;
+  Configuration.AdvancedConfiguration configuration=Configuration.getProjectInstance(project).getAdvancedConfiguration();
+  if (!configuration.isSourceModificationAllowed()) {
+    host.putUserData(InjectLanguageAction.FIX_KEY,annotationFixer);
+    return false;
+  }
+  new WriteCommandAction(modifierListOwner.getProject(),modifierListOwner.getContainingFile()){
+    protected void run(    @NotNull Result result) throws Throwable {
+      PsiElementFactory javaFacade=JavaPsiFacade.getElementFactory(getProject());
+      if (addAnnotation) {
+        JVMElementFactory factory=ObjectUtils.chooseNotNull(JVMElementFactories.getFactory(modifierListOwner.getLanguage(),getProject()),javaFacade);
+        PsiAnnotation annotation=factory.createAnnotationFromText("@" + AnnotationUtil.LANGUAGE + "(\""+ languageId+ "\")",modifierListOwner);
+        PsiModifierList list=ObjectUtils.assertNotNull(modifierListOwner.getModifierList());
+        final PsiAnnotation existingAnnotation=list.findAnnotation(AnnotationUtil.LANGUAGE);
+        if (existingAnnotation != null) {
+          existingAnnotation.replace(annotation);
+        }
+ else {
+          list.addAfter(annotation,null);
+        }
+        JavaCodeStyleManager.getInstance(getProject()).shortenClassReferences(list);
+      }
+ else {
+        statement.getParent().addBefore(javaFacade.createCommentFromText("//language=" + languageId,host),statement);
+      }
+    }
+  }
+.execute();
+  return true;
 }
