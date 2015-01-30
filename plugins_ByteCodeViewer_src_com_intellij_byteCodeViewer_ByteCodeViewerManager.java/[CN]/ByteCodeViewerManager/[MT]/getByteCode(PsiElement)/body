@@ -6,12 +6,21 @@
   Module module=ModuleUtilCore.findModuleForPsiElement(psiElement);
   if (module == null) {
     final Project project=containingClass.getProject();
-    final PsiClass aClass=JavaPsiFacade.getInstance(project).findClass(classVMName,psiElement.getResolveScope());
+    final PsiClass topLevelClass=PsiUtil.getTopLevelClass(psiElement);
+    final String qualifiedName=topLevelClass != null ? topLevelClass.getQualifiedName() : null;
+    final PsiClass aClass=qualifiedName != null ? JavaPsiFacade.getInstance(project).findClass(qualifiedName,psiElement.getResolveScope()) : null;
     if (aClass != null) {
       final VirtualFile virtualFile=PsiUtilCore.getVirtualFile(aClass);
-      if (virtualFile != null && ProjectRootManager.getInstance(project).getFileIndex().isInLibraryClasses(virtualFile)) {
+      final ProjectFileIndex fileIndex=ProjectRootManager.getInstance(project).getFileIndex();
+      if (virtualFile != null && fileIndex.isInLibraryClasses(virtualFile)) {
         try {
-          return processClassFile(virtualFile.contentsToByteArray());
+          final VirtualFile rootForFile=fileIndex.getClassRootForFile(virtualFile);
+          if (rootForFile != null) {
+            final VirtualFile classFile=rootForFile.findFileByRelativePath("/" + classVMName.replace('.','/') + ".class");
+            if (classFile != null) {
+              return processClassFile(classFile.contentsToByteArray());
+            }
+          }
         }
  catch (        IOException e) {
           LOG.error(e);

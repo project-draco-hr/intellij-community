@@ -1,0 +1,56 @@
+{
+  @NonNls final String name=tag.getName();
+  if (!"inheritDoc".equals(name)) {
+    return;
+  }
+  final PsiDocComment docComment=tag.getContainingComment();
+  if (docComment == null) {
+    return;
+  }
+  final PsiDocCommentOwner owner=docComment.getOwner();
+  if (owner instanceof PsiField) {
+    registerError(tag,WarningType.FIELD);
+    return;
+  }
+ else   if (owner instanceof PsiClass) {
+    registerError(tag,WarningType.CLASS);
+    return;
+  }
+ else   if (owner instanceof PsiMethod) {
+    final PsiMethod method=(PsiMethod)owner;
+    if (method.isConstructor()) {
+      registerError(tag,WarningType.CONSTRUCTOR);
+      return;
+    }
+    final MethodSignatureBackedByPsiMethod superMethod=SuperMethodsSearch.search(method,method.getContainingClass(),true,false).findFirst();
+    if (superMethod == null) {
+      registerError(tag,WarningType.NO_SUPER);
+      return;
+    }
+  }
+ else {
+    return;
+  }
+  final PsiElement parent=tag.getParent();
+  if (parent instanceof PsiDocTag) {
+    final PsiDocTag docTag=(PsiDocTag)parent;
+    final String docTagName=docTag.getName();
+    if ((docTagName.equals("throws") || docTagName.equals("exception")) && !isCheckExceptionAndPresentInThrowsList((PsiMethod)owner,docTag)) {
+      return;
+    }
+  }
+  final PsiDocToken[] docTokens=PsiTreeUtil.getChildrenOfType(parent,PsiDocToken.class);
+  if (docTokens == null) {
+    return;
+  }
+  for (  PsiDocToken docToken : docTokens) {
+    final IElementType tokenType=docToken.getTokenType();
+    if (!JavaDocTokenType.DOC_COMMENT_DATA.equals(tokenType)) {
+      continue;
+    }
+    if (!StringUtil.isEmptyOrSpaces(docToken.getText())) {
+      return;
+    }
+  }
+  registerError(tag,WarningType.EMPTY);
+}

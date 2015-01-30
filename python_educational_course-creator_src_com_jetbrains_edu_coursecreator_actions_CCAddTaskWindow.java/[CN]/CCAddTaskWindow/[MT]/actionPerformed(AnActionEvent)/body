@@ -1,0 +1,43 @@
+{
+  final Project project=e.getData(CommonDataKeys.PROJECT);
+  if (project == null) {
+    return;
+  }
+  final PsiFile file=CommonDataKeys.PSI_FILE.getData(e.getDataContext());
+  if (file == null)   return;
+  final Editor editor=CommonDataKeys.EDITOR.getData(e.getDataContext());
+  if (editor == null)   return;
+  final SelectionModel model=editor.getSelectionModel();
+  final Document document=PsiDocumentManager.getInstance(project).getDocument(file);
+  if (document == null)   return;
+  final int start=model.getSelectionStart();
+  final int end=model.getSelectionEnd();
+  final int lineNumber=document.getLineNumber(start);
+  final int length=end - start;
+  int realStart=start - document.getLineStartOffset(lineNumber);
+  final CCProjectService service=CCProjectService.getInstance(project);
+  final Course course=service.getCourse();
+  final PsiDirectory taskDir=file.getContainingDirectory();
+  final PsiDirectory lessonDir=taskDir.getParent();
+  if (lessonDir == null)   return;
+  final Lesson lesson=course.getLesson(lessonDir.getName());
+  final Task task=lesson.getTask(taskDir.getName());
+  final TaskFile taskFile=task.getTaskFile(file.getName());
+  if (taskFile == null) {
+    return;
+  }
+  if (areTaskWindowsIntersect(taskFile,document,start,end)) {
+    return;
+  }
+  final AnswerPlaceholder answerPlaceholder=new AnswerPlaceholder(lineNumber,realStart,length,model.getSelectedText());
+  CreateTaskWindowDialog dlg=new CreateTaskWindowDialog(project,answerPlaceholder,lesson.getIndex(),task.getIndex(),file.getVirtualFile().getNameWithoutExtension(),taskFile.getTaskWindows().size() + 1);
+  dlg.show();
+  if (dlg.getExitCode() != DialogWrapper.OK_EXIT_CODE) {
+    return;
+  }
+  int index=taskFile.getTaskWindows().size() + 1;
+  taskFile.addTaskWindow(answerPlaceholder,index);
+  taskFile.sortTaskWindows();
+  answerPlaceholder.drawHighlighter(editor,false);
+  answerPlaceholder.createGuardedBlocks(editor);
+}
