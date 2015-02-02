@@ -1,33 +1,22 @@
 {
   final ListSelectionListener selectionListener=new ListSelectionListener(){
     @Override public void valueChanged(    ListSelectionEvent e){
-      final List objects=myRevisionsList.getSelectedObjects();
+      final List<CommittedChangeList> changeLists=myRevisionsList.getSelectedObjects();
       myRepositoryChangesBrowser.setChangesToDisplay(Collections.<Change>emptyList());
       myAlreadyMerged.clear();
-      if ((!objects.isEmpty())) {
-        final List<CommittedChangeList> lists=ObjectsConvertor.convert(objects,new Convertor<Object,CommittedChangeList>(){
-          @Override public CommittedChangeList convert(          Object o){
-            if (o instanceof CommittedChangeList) {
-              final CommittedChangeList cl=(CommittedChangeList)o;
-              final Collection<String> notMerged=myMergeChecker.getNotMergedPaths(cl.getNumber());
-              final SvnChangeList svnList=(SvnChangeList)cl;
-              final Collection<String> forCheck=new HashSet<String>();
-              forCheck.addAll(svnList.getAddedPaths());
-              forCheck.addAll(svnList.getChangedPaths());
-              forCheck.addAll(svnList.getDeletedPaths());
-              for (              String path : forCheck) {
-                if ((notMerged != null) && (!notMerged.isEmpty()) && !notMerged.contains(path)) {
-                  myAlreadyMerged.add(((SvnChangeList)cl).getByPath(path));
-                }
+      if (!changeLists.isEmpty()) {
+        final List<SvnChangeList> svnChangeLists=ContainerUtil.findAll(changeLists,SvnChangeList.class);
+        for (        SvnChangeList svnChangeList : svnChangeLists) {
+          final Collection<String> notMerged=myMergeChecker.getNotMergedPaths(svnChangeList.getNumber());
+          if (!ContainerUtil.isEmpty(notMerged)) {
+            for (            String path : svnChangeList.getAffectedPaths()) {
+              if (!notMerged.contains(path)) {
+                myAlreadyMerged.add(svnChangeList.getByPath(path));
               }
-              return cl;
             }
-            return null;
           }
         }
-,ObjectsConvertor.NOT_NULL);
-        final List<Change> changes=CommittedChangesTreeBrowser.collectChanges(lists,false);
-        myRepositoryChangesBrowser.setChangesToDisplay(changes);
+        myRepositoryChangesBrowser.setChangesToDisplay(CommittedChangesTreeBrowser.collectChanges(svnChangeLists,false));
       }
       mySplitter.doLayout();
       myRepositoryChangesBrowser.repaint();
@@ -62,7 +51,7 @@
       int row=table.rowAtPoint(e.getPoint());
       int column=table.columnAtPoint(e.getPoint());
       if (row == -1 || column == -1)       return null;
-      listCellRenderer.customizeCellRenderer(table,table.getValueAt(row,column),table.isRowSelected(row),false,row,column);
+      listCellRenderer.customizeCellRenderer(table,table.getValueAt(row,column),table.isRowSelected(row));
       return listCellRenderer.myRenderer.getFragmentTagAt(e.getPoint().x - table.getCellRect(row,column,false).x);
     }
   }
