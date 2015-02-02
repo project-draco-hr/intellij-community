@@ -1,0 +1,63 @@
+{
+  final List<DiffContent> contents=new ArrayList<DiffContent>();
+  final List<String> titles=new ArrayList<String>();
+  boolean focused=true;
+  String windowTitle=null;
+  JsonReader reader=createJsonReader(request);
+  if (reader.hasNext()) {
+    String fileType=null;
+    reader.beginObject();
+    while (reader.hasNext()) {
+      String name=reader.nextName();
+      if (name.equals("fileType")) {
+        fileType=reader.nextString();
+      }
+ else       if (name.equals("focused")) {
+        focused=reader.nextBoolean();
+      }
+ else       if (name.equals("windowTitle")) {
+        windowTitle=StringUtil.nullize(reader.nextString(),true);
+      }
+ else       if (name.equals("contents")) {
+        String error=readContent(reader,contents,titles,fileType);
+        if (error != null) {
+          return error;
+        }
+      }
+ else {
+        reader.skipValue();
+      }
+    }
+    reader.endObject();
+  }
+  if (contents.isEmpty()) {
+    return "Empty request";
+  }
+  final Project project=guessProject();
+  if (project == null) {
+    return "No opened project, please open any project";
+  }
+  final boolean finalFocused=focused;
+  final String finalWindowTitle=windowTitle;
+  ApplicationManager.getApplication().invokeLater(new Runnable(){
+    @Override public void run(){
+      DiffManager.getInstance().getDiffTool().show(new DiffRequest(project){
+        @NotNull @Override public DiffContent[] getContents(){
+          return contents.toArray(new DiffContent[contents.size()]);
+        }
+        @Override public String[] getContentTitles(){
+          return ArrayUtil.toStringArray(titles);
+        }
+        @Override public String getWindowTitle(){
+          return StringUtil.notNullize(finalWindowTitle,"Diff Service");
+        }
+      }
+);
+      if (finalFocused) {
+        ProjectUtil.focusProjectWindow(project,true);
+      }
+    }
+  }
+,project.getDisposed());
+  return null;
+}
