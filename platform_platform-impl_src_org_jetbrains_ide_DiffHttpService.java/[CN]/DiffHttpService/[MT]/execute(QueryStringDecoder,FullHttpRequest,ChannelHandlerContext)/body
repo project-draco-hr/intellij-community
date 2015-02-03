@@ -1,15 +1,22 @@
 {
   final List<DiffContent> contents=new ArrayList<DiffContent>();
   final List<String> titles=new ArrayList<String>();
+  boolean focused=true;
+  String windowTitle=null;
   JsonReader reader=createJsonReader(request);
   if (reader.hasNext()) {
     String fileType=null;
-    boolean reformat;
     reader.beginObject();
     while (reader.hasNext()) {
       String name=reader.nextName();
-      if (name.equals("fileTypeName")) {
+      if (name.equals("fileType")) {
         fileType=reader.nextString();
+      }
+ else       if (name.equals("focused")) {
+        focused=reader.nextBoolean();
+      }
+ else       if (name.equals("windowTitle")) {
+        windowTitle=StringUtil.nullize(reader.nextString(),true);
       }
  else       if (name.equals("contents")) {
         String error=readContent(reader,contents,titles,fileType);
@@ -26,13 +33,16 @@
   if (contents.isEmpty()) {
     return "Empty request";
   }
-  final Project project=guessProject();
+  Project project=guessProject();
   if (project == null) {
-    return "No opened project, please open any project";
+    project=ProjectManager.getInstance().getDefaultProject();
   }
+  final boolean finalFocused=focused;
+  final String finalWindowTitle=windowTitle;
+  final Project finalProject=project;
   ApplicationManager.getApplication().invokeLater(new Runnable(){
     @Override public void run(){
-      DiffManager.getInstance().getDiffTool().show(new DiffRequest(project){
+      DiffManager.getInstance().getDiffTool().show(new DiffRequest(finalProject){
         @NotNull @Override public DiffContent[] getContents(){
           return contents.toArray(new DiffContent[contents.size()]);
         }
@@ -40,13 +50,16 @@
           return ArrayUtil.toStringArray(titles);
         }
         @Override public String getWindowTitle(){
-          return "Diff Service";
+          return StringUtil.notNullize(finalWindowTitle,"Diff Service");
         }
       }
 );
-      ProjectUtil.focusProjectWindow(project,true);
+      if (finalFocused) {
+        ProjectUtil.focusProjectWindow(finalProject,true);
+      }
     }
   }
 ,project.getDisposed());
+  sendOk(request,context);
   return null;
 }
