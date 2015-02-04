@@ -5,28 +5,38 @@
     int line=document.getLineNumber(selectedRange.getStartOffset());
     selectedRange=TextRange.create(document.getLineStartOffset(line),document.getLineEndOffset(line));
   }
+  VirtualFile profileChild=file.getParent().findChild(".profile." + file.getExtension());
+  String profile=null;
+  try {
+    profile=profileChild == null ? "" : VfsUtilCore.loadText(profileChild);
+  }
+ catch (  IOException ignored) {
+  }
   String command=document.getText(selectedRange);
-  final ConsoleView consoleView=getConsoleView(project,file,engine);
+  final RunContentDescriptor descriptor=getConsoleView(project_,file,engine);
+  ConsoleViewImpl consoleView=(ConsoleViewImpl)descriptor.getExecutionConsole();
   try {
 class IDE {
+      public final Application application=ApplicationManager.getApplication();
+      public final Project project=project_;
       public void print(      String s){
-        consoleView.print(s + "\n",ConsoleViewContentType.NORMAL_OUTPUT);
+        printInContent(descriptor,s + "\n",ConsoleViewContentType.NORMAL_OUTPUT);
       }
       public void error(      String s){
-        consoleView.print(s + "\n",ConsoleViewContentType.ERROR_OUTPUT);
+        printInContent(descriptor,s + "\n",ConsoleViewContentType.ERROR_OUTPUT);
       }
     }
     consoleView.print("> " + command,ConsoleViewContentType.USER_INPUT);
     consoleView.print("\n",ConsoleViewContentType.USER_INPUT);
     engine.getBindings(ScriptContext.ENGINE_SCOPE).put("IDE",new IDE());
-    Object o=engine.eval(command);
+    Object o=engine.eval(profile == null ? command : profile + "\n" + command);
     consoleView.print("=> " + o,ConsoleViewContentType.NORMAL_OUTPUT);
-    consoleView.print("\n",ConsoleViewContentType.NORMAL_OUTPUT);
     consoleView.print("\n",ConsoleViewContentType.NORMAL_OUTPUT);
   }
  catch (  Exception e) {
-    consoleView.print(e.getMessage(),ConsoleViewContentType.ERROR_OUTPUT);
+    consoleView.print(ExceptionUtil.getRootCause(e).getMessage(),ConsoleViewContentType.ERROR_OUTPUT);
     consoleView.print("\n",ConsoleViewContentType.ERROR_OUTPUT);
   }
-  ((ConsoleViewImpl)consoleView).scrollToEnd();
+  selectContent(descriptor);
+  consoleView.scrollToEnd();
 }
