@@ -1,6 +1,14 @@
 {
   final FileViewProvider viewProvider=myFile.getViewProvider();
   final Set<Language> relevantLanguages=viewProvider.getLanguages();
+  int externalAnnotatorsInRoots=0;
+  for (  Language language : relevantLanguages) {
+    PsiFile psiRoot=viewProvider.getPsi(language);
+    if (!HighlightingLevelManager.getInstance(myProject).shouldInspect(psiRoot))     continue;
+    final List<ExternalAnnotator> externalAnnotators=ExternalLanguageAnnotators.allForFile(language,psiRoot);
+    externalAnnotatorsInRoots+=externalAnnotators.size();
+  }
+  setProgressLimit(externalAnnotatorsInRoots);
   for (  Language language : relevantLanguages) {
     PsiFile psiRoot=viewProvider.getPsi(language);
     if (!HighlightingLevelManager.getInstance(myProject).shouldInspect(psiRoot))     continue;
@@ -9,7 +17,8 @@
       DaemonCodeAnalyzerEx daemonCodeAnalyzer=DaemonCodeAnalyzerEx.getInstanceEx(myProject);
       boolean errorFound=daemonCodeAnalyzer.getFileStatusMap().wasErrorFound(myDocument);
       for (      ExternalAnnotator externalAnnotator : externalAnnotators) {
-        final Object collectedInfo=externalAnnotator.collectInformation(psiRoot,myEditor,errorFound);
+        final Object collectedInfo=externalAnnotator.collectInformation(psiRoot,getEditor(),errorFound);
+        advanceProgress(1);
         if (collectedInfo != null) {
           myAnnotator2DataMap.put(externalAnnotator,new MyData(psiRoot,collectedInfo));
         }
