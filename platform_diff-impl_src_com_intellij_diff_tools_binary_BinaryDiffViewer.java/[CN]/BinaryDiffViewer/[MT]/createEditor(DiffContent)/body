@@ -1,0 +1,27 @@
+{
+  if (content instanceof EmptyContent)   return Pair.empty();
+  if (content instanceof BinaryFileContent) {
+    Project project=myProject != null ? myProject : ProjectManager.getInstance().getDefaultProject();
+    VirtualFile file=((BinaryFileContent)content).getFile();
+    FileEditorProvider[] providers=FileEditorProviderManager.getInstance().getProviders(project,file);
+    if (providers.length == 0)     throw new IOException("Can't find FileEditorProvider");
+    FileEditorProvider provider=providers[0];
+    FileEditor editor=provider.createEditor(project,file);
+    UIUtil.removeScrollBorder(editor.getComponent());
+    return Pair.create(editor,provider);
+  }
+  if (content instanceof DocumentContent) {
+    Document document=((DocumentContent)content).getDocument();
+    final Editor editor=DiffUtil.createEditor(document,myProject,true);
+    TextEditorProvider provider=TextEditorProvider.getInstance();
+    TextEditor fileEditor=provider.getTextEditor(editor);
+    Disposer.register(fileEditor,new Disposable(){
+      @Override public void dispose(){
+        EditorFactory.getInstance().releaseEditor(editor);
+      }
+    }
+);
+    return Pair.<FileEditor,FileEditorProvider>create(fileEditor,provider);
+  }
+  throw new IllegalArgumentException(content.getClass() + " - " + content.toString());
+}
