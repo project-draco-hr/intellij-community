@@ -1,40 +1,37 @@
 {
   final boolean keepAlive=HttpHeaders.isKeepAlive(request);
   final Channel channel=context.channel();
-  String file;
-  int line;
-  int column;
+  OpenFileRequest apiRequest;
   if (request.method() == HttpMethod.POST) {
-    OpenFileRequest jsonRequest=new Gson().fromJson(createJsonReader(request),OpenFileRequest.class);
-    file=jsonRequest.file;
-    line=jsonRequest.line;
-    column=jsonRequest.column;
+    apiRequest=new Gson().fromJson(createJsonReader(request),OpenFileRequest.class);
   }
  else {
-    file=StringUtil.nullize(getStringParameter("file",urlDecoder),true);
-    line=getIntParameter("line",urlDecoder);
-    column=getIntParameter("column",urlDecoder);
+    apiRequest=new OpenFileRequest();
+    apiRequest.file=StringUtil.nullize(getStringParameter("file",urlDecoder),true);
+    apiRequest.line=getIntParameter("line",urlDecoder);
+    apiRequest.column=getIntParameter("column",urlDecoder);
+    apiRequest.focused=getBooleanParameter("focused",urlDecoder,true);
   }
   int prefixLength=1 + PREFIX.length() + 1+ getServiceName().length()+ 1;
   String path=urlDecoder.path();
   if (path.length() > prefixLength) {
     Matcher matcher=LINE_AND_COLUMN.matcher(path).region(prefixLength,path.length());
     LOG.assertTrue(matcher.matches());
-    if (file == null) {
-      file=matcher.group(1).trim();
+    if (apiRequest.file == null) {
+      apiRequest.file=matcher.group(1).trim();
     }
-    if (line == -1) {
-      line=StringUtilRt.parseInt(matcher.group(2),1);
+    if (apiRequest.line == -1) {
+      apiRequest.line=StringUtilRt.parseInt(matcher.group(2),1);
     }
-    if (column == -1) {
-      column=StringUtilRt.parseInt(matcher.group(3),1);
+    if (apiRequest.column == -1) {
+      apiRequest.column=StringUtilRt.parseInt(matcher.group(3),1);
     }
   }
-  if (file == null) {
+  if (apiRequest.file == null) {
     sendStatus(HttpResponseStatus.BAD_REQUEST,keepAlive,channel);
     return null;
   }
-  openFile(file,line,column,getBooleanParameter("focused",urlDecoder)).done(new Consumer<Void>(){
+  openFile(apiRequest).done(new Consumer<Void>(){
     @Override public void consume(    Void aVoid){
       sendStatus(HttpResponseStatus.OK,keepAlive,channel);
     }
