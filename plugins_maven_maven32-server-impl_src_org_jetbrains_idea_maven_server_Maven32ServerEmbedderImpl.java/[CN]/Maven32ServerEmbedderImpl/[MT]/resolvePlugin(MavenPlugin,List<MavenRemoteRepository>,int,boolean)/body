@@ -1,0 +1,32 @@
+{
+  try {
+    Plugin mavenPlugin=new Plugin();
+    mavenPlugin.setGroupId(plugin.getGroupId());
+    mavenPlugin.setArtifactId(plugin.getArtifactId());
+    mavenPlugin.setVersion(plugin.getVersion());
+    MavenProject project=RemoteNativeMavenProjectHolder.findProjectById(nativeMavenProjectId);
+    Plugin pluginFromProject=project.getBuild().getPluginsAsMap().get(plugin.getGroupId() + ':' + plugin.getArtifactId());
+    if (pluginFromProject != null) {
+      mavenPlugin.setDependencies(pluginFromProject.getDependencies());
+    }
+    final MavenExecutionRequest request=createRequest(null,Collections.<String>emptyList(),Collections.<String>emptyList(),Collections.<String>emptyList());
+    DefaultMaven maven=(DefaultMaven)getComponent(Maven.class);
+    RepositorySystemSession repositorySystemSession=maven.newRepositorySession(request);
+    PluginDependenciesResolver pluginDependenciesResolver=getComponent(PluginDependenciesResolver.class);
+    org.eclipse.aether.artifact.Artifact pluginArtifact=pluginDependenciesResolver.resolve(mavenPlugin,project.getRemotePluginRepositories(),repositorySystemSession);
+    org.eclipse.aether.graph.DependencyNode node=pluginDependenciesResolver.resolve(mavenPlugin,pluginArtifact,null,project.getRemotePluginRepositories(),repositorySystemSession);
+    PreorderNodeListGenerator nlg=new PreorderNodeListGenerator();
+    node.accept(nlg);
+    List<MavenArtifact> res=new ArrayList<MavenArtifact>();
+    for (    org.eclipse.aether.artifact.Artifact artifact : nlg.getArtifacts(true)) {
+      if (!Comparing.equal(artifact.getArtifactId(),plugin.getArtifactId()) || !Comparing.equal(artifact.getGroupId(),plugin.getGroupId())) {
+        res.add(MavenModelConverter.convertArtifact(RepositoryUtils.toArtifact(artifact),getLocalRepositoryFile()));
+      }
+    }
+    return res;
+  }
+ catch (  Exception e) {
+    Maven3ServerGlobals.getLogger().info(e);
+    return Collections.emptyList();
+  }
+}

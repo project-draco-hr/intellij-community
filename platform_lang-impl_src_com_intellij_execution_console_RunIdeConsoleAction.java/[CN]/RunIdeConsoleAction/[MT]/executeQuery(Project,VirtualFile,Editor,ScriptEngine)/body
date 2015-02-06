@@ -1,18 +1,51 @@
 {
   TextRange selectedRange=EditorUtil.getSelectionInAnyMode(editor);
-  if (selectedRange.getLength() == 0)   return;
-  String command=editor.getDocument().getText(selectedRange);
-  ConsoleView consoleView=getConsoleView(project,file,engine);
+  Document document=editor.getDocument();
+  if (selectedRange.getLength() == 0) {
+    int line=document.getLineNumber(selectedRange.getStartOffset());
+    selectedRange=TextRange.create(document.getLineStartOffset(line),document.getLineEndOffset(line));
+  }
+  VirtualFile profileChild=file.getParent().findChild(".profile." + file.getExtension());
+  String profile=null;
   try {
+    profile=profileChild == null ? "" : VfsUtilCore.loadText(profileChild);
+  }
+ catch (  IOException ignored) {
+  }
+  String command=document.getText(selectedRange);
+  final RunContentDescriptor descriptor=getConsoleView(project_,file,engine);
+  ConsoleViewImpl consoleView=(ConsoleViewImpl)descriptor.getExecutionConsole();
+  try {
+class IDE {
+      private final Map<Object,Object> bindings=ContainerUtil.newConcurrentMap();
+      public final Application application=ApplicationManager.getApplication();
+      public final Project project=project_;
+      public void print(      Object o){
+        printInContent(descriptor,o,ConsoleViewContentType.NORMAL_OUTPUT);
+      }
+      public void error(      Object o){
+        printInContent(descriptor,o,ConsoleViewContentType.ERROR_OUTPUT);
+      }
+      public Object put(      Object key,      Object value){
+        return value == null ? bindings.remove(key) : bindings.put(key,value);
+      }
+      public Object get(      Object key){
+        return bindings.get(key);
+      }
+    }
     consoleView.print("> " + command,ConsoleViewContentType.USER_INPUT);
     consoleView.print("\n",ConsoleViewContentType.USER_INPUT);
-    Object o=engine.eval(command);
-    String string=o == null ? "nil" : String.valueOf(o);
-    consoleView.print(string,ConsoleViewContentType.NORMAL_OUTPUT);
+    Bindings bindings=engine.getBindings(ScriptContext.ENGINE_SCOPE);
+    if (bindings.get("IDE") == null)     bindings.put("IDE",new IDE());
+    Object o=engine.eval(profile == null ? command : profile + "\n" + command);
+    consoleView.print("=> " + o,ConsoleViewContentType.NORMAL_OUTPUT);
     consoleView.print("\n",ConsoleViewContentType.NORMAL_OUTPUT);
   }
  catch (  Exception e) {
-    consoleView.print(e.getMessage(),ConsoleViewContentType.ERROR_OUTPUT);
+    Throwable ex=ExceptionUtil.getRootCause(e);
+    consoleView.print(ex.getClass().getSimpleName() + ": " + ex.getMessage(),ConsoleViewContentType.ERROR_OUTPUT);
     consoleView.print("\n",ConsoleViewContentType.ERROR_OUTPUT);
   }
+  selectContent(descriptor);
+  consoleView.scrollToEnd();
 }
