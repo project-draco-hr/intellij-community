@@ -16,6 +16,7 @@
   EmptyAction.setupAction(rollback,IdeActions.SELECTED_CHANGES_ROLLBACK,editorComponent);
   EmptyAction.setupAction(showDiff,"ChangesView.Diff",editorComponent);
   EmptyAction.setupAction(copyRange,IdeActions.ACTION_COPY,editorComponent);
+  int offsetX=0;
   final JComponent toolbar=ActionManager.getInstance().createActionToolbar(ActionPlaces.FILEHISTORY_VIEW_TOOLBAR,group,true).getComponent();
   final Color background=((EditorEx)editor).getBackgroundColor();
   final Color foreground=editor.getColorsScheme().getColor(EditorColors.CARET_COLOR);
@@ -46,14 +47,16 @@
   if (range.getType() != Range.INSERTED) {
     final DocumentEx doc=(DocumentEx)tracker.getVcsDocument();
     final EditorEx uEditor=(EditorEx)EditorFactory.getInstance().createViewer(doc,tracker.getProject());
+    uEditor.setColorsScheme(editor.getColorsScheme());
     final EditorHighlighter highlighter=EditorHighlighterFactory.getInstance().createEditorHighlighter(tracker.getProject(),getFileName(tracker.getDocument()));
     uEditor.setHighlighter(highlighter);
     final EditorFragmentComponent editorFragmentComponent=EditorFragmentComponent.createEditorFragmentComponent(uEditor,range.getVcsLine1(),range.getVcsLine2(),false,false);
     component.add(editorFragmentComponent,BorderLayout.CENTER);
+    offsetX-=editorFragmentComponent.getBorder().getBorderInsets(editorFragmentComponent).left;
     EditorFactory.getInstance().releaseEditor(uEditor);
   }
   final List<AnAction> actionList=ActionUtil.getActions(editorComponent);
-  final LightweightHint lightweightHint=new LightweightHint(component);
+  final LightweightHint hint=new LightweightHint(component);
   HintListener closeListener=new HintListener(){
     public void hintHidden(    final EventObject event){
       actionList.remove(rollback);
@@ -64,9 +67,19 @@
     }
   }
 ;
-  lightweightHint.addHintListener(closeListener);
-  HintManagerImpl.getInstanceImpl().showEditorHint(lightweightHint,editor,point,HintManagerImpl.HIDE_BY_ANY_KEY | HintManagerImpl.HIDE_BY_TEXT_CHANGE | HintManagerImpl.HIDE_BY_SCROLLING,-1,false,new HintHint(editor,point));
-  if (!lightweightHint.isVisible()) {
+  hint.addHintListener(closeListener);
+  int line=editor.getCaretModel().getLogicalPosition().line;
+  Point point=HintManagerImpl.getHintPosition(hint,editor,new LogicalPosition(line,0),HintManager.UNDER);
+  if (mousePosition != null) {
+    int lineHeight=editor.getLineHeight();
+    int delta=(point.y - mousePosition.y) % lineHeight;
+    if (delta < 0)     delta+=lineHeight;
+    point.y=mousePosition.y + delta;
+  }
+  point.x+=offsetX;
+  int flags=HintManager.HIDE_BY_ANY_KEY | HintManager.HIDE_BY_TEXT_CHANGE | HintManager.HIDE_BY_SCROLLING;
+  HintManagerImpl.getInstanceImpl().showEditorHint(hint,editor,point,flags,-1,false,new HintHint(editor,point));
+  if (!hint.isVisible()) {
     closeListener.hintHidden(null);
   }
 }
