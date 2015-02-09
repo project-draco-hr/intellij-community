@@ -1,0 +1,52 @@
+{
+  final boolean keepAlive=HttpHeaders.isKeepAlive(request);
+  final Channel channel=context.channel();
+  OpenFileRequest apiRequest;
+  if (request.method() == HttpMethod.POST) {
+    apiRequest=gson.getValue().fromJson(createJsonReader(request),OpenFileRequest.class);
+  }
+ else {
+    apiRequest=new OpenFileRequest();
+    apiRequest.file=StringUtil.nullize(getStringParameter("file",urlDecoder),true);
+    apiRequest.line=getIntParameter("line",urlDecoder);
+    apiRequest.column=getIntParameter("column",urlDecoder);
+    apiRequest.focused=getBooleanParameter("focused",urlDecoder,true);
+  }
+  int prefixLength=1 + PREFIX.length() + 1+ getServiceName().length()+ 1;
+  String path=urlDecoder.path();
+  if (path.length() > prefixLength) {
+    Matcher matcher=LINE_AND_COLUMN.matcher(path).region(prefixLength,path.length());
+    LOG.assertTrue(matcher.matches());
+    if (apiRequest.file == null) {
+      apiRequest.file=matcher.group(1).trim();
+    }
+    if (apiRequest.line == -1) {
+      apiRequest.line=StringUtilRt.parseInt(matcher.group(2),1);
+    }
+    if (apiRequest.column == -1) {
+      apiRequest.column=StringUtilRt.parseInt(matcher.group(3),1);
+    }
+  }
+  if (apiRequest.file == null) {
+    sendStatus(HttpResponseStatus.BAD_REQUEST,keepAlive,channel);
+    return null;
+  }
+  openFile(apiRequest).done(new Consumer<Void>(){
+    @Override public void consume(    Void aVoid){
+      sendStatus(HttpResponseStatus.OK,keepAlive,channel);
+    }
+  }
+).rejected(new Consumer<Throwable>(){
+    @Override public void consume(    Throwable throwable){
+      if (throwable == NOT_FOUND) {
+        sendStatus(HttpResponseStatus.NOT_FOUND,keepAlive,channel);
+      }
+ else {
+        sendStatus(HttpResponseStatus.INTERNAL_SERVER_ERROR,keepAlive,channel);
+        LOG.error(throwable);
+      }
+    }
+  }
+);
+  return null;
+}
