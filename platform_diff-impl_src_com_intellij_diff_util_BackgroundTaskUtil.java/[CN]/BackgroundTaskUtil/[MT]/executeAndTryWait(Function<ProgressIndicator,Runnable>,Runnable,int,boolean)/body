@@ -1,35 +1,31 @@
 {
-  abort();
-  myModificationStamp++;
-  final int modificationStamp=myModificationStamp;
   final ModalityState modality=ModalityState.current();
-  myProgressIndicator=new EmptyProgressIndicator(){
+  final ProgressIndicator indicator=new EmptyProgressIndicator(){
     @NotNull @Override public ModalityState getModalityState(){
       return modality;
     }
   }
 ;
-  final ProgressIndicator indicator=myProgressIndicator;
   final Semaphore semaphore=new Semaphore(0);
   final AtomicReference<Runnable> resultRef=new AtomicReference<Runnable>();
   if (forceEDT) {
-    Runnable result=backgroundTask.convert(indicator);
-    finish(result,modificationStamp,indicator);
+    Runnable callback=backgroundTask.fun(indicator);
+    finish(callback,indicator);
   }
  else {
     ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
       @Override public void run(){
         ProgressManager.getInstance().executeProcessUnderProgress(new Runnable(){
           @Override public void run(){
-            final Runnable result=backgroundTask.convert(indicator);
+            final Runnable callback=backgroundTask.fun(indicator);
             if (indicator.isCanceled()) {
               semaphore.release();
               return;
             }
-            if (!resultRef.compareAndSet(null,result)) {
+            if (!resultRef.compareAndSet(null,callback)) {
               ApplicationManager.getApplication().invokeLater(new Runnable(){
                 @Override public void run(){
-                  finish(result,modificationStamp,indicator);
+                  finish(callback,indicator);
                 }
               }
 ,modality);
@@ -47,10 +43,11 @@
  catch (    InterruptedException ignore) {
     }
     if (!resultRef.compareAndSet(null,TOO_SLOW_OPERATION)) {
-      finish(resultRef.get(),modificationStamp,indicator);
+      finish(resultRef.get(),indicator);
     }
  else {
       if (onSlowAction != null)       onSlowAction.run();
     }
   }
+  return indicator;
 }
