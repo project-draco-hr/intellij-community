@@ -1,0 +1,35 @@
+{
+  final PsiClassType.ClassResolveResult originalResolveResult=originalType.resolveGenerics();
+  PsiClass superClass=originalResolveResult.getElement();
+  if (superClass == null) {
+    return originalType;
+  }
+  String qualifiedName=superClass.getQualifiedName();
+  if (qualifiedName != null && !PsiSearchScopeUtil.isInScope(resolveScope,superClass)) {
+    PsiClass originalSuperClass=superClass;
+    PsiSubstitutor originalSubstitutor=originalResolveResult.getSubstitutor();
+    superClass=JavaPsiFacade.getInstance(superClass.getProject()).findClass(qualifiedName,resolveScope);
+    if (superClass == null) {
+      return null;
+    }
+    PsiTypeParameter[] typeParameters=superClass.getTypeParameters();
+    PsiTypeParameter[] originalTypeParameters=originalSuperClass.getTypeParameters();
+    if (typeParameters.length != originalTypeParameters.length)     return null;
+    PsiSubstitutor substitutor=PsiSubstitutor.EMPTY;
+    for (int i=0; i < originalTypeParameters.length; i++) {
+      PsiType originalSubstitute=originalSubstitutor.substitute(originalTypeParameters[i]);
+      if (originalSubstitute != null) {
+        PsiType substitute=originalSubstitute.accept(new PsiTypeVisitor<PsiType>(){
+          @Nullable @Override public PsiType visitClassType(          PsiClassType classType){
+            return correctType(classType,resolveScope);
+          }
+        }
+);
+        if (substitute == null)         return null;
+        substitutor=substitutor.put(typeParameters[i],substitute);
+      }
+    }
+    return JavaPsiFacade.getElementFactory(superClass.getProject()).createType(superClass,substitutor);
+  }
+  return originalType;
+}
