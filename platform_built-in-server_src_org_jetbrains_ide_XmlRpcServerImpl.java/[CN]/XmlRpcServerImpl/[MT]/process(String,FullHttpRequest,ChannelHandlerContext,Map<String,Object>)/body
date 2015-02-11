@@ -1,0 +1,29 @@
+{
+  if (!(path.isEmpty() || (path.length() == 1 && path.charAt(0) == '/') || path.equalsIgnoreCase("/rpc2"))) {
+    return false;
+  }
+  if (request.method() == HttpMethod.POST) {
+    ByteBuf result;
+    ByteBufInputStream in=new ByteBufInputStream(request.content());
+    try {
+      XmlRpcServerRequest xmlRpcServerRequest=new XmlRpcRequestProcessor().decodeRequest(in);
+      if (StringUtil.isEmpty(xmlRpcServerRequest.getMethodName())) {
+        LOG.warn("method name empty");
+        return false;
+      }
+      Object response=invokeHandler(getHandler(xmlRpcServerRequest.getMethodName(),handlers == null ? handlerMapping : handlers),xmlRpcServerRequest);
+      result=Unpooled.copiedBuffer(new XmlRpcResponseProcessor().encodeResponse(response,CharsetToolkit.UTF8));
+    }
+ catch (    Throwable e) {
+      context.channel().close();
+      LOG.error(e);
+      return true;
+    }
+ finally {
+      in.close();
+    }
+    Responses.send(Responses.response("text/xml",result),context.channel(),request);
+    return true;
+  }
+  return false;
+}

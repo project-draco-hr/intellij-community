@@ -4,17 +4,29 @@
   }
   Set<SuppressQuickFix> fixes=new THashSet<SuppressQuickFix>(new TObjectHashingStrategy<SuppressQuickFix>(){
     @Override public int computeHashCode(    SuppressQuickFix object){
-      return object.getName().hashCode();
+      int result=object instanceof InjectionAwareSuppressQuickFix ? ((InjectionAwareSuppressQuickFix)object).isShouldBeAppliedToInjectionHost().hashCode() : 0;
+      return 31 * result + object.getName().hashCode();
     }
     @Override public boolean equals(    SuppressQuickFix o1,    SuppressQuickFix o2){
+      if (o1 instanceof InjectionAwareSuppressQuickFix && o2 instanceof InjectionAwareSuppressQuickFix) {
+        if (((InjectionAwareSuppressQuickFix)o1).isShouldBeAppliedToInjectionHost() != ((InjectionAwareSuppressQuickFix)o2).isShouldBeAppliedToInjectionHost()) {
+          return false;
+        }
+      }
       return o1.getName().equals(o2.getName());
     }
   }
 );
   Set<InspectionSuppressor> suppressors=getSuppressors(element);
+  final PsiLanguageInjectionHost injectionHost=InjectedLanguageManager.getInstance(element.getProject()).getInjectionHost(element);
+  if (injectionHost != null) {
+    Set<InspectionSuppressor> injectionHostSuppressors=getSuppressors(injectionHost);
+    for (    InspectionSuppressor suppressor : injectionHostSuppressors) {
+      addAllSuppressActions(fixes,injectionHost,suppressor,ThreeState.YES,getShortName());
+    }
+  }
   for (  InspectionSuppressor suppressor : suppressors) {
-    SuppressQuickFix[] actions=suppressor.getSuppressActions(element,getShortName());
-    fixes.addAll(Arrays.asList(actions));
+    addAllSuppressActions(fixes,element,suppressor,injectionHost != null ? ThreeState.NO : ThreeState.UNSURE,getShortName());
   }
   return fixes.toArray(new SuppressQuickFix[fixes.size()]);
 }

@@ -1,0 +1,41 @@
+{
+  if (shouldBeBuiltByExternalSystem(myProject))   return;
+  if (!hasGradleModules(context))   return;
+  final BuildManager buildManager=BuildManager.getInstance();
+  final File projectSystemDir=buildManager.getProjectSystemDirectory(myProject);
+  if (projectSystemDir == null)   return;
+  final File gradleConfigFile=new File(projectSystemDir,GradleProjectConfiguration.CONFIGURATION_FILE_RELATIVE_PATH);
+  final Map<String,GradleModuleResourceConfiguration> affectedGradleModuleConfigurations=generateAffectedGradleModulesConfiguration(context);
+  if (affectedGradleModuleConfigurations.isEmpty())   return;
+  boolean configurationUpdateRequired=context.isRebuild() || !gradleConfigFile.exists();
+  final Map<String,Integer> affectedConfigurationHash=new THashMap<String,Integer>();
+  for (  Map.Entry<String,GradleModuleResourceConfiguration> entry : affectedGradleModuleConfigurations.entrySet()) {
+    Integer moduleLastConfigurationHash=myModulesConfigurationHash.get(entry.getKey());
+    int moduleCurrentConfigurationHash=entry.getValue().computeConfigurationHash();
+    if (moduleLastConfigurationHash == null || moduleLastConfigurationHash.intValue() != moduleCurrentConfigurationHash) {
+      configurationUpdateRequired=true;
+    }
+    affectedConfigurationHash.put(entry.getKey(),moduleCurrentConfigurationHash);
+  }
+  final GradleProjectConfiguration projectConfig=loadLastConfiguration(gradleConfigFile);
+  projectConfig.moduleConfigurations.putAll(affectedGradleModuleConfigurations);
+  final Document document=new Document(new Element("gradle-project-configuration"));
+  XmlSerializer.serializeInto(projectConfig,document.getRootElement());
+  final boolean finalConfigurationUpdateRequired=configurationUpdateRequired;
+  buildManager.runCommand(new Runnable(){
+    @Override public void run(){
+      if (finalConfigurationUpdateRequired) {
+        buildManager.clearState(myProject);
+      }
+      FileUtil.createIfDoesntExist(gradleConfigFile);
+      try {
+        JDOMUtil.writeDocument(document,gradleConfigFile,"\n");
+        myModulesConfigurationHash.putAll(affectedConfigurationHash);
+      }
+ catch (      IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+);
+}

@@ -9,6 +9,7 @@
             final int column=myTableView.getEditingColumn();
             final int row=myTableView.getEditingRow();
             if (e.getModifiers() == 0 && (e.getKeyCode() == KeyEvent.VK_ENTER || e.getKeyCode() == KeyEvent.VK_TAB)) {
+              e.consume();
               SwingUtilities.invokeLater(new Runnable(){
                 @Override public void run(){
                   stopEditing();
@@ -23,6 +24,7 @@
                       nextRow=0;
                     }
                   }
+                  myTableView.scrollRectToVisible(myTableView.getCellRect(nextRow,nextColumn,true));
                   myTableView.editCellAt(nextRow,nextColumn);
                 }
               }
@@ -36,16 +38,20 @@
   }
 ;
   myTableView.setRowHeight(new JTextField().getPreferredSize().height);
+  myTableView.setIntercellSpacing(JBUI.emptySize());
+  myTableView.setStriped(true);
   myTableView.getTableViewModel().setSortable(false);
-  myPanel=ToolbarDecorator.createDecorator(myTableView).setAddAction(new AnActionButtonRunnable(){
+  ToolbarDecorator decorator=ToolbarDecorator.createDecorator(myTableView);
+  myPanel=decorator.setAddAction(new AnActionButtonRunnable(){
     @Override public void run(    AnActionButton button){
-      if (!myElements.isEmpty() && isEmpty(myElements.get(myElements.size() - 1)))       return;
       myTableView.stopEditing();
       setModified();
       SwingUtilities.invokeLater(new Runnable(){
         @Override public void run(){
-          myElements.add(createElement());
-          myTableView.getTableViewModel().setItems(myElements);
+          if (myElements.isEmpty() || !isEmpty(myElements.get(myElements.size() - 1))) {
+            myElements.add(createElement());
+            myTableView.getTableViewModel().setItems(myElements);
+          }
           myTableView.scrollRectToVisible(myTableView.getCellRect(myElements.size() - 1,0,true));
           myTableView.getComponent().editCellAt(myElements.size() - 1,0);
         }
@@ -55,28 +61,18 @@
   }
 ).setRemoveAction(new AnActionButtonRunnable(){
     @Override public void run(    AnActionButton button){
-      myTableView.stopEditing();
-      setModified();
-      T selected=getSelection();
-      if (selected != null) {
-        int selectedIndex=myElements.indexOf(selected);
-        myElements.remove(selected);
-        myTableView.getTableViewModel().setItems(myElements);
-        int prev=selectedIndex - 1;
-        if (prev >= 0) {
-          myTableView.getComponent().getSelectionModel().setSelectionInterval(prev,prev);
-        }
- else         if (selectedIndex < myElements.size()) {
-          myTableView.getComponent().getSelectionModel().setSelectionInterval(selectedIndex,selectedIndex);
-        }
-      }
+      removeSelected();
     }
   }
 ).disableUpDownActions().addExtraActions(createExtraActions()).createPanel();
   ToolbarDecorator.findRemoveButton(myPanel).addCustomUpdater(new AnActionButtonUpdater(){
     @Override public boolean isEnabled(    AnActionEvent e){
-      T selection=getSelection();
-      return selection != null && myIsEnabled && canDeleteElement(selection);
+      List<T> selection=getSelection();
+      if (selection.isEmpty() || !myIsEnabled)       return false;
+      for (      T t : selection) {
+        if (!canDeleteElement(t))         return false;
+      }
+      return true;
     }
   }
 );
@@ -86,5 +82,6 @@
     }
   }
 );
-  myTableView.getComponent().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+  myActionsPanel=decorator.getActionsPanel();
+  myTableView.getComponent().setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 }

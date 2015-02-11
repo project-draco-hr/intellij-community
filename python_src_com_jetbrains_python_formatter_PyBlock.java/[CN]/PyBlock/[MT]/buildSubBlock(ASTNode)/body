@@ -36,6 +36,9 @@
     wrap=Wrap.createWrap(WrapType.NORMAL,true);
     childIndent=Indent.getNormalIndent();
   }
+  if (childType == PyTokenTypes.END_OF_LINE_COMMENT && parentType == PyElementTypes.FROM_IMPORT_STATEMENT) {
+    childIndent=Indent.getNormalIndent();
+  }
   if (ourListElementTypes.contains(parentType)) {
     if ((parentType != PyElementTypes.TUPLE_EXPRESSION || grandparentType == PyElementTypes.PARENTHESIZED_EXPRESSION) && !ourBrackets.contains(childType) && childType != PyTokenTypes.COMMA && !isSliceOperand(child)) {
       wrap=Wrap.createWrap(WrapType.NORMAL,true);
@@ -86,6 +89,9 @@
       }
       if (childType == PyTokenTypes.RPAR) {
         childIndent=Indent.getNoneIndent();
+        if (!hasHangingIndent(_node.getPsi())) {
+          childAlignment=getAlignmentForChildren();
+        }
       }
     }
   }
@@ -95,7 +101,7 @@
       childIndent=Indent.getNormalIndent();
     }
   }
- else   if (((parentType == PyElementTypes.PARENTHESIZED_EXPRESSION && myContext.getSettings().ALIGN_MULTILINE_PARENTHESIZED_EXPRESSION) || (parentType == PyElementTypes.ARGUMENT_LIST && myContext.getSettings().ALIGN_MULTILINE_PARAMETERS_IN_CALLS) || (parentType == PyElementTypes.PARAMETER_LIST && myContext.getSettings().ALIGN_MULTILINE_PARAMETERS)) && !isIndentNext(child) && !hasLineBreaksBefore(_node.getFirstChildNode(),1)&& !ourListElementTypes.contains(childType)) {
+ else   if (!hasHangingIndent(_node.getPsi()) && ((parentType == PyElementTypes.PARENTHESIZED_EXPRESSION && myContext.getSettings().ALIGN_MULTILINE_PARENTHESIZED_EXPRESSION) || (parentType == PyElementTypes.ARGUMENT_LIST && myContext.getSettings().ALIGN_MULTILINE_PARAMETERS_IN_CALLS) || (parentType == PyElementTypes.PARAMETER_LIST && myContext.getSettings().ALIGN_MULTILINE_PARAMETERS)) && !isIndentNext(child)&& !hasLineBreaksBefore(_node.getFirstChildNode(),1)&& !ourListElementTypes.contains(childType)) {
     if (!ourBrackets.contains(childType)) {
       childAlignment=getAlignmentForChildren();
       if (parentType != PyElementTypes.CALL_EXPRESSION) {
@@ -119,7 +125,12 @@
       childIndent=Indent.getNoneIndent();
     }
  else {
-      childIndent=parentType == PyElementTypes.PARAMETER_LIST || isInControlStatement() ? Indent.getContinuationIndent() : Indent.getNormalIndent();
+      if (parentType == PyElementTypes.PARAMETER_LIST || argumentMayHaveSameIndentAsFollowingStatementList()) {
+        childIndent=Indent.getContinuationIndent();
+      }
+ else {
+        childIndent=Indent.getNormalIndent();
+      }
     }
   }
  else   if (parentType == PyElementTypes.SUBSCRIPTION_EXPRESSION) {
@@ -153,7 +164,7 @@
   }
   ASTNode prev=child.getTreePrev();
   while (prev != null && prev.getElementType() == TokenType.WHITE_SPACE) {
-    if (prev.getText().contains("\\") && !childIndent.equals(Indent.getContinuationIndent()) && !childIndent.equals(Indent.getContinuationIndent(true))) {
+    if (prev.textContains('\\') && !childIndent.equals(Indent.getContinuationIndent(false)) && !childIndent.equals(Indent.getContinuationIndent(true))) {
       childIndent=isIndentNext(child) ? Indent.getContinuationIndent() : Indent.getNormalIndent();
       break;
     }

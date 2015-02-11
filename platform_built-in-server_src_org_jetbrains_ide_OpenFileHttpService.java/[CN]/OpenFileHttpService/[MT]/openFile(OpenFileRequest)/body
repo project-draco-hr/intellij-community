@@ -1,0 +1,34 @@
+{
+  String path=FileUtil.expandUserHome(request.file);
+  final File file=new File(FileUtil.toSystemDependentName(path));
+  if (file.isAbsolute()) {
+    return openAbsolutePath(file,request);
+  }
+  RefreshQueue queue=RefreshQueue.getInstance();
+  queue.cancelSession(refreshSessionId);
+  OpenFileTask task=new OpenFileTask(FileUtil.toCanonicalPath(FileUtil.toSystemIndependentName(path),'/'),request);
+  requests.offer(task);
+  RefreshSession session=queue.createSession(true,true,new Runnable(){
+    @Override public void run(){
+      OpenFileTask task;
+      while ((task=requests.poll()) != null) {
+        try {
+          if (openRelativePath(task.path,task.request)) {
+            task.promise.setResult(null);
+          }
+ else {
+            task.promise.setError(NOT_FOUND);
+          }
+        }
+ catch (        Throwable e) {
+          task.promise.setError(e);
+        }
+      }
+    }
+  }
+,ModalityState.NON_MODAL);
+  session.addAllFiles(ManagingFS.getInstance().getLocalRoots());
+  refreshSessionId=session.getId();
+  session.launch();
+  return task.promise;
+}
