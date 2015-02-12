@@ -17,36 +17,35 @@
     @Override public void run(){
       final PsiDirectory taskDirectory=DirectoryUtil.createSubdirectories("task" + (size + 1),lessonDir,"\\/");
       if (taskDirectory != null) {
+        Language language=Language.findLanguageByID(course.getLanguage());
+        if (language == null) {
+          return;
+        }
+        final StudyLanguageManager studyLanguageManager=StudyLanguageManager.INSTANCE.forLanguage(language);
         CCUtils.markDirAsSourceRoot(taskDirectory.getVirtualFile(),project);
-        final FileTemplate template=FileTemplateManager.getInstance(project).getInternalTemplate("task.html");
-        final FileTemplate testsTemplate=FileTemplateManager.getInstance(project).getInternalTemplate("tests");
-        final FileTemplate taskTemplate=FileTemplateManager.getInstance(project).getInternalTemplate("task.answer");
-        try {
-          final PsiElement taskFile=FileTemplateUtil.createFromTemplate(template,"task.html",null,taskDirectory);
-          final PsiElement testsFile=FileTemplateUtil.createFromTemplate(testsTemplate,"tests.py",null,taskDirectory);
-          final PsiElement taskPyFile=FileTemplateUtil.createFromTemplate(taskTemplate,"file1",null,taskDirectory);
-          final Task task=new Task(taskName);
-          task.addTaskFile("file1.py",size + 1);
-          task.setIndex(size + 1);
-          lesson.addTask(task,taskDirectory);
-          ApplicationManager.getApplication().invokeLater(new Runnable(){
-            @Override public void run(){
-              FileEditorManager fileEditorManager=FileEditorManager.getInstance(project);
-              for (              VirtualFile virtualFile : fileEditorManager.getOpenFiles()) {
-                fileEditorManager.closeFile(virtualFile);
-              }
-              if (view != null) {
-                EditorHelper.openInEditor(testsFile,false);
-                EditorHelper.openInEditor(taskPyFile,false);
-                view.selectElement(taskFile);
-                EditorHelper.openInEditor(taskFile,false);
-              }
+        final Task task=new Task(taskName);
+        task.setIndex(size + 1);
+        lesson.addTask(task,taskDirectory);
+        createFromTemplateAndOpen(taskDirectory,studyLanguageManager.getTestsTemplate(project),view);
+        createFromTemplateAndOpen(taskDirectory,FileTemplateManager.getInstance(project).getInternalTemplate("task.html"),view);
+        String defaultExtension=studyLanguageManager.getDefaultTaskFileExtension();
+        if (defaultExtension != null) {
+          FileTemplate taskFileTemplate=studyLanguageManager.getTaskFileTemplateForExtension(project,defaultExtension);
+          createFromTemplateAndOpen(taskDirectory,taskFileTemplate,view);
+          if (taskFileTemplate != null) {
+            String taskFileName=FileUtil.getNameWithoutExtension(taskFileTemplate.getName());
+            task.addTaskFile(taskFileName + "." + defaultExtension,size + 1);
+          }
+        }
+        ApplicationManager.getApplication().invokeLater(new Runnable(){
+          @Override public void run(){
+            FileEditorManager fileEditorManager=FileEditorManager.getInstance(project);
+            for (            VirtualFile virtualFile : fileEditorManager.getOpenFiles()) {
+              fileEditorManager.closeFile(virtualFile);
             }
           }
+        }
 );
-        }
- catch (        Exception ignored) {
-        }
       }
     }
   }

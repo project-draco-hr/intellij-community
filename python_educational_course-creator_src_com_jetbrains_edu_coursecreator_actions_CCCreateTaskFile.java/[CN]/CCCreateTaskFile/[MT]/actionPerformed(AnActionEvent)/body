@@ -16,21 +16,43 @@
   final Task task=lesson.getTask(taskDir.getName());
   final int index=task.getTaskFiles().size() + 1;
   String generatedName="file" + index;
-  final String taskFileName=Messages.showInputDialog("Name:","Task File Name",null,generatedName,null);
+  CreateTaskFileDialog dialog=new CreateTaskFileDialog(project,generatedName,course);
+  dialog.show();
+  if (dialog.getExitCode() != OK_EXIT_CODE) {
+    return;
+  }
+  final String taskFileName=dialog.getFileName();
   if (taskFileName == null)   return;
+  FileType type=dialog.getFileType();
+  if (type == null) {
+    return;
+  }
+  final StudyLanguageManager studyLanguageManager=CCUtils.getStudyLanguageManager(course);
+  if (studyLanguageManager == null) {
+    return;
+  }
+  final String extension=type.getDefaultExtension();
   ApplicationManager.getApplication().runWriteAction(new Runnable(){
     @Override public void run(){
-      final FileTemplate taskTemplate=FileTemplateManager.getInstance(project).getInternalTemplate("task.answer");
+      final FileTemplate taskTemplate=studyLanguageManager.getTaskFileTemplateForExtension(project,extension);
+      final String answerFileName=taskFileName + ".answer." + extension;
       try {
-        final PsiElement taskPyFile=FileTemplateUtil.createFromTemplate(taskTemplate,taskFileName,null,taskDir);
-        task.addTaskFile(taskFileName + ".py",index);
-        ApplicationManager.getApplication().invokeLater(new Runnable(){
-          @Override public void run(){
-            EditorHelper.openInEditor(taskPyFile,false);
-            view.selectElement(taskPyFile);
-          }
+        if (taskTemplate == null) {
+          VirtualFile file=taskDir.getVirtualFile().createChildData(this,answerFileName);
+          ProjectView.getInstance(project).select(file,file,false);
+          FileEditorManager.getInstance(project).openFile(file,true);
         }
+ else {
+          final PsiElement taskFile=FileTemplateUtil.createFromTemplate(taskTemplate,answerFileName,null,taskDir);
+          ApplicationManager.getApplication().invokeLater(new Runnable(){
+            @Override public void run(){
+              EditorHelper.openInEditor(taskFile,false);
+              view.selectElement(taskFile);
+            }
+          }
 );
+        }
+        task.addTaskFile(taskFileName + "." + extension,index);
       }
  catch (      Exception ignored) {
       }
