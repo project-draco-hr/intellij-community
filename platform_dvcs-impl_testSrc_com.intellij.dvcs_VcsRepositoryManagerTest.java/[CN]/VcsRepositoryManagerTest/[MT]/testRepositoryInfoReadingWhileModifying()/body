@@ -1,0 +1,23 @@
+{
+  final VirtualFile repositoryFile=createExternalRepository();
+  assertNotNull(myGlobalRepositoryManager.getRepositoryForRoot(repositoryFile));
+  FutureTask<Repository> readExistingRepo=new FutureTask<Repository>(new Callable<Repository>(){
+    @Override public Repository call() throws Exception {
+      return myGlobalRepositoryManager.getRepositoryForRoot(repositoryFile);
+    }
+  }
+);
+  FutureTask<Boolean> modifyRepositoryMapping=new FutureTask<Boolean>(new Callable<Boolean>(){
+    @Override public Boolean call() throws Exception {
+      myProjectLevelVcsManager.setDirectoryMappings(VcsUtil.addMapping(myProjectLevelVcsManager.getDirectoryMappings(),myProjectRoot.getPath(),myVcs.getName()));
+      return !myGlobalRepositoryManager.getRepositories().isEmpty();
+    }
+  }
+);
+  new Thread(modifyRepositoryMapping).start();
+  assertTrue(LOCK_ERROR_TEXT,READY_TO_READ.await(1,TimeUnit.SECONDS));
+  new Thread(readExistingRepo).start();
+  assertNotNull(readExistingRepo.get(1,TimeUnit.SECONDS));
+  CONTINUE_MODIFY.countDown();
+  assertTrue(modifyRepositoryMapping.get(1,TimeUnit.SECONDS));
+}

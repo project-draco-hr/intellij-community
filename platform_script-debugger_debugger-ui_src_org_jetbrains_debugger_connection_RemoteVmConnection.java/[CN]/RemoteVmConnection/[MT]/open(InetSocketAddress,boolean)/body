@@ -1,0 +1,53 @@
+{
+  setState(ConnectionStatus.WAITING_FOR_CONNECTION,"Connecting to " + address.getHostName() + ":"+ address.getPort());
+  final Future<?> future=ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+    @Override public void run(){
+      if (Thread.interrupted()) {
+        return;
+      }
+      final AsyncPromise<Vm> result=new AsyncPromise<Vm>();
+      connectCancelHandler.set(new Runnable(){
+        @Override public void run(){
+          result.setError(Promise.createError("Closed explicitly"));
+        }
+      }
+);
+      AsyncPromise<Void> connectionPromise=new AsyncPromise<Void>();
+      NettyUtil.connect(createBootstrap(address,result),address,connectionPromise,waitForever ? -1 : NettyUtil.DEFAULT_CONNECT_ATTEMPT_COUNT);
+      connectionPromise.rejected(new Consumer<Throwable>(){
+        @Override public void consume(        Throwable error){
+          result.setError(error);
+        }
+      }
+);
+      result.done(new Consumer<Vm>(){
+        @Override public void consume(        @NotNull Vm vm){
+          RemoteVmConnection.this.vm=vm;
+          setState(ConnectionStatus.CONNECTED,"Connected to " + connectedAddressToPresentation(address,vm));
+          startProcessing();
+        }
+      }
+).rejected(new Consumer<Throwable>(){
+        @Override public void consume(        Throwable error){
+          if (ApplicationManager.getApplication().isUnitTestMode() || !(error instanceof Promise.MessageError)) {
+            CommandProcessor.LOG.error(error);
+          }
+          setState(ConnectionStatus.CONNECTION_FAILED,error.getMessage());
+        }
+      }
+).processed(new Consumer<Vm>(){
+        @Override public void consume(        Vm vm){
+          connectCancelHandler.set(null);
+        }
+      }
+);
+    }
+  }
+);
+  connectCancelHandler.set(new Runnable(){
+    @Override public void run(){
+      future.cancel(true);
+    }
+  }
+);
+}

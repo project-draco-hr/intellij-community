@@ -1,0 +1,38 @@
+{
+  checkSubscription();
+  ArchiveHandler handler;
+  boolean refresh=false;
+synchronized (ourLock) {
+    Pair<ArchiveFileSystem,ArchiveHandler> record=ourHandlers.get(localPath);
+    if (record == null) {
+      handler=producer.fun(localPath);
+      record=Pair.create(vfs,handler);
+      ourHandlers.put(localPath,record);
+      final String finalRootPath=localPath;
+      forEachDirectoryComponent(localPath,new Processor<String>(){
+        @Override public boolean process(        String containingDirectoryPath){
+          Set<String> handlers=ourDominatorsMap.get(containingDirectoryPath);
+          if (handlers == null) {
+            ourDominatorsMap.put(containingDirectoryPath,handlers=ContainerUtil.newTroveSet());
+          }
+          handlers.add(finalRootPath);
+          return true;
+        }
+      }
+);
+      refresh=true;
+    }
+    handler=record.second;
+  }
+  if (refresh) {
+    final File file=handler.getFile();
+    ApplicationManager.getApplication().invokeLater(new Runnable(){
+      @Override public void run(){
+        LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file);
+      }
+    }
+,ModalityState.defaultModalityState());
+  }
+  @SuppressWarnings("unchecked") T t=(T)handler;
+  return t;
+}

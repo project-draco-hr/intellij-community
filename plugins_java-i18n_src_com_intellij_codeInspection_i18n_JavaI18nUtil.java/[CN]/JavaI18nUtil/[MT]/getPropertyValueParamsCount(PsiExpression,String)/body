@@ -1,0 +1,43 @@
+{
+  final PsiLiteralExpression literalExpression;
+  if (expression instanceof PsiLiteralExpression) {
+    literalExpression=(PsiLiteralExpression)expression;
+  }
+ else   if (expression instanceof PsiReferenceExpression) {
+    final PsiElement resolved=((PsiReferenceExpression)expression).resolve();
+    final PsiField field=resolved == null ? null : (PsiField)resolved;
+    literalExpression=field != null && field.hasModifierProperty(PsiModifier.FINAL) && field.getInitializer() instanceof PsiLiteralExpression ? (PsiLiteralExpression)field.getInitializer() : null;
+  }
+ else {
+    literalExpression=null;
+  }
+  final TreeSet<Integer> paramsCount=new TreeSet<Integer>();
+  if (literalExpression == null) {
+    return paramsCount;
+  }
+  for (  PsiReference reference : literalExpression.getReferences()) {
+    if (reference instanceof PsiPolyVariantReference) {
+      for (      ResolveResult result : ((PsiPolyVariantReference)reference).multiResolve(false)) {
+        if (result.isValidResult() && result.getElement() instanceof IProperty) {
+          try {
+            final IProperty property=(IProperty)result.getElement();
+            if (resourceBundleName != null) {
+              final PsiFile file=property.getPropertiesFile().getContainingFile();
+              if (!resourceBundleName.equals(BundleNameEvaluator.DEFAULT.evaluateBundleName(file))) {
+                continue;
+              }
+            }
+            final String propertyValue=property.getValue();
+            if (propertyValue == null) {
+              continue;
+            }
+            paramsCount.add(getPropertyValuePlaceholdersCount(propertyValue));
+          }
+ catch (          IllegalArgumentException ignored) {
+          }
+        }
+      }
+    }
+  }
+  return paramsCount;
+}

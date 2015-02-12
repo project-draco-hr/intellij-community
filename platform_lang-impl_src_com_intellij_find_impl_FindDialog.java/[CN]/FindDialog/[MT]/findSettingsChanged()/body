@@ -3,6 +3,7 @@
     final ModalityState state=ModalityState.current();
     if (state == ModalityState.NON_MODAL)     return;
     finishPreviousPreviewSearch();
+    mySearchRescheduleOnCancellationsAlarm.cancelAllRequests();
     final DefaultTableModel model=new DefaultTableModel(){
       @Override public boolean isCellEditable(      int row,      int column){
         return false;
@@ -13,11 +14,14 @@
     final FindModel modelClone=myModel.clone();
     applyTo(modelClone,false);
     ValidationInfo result=getValidationInfo(modelClone);
-    if (result != null)     return;
     final PsiDirectory psiDirectory=FindInProjectUtil.getPsiDirectory(modelClone,myProject);
     final ProgressIndicatorBase progressIndicatorWhenSearchStarted=new ProgressIndicatorBase();
     myResultsPreviewSearchProgress=progressIndicatorWhenSearchStarted;
     myResultsPreviewTable.setModel(model);
+    if (result != null) {
+      myResultsPreviewTable.getEmptyText().setText(UIBundle.message("message.nothingToShow"));
+      return;
+    }
     myResultsPreviewTable.getColumnModel().getColumn(0).setCellRenderer(new UsageTableCellRenderer());
     myResultsPreviewTable.getEmptyText().setText("Searching...");
     final AtomicInteger resultsCount=new AtomicInteger();
@@ -33,6 +37,9 @@
             ApplicationManager.getApplication().invokeLater(new Runnable(){
               @Override public void run(){
                 model.addRow(new Object[]{usage});
+                if (model.getRowCount() == 1 && myResultsPreviewTable.getModel() == model) {
+                  myResultsPreviewTable.setRowSelectionInterval(0,0);
+                }
               }
             }
 ,state);
@@ -40,7 +47,7 @@
           }
         }
 ,processPresentation);
-        if (resultsCount.get() == 0) {
+        if (resultsCount.get() == 0 && !progressIndicatorWhenSearchStarted.isCanceled()) {
           ApplicationManager.getApplication().invokeLater(new Runnable(){
             @Override public void run(){
               if (progressIndicatorWhenSearchStarted == myResultsPreviewSearchProgress) {
@@ -52,8 +59,14 @@
         }
       }
       @Override public void onCanceled(      @NotNull ProgressIndicator indicator){
-        if (progressIndicatorWhenSearchStarted == myResultsPreviewSearchProgress && resultsCount.get() == 0) {
-          myResultsPreviewTable.getEmptyText().setText("Cancelled");
+        if (isShowing() && progressIndicatorWhenSearchStarted == myResultsPreviewSearchProgress) {
+          mySearchRescheduleOnCancellationsAlarm.cancelAllRequests();
+          mySearchRescheduleOnCancellationsAlarm.addRequest(new Runnable(){
+            @Override public void run(){
+              findSettingsChanged();
+            }
+          }
+,100);
         }
       }
     }

@@ -1,0 +1,61 @@
+{
+  super(new BorderLayout());
+  myOptions=options;
+  mySchemesProvider=schemesProvider;
+  myCategoryName=categoryName;
+  myOptionsPanel=new ColorAndFontDescriptionPanel(){
+    @Override protected void onSettingsChanged(    ActionEvent e){
+      super.onSettingsChanged(e);
+      myDispatcher.getMulticaster().settingsChanged();
+    }
+    @Override protected void onHyperLinkClicked(    HyperlinkEvent e){
+      if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
+        Settings settings=Settings.KEY.getData(DataManager.getInstance().getDataContext(OptionsPanelImpl.this));
+        String attrName=e.getDescription();
+        Element element=e.getSourceElement();
+        String pageName;
+        try {
+          pageName=element.getDocument().getText(element.getStartOffset(),element.getEndOffset() - element.getStartOffset());
+        }
+ catch (        BadLocationException e1) {
+          return;
+        }
+        final SearchableConfigurable page=myOptions.findSubConfigurable(pageName);
+        if (page != null && settings != null) {
+          Runnable runnable=page.enableSearch(attrName);
+          ActionCallback callback=settings.select(page);
+          if (runnable != null)           callback.doWhenDone(runnable);
+        }
+      }
+    }
+  }
+;
+  myListModel=new CollectionListModel<EditorSchemeAttributeDescriptor>();
+  myOptionsList=new JBList(myListModel);
+  new ListSpeedSearch(myOptionsList);
+  myOptionsList.addListSelectionListener(new ListSelectionListener(){
+    @Override public void valueChanged(    ListSelectionEvent e){
+      if (!mySchemesProvider.areSchemesLoaded())       return;
+      processListValueChanged();
+    }
+  }
+);
+  myOptionsList.setCellRenderer(new DefaultListCellRenderer(){
+    @Override public Component getListCellRendererComponent(    JList list,    Object value,    int index,    boolean isSelected,    boolean cellHasFocus){
+      Component component=super.getListCellRendererComponent(list,value,index,isSelected,cellHasFocus);
+      if (value instanceof ColorAndFontDescription) {
+        setIcon(((ColorAndFontDescription)value).getIcon());
+        setToolTipText(((ColorAndFontDescription)value).getToolTip());
+      }
+      return component;
+    }
+  }
+);
+  myOptionsList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+  JScrollPane scrollPane=ScrollPaneFactory.createScrollPane(myOptionsList);
+  scrollPane.setPreferredSize(new Dimension(230,60));
+  JPanel north=new JPanel(new BorderLayout());
+  north.add(scrollPane,BorderLayout.CENTER);
+  north.add(myOptionsPanel,BorderLayout.EAST);
+  add(north,BorderLayout.NORTH);
+}

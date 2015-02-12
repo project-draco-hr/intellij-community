@@ -1,34 +1,21 @@
 {
-  final String branchAsString=branchUrl.toString();
-  final String keyString=branchAsString + "@" + targetRevision;
-  final Set<Long> mergeInfo=myPathMergedMap.get(keyString);
+  SvnMergeInfoCache.MergeCheckResult result;
+  Set<Long> mergeInfo=myPathMergedMap.get(branchUrl.toString() + "@" + targetRevision);
   if (mergeInfo != null) {
-    return SvnMergeInfoCache.MergeCheckResult.getInstance(mergeInfo.contains(revisionAsked));
+    result=SvnMergeInfoCache.MergeCheckResult.getInstance(mergeInfo.contains(revisionAsked));
   }
-  final PropertyValue mergeinfoProperty;
-  SvnTarget target=SvnTarget.fromURL(branchUrl);
-  try {
-    mergeinfoProperty=myVcs.getFactory(target).createPropertyClient().getProperty(target,SvnPropertyKeys.MERGE_INFO,false,SVNRevision.create(targetRevision));
-  }
- catch (  VcsException e) {
-    LOG.info(e);
-    return SvnMergeInfoCache.MergeCheckResult.NOT_MERGED;
-  }
-  if (mergeinfoProperty == null) {
-    final String newTrunkUrl=SVNPathUtil.removeTail(trunkUrl).trim();
-    final SVNURL newBranchUrl;
-    try {
-      newBranchUrl=branchUrl.removePathTail();
+ else {
+    SvnTarget target=SvnTarget.fromURL(branchUrl);
+    PropertyValue mergeinfoProperty=myVcs.getFactory(target).createPropertyClient().getProperty(target,SvnPropertyKeys.MERGE_INFO,false,SVNRevision.create(targetRevision));
+    if (mergeinfoProperty == null) {
+      final String newTrunkUrl=SVNPathUtil.removeTail(trunkUrl).trim();
+      final SVNURL newBranchUrl=branchUrl.removePathTail();
+      final String absoluteTrunk=SVNPathUtil.append(myInfo.getRepoUrl(),newTrunkUrl);
+      result=newTrunkUrl.length() <= 1 || newBranchUrl.toString().length() <= myInfo.getRepoUrl().length() || newBranchUrl.toString().equals(absoluteTrunk) ? SvnMergeInfoCache.MergeCheckResult.NOT_MERGED : goUpInRepo(revisionAsked,targetRevision,newBranchUrl,newTrunkUrl);
     }
- catch (    SVNException e) {
-      LOG.info(e);
-      return SvnMergeInfoCache.MergeCheckResult.NOT_MERGED;
+ else {
+      result=processMergeinfoProperty(branchUrl.toString() + "@" + targetRevision,revisionAsked,mergeinfoProperty,trunkUrl,false);
     }
-    final String absoluteTrunk=SVNPathUtil.append(myRepositoryRoot,newTrunkUrl);
-    if ((1 >= newTrunkUrl.length()) || (myRepositoryRoot.length() >= newBranchUrl.toString().length()) || (newBranchUrl.toString().equals(absoluteTrunk))) {
-      return SvnMergeInfoCache.MergeCheckResult.NOT_MERGED;
-    }
-    return goUpInRepo(revisionAsked,targetRevision,newBranchUrl,newTrunkUrl);
   }
-  return processMergeinfoProperty(keyString,revisionAsked,mergeinfoProperty,trunkUrl,false);
+  return result;
 }

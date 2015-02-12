@@ -1,25 +1,26 @@
 {
-  ClasspathCache.LoaderData loaderData=new ClasspathCache.LoaderData();
-  File index=new File(myRootDir,"classpath.index");
-  if (index.exists()) {
-    BufferedReader reader=new BufferedReader(new FileReader(index));
-    try {
-      do {
-        String line=reader.readLine();
-        if (line == null)         break;
-        loaderData.addResourceEntry(line);
-        loaderData.addNameEntry(line);
-      }
- while (true);
+  ClasspathCache.LoaderData fromIndex=tryReadFromIndex();
+  final ClasspathCache.LoaderData loaderData=fromIndex != null ? fromIndex : new ClasspathCache.LoaderData();
+  final int nsMsFactor=1000000;
+  int currentLoaders=totalLoaders.incrementAndGet();
+  long currentScanning;
+  if (fromIndex == null) {
+    long started=System.nanoTime();
+    buildPackageCache(myRootDir,loaderData);
+    final long doneNanos=System.nanoTime() - started;
+    currentScanning=totalScanning.addAndGet(doneNanos);
+    if (doFsActivityLogging) {
+      System.out.println("Scanned: " + myRootDirAbsolutePath + " for "+ (doneNanos / nsMsFactor)+ "ms");
     }
-  finally {
-      reader.close();
-    }
+    trySaveToIndex(loaderData);
   }
  else {
-    loaderData.addResourceEntry("foo.class");
-    loaderData.addResourceEntry("bar.properties");
-    buildPackageCache(myRootDir,loaderData);
+    currentScanning=totalScanning.get();
+  }
+  loaderData.addResourceEntry("foo.class");
+  loaderData.addResourceEntry("bar.properties");
+  if (doFsActivityLogging) {
+    System.out.println("Scanning: " + (currentScanning / nsMsFactor) + "ms, saving: "+ (totalSaving.get() / nsMsFactor)+ "ms, loading:"+ (totalReading.get() / nsMsFactor)+ "ms for "+ currentLoaders+ " loaders");
   }
   return loaderData;
 }

@@ -1,0 +1,40 @@
+{
+  final HashMap<String,Object> annotationAttributeValues=new HashMap<String,Object>();
+  annotationAttributeValues.put(AnnotationUtil.PROPERTY_KEY_RESOURCE_BUNDLE_PARAMETER,null);
+  if (mustBePropertyKey(project,expression,annotationAttributeValues)) {
+    final Object resourceBundleName=annotationAttributeValues.get(AnnotationUtil.PROPERTY_KEY_RESOURCE_BUNDLE_PARAMETER);
+    if (!(resourceBundleName instanceof PsiExpression)) {
+      return false;
+    }
+    PsiExpression expr=(PsiExpression)resourceBundleName;
+    final PsiConstantEvaluationHelper constantEvaluationHelper=JavaPsiFacade.getInstance(project).getConstantEvaluationHelper();
+    Object value=constantEvaluationHelper.computeConstantExpression(expr);
+    if (value == null) {
+      if (expr instanceof PsiReferenceExpression) {
+        final PsiElement resolve=((PsiReferenceExpression)expr).resolve();
+        if (resolve instanceof PsiField && ((PsiField)resolve).hasModifierProperty(PsiModifier.FINAL)) {
+          value=constantEvaluationHelper.computeConstantExpression(((PsiField)resolve).getInitializer());
+          if (value == null) {
+            return false;
+          }
+        }
+      }
+      if (value == null) {
+        final ResourceBundle resourceBundle=resolveResourceBundleByKey(key,project);
+        if (resourceBundle == null) {
+          return false;
+        }
+        final PropertiesFile defaultPropertiesFile=resourceBundle.getDefaultPropertiesFile();
+        final String bundleName=BundleNameEvaluator.DEFAULT.evaluateBundleName(defaultPropertiesFile.getContainingFile());
+        if (bundleName == null) {
+          return false;
+        }
+        value=bundleName;
+      }
+    }
+    String bundleName=value.toString();
+    outResourceBundle.set(bundleName);
+    return isPropertyRef(expression,key,bundleName);
+  }
+  return true;
+}

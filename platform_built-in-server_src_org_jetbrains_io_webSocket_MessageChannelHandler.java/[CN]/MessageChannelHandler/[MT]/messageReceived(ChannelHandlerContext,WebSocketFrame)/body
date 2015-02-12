@@ -1,0 +1,29 @@
+{
+  WebSocketClient client=(WebSocketClient)context.attr(ClientManager.CLIENT).get();
+  if (message instanceof CloseWebSocketFrame) {
+    if (client != null) {
+      try {
+        clientManager.disconnectClient(context,client,false);
+      }
+  finally {
+        message.retain();
+        client.disconnect((CloseWebSocketFrame)message);
+      }
+    }
+  }
+ else   if (message instanceof PingWebSocketFrame) {
+    context.channel().writeAndFlush(new PongWebSocketFrame(message.content()));
+  }
+ else   if (message instanceof TextWebSocketFrame) {
+    String text=ChannelBufferToString.readString(message.content());
+    try {
+      messageServer.message(client,text);
+    }
+ catch (    Throwable e) {
+      clientManager.exceptionHandler.exceptionCaught(new IOException("Exception while handle message: " + text,e));
+    }
+  }
+ else   if (!(message instanceof PongWebSocketFrame)) {
+    throw new UnsupportedOperationException(message.getClass().getName() + " frame types not supported");
+  }
+}
