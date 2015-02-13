@@ -10,35 +10,45 @@
   ControlBinder binder=new ControlBinder(manager.getState());
   binder.bindAnnotations(this);
   binder.reset();
-  myStateComboBox.setRenderer(new ListCellRendererWrapper<CustomTaskState>(){
-    @Override public void customize(    JList list,    CustomTaskState value,    int index,    boolean selected,    boolean hasFocus){
-      if (value != null) {
-        setText(value.getPresentableName());
+  myStateComboLabel.setLabelFor(myStateCombo);
+  myStateComboHint.setIcon(PlatformIcons.UP_DOWN_ARROWS);
+  final JComboBox comboBox=myStateCombo.getComboBox();
+  comboBox.setPreferredSize(new Dimension(300,UIUtil.fixComboBoxHeight(comboBox.getPreferredSize().height)));
+  final ListCellRenderer defaultRenderer=comboBox.getRenderer();
+  comboBox.setRenderer(new ListCellRenderer(){
+    @Override public Component getListCellRendererComponent(    JList list,    Object value,    int index,    boolean isSelected,    boolean cellHasFocus){
+      if (value == null) {
+        return new JBLabel("-- no states available --");
       }
- else {
-        setText("-- no states available --");
-      }
+      return defaultRenderer.getListCellRendererComponent(list,value,index,isSelected,cellHasFocus);
     }
   }
 );
   final TaskRepository repository=myTask.getRepository();
   if (myTask.isIssue() && repository != null && repository.isSupported(TaskRepository.STATE_UPDATING)) {
-    new ComboBoxUpdater<CustomTaskState>(myProject,"Fetching available task states...",myStateComboBox){
-      @NotNull @Override protected Set<CustomTaskState> fetch(      @NotNull ProgressIndicator indicator) throws Exception {
-        return repository.getAvailableTaskStates(myTask);
+    new ComboBoxUpdater<CustomStateTrinityAdapter>(myProject,"Fetching available task states...",comboBox){
+      @NotNull @Override protected List<CustomStateTrinityAdapter> fetch(      @NotNull ProgressIndicator indicator) throws Exception {
+        return ContainerUtil.map(repository.getAvailableTaskStates(myTask),new Function<CustomTaskState,CustomStateTrinityAdapter>(){
+          @Override public CustomStateTrinityAdapter fun(          CustomTaskState state){
+            return new CustomStateTrinityAdapter(state);
+          }
+        }
+);
       }
-      @Nullable @Override public CustomTaskState getSelectedItem(){
-        return repository.getPreferredOpenTaskState();
+      @Nullable @Override public CustomStateTrinityAdapter getSelectedItem(){
+        final CustomTaskState state=repository.getPreferredOpenTaskState();
+        return state != null ? new CustomStateTrinityAdapter(state) : null;
       }
-      @Nullable @Override public CustomTaskState getExtraItem(){
-        return DO_NOT_UPDATE_STATE;
+      @Nullable @Override public CustomStateTrinityAdapter getExtraItem(){
+        return new CustomStateTrinityAdapter(DO_NOT_UPDATE_STATE);
       }
     }
 .queue();
   }
  else {
-    myStateComboBoxLabel.setVisible(false);
-    myStateComboBox.setVisible(false);
+    myStateComboLabel.setVisible(false);
+    myStateComboHint.setVisible(false);
+    myStateCombo.setVisible(false);
   }
   TaskManagerImpl.Config state=taskManager.getState();
   myClearContext.setSelected(state.clearContext);
@@ -111,5 +121,13 @@
     myChangelistName.setText(taskManager.getChangelistName(task));
     updateFields(true);
   }
+  final JComponent contentPanel=getContentPanel();
+  contentPanel.addKeyListener(new KeyAdapter(){
+    @Override public void keyPressed(    KeyEvent e){
+      super.keyPressed(e);
+    }
+  }
+);
+  myStateCombo.registerUpDownHint(getPreferredFocusedComponent());
   init();
 }
