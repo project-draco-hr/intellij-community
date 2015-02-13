@@ -7,16 +7,16 @@
   int messageId=reader.peek() == JsonToken.NUMBER ? reader.nextInt() : -1;
   String domainName=reader.nextString();
   if (domainName.length() == 1) {
-    AsyncResult asyncResult=webSocketServer.removeAsyncResult(client,messageId);
+    AsyncPromise<Object> promise=client.messageCallbackMap.remove(messageId);
     if (domainName.charAt(0) == 'r') {
-      if (asyncResult == null) {
+      if (promise == null) {
         LOG.error("Response with id " + messageId + " was already processed");
         return;
       }
-      asyncResult.setDone(JsonUtil.nextAny(reader));
+      promise.setResult(JsonUtil.nextAny(reader));
     }
  else {
-      asyncResult.setRejected();
+      promise.setError(Promise.createError("error"));
     }
     return;
   }
@@ -56,10 +56,7 @@
         method.setAccessible(true);
         Object result=method.invoke(isStatic ? null : domain,parameters);
         if (messageId != -1) {
-          ByteBuf response=encodeMessage(messageId,null,null,new Object[]{result});
-          if (response != null) {
-            webSocketServer.sendResponse(client,response);
-          }
+          client.send(encodeMessage(messageId,null,null,null,new Object[]{result}));
         }
         return;
       }

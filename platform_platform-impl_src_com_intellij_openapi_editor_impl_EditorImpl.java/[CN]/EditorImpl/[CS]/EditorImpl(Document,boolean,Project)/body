@@ -9,8 +9,7 @@
   initTabPainter();
   myIsViewer=viewer;
   mySettings=new SettingsImpl(this,project);
-  boolean forceSoftWraps=!mySettings.isUseSoftWraps() && shouldSoftWrapsBeForced(myDocument);
-  if (forceSoftWraps) {
+  if (shouldSoftWrapsBeForced()) {
     mySettings.setUseSoftWrapsQuiet();
     putUserData(FORCED_SOFT_WRAPS,Boolean.TRUE);
   }
@@ -19,7 +18,7 @@
   myFoldingModel=new FoldingModelImpl(this);
   myCaretModel=new CaretModelImpl(this);
   mySoftWrapModel=new SoftWrapModelImpl(this);
-  mySizeContainer.reset();
+  if (!myUseNewRendering)   mySizeContainer.reset();
   myCommandProcessor=CommandProcessor.getInstance();
   if (project != null) {
     myConnection=project.getMessageBus().connect();
@@ -43,6 +42,7 @@
       int end=Math.min(Math.max(highlighter.getAffectedAreaEndOffset(),0),textLength);
       int startLine=start == -1 ? 0 : myDocument.getLineNumber(start);
       int endLine=end == -1 ? myDocument.getLineCount() : myDocument.getLineNumber(end);
+      if (myUseNewRendering)       myView.invalidateLines(startLine - 1,endLine + 1);
       repaintLines(Math.max(0,startLine - 1),Math.min(endLine + 1,getDocument().getLineCount()));
       if (renderersChanged || highlighter.getErrorStripeMarkColor() != null) {
         ((EditorMarkupModelImpl)getMarkupModel()).repaint(start,end);
@@ -118,20 +118,22 @@
     }
   }
 );
-  mySoftWrapModel.addVisualSizeChangeListener(new VisualSizeChangeListener(){
-    @Override public void onLineWidthsChange(    int startLine,    int oldEndLine,    int newEndLine,    @NotNull TIntIntHashMap lineWidths){
-      mySizeContainer.update(startLine,newEndLine,oldEndLine);
-      for (int i=startLine; i <= newEndLine; i++) {
-        if (lineWidths.contains(i)) {
-          int width=lineWidths.get(i);
-          if (width >= 0) {
-            mySizeContainer.updateLineWidthIfNecessary(i,width);
+  if (!myUseNewRendering) {
+    mySoftWrapModel.addVisualSizeChangeListener(new VisualSizeChangeListener(){
+      @Override public void onLineWidthsChange(      int startLine,      int oldEndLine,      int newEndLine,      @NotNull TIntIntHashMap lineWidths){
+        mySizeContainer.update(startLine,newEndLine,oldEndLine);
+        for (int i=startLine; i <= newEndLine; i++) {
+          if (lineWidths.contains(i)) {
+            int width=lineWidths.get(i);
+            if (width >= 0) {
+              mySizeContainer.updateLineWidthIfNecessary(i,width);
+            }
           }
         }
       }
     }
-  }
 );
+  }
   EditorHighlighter highlighter=new EmptyEditorHighlighter(myScheme.getAttributes(HighlighterColors.TEXT));
   setHighlighter(highlighter);
   myEditorComponent=new EditorComponentImpl(this);
@@ -139,6 +141,7 @@
   myVerticalScrollBar=(MyScrollBar)myScrollPane.getVerticalScrollBar();
   myVerticalScrollBar.setOpaque(false);
   myPanel=new JPanel();
+  myView=myUseNewRendering ? new EditorView(this) : null;
   UIUtil.putClientProperty(myPanel,JBSwingUtilities.NOT_IN_HIERARCHY_COMPONENTS,new Iterable<JComponent>(){
     @Override public Iterator<JComponent> iterator(){
       JComponent component=getPermanentHeaderComponent();

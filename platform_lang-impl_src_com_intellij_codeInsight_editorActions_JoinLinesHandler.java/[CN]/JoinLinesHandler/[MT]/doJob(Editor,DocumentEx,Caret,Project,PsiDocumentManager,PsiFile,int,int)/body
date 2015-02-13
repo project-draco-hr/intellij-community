@@ -2,27 +2,18 @@
   int caretRestoreOffset=-1;
   for (int i=startLine; i < endLine; i++) {
     if (i >= doc.getLineCount() - 1)     break;
-    int lineEndOffset=doc.getLineEndOffset(startLine);
     docManager.doPostponedOperationsAndUnblockDocument(doc);
     docManager.commitDocument(doc);
     CharSequence text=doc.getCharsSequence();
-    int firstNonSpaceOffsetInNextLine=doc.getLineStartOffset(startLine + 1);
-    while (firstNonSpaceOffsetInNextLine < text.length() - 1 && (text.charAt(firstNonSpaceOffsetInNextLine) == ' ' || text.charAt(firstNonSpaceOffsetInNextLine) == '\t')) {
-      firstNonSpaceOffsetInNextLine++;
+    JoinLinesOffsets offsets=calcJoinLinesOffsets(psiFile,doc,startLine);
+    if (offsets.isStartLineEndsWithComment && !offsets.isNextLineStartsWithComment) {
+      tryConvertEndOfLineComment(doc,offsets.elementAtStartLineEnd);
+      offsets=calcJoinLinesOffsets(psiFile,doc,startLine);
     }
-    PsiElement elementAtNextLineStart=psiFile.findElementAt(firstNonSpaceOffsetInNextLine);
-    boolean isNextLineStartsWithComment=isCommentElement(elementAtNextLineStart);
-    int lastNonSpaceOffsetInStartLine=lineEndOffset;
-    while (lastNonSpaceOffsetInStartLine > 0 && (text.charAt(lastNonSpaceOffsetInStartLine - 1) == ' ' || text.charAt(lastNonSpaceOffsetInStartLine - 1) == '\t')) {
-      lastNonSpaceOffsetInStartLine--;
-    }
-    int elemOffset=lastNonSpaceOffsetInStartLine > doc.getLineStartOffset(startLine) ? lastNonSpaceOffsetInStartLine - 1 : -1;
-    PsiElement elementAtStartLineEnd=elemOffset == -1 ? null : psiFile.findElementAt(elemOffset);
-    boolean isStartLineEndsWithComment=isCommentElement(elementAtStartLineEnd);
     int rc=-1;
     int start;
     int end;
-    TextRange limits=findStartAndEnd(text,lastNonSpaceOffsetInStartLine,firstNonSpaceOffsetInNextLine,doc.getTextLength());
+    TextRange limits=findStartAndEnd(text,offsets.lastNonSpaceOffsetInStartLine,offsets.firstNonSpaceOffsetInNextLine,doc.getTextLength());
     start=limits.getStartOffset();
     end=limits.getEndOffset();
     for (    JoinLinesHandlerDelegate delegate : Extensions.getExtensions(JoinLinesHandlerDelegate.EP_NAME)) {
@@ -35,8 +26,8 @@
       }
     }
     if (rc == CANNOT_JOIN) {
-      if (lastNonSpaceOffsetInStartLine == doc.getLineStartOffset(startLine)) {
-        doc.deleteString(doc.getLineStartOffset(startLine),firstNonSpaceOffsetInNextLine);
+      if (offsets.lastNonSpaceOffsetInStartLine == doc.getLineStartOffset(startLine)) {
+        doc.deleteString(doc.getLineStartOffset(startLine),offsets.firstNonSpaceOffsetInNextLine);
         int indent=-1;
         try {
           docManager.commitDocument(doc);
@@ -50,9 +41,9 @@
         }
         continue;
       }
-      doc.deleteString(lineEndOffset,lineEndOffset + doc.getLineSeparatorLength(startLine));
+      doc.deleteString(offsets.lineEndOffset,offsets.lineEndOffset + doc.getLineSeparatorLength(startLine));
       text=doc.getCharsSequence();
-      limits=findStartAndEnd(text,lineEndOffset - 1,lineEndOffset,doc.getTextLength());
+      limits=findStartAndEnd(text,offsets.lineEndOffset - 1,offsets.lineEndOffset,doc.getTextLength());
       start=limits.getStartOffset();
       end=limits.getEndOffset();
       docManager.commitDocument(doc);
@@ -66,8 +57,8 @@
       if (caretRestoreOffset == CANNOT_JOIN)       caretRestoreOffset=rc;
       continue;
     }
-    if (caretRestoreOffset == CANNOT_JOIN)     caretRestoreOffset=start == lineEndOffset ? start : start + 1;
-    if (isStartLineEndsWithComment && isNextLineStartsWithComment) {
+    if (caretRestoreOffset == CANNOT_JOIN)     caretRestoreOffset=start == offsets.lineEndOffset ? start : start + 1;
+    if (offsets.isStartLineEndsWithComment && offsets.isNextLineStartsWithComment) {
       if (text.charAt(end) == '*' && end < text.length() && text.charAt(end + 1) != '/') {
         end++;
         while (end < doc.getTextLength() && (text.charAt(end) == ' ' || text.charAt(end) == '\t'))         end++;
@@ -76,11 +67,11 @@
         end+=2;
         while (end < doc.getTextLength() && (text.charAt(end) == ' ' || text.charAt(end) == '\t'))         end++;
       }
-      doc.replaceString(start == lineEndOffset ? start : start + 1,end," ");
+      doc.replaceString(start == offsets.lineEndOffset ? start : start + 1,end," ");
       continue;
     }
     while (end < doc.getTextLength() && (text.charAt(end) == ' ' || text.charAt(end) == '\t'))     end++;
-    doc.replaceString(start == lineEndOffset ? start : start + 1,end," ");
+    doc.replaceString(start == offsets.lineEndOffset ? start : start + 1,end," ");
     if (start <= doc.getLineStartOffset(startLine)) {
       try {
         docManager.commitDocument(doc);
