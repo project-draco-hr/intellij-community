@@ -1,0 +1,66 @@
+{
+  Project project=CommonDataKeys.PROJECT.getData(dataContext);
+  if (project == null)   return false;
+  PsiFile file=PsiUtilBase.getPsiFileInEditor(editor,project);
+  if (file == null)   return false;
+  if (editor.getSelectionModel().hasSelection())   return false;
+  int offset=editor.getCaretModel().getOffset() - 1;
+  if (offset < 0)   return false;
+  CharSequence chars=editor.getDocument().getCharsSequence();
+  char c=chars.charAt(offset);
+  final Editor injectedEditor=TypedHandler.injectedEditorIfCharTypedIsSignificant(c,editor,file);
+  final Editor originalEditor=editor;
+  if (injectedEditor != editor) {
+    int injectedOffset=injectedEditor.getCaretModel().getOffset();
+    if (isOffsetInsideInjected(injectedEditor,injectedOffset)) {
+      file=PsiDocumentManager.getInstance(project).getPsiFile(injectedEditor.getDocument());
+      editor=injectedEditor;
+      offset=injectedOffset - 1;
+    }
+  }
+  final BackspaceHandlerDelegate[] delegates=Extensions.getExtensions(BackspaceHandlerDelegate.EP_NAME);
+  if (!toWordStart) {
+    for (    BackspaceHandlerDelegate delegate : delegates) {
+      delegate.beforeCharDeleted(c,file,editor);
+    }
+  }
+  FileType fileType=file.getFileType();
+  final QuoteHandler quoteHandler=TypedHandler.getQuoteHandler(file,editor);
+  HighlighterIterator hiterator=((EditorEx)editor).getHighlighter().createIterator(offset);
+  boolean wasClosingQuote=quoteHandler != null && quoteHandler.isClosingQuote(hiterator,offset);
+  myOriginalHandler.execute(originalEditor,caret,dataContext);
+  if (!toWordStart) {
+    for (    BackspaceHandlerDelegate delegate : delegates) {
+      if (delegate.charDeleted(c,file,editor)) {
+        return true;
+      }
+    }
+  }
+  if (offset >= editor.getDocument().getTextLength())   return true;
+  chars=editor.getDocument().getCharsSequence();
+  if ((c == '(' || c == '[' || c == '{') && CodeInsightSettings.getInstance().AUTOINSERT_PAIR_BRACKET) {
+    char c1=chars.charAt(offset);
+    if (c1 != getRightChar(c))     return true;
+    HighlighterIterator iterator=((EditorEx)editor).getHighlighter().createIterator(offset);
+    BraceMatcher braceMatcher=BraceMatchingUtil.getBraceMatcher(fileType,iterator);
+    if (!braceMatcher.isLBraceToken(iterator,chars,fileType) && !braceMatcher.isRBraceToken(iterator,chars,fileType)) {
+      return true;
+    }
+    int rparenOffset=BraceMatchingUtil.findRightmostRParen(iterator,iterator.getTokenType(),chars,fileType);
+    if (rparenOffset >= 0) {
+      iterator=((EditorEx)editor).getHighlighter().createIterator(rparenOffset);
+      boolean matched=BraceMatchingUtil.matchBrace(chars,fileType,iterator,false);
+      if (matched)       return true;
+    }
+    editor.getDocument().deleteString(offset,offset + 1);
+  }
+ else   if ((c == '"' || c == '\'' || c == '`') && CodeInsightSettings.getInstance().AUTOINSERT_PAIR_QUOTE) {
+    char c1=chars.charAt(offset);
+    if (c1 != c)     return true;
+    if (wasClosingQuote)     return true;
+    HighlighterIterator iterator=((EditorEx)editor).getHighlighter().createIterator(offset);
+    if (quoteHandler == null || !quoteHandler.isOpeningQuote(iterator,offset))     return true;
+    editor.getDocument().deleteString(offset,offset + 1);
+  }
+  return true;
+}

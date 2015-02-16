@@ -1,23 +1,34 @@
 {
-  content.retain();
-  if (processHandler.has()) {
-    fastCgiRequest.writeToServerChannel(content,processChannel);
+  final ByteBuf notEmptyContent;
+  if (content.isReadable()) {
+    content.retain();
+    notEmptyContent=content;
+    notEmptyContent.touch();
   }
  else {
-    processHandler.get().doWhenDone(new Runnable(){
-      @Override public void run(){
-        fastCgiRequest.writeToServerChannel(content,processChannel);
-      }
+    notEmptyContent=null;
+  }
+  try {
+    if (processHandler.has()) {
+      fastCgiRequest.writeToServerChannel(notEmptyContent,processChannel);
     }
-).doWhenRejected(new Runnable(){
-      @Override public void run(){
-        content.release();
-        Channel channel=requests.get(fastCgiRequest.requestId);
-        if (channel != null && channel.isActive()) {
-          Responses.sendStatus(HttpResponseStatus.BAD_GATEWAY,channel);
+ else {
+      processHandler.get().done(new Consumer<OSProcessHandler>(){
+        @Override public void consume(        OSProcessHandler osProcessHandler){
+          fastCgiRequest.writeToServerChannel(notEmptyContent,processChannel);
         }
       }
-    }
+).rejected(new Consumer<Throwable>(){
+        @Override public void consume(        Throwable error){
+          LOG.error(error);
+          handleError(fastCgiRequest,notEmptyContent);
+        }
+      }
 );
+    }
+  }
+ catch (  Throwable e) {
+    LOG.error(e);
+    handleError(fastCgiRequest,notEmptyContent);
   }
 }

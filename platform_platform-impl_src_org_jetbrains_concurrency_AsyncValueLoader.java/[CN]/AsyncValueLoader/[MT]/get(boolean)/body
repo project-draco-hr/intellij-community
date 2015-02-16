@@ -1,0 +1,32 @@
+{
+  Promise<T> promise=ref.get();
+  if (promise == null) {
+    if (!ref.compareAndSet(null,promise=new AsyncPromise<T>())) {
+      return ref.get();
+    }
+  }
+ else {
+    Promise.State state=promise.getState();
+    if (state == Promise.State.PENDING) {
+      return promise;
+    }
+ else     if (state == Promise.State.FULFILLED) {
+      if (!checkFreshness || isUpToDate(((Getter<T>)promise).get())) {
+        return promise;
+      }
+      if (!ref.compareAndSet(promise,promise=new AsyncPromise<T>())) {
+        Promise<T> valueFromAnotherThread=ref.get();
+        while (valueFromAnotherThread == null) {
+          if (ref.compareAndSet(null,promise)) {
+            return getPromise((AsyncPromise<T>)promise);
+          }
+ else {
+            valueFromAnotherThread=ref.get();
+          }
+        }
+        return valueFromAnotherThread;
+      }
+    }
+  }
+  return getPromise((AsyncPromise<T>)promise);
+}
