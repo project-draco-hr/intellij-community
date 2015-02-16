@@ -1,0 +1,32 @@
+{
+  Channel channel=requests.remove(id);
+  if (channel == null || !channel.isActive()) {
+    if (buffer != null) {
+      buffer.release();
+    }
+    return;
+  }
+  if (buffer == null) {
+    Responses.sendStatus(HttpResponseStatus.BAD_GATEWAY,channel);
+    return;
+  }
+  HttpResponse httpResponse=new DefaultFullHttpResponse(HttpVersion.HTTP_1_1,HttpResponseStatus.OK,buffer);
+  try {
+    parseHeaders(httpResponse,buffer);
+    Responses.addServer(httpResponse);
+    if (!HttpHeaderUtil.isContentLengthSet(httpResponse)) {
+      HttpHeaderUtil.setContentLength(httpResponse,buffer.readableBytes());
+    }
+  }
+ catch (  Throwable e) {
+    buffer.release();
+    try {
+      LOG.error(e);
+    }
+  finally {
+      Responses.sendStatus(HttpResponseStatus.INTERNAL_SERVER_ERROR,channel);
+    }
+    return;
+  }
+  channel.writeAndFlush(httpResponse);
+}
