@@ -8,31 +8,45 @@
   final int len=end - start;
   final int maxSize=len * 3;
   buf.ensureWritable(maxSize);
+  int oldWriterIndex;
+  AbstractByteBuf buffer;
   if (buf instanceof AbstractByteBuf) {
-    AbstractByteBuf buffer=(AbstractByteBuf)buf;
-    int oldWriterIndex=buffer.writerIndex;
-    int writerIndex=oldWriterIndex;
-    for (int i=start; i < end; i++) {
-      char c=seq.charAt(i);
-      if (c < 0x80) {
-        buffer._setByte(writerIndex++,(byte)c);
-      }
- else       if (c < 0x800) {
-        buffer._setByte(writerIndex++,(byte)(0xc0 | (c >> 6)));
-        buffer._setByte(writerIndex++,(byte)(0x80 | (c & 0x3f)));
-      }
+    buffer=(AbstractByteBuf)buf;
+    oldWriterIndex=buffer.writerIndex;
+  }
  else {
-        buffer._setByte(writerIndex++,(byte)(0xe0 | (c >> 12)));
-        buffer._setByte(writerIndex++,(byte)(0x80 | ((c >> 6) & 0x3f)));
-        buffer._setByte(writerIndex++,(byte)(0x80 | (c & 0x3f)));
-      }
+    ByteBuf underlying=buf.unwrap();
+    if (underlying instanceof AbstractByteBuf) {
+      buffer=(AbstractByteBuf)underlying;
+      oldWriterIndex=buf.writerIndex();
     }
+ else {
+      byte[] bytes=seq.toString().getBytes(CharsetUtil.UTF_8);
+      buf.writeBytes(bytes);
+      return bytes.length;
+    }
+  }
+  int writerIndex=oldWriterIndex;
+  for (int i=start; i < end; i++) {
+    char c=seq.charAt(i);
+    if (c < 0x80) {
+      buffer._setByte(writerIndex++,(byte)c);
+    }
+ else     if (c < 0x800) {
+      buffer._setByte(writerIndex++,(byte)(0xc0 | (c >> 6)));
+      buffer._setByte(writerIndex++,(byte)(0x80 | (c & 0x3f)));
+    }
+ else {
+      buffer._setByte(writerIndex++,(byte)(0xe0 | (c >> 12)));
+      buffer._setByte(writerIndex++,(byte)(0x80 | ((c >> 6) & 0x3f)));
+      buffer._setByte(writerIndex++,(byte)(0x80 | (c & 0x3f)));
+    }
+  }
+  if (buf == buffer) {
     buffer.writerIndex=writerIndex;
-    return writerIndex - oldWriterIndex;
   }
  else {
-    byte[] bytes=seq.toString().getBytes(CharsetUtil.UTF_8);
-    buf.writeBytes(bytes);
-    return bytes.length;
+    buf.writerIndex(writerIndex);
   }
+  return writerIndex - oldWriterIndex;
 }
