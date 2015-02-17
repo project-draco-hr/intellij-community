@@ -1,0 +1,43 @@
+{
+  final Project project=e.getData(CommonDataKeys.PROJECT);
+  if (project == null) {
+    return;
+  }
+  final PsiFile file=CommonDataKeys.PSI_FILE.getData(e.getDataContext());
+  if (file == null)   return;
+  final Editor editor=CommonDataKeys.EDITOR.getData(e.getDataContext());
+  if (editor == null)   return;
+  final SelectionModel model=editor.getSelectionModel();
+  final Document document=PsiDocumentManager.getInstance(project).getDocument(file);
+  if (document == null)   return;
+  final int start=model.getSelectionStart();
+  final int end=model.getSelectionEnd();
+  final int lineNumber=document.getLineNumber(start);
+  int realStart=start - document.getLineStartOffset(lineNumber);
+  final CCProjectService service=CCProjectService.getInstance(project);
+  final PsiDirectory taskDir=file.getContainingDirectory();
+  final PsiDirectory lessonDir=taskDir.getParent();
+  if (lessonDir == null)   return;
+  final TaskFile taskFile=service.getTaskFile(file.getVirtualFile());
+  if (taskFile == null) {
+    return;
+  }
+  if (arePlaceholdersIntersect(taskFile,document,start,end)) {
+    return;
+  }
+  final AnswerPlaceholder answerPlaceholder=new AnswerPlaceholder();
+  answerPlaceholder.setLine(lineNumber);
+  answerPlaceholder.setStart(realStart);
+  answerPlaceholder.setPossibleAnswer(model.getSelectedText());
+  CCCreateAnswerPlaceholderDialog dlg=new CCCreateAnswerPlaceholderDialog(project,answerPlaceholder);
+  dlg.show();
+  if (dlg.getExitCode() != DialogWrapper.OK_EXIT_CODE) {
+    return;
+  }
+  int index=taskFile.getAnswerPlaceholders().size() + 1;
+  answerPlaceholder.setIndex(index);
+  taskFile.addAnswerPlaceholder(answerPlaceholder);
+  taskFile.sortAnswerPlaceholders();
+  EduAnswerPlaceholderPainter.drawAnswerPlaceholder(editor,answerPlaceholder,false,JBColor.BLUE);
+  EduAnswerPlaceholderPainter.createGuardedBlocks(editor,answerPlaceholder,false);
+}

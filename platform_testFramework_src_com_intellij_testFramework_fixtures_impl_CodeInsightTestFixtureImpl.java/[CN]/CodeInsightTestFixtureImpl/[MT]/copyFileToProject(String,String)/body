@@ -1,2 +1,48 @@
 {
+  final String testDataPath=getTestDataPath();
+  File fromFile=new File(testDataPath + "/" + sourceFilePath);
+  if (!fromFile.exists()) {
+    fromFile=new File(sourceFilePath);
+  }
+  VirtualFile result;
+  final String path=fromFile.getAbsolutePath();
+  if (myTempDirFixture instanceof LightTempDirTestFixtureImpl) {
+    VfsRootAccess.allowRootAccess(path);
+    Disposer.register(myTestRootDisposable,new Disposable(){
+      @Override public void dispose(){
+        VfsRootAccess.disallowRootAccess(path);
+      }
+    }
+);
+    VirtualFile fromVFile=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(fromFile);
+    if (fromVFile == null) {
+      fromVFile=myTempDirFixture.getFile(sourceFilePath);
+    }
+    Assert.assertNotNull("can't find test data file " + sourceFilePath + " ("+ testDataPath+ ")",fromVFile);
+    result=myTempDirFixture.copyFile(fromVFile,targetPath);
+  }
+ else {
+    final File targetFile=new File(getTempDirPath() + "/" + targetPath);
+    if (!targetFile.exists()) {
+      if (fromFile.isDirectory()) {
+        Assert.assertTrue(targetFile.toString(),targetFile.mkdirs());
+      }
+ else {
+        if (!fromFile.exists()) {
+          Assert.fail("Cannot find source file: '" + sourceFilePath + "'. getTestDataPath()='"+ testDataPath+ "'. ");
+        }
+        try {
+          FileUtil.copy(fromFile,targetFile);
+        }
+ catch (        IOException e) {
+          throw new RuntimeException("Cannot copy " + fromFile + " to "+ targetFile,e);
+        }
+      }
+    }
+    final VirtualFile file=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(targetFile);
+    Assert.assertNotNull(targetFile.toString(),file);
+    result=file;
+  }
+  result.putUserData(VfsTestUtil.TEST_DATA_FILE_PATH,path);
+  return result;
 }
