@@ -1,12 +1,14 @@
 {
   myMessageBus=bus;
   mySchemesManager=schemesManagerFactory.createSchemesManager(FILE_SPEC,new BaseSchemeProcessor<AbstractFileType>(){
-    @NotNull @Override public AbstractFileType readScheme(    @NotNull Element element){
-      ReadFileType type=new ReadFileType(AbstractFileType.readSyntaxTable(element.getChild(AbstractFileType.ELEMENT_HIGHLIGHTING)),element);
-      String fileTypeName=element.getAttributeValue(ATTRIBUTE_NAME);
-      String fileTypeDescr=element.getAttributeValue(ATTRIBUTE_DESCRIPTION);
-      String iconPath=element.getAttributeValue(ATTRIBUTE_ICON);
-      setFileTypeAttributes(fileTypeName,fileTypeDescr,iconPath,type);
+    @NotNull @Override public AbstractFileType readScheme(    @NotNull Element element,    boolean duringLoad){
+      if (!duringLoad) {
+        fireBeforeFileTypesChanged();
+      }
+      AbstractFileType type=(AbstractFileType)loadFileType(element,false);
+      if (!duringLoad) {
+        fireFileTypesChanged();
+      }
       return type;
     }
     @NotNull @Override public State getState(    @NotNull AbstractFileType fileType){
@@ -18,31 +20,36 @@
       }
       return fileType.isModified() ? State.POSSIBLY_CHANGED : State.NON_PERSISTENT;
     }
-    @Override public Element writeScheme(    @NotNull final AbstractFileType fileType) throws WriteExternalException {
+    @Override public Element writeScheme(    @NotNull AbstractFileType fileType){
       Element root=new Element(ELEMENT_FILETYPE);
-      root.setAttribute(ATTRIBUTE_BINARY,String.valueOf(fileType.isBinary()));
-      root.setAttribute(ATTRIBUTE_DEFAULT_EXTENSION,fileType.getDefaultExtension());
+      root.setAttribute("binary",String.valueOf(fileType.isBinary()));
+      if (!StringUtil.isEmpty(fileType.getDefaultExtension())) {
+        root.setAttribute("default_extension",fileType.getDefaultExtension());
+      }
       root.setAttribute(ATTRIBUTE_DESCRIPTION,fileType.getDescription());
       root.setAttribute(ATTRIBUTE_NAME,fileType.getName());
       fileType.writeExternal(root);
-      Element map=new Element(AbstractFileType.ELEMENT_EXTENSIONMAP);
-      root.addContent(map);
+      Element map=new Element(AbstractFileType.ELEMENT_EXTENSION_MAP);
       if (fileType instanceof ImportedFileType) {
-        writeImportedExtensionsMap(map,(ImportedFileType)fileType);
+        FileNameMatcher[] patterns=((ImportedFileType)fileType).getOriginalPatterns();
+        if (patterns != null) {
+          for (          FileNameMatcher matcher : patterns) {
+            Element content=AbstractFileType.writeMapping(fileType.getName(),matcher,false);
+            if (content != null) {
+              map.addContent(content);
+            }
+          }
+        }
       }
  else {
         writeExtensionsMap(map,fileType,false);
       }
+      if (!map.getChildren().isEmpty()) {
+        root.addContent(map);
+      }
       return root;
     }
-    @Override public void onSchemeAdded(    @NotNull AbstractFileType scheme){
-      fireBeforeFileTypesChanged();
-      if (scheme instanceof ReadFileType) {
-        loadFileType((ReadFileType)scheme);
-      }
-      fireFileTypesChanged();
-    }
-    @Override public void onSchemeDeleted(    @NotNull final AbstractFileType scheme){
+    @Override public void onSchemeDeleted(    @NotNull AbstractFileType scheme){
       fireBeforeFileTypesChanged();
       myPatternsTable.removeAllAssociations(scheme);
       fireFileTypesChanged();
