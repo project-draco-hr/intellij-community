@@ -1,5 +1,5 @@
 {
-  ClassesProcessor clprocessor=DecompilerContext.getClassProcessor();
+  ClassesProcessor clProcessor=DecompilerContext.getClassProcessor();
   StructClass cl=node.classStruct;
   if (cl.getBytecodeVersion() < CodeConstants.BYTECODE_JAVA_8) {
     return false;
@@ -8,11 +8,11 @@
   if (bootstrap == null || bootstrap.getMethodsNumber() == 0) {
     return false;
   }
-  Set<Integer> lambda_methods=new HashSet<Integer>();
+  BitSet lambda_methods=new BitSet();
   for (int i=0; i < bootstrap.getMethodsNumber(); ++i) {
     LinkConstant method_ref=bootstrap.getMethodReference(i);
-    if (JAVAC_LAMBDA_CLASS.equals(method_ref.classname) && JAVAC_LAMBDA_METHOD.equals(method_ref.elementname) && JAVAC_LAMBDA_METHOD_DESCRIPTOR.equals(method_ref.descriptor)) {
-      lambda_methods.add(i);
+    if (JAVAC_LAMBDA_CLASS.equals(method_ref.classname) && (JAVAC_LAMBDA_METHOD.equals(method_ref.elementname) || JAVAC_LAMBDA_ALT_METHOD.equals(method_ref.elementname))) {
+      lambda_methods.set(i);
     }
   }
   if (lambda_methods.isEmpty()) {
@@ -28,7 +28,7 @@
         Instruction instr=seq.getInstr(i);
         if (instr.opcode == CodeConstants.opc_invokedynamic) {
           LinkConstant invoke_dynamic=cl.getPool().getLinkConstant(instr.getOperand(0));
-          if (lambda_methods.contains(invoke_dynamic.index1)) {
+          if (lambda_methods.get(invoke_dynamic.index1)) {
             List<PooledConstant> bootstrap_arguments=bootstrap.getMethodArguments(invoke_dynamic.index1);
             MethodDescriptor md=MethodDescriptor.parseDescriptor(invoke_dynamic.descriptor);
             String lambda_class_name=md.ret.value;
@@ -40,7 +40,7 @@
             node_lambda.enclosingMethod=InterpreterUtil.makeUniqueKey(mt.getName(),mt.getDescriptor());
             node.nested.add(node_lambda);
             node_lambda.parent=node;
-            clprocessor.getMapRootClasses().put(node_lambda.simpleName,node_lambda);
+            clProcessor.getMapRootClasses().put(node_lambda.simpleName,node_lambda);
             mapMethodsLambda.put(node_lambda.lambdaInformation.content_method_key,node_lambda.simpleName);
           }
         }
@@ -52,7 +52,7 @@
     if (nd.type == ClassNode.CLASS_LAMBDA) {
       String parent_class_name=mapMethodsLambda.get(nd.enclosingMethod);
       if (parent_class_name != null) {
-        ClassNode parent_class=clprocessor.getMapRootClasses().get(parent_class_name);
+        ClassNode parent_class=clProcessor.getMapRootClasses().get(parent_class_name);
         parent_class.nested.add(nd);
         nd.parent=parent_class;
       }

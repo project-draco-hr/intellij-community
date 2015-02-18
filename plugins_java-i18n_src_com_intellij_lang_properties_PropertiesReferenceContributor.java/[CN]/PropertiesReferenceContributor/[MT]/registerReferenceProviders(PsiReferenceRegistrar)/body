@@ -1,6 +1,40 @@
 {
   registrar.registerReferenceProvider(literalExpression(),new PropertiesReferenceProvider(true));
   registrar.registerReferenceProvider(literalExpression().withParent(psiNameValuePair().withName(AnnotationUtil.PROPERTY_KEY_RESOURCE_BUNDLE_PARAMETER)),new ResourceBundleReferenceProvider());
+  registrar.registerReferenceProvider(literalExpression(),new PsiReferenceProvider(){
+    private final PsiReferenceProvider myUnderlying=new ResourceBundleReferenceProvider();
+    @NotNull @Override public PsiReference[] getReferencesByElement(    @NotNull PsiElement element,    @NotNull ProcessingContext context){
+      final PsiElement parent=element.getParent();
+      if (!(parent instanceof PsiField)) {
+        return PsiReference.EMPTY_ARRAY;
+      }
+      final PsiField field=(PsiField)parent;
+      if (field.getInitializer() != element || !field.hasModifierProperty(PsiModifier.FINAL)) {
+        return PsiReference.EMPTY_ARRAY;
+      }
+      Set<PsiReference> references=new THashSet<PsiReference>(TObjectHashingStrategy.IDENTITY);
+      for (      PsiMethod method : PsiTreeUtil.findChildrenOfType(element.getContainingFile(),PsiMethod.class)) {
+        for (        PsiParameter parameter : method.getParameterList().getParameters()) {
+          final PsiModifierList modifierList=parameter.getModifierList();
+          if (modifierList != null) {
+            final PsiAnnotation annotation=modifierList.findAnnotation(AnnotationUtil.PROPERTY_KEY);
+            if (annotation != null) {
+              for (              PsiNameValuePair pair : annotation.getParameterList().getAttributes()) {
+                if (AnnotationUtil.PROPERTY_KEY_RESOURCE_BUNDLE_PARAMETER.equals(pair.getName())) {
+                  final PsiAnnotationMemberValue value=pair.getValue();
+                  if (value instanceof PsiReferenceExpression && ((PsiReferenceExpression)value).resolve() == field) {
+                    Collections.addAll(references,myUnderlying.getReferencesByElement(element,context));
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      return references.toArray(new PsiReference[references.size()]);
+    }
+  }
+);
   registrar.registerReferenceProvider(PsiJavaPatterns.psiElement(PropertyValueImpl.class),new PsiReferenceProvider(){
     @NotNull @Override public PsiReference[] getReferencesByElement(    @NotNull PsiElement element,    @NotNull ProcessingContext context){
       String text=element.getText();
