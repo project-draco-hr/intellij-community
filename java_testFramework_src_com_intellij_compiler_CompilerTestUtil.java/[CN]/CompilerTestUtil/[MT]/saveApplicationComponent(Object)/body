@@ -1,53 +1,8 @@
 {
-  try {
-    final File file;
-    String componentName;
-    State state=StoreUtil.getStateSpec(appComponent.getClass());
-    if (state != null) {
-      componentName=state.name();
-      Storage storageToWrite=findNonDeprecated(state.storages());
-      StateStorageManager storageManager=((ApplicationImpl)ApplicationManager.getApplication()).getStateStore().getStateStorageManager();
-      file=new File(storageManager.expandMacros(storageToWrite.file()));
+  ApplicationManager.getApplication().invokeAndWait(new Runnable(){
+    @Override public void run(){
+      doSaveComponent(appComponent);
     }
- else     if (appComponent instanceof ExportableApplicationComponent && appComponent instanceof NamedJDOMExternalizable) {
-      componentName=((ExportableApplicationComponent)appComponent).getComponentName();
-      file=PathManager.getOptionsFile((NamedJDOMExternalizable)appComponent);
-    }
- else {
-      throw new AssertionError(appComponent.getClass() + " doesn't have @State annotation and doesn't implement ExportableApplicationComponent");
-    }
-    final Element root=new Element("application");
-    Element element=JDomSerializationUtil.createComponentElement(componentName);
-    if (appComponent instanceof JDOMExternalizable) {
-      ((JDOMExternalizable)appComponent).writeExternal(element);
-    }
- else {
-      element.addContent(((PersistentStateComponent<Element>)appComponent).getState().cloneContent());
-    }
-    root.addContent(element);
-    Assert.assertTrue("Cannot create " + file,FileUtil.createIfDoesntExist(file));
-    new WriteAction(){
-      @Override protected void run(      @NotNull final Result result) throws IOException {
-        VfsRootAccess.allowRootAccess(file.getAbsolutePath());
-        try {
-          VirtualFile virtualFile=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file);
-          Assert.assertNotNull(file.getAbsolutePath(),virtualFile);
-          OutputStream stream=virtualFile.getOutputStream(new SaveSessionRequestor());
-          try {
-            JDOMUtil.writeParent(root,stream,SystemProperties.getLineSeparator());
-          }
-  finally {
-            stream.close();
-          }
-        }
-  finally {
-          VfsRootAccess.disallowRootAccess(file.getAbsolutePath());
-        }
-      }
-    }
-.execute().throwException();
   }
- catch (  WriteExternalException e) {
-    throw new RuntimeException(e);
-  }
+,ModalityState.any());
 }

@@ -1,30 +1,44 @@
 {
-  Element parentNode=new Element("state");
-  parentNode.setAttribute(ATTRIBUTE_VERSION,String.valueOf(VERSION));
-  Element element=new Element(ELEMENT_IGNORE_FILES);
-  parentNode.addContent(element);
-  element.setAttribute(ATTRIBUTE_LIST,getIgnoredFilesList());
-  Element map=new Element(AbstractFileType.ELEMENT_EXTENSIONMAP);
-  parentNode.addContent(map);
-  final List<FileType> fileTypes=Arrays.asList(getRegisteredFileTypes());
-  Collections.sort(fileTypes,new Comparator<FileType>(){
-    @Override public int compare(    @NotNull FileType o1,    @NotNull FileType o2){
-      return o1.getName().compareTo(o2.getName());
-    }
+  Element state=new Element("state");
+  state.setAttribute(ATTRIBUTE_VERSION,String.valueOf(VERSION));
+  String ignoredFilesList=getIgnoredFilesList();
+  if (!StringUtil.isEmpty(ignoredFilesList)) {
+    state.addContent(new Element(ELEMENT_IGNORE_FILES).setAttribute(ATTRIBUTE_LIST,ignoredFilesList));
   }
+  Element map=new Element(AbstractFileType.ELEMENT_EXTENSION_MAP);
+  FileType[] fileTypes=getRegisteredFileTypes();
+  if (fileTypes.length > 0) {
+    Arrays.sort(fileTypes,new Comparator<FileType>(){
+      @Override public int compare(      @NotNull FileType o1,      @NotNull FileType o2){
+        return o1.getName().compareTo(o2.getName());
+      }
+    }
 );
-  for (  FileType type : fileTypes) {
-    writeExtensionsMap(map,type,true);
-  }
-  for (  Map.Entry<FileNameMatcher,String> entry : myUnresolvedMappings.entrySet()) {
-    Element content=AbstractFileType.writeMapping(entry.getValue(),entry.getKey(),true);
-    if (content != null) {
-      map.addContent(content);
+    for (    FileType type : fileTypes) {
+      writeExtensionsMap(map,type,true);
     }
+  }
+  if (!myUnresolvedMappings.isEmpty()) {
+    FileNameMatcher[] unresolvedMappingKeys=myUnresolvedMappings.keySet().toArray(new FileNameMatcher[myUnresolvedMappings.size()]);
+    Arrays.sort(unresolvedMappingKeys,new Comparator<FileNameMatcher>(){
+      @Override public int compare(      FileNameMatcher o1,      FileNameMatcher o2){
+        return o1.getPresentableString().compareTo(o2.getPresentableString());
+      }
+    }
+);
+    for (    FileNameMatcher fileNameMatcher : unresolvedMappingKeys) {
+      Element content=AbstractFileType.writeMapping(myUnresolvedMappings.get(fileNameMatcher),fileNameMatcher,true);
+      if (content != null) {
+        map.addContent(content);
+      }
+    }
+  }
+  if (!map.getChildren().isEmpty()) {
+    state.addContent(map);
   }
   int value=fileTypeChangedCount.get();
   if (value != 0) {
-    JDOMExternalizer.write(parentNode,"fileTypeChangedCounter",value);
+    JDOMExternalizer.write(state,"fileTypeChangedCounter",value);
   }
-  return parentNode;
+  return state;
 }

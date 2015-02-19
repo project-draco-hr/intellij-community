@@ -1,0 +1,35 @@
+{
+  StateStorageManager.ExternalizationSession externalizationSession=getStateStorageManager().startExternalization();
+  if (externalizationSession == null) {
+    return;
+  }
+  commitComponent(externalizationSession,component);
+  List<SaveSession> sessions=externalizationSession.createSaveSessions();
+  if (sessions.isEmpty()) {
+    return;
+  }
+  final File file;
+  State state=StoreUtil.getStateSpec(component.getClass());
+  if (state != null) {
+    file=new File(getStateStorageManager().expandMacros(findNonDeprecated(state.storages()).file()));
+  }
+ else   if (component instanceof ExportableApplicationComponent && component instanceof NamedJDOMExternalizable) {
+    file=PathManager.getOptionsFile((NamedJDOMExternalizable)component);
+  }
+ else {
+    throw new AssertionError(component.getClass() + " doesn't have @State annotation and doesn't implement ExportableApplicationComponent");
+  }
+  AccessToken token=WriteAction.start();
+  try {
+    VfsRootAccess.allowRootAccess(file.getAbsolutePath());
+    doSave(sessions,Collections.<Pair<SaveSession,VirtualFile>>emptyList());
+  }
+  finally {
+    try {
+      VfsRootAccess.disallowRootAccess(file.getAbsolutePath());
+    }
+  finally {
+      token.finish();
+    }
+  }
+}
