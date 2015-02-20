@@ -1,8 +1,10 @@
 {
   myDefaultColorSchemesManager=defaultColorSchemesManager;
   mySchemesManager=schemesManagerFactory.createSchemesManager(FILE_SPEC,new BaseSchemeProcessor<EditorColorsSchemeImpl>(){
-    @NotNull @Override public EditorColorsSchemeImpl readScheme(    @NotNull Element element) throws InvalidDataException {
-      return loadSchemeFromDocument(element,true);
+    @NotNull @Override public EditorColorsSchemeImpl readScheme(    @NotNull Element element){
+      EditorColorsSchemeImpl scheme=new EditorColorsSchemeImpl(null);
+      scheme.readExternal(element);
+      return scheme;
     }
     @Override public Element writeScheme(    @NotNull final EditorColorsSchemeImpl scheme){
       Element root=new Element(SCHEME_NODE_NAME);
@@ -21,8 +23,8 @@
     @Override public void onCurrentSchemeChanged(    final Scheme newCurrentScheme){
       fireChanges(mySchemesManager.getCurrentScheme());
     }
-    @NotNull @Override public String getSchemeExtension(){
-      return FILE_EXT;
+    @NotNull @NonNls @Override public String getSchemeExtension(){
+      return ".icls";
     }
     @Override public boolean isUpgradeNeeded(){
       return true;
@@ -31,7 +33,14 @@
 ,RoamingType.PER_USER);
   addDefaultSchemes();
   if (!isUnitTestOrHeadlessMode()) {
-    loadSchemesFromBeans();
+    for (    BundledColorSchemeEP ep : BundledColorSchemeEP.EP_NAME.getExtensions()) {
+      mySchemesManager.loadBundledScheme(ep.path + ".xml",ep,new ThrowableConvertor<Element,EditorColorsScheme,Throwable>(){
+        @Override public EditorColorsScheme convert(        Element element) throws Throwable {
+          return new ReadOnlyColorsSchemeImpl(element);
+        }
+      }
+);
+    }
   }
   mySchemesManager.loadSchemes();
   loadAdditionalTextAttributes();
@@ -41,6 +50,5 @@
     scheme=getScheme(wizardEditorScheme);
     LOG.assertTrue(scheme != null,"Wizard scheme " + wizardEditorScheme + " not found");
   }
-  if (scheme == null)   scheme=myDefaultColorSchemesManager.getAllSchemes()[0];
-  setGlobalSchemeInner(scheme);
+  setGlobalSchemeInner(scheme == null ? getDefaultScheme() : scheme);
 }
