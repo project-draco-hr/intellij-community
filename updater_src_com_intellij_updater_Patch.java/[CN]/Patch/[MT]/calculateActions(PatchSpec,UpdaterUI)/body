@@ -1,0 +1,41 @@
+{
+  Runner.logger.info("Calculating difference...");
+  ui.startProcess("Calculating difference...");
+  ui.checkCancelled();
+  File olderDir=new File(spec.getOldFolder());
+  File newerDir=new File(spec.getNewFolder());
+  DiffCalculator.Result diff;
+  diff=DiffCalculator.calculate(digestFiles(olderDir,spec.getIgnoredFiles(),isNormalized(),ui),digestFiles(newerDir,spec.getIgnoredFiles(),false,ui),spec.getCriticalFiles(),true);
+  List<PatchAction> tempActions=new ArrayList<PatchAction>();
+  for (  Map.Entry<String,Long> each : diff.filesToDelete.entrySet()) {
+    tempActions.add(0,new DeleteAction(this,each.getKey(),each.getValue()));
+  }
+  for (  String each : diff.filesToCreate.keySet()) {
+    tempActions.add(new CreateAction(this,each));
+  }
+  for (  Map.Entry<String,DiffCalculator.Update> each : diff.filesToUpdate.entrySet()) {
+    DiffCalculator.Update update=each.getValue();
+    if (!spec.isBinary() && Utils.isZipFile(each.getKey())) {
+      tempActions.add(new UpdateZipAction(this,each.getKey(),update.source,update.checksum,update.move));
+    }
+ else {
+      tempActions.add(new UpdateAction(this,each.getKey(),update.source,update.checksum,update.move));
+    }
+  }
+  if (spec.isStrict()) {
+    for (    Map.Entry<String,Long> each : diff.commonFiles.entrySet()) {
+      tempActions.add(new ValidateAction(this,each.getKey(),each.getValue()));
+    }
+  }
+  Runner.logger.info("Preparing actions...");
+  ui.startProcess("Preparing actions...");
+  ui.checkCancelled();
+  for (  PatchAction each : tempActions) {
+    ui.setStatus(each.getPath());
+    ui.checkCancelled();
+    if (!each.calculate(olderDir,newerDir))     continue;
+    myActions.add(each);
+    each.setCritical(spec.getCriticalFiles().contains(each.getPath()));
+    each.setOptional(spec.getOptionalFiles().contains(each.getPath()));
+  }
+}

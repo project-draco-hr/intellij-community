@@ -2,14 +2,14 @@
   super(project);
   new ClickListener(){
     @Override public boolean onClick(    @NotNull MouseEvent e,    int clickCount){
-      final Project project=getProject();
+      Project project=getProject();
       Editor editor=getEditor();
-      final LightVirtualFile selectedFile=getScratchFile();
-      if (project == null || editor == null || selectedFile == null)       return false;
-      ListPopup popup=NewScratchFileAction.buildLanguagePopup(project,selectedFile.getLanguage(),new Consumer<Language>(){
+      final VirtualFile file=getSelectedFile();
+      if (project == null || editor == null || file == null)       return false;
+      final PerFileMappings<Language> fileService=ScratchFileService.getInstance().getScratchesMapping();
+      ListPopup popup=NewScratchFileAction.buildLanguageSelectionPopup(project,"Change Language",fileService.getMapping(file),new Consumer<Language>(){
         @Override public void consume(        Language language){
-          selectedFile.setLanguage(NewScratchFileAction.substitute(project,language));
-          FileContentUtilCore.reparseFiles(selectedFile);
+          fileService.setMapping(file,language);
           update();
         }
       }
@@ -21,4 +21,15 @@
     }
   }
 .installOn(myPanel);
+  myConnection.subscribe(VirtualFileManager.VFS_CHANGES,new BulkFileListener.Adapter(){
+    @Override public void after(    @NotNull List<? extends VFileEvent> events){
+      for (      VFileEvent event : events) {
+        if (event.getRequestor() == FileContentUtilCore.FORCE_RELOAD_REQUESTOR) {
+          update();
+          break;
+        }
+      }
+    }
+  }
+);
 }

@@ -1,0 +1,33 @@
+{
+  final PsiElement element=descriptor.getPsiElement();
+  if (!(element instanceof PsiTypeElement)) {
+    return;
+  }
+  final PsiElement parent=element.getParent();
+  if (!(parent instanceof PsiMethod)) {
+    return;
+  }
+  final PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
+  final PsiTypeElement newTypeElement=factory.createTypeElementFromText(myClassName,element);
+  final PsiType newType=newTypeElement.getType();
+  parent.accept(new JavaRecursiveElementVisitor(){
+    @Override public void visitReturnStatement(    PsiReturnStatement statement){
+      super.visitReturnStatement(statement);
+      final PsiElement owner=PsiTreeUtil.getParentOfType(statement,PsiClass.class,PsiLambdaExpression.class,PsiMethod.class);
+      if (owner != parent) {
+        return;
+      }
+      final PsiExpression returnValue=statement.getReturnValue();
+      if (returnValue == null) {
+        return;
+      }
+      final PsiType type=returnValue.getType();
+      if (newType.equals(type)) {
+        return;
+      }
+      PsiReplacementUtil.replaceStatement(statement,"return (" + myClassName + ')'+ returnValue.getText()+ ';');
+    }
+  }
+);
+  element.replace(newTypeElement);
+}

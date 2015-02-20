@@ -22,25 +22,46 @@
     resultsOptionPanel=createResultsOptionPanel(optionsPanel,gbConstraints);
     resultsOptionPanel.add(myCbToSkipResultsWhenOneUsage);
     myCbToSkipResultsWhenOneUsage.setVisible(!myModel.isReplaceState());
+    if (haveResultsPreview()) {
+      final JBTable table=new JBTable(){
+        @Override public Dimension getPreferredSize(){
+          return new Dimension(myInputComboBox.getWidth(),super.getPreferredSize().height);
+        }
+      }
+;
+      table.setShowColumns(false);
+      table.setShowGrid(false);
+      new NavigateToSourceListener().installOn(table);
+      Splitter previewSplitter=new Splitter(true,0.5f,0.1f,0.9f);
+      myUsagePreviewPanel=new UsagePreviewPanel(myProject,new UsageViewPresentation());
+      myResultsPreviewTable=table;
+      myResultsPreviewTable.getSelectionModel().addListSelectionListener(new ListSelectionListener(){
+        @Override public void valueChanged(        ListSelectionEvent e){
+          if (e.getValueIsAdjusting())           return;
+          int index=myResultsPreviewTable.getSelectionModel().getLeadSelectionIndex();
+          if (index != -1) {
+            UsageInfo usageInfo=((UsageInfo2UsageAdapter)myResultsPreviewTable.getModel().getValueAt(index,0)).getUsageInfo();
+            myUsagePreviewPanel.updateLayout(Collections.singletonList(usageInfo));
+          }
+ else {
+            myUsagePreviewPanel.updateLayout(null);
+          }
+        }
+      }
+);
+      mySearchRescheduleOnCancellationsAlarm=new Alarm();
+      previewSplitter.setFirstComponent(new JBScrollPane(myResultsPreviewTable));
+      previewSplitter.setSecondComponent(myUsagePreviewPanel.createComponent());
+      myPreviewSplitter=previewSplitter;
+    }
   }
  else {
-    if (FindManagerImpl.ourHasSearchInCommentsAndLiterals) {
-      JPanel leftOptionsPanel=new JPanel();
-      leftOptionsPanel.setLayout(new GridLayout(3,1,0,4));
-      leftOptionsPanel.add(createDirectionPanel());
-      leftOptionsPanel.add(createOriginPanel());
-      leftOptionsPanel.add(createScopePanel());
-      topOptionsPanel.add(leftOptionsPanel);
-    }
- else {
-      topOptionsPanel.add(createDirectionPanel());
-      gbConstraints.gridwidth=GridBagConstraints.RELATIVE;
-      JPanel bottomOptionsPanel=new JPanel();
-      bottomOptionsPanel.setLayout(new GridLayout(1,2,8,0));
-      optionsPanel.add(bottomOptionsPanel,gbConstraints);
-      bottomOptionsPanel.add(createScopePanel());
-      bottomOptionsPanel.add(createOriginPanel());
-    }
+    JPanel leftOptionsPanel=new JPanel();
+    leftOptionsPanel.setLayout(new GridLayout(3,1,0,4));
+    leftOptionsPanel.add(createDirectionPanel());
+    leftOptionsPanel.add(createOriginPanel());
+    leftOptionsPanel.add(createScopePanel());
+    topOptionsPanel.add(leftOptionsPanel);
   }
   if (myModel.isOpenInNewTabVisible()) {
     myCbToOpenInNewTab=new JCheckBox(FindBundle.message("find.open.in.new.tab.checkbox"));
@@ -49,6 +70,14 @@
     myCbToOpenInNewTab.setEnabled(myModel.isOpenInNewTabEnabled());
     if (resultsOptionPanel == null)     resultsOptionPanel=createResultsOptionPanel(optionsPanel,gbConstraints);
     resultsOptionPanel.add(myCbToOpenInNewTab);
+  }
+  if (myPreviewSplitter != null) {
+    TabbedPane pane=new TabbedPaneImpl(SwingConstants.TOP);
+    pane.insertTab("Options",null,optionsPanel,null,0);
+    pane.insertTab("Preview",null,myPreviewSplitter,null,RESULTS_PREVIEW_TAB_INDEX);
+    myContent=pane;
+    if (myPreviewResultsTabWasSelected)     myContent.setSelectedIndex(RESULTS_PREVIEW_TAB_INDEX);
+    return pane.getComponent();
   }
   return optionsPanel;
 }

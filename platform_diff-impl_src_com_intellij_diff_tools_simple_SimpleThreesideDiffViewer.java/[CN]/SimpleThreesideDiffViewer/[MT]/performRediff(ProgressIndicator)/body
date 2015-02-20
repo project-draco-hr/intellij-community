@@ -1,0 +1,58 @@
+{
+  try {
+    indicator.checkCanceled();
+    List<DiffContent> contents=myRequest.getContents();
+    final Document[] documents=new Document[3];
+    documents[0]=((DocumentContent)contents.get(0)).getDocument();
+    documents[1]=((DocumentContent)contents.get(1)).getDocument();
+    documents[2]=((DocumentContent)contents.get(2)).getDocument();
+    DocumentData data=ApplicationManager.getApplication().runReadAction(new Computable<DocumentData>(){
+      @Override public DocumentData compute(){
+        CharSequence[] sequences=new CharSequence[3];
+        sequences[0]=documents[0].getImmutableCharSequence();
+        sequences[1]=documents[1].getImmutableCharSequence();
+        sequences[2]=documents[2].getImmutableCharSequence();
+        long[] stamps=new long[3];
+        stamps[0]=documents[0].getModificationStamp();
+        stamps[1]=documents[1].getModificationStamp();
+        stamps[2]=documents[2].getModificationStamp();
+        return new DocumentData(stamps,sequences);
+      }
+    }
+);
+    CharSequence[] sequences=data.getSequences();
+    ComparisonPolicy comparisonPolicy=getIgnorePolicy().getComparisonPolicy();
+    FairDiffIterable fragments1=ByLine.compareTwoStepFair(sequences[1],sequences[0],comparisonPolicy,indicator);
+    FairDiffIterable fragments2=ByLine.compareTwoStepFair(sequences[1],sequences[2],comparisonPolicy,indicator);
+    List<MergeLineFragment> mergeFragments=MergeUtil.buildFair(fragments1,fragments2,indicator);
+    return apply(mergeFragments,data.getStamps(),comparisonPolicy);
+  }
+ catch (  DiffTooBigException ignore) {
+    return new Runnable(){
+      @Override public void run(){
+        clearDiffPresentation();
+        myPanel.addTooBigContentNotification();
+      }
+    }
+;
+  }
+catch (  ProcessCanceledException ignore) {
+    return new Runnable(){
+      @Override public void run(){
+        clearDiffPresentation();
+        myPanel.addOperationCanceledNotification();
+      }
+    }
+;
+  }
+catch (  Throwable e) {
+    LOG.error(e);
+    return new Runnable(){
+      @Override public void run(){
+        clearDiffPresentation();
+        myPanel.addDiffErrorNotification();
+      }
+    }
+;
+  }
+}

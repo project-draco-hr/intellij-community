@@ -1,0 +1,28 @@
+{
+  WebSocketServerHandshakerFactory factory=new WebSocketServerHandshakerFactory("ws://" + request.headers().get(HttpHeaderNames.HOST) + uriDecoder.path(),null,false,NettyUtil.MAX_CONTENT_LENGTH);
+  WebSocketServerHandshaker handshaker=factory.newHandshaker(request);
+  if (handshaker == null) {
+    WebSocketServerHandshakerFactory.sendUnsupportedVersionResponse(context.channel());
+    return;
+  }
+  if (!context.channel().isOpen()) {
+    return;
+  }
+  final Client client=new WebSocketClient(context.channel(),handshaker);
+  context.attr(ClientManager.CLIENT).set(client);
+  handshaker.handshake(context.channel(),request).addListener(new ChannelFutureListener(){
+    @Override public void operationComplete(    ChannelFuture future) throws Exception {
+      if (future.isSuccess()) {
+        ClientManager clientManager=WebSocketHandshakeHandler.this.clientManager.getValue();
+        clientManager.addClient(client);
+        MessageChannelHandler messageChannelHandler=new MessageChannelHandler(clientManager,getMessageServer());
+        BuiltInServer.replaceDefaultHandler(context,messageChannelHandler);
+        ChannelHandlerContext messageChannelHandlerContext=context.pipeline().context(messageChannelHandler);
+        context.pipeline().addBefore(messageChannelHandlerContext.name(),"webSocketFrameAggregator",new WebSocketFrameAggregator(NettyUtil.MAX_CONTENT_LENGTH));
+        messageChannelHandlerContext.attr(ClientManager.CLIENT).set(client);
+        connected(client,uriDecoder.parameters());
+      }
+    }
+  }
+);
+}

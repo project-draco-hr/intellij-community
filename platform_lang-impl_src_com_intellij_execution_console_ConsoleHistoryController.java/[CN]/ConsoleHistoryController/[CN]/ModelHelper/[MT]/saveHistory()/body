@@ -1,31 +1,20 @@
 {
-  final File file=new File(getHistoryFilePath(myId));
-  final File dir=file.getParentFile();
-  if (!dir.exists() && !dir.mkdirs() || !dir.isDirectory()) {
-    LOG.error("failed to create folder: " + dir.getAbsolutePath());
-    return;
-  }
-  OutputStream os=null;
   try {
-    final XmlSerializer serializer=XmlPullParserFactory.newInstance().newSerializer();
+    if (getModel().getHistory().isEmpty())     return;
+    if (myRootType.isHidden()) {
+      saveHistoryOld();
+      return;
+    }
+    AccessToken token=ApplicationManager.getApplication().acquireWriteActionLock(getClass());
     try {
-      serializer.setProperty("http://xmlpull.org/v1/doc/properties.html#serializer-indentation","  ");
+      VirtualFile file=HistoryRootType.getInstance().findFile(null,getHistoryName(myRootType,myId),ScratchFileService.Option.create_if_missing);
+      VfsUtil.saveText(file,StringUtil.join(ContainerUtil.reverse(getModel().getHistory()),myRootType.getEntrySeparator()));
     }
- catch (    Exception ignored) {
+  finally {
+      token.finish();
     }
-    serializer.setOutput(os=new SafeFileOutputStream(file),CharsetToolkit.UTF8);
-    saveHistory(serializer);
-    serializer.flush();
   }
  catch (  Exception ex) {
     LOG.error(ex);
   }
- finally {
-    try {
-      os.close();
-    }
- catch (    Exception ignored) {
-    }
-  }
-  cleanupOldFiles(dir);
 }

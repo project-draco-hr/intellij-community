@@ -1,0 +1,52 @@
+{
+  Model nativeModel=MavenModelConverter.toNativeModel(model);
+  Collection<String> enabledProfiles=explicitProfiles.getEnabledProfiles();
+  Collection<String> disabledProfiles=explicitProfiles.getDisabledProfiles();
+  List<Profile> activatedPom=new ArrayList<Profile>();
+  List<Profile> activatedExternal=new ArrayList<Profile>();
+  List<Profile> activeByDefault=new ArrayList<Profile>();
+  List<Profile> rawProfiles=nativeModel.getProfiles();
+  List<Profile> expandedProfilesCache=null;
+  List<Profile> deactivatedProfiles=new ArrayList<Profile>();
+  for (int i=0; i < rawProfiles.size(); i++) {
+    Profile eachRawProfile=rawProfiles.get(i);
+    if (disabledProfiles.contains(eachRawProfile.getId())) {
+      deactivatedProfiles.add(eachRawProfile);
+      continue;
+    }
+    boolean shouldAdd=enabledProfiles.contains(eachRawProfile.getId()) || alwaysOnProfiles.contains(eachRawProfile.getId());
+    Activation activation=eachRawProfile.getActivation();
+    if (activation != null) {
+      if (activation.isActiveByDefault()) {
+        activeByDefault.add(eachRawProfile);
+      }
+      if (expandedProfilesCache == null)       expandedProfilesCache=doInterpolate(nativeModel,basedir).getProfiles();
+      Profile eachExpandedProfile=expandedProfilesCache.get(i);
+      for (      ProfileActivator eachActivator : getProfileActivators(basedir)) {
+        try {
+          if (eachActivator.canDetermineActivation(eachExpandedProfile) && eachActivator.isActive(eachExpandedProfile)) {
+            shouldAdd=true;
+            break;
+          }
+        }
+ catch (        ProfileActivationException e) {
+          Maven3ServerGlobals.getLogger().warn(e);
+        }
+      }
+    }
+    if (shouldAdd) {
+      if (MavenConstants.PROFILE_FROM_POM.equals(eachRawProfile.getSource())) {
+        activatedPom.add(eachRawProfile);
+      }
+ else {
+        activatedExternal.add(eachRawProfile);
+      }
+    }
+  }
+  List<Profile> activatedProfiles=new ArrayList<Profile>(activatedPom.isEmpty() ? activeByDefault : activatedPom);
+  activatedProfiles.addAll(activatedExternal);
+  for (  Profile each : activatedProfiles) {
+    new DefaultProfileInjector().injectProfile(nativeModel,each,null,null);
+  }
+  return new ProfileApplicationResult(MavenModelConverter.convertModel(nativeModel,null),new MavenExplicitProfiles(collectProfilesIds(activatedProfiles),collectProfilesIds(deactivatedProfiles)));
+}

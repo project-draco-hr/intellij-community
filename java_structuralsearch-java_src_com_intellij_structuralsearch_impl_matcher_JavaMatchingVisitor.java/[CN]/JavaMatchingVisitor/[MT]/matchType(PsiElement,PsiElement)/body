@@ -13,9 +13,9 @@
   }
   PsiElement[] typeparams=null;
   if (el2 instanceof PsiJavaCodeReferenceElement) {
-    typeparams=((PsiJavaCodeReferenceElement)el2).getParameterList().getTypeParameterElements();
-    if (typeparams.length > 0) {
-      el2=((PsiJavaCodeReferenceElement)el2).getReferenceNameElement();
+    final PsiReferenceParameterList parameterList=((PsiJavaCodeReferenceElement)el2).getParameterList();
+    if (parameterList != null) {
+      typeparams=parameterList.getTypeParameterElements();
     }
   }
  else   if (el2 instanceof PsiTypeParameter) {
@@ -32,11 +32,11 @@
   PsiReferenceParameterList list=null;
   if (el instanceof PsiJavaCodeReferenceElement) {
     list=((PsiJavaCodeReferenceElement)el).getParameterList();
+    el=((PsiJavaCodeReferenceElement)el).getReferenceNameElement();
   }
   if (list != null && list.getTypeParameterElements().length > 0) {
-    boolean result=typeparams != null && myMatchingVisitor.matchInAnyOrder(list.getTypeParameterElements(),typeparams);
+    boolean result=typeparams != null && myMatchingVisitor.matchSequentially(list.getTypeParameterElements(),typeparams);
     if (!result)     return false;
-    el=((PsiJavaCodeReferenceElement)el).getReferenceNameElement();
   }
  else {
     if (_type2 instanceof PsiTypeElement) {
@@ -100,26 +100,21 @@
       el2=parent;
     }
   }
-  final String text=stripTypeParameters(el.getText());
-  String text2;
-  if (el2 instanceof PsiClass) {
-    text2=((PsiClass)el2).getQualifiedName();
-    if (text2 == null)     text2=el2.getText();
-  }
- else {
-    text2=el2.getText();
-  }
-  final boolean equalsIgnorePackage=MatchUtils.compareWithNoDifferenceToPackage(text,stripTypeParameters(text2));
+  final String text=getText(el);
+  final String text2=getText(el2);
+  final boolean caseSensitive=myMatchingVisitor.getMatchContext().getOptions().isCaseSensitiveMatch();
+  final boolean equalsIgnorePackage=MatchUtils.compareWithNoDifferenceToPackage(text,text2,!caseSensitive);
   if (equalsIgnorePackage || !(el2 instanceof PsiJavaReference)) {
     return equalsIgnorePackage;
   }
  else {
-    PsiElement element2=((PsiJavaReference)el2).resolve();
-    if (element2 != null) {
-      return text.equals(((PsiClass)element2).getQualifiedName());
+    final PsiElement element2=((PsiJavaReference)el2).resolve();
+    if (element2 instanceof PsiClass) {
+      final String name=((PsiClass)element2).getQualifiedName();
+      return caseSensitive ? text.equals(name) : text.equalsIgnoreCase(name);
     }
  else {
-      return MatchUtils.compareWithNoDifferenceToPackage(text,text2);
+      return MatchUtils.compareWithNoDifferenceToPackage(text,text2,!caseSensitive);
     }
   }
 }

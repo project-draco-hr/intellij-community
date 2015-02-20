@@ -1,5 +1,5 @@
 {
-  ClassWrapper wrapper=node.wrapper;
+  ClassWrapper wrapper=node.getWrapper();
   StructClass cl=wrapper.getClassStruct();
   MethodWrapper methodWrapper=wrapper.getMethodWrapper(mt.getName(),mt.getDescriptor());
   boolean hideMethod=false;
@@ -12,14 +12,12 @@
     boolean isEnum=cl.hasModifier(CodeConstants.ACC_ENUM) && DecompilerContext.getOption(IFernflowerPreferences.DECOMPILE_ENUM);
     boolean isDeprecated=mt.getAttributes().containsKey("Deprecated");
     boolean clinit=false, init=false, dinit=false;
-    StructLineNumberTableAttribute lineNumberTable=(StructLineNumberTableAttribute)mt.getAttributes().getWithKey(StructGeneralAttribute.ATTRIBUTE_LINE_NUMBER_TABLE);
-    tracer.setLineNumberTable(lineNumberTable);
     MethodDescriptor md=MethodDescriptor.parseDescriptor(mt.getDescriptor());
     int flags=mt.getAccessFlags();
     if ((flags & CodeConstants.ACC_NATIVE) != 0) {
       flags&=~CodeConstants.ACC_STRICT;
     }
-    if ("<clinit>".equals(mt.getName())) {
+    if (CodeConstants.CLINIT_NAME.equals(mt.getName())) {
       flags&=CodeConstants.ACC_STATIC;
     }
     if (isDeprecated) {
@@ -44,7 +42,7 @@
       buffer.append("default ");
     }
     String name=mt.getName();
-    if ("<init>".equals(name)) {
+    if (CodeConstants.INIT_NAME.equals(name)) {
       if (node.type == ClassNode.CLASS_ANONYMOUS) {
         name="";
         dinit=true;
@@ -54,7 +52,7 @@
         init=true;
       }
     }
- else     if ("<clinit>".equals(name)) {
+ else     if (CodeConstants.CLINIT_NAME.equals(name)) {
       name="";
       clinit=true;
     }
@@ -65,9 +63,18 @@
         descriptor=GenericMain.parseMethodSignature(attr.getSignature());
         if (descriptor != null) {
           int actualParams=md.params.length;
-          if (isEnum && init)           actualParams-=2;
+          List<VarVersionPair> sigFields=methodWrapper.signatureFields;
+          if (sigFields != null) {
+            actualParams=0;
+            for (            VarVersionPair field : methodWrapper.signatureFields) {
+              if (field == null) {
+                actualParams++;
+              }
+            }
+          }
+ else           if (isEnum && init)           actualParams-=2;
           if (actualParams != descriptor.params.size()) {
-            String message="Inconsistent generic signature in method " + mt.getName() + " "+ mt.getDescriptor();
+            String message="Inconsistent generic signature in method " + mt.getName() + " "+ mt.getDescriptor()+ " in "+ cl.qualifiedName;
             DecompilerContext.getLogger().writeMessage(message,IFernflowerLogger.Severity.WARN);
             descriptor=null;
           }
@@ -91,7 +98,7 @@
         }
         buffer.append(' ');
       }
-      buffer.append(name);
+      buffer.append(toValidJavaIdentifier(name));
       buffer.append('(');
       List<VarVersionPair> signFields=methodWrapper.signatureFields;
       int lastVisibleParameterIndex=-1;
@@ -102,10 +109,11 @@
       }
       boolean firstParameter=true;
       int index=isEnum && init ? 3 : thisVar ? 1 : 0;
-      int start=isEnum && init && descriptor == null ? 2 : 0;
-      int params=descriptor == null ? md.params.length : descriptor.params.size();
+      boolean hasDescriptor=descriptor != null;
+      int start=isEnum && init && !hasDescriptor ? 2 : 0;
+      int params=hasDescriptor ? descriptor.params.size() : md.params.length;
       for (int i=start; i < params; i++) {
-        if (signFields == null || signFields.get(i) == null) {
+        if (hasDescriptor || (signFields == null || signFields.get(i) == null)) {
           if (!firstParameter) {
             buffer.append(", ");
           }
@@ -171,6 +179,7 @@
         }
       }
     }
+    tracer.incrementCurrentSourceLine(buffer.countLines(start_index_method));
     if ((flags & (CodeConstants.ACC_ABSTRACT | CodeConstants.ACC_NATIVE)) != 0) {
       if (isAnnotation) {
         StructAnnDefaultAttribute attr=(StructAnnDefaultAttribute)mt.getAttributes().getWithKey("AnnotationDefault");
@@ -187,14 +196,15 @@
       if (!clinit && !dinit) {
         buffer.append(' ');
       }
+      StructLineNumberTableAttribute lineNumberTable=(StructLineNumberTableAttribute)mt.getAttributes().getWithKey(StructGeneralAttribute.ATTRIBUTE_LINE_NUMBER_TABLE);
       if (lineNumberTable != null && DecompilerContext.getOption(IFernflowerPreferences.USE_DEBUG_LINE_NUMBERS)) {
         buffer.setCurrentLine(lineNumberTable.getFirstLine() - 1);
       }
       buffer.append('{').appendLineSeparator();
+      tracer.incrementCurrentSourceLine();
       RootStatement root=wrapper.getMethodWrapper(mt.getName(),mt.getDescriptor()).root;
       if (root != null && !methodWrapper.decompiledWithErrors) {
         try {
-          tracer.incrementCurrentSourceLine(buffer.countLines(start_index_method));
           int startLine=tracer.getCurrentSourceLine();
           TextBuffer code=root.toJava(indent + 1,tracer);
           hideMethod=(clinit || dinit || hideConstructor(wrapper,init,throwsExceptions,paramCount)) && code.length() == 0;

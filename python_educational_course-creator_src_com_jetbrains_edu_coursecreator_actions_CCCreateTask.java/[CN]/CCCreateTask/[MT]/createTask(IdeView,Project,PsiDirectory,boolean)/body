@@ -1,0 +1,52 @@
+{
+  final CCProjectService service=CCProjectService.getInstance(project);
+  final Course course=service.getCourse();
+  final Lesson lesson=course.getLesson(lessonDir.getName());
+  final int size=lesson.getTaskList().size();
+  final String taskName;
+  if (showDialog) {
+    taskName=Messages.showInputDialog("Name:","Task Name",null,EduNames.TASK + (size + 1),null);
+  }
+ else {
+    taskName=EduNames.TASK + (size + 1);
+  }
+  if (taskName == null) {
+    return;
+  }
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    @Override public void run(){
+      final PsiDirectory taskDirectory=DirectoryUtil.createSubdirectories(EduNames.TASK + (size + 1),lessonDir,"\\/");
+      if (taskDirectory != null) {
+        CCLanguageManager manager=CCUtils.getStudyLanguageManager(course);
+        if (manager == null) {
+          return;
+        }
+        EduUtils.markDirAsSourceRoot(taskDirectory.getVirtualFile(),project);
+        final Task task=new Task(taskName);
+        task.setIndex(size + 1);
+        lesson.addTask(task);
+        createFromTemplateAndOpen(taskDirectory,manager.getTestsTemplate(project),view);
+        createFromTemplateAndOpen(taskDirectory,FileTemplateManager.getInstance(project).getInternalTemplate("task.html"),view);
+        String defaultExtension=manager.getDefaultTaskFileExtension();
+        if (defaultExtension != null) {
+          FileTemplate taskFileTemplate=manager.getTaskFileTemplateForExtension(project,defaultExtension);
+          createFromTemplateAndOpen(taskDirectory,taskFileTemplate,view);
+          if (taskFileTemplate != null) {
+            String taskFileName=FileUtil.getNameWithoutExtension(taskFileTemplate.getName());
+            task.addTaskFile(taskFileName + "." + defaultExtension,size + 1);
+          }
+        }
+        ApplicationManager.getApplication().invokeLater(new Runnable(){
+          @Override public void run(){
+            FileEditorManager fileEditorManager=FileEditorManager.getInstance(project);
+            for (            VirtualFile virtualFile : fileEditorManager.getOpenFiles()) {
+              fileEditorManager.closeFile(virtualFile);
+            }
+          }
+        }
+);
+      }
+    }
+  }
+);
+}

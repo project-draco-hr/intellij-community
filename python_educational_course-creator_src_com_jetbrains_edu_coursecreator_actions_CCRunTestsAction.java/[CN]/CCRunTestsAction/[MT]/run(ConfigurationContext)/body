@@ -1,0 +1,46 @@
+{
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    @Override public void run(){
+      final Project project=context.getProject();
+      PsiElement location=context.getPsiLocation();
+      final Course course=CCProjectService.getInstance(project).getCourse();
+      if (course == null || location == null) {
+        return;
+      }
+      PsiFile psiFile=location.getContainingFile();
+      final VirtualFile virtualFile=psiFile.getVirtualFile();
+      final VirtualFile taskDir=virtualFile.getParent();
+      if (taskDir == null) {
+        return;
+      }
+      VirtualFile lessonDir=taskDir.getParent();
+      Lesson lesson=course.getLesson(lessonDir.getName());
+      if (lesson == null) {
+        return;
+      }
+      final Task task=lesson.getTask(taskDir.getName());
+      if (task == null) {
+        return;
+      }
+      clearTestEnvironment(taskDir,project);
+      for (      final Map.Entry<String,TaskFile> entry : task.getTaskFiles().entrySet()) {
+        final String name=entry.getKey();
+        CCLanguageManager manager=CCUtils.getStudyLanguageManager(course);
+        if (manager == null) {
+          return;
+        }
+        createTestEnvironment(taskDir,name,entry.getValue(),project);
+        FileTemplate testsTemplate=manager.getTestsTemplate(project);
+        if (testsTemplate == null) {
+          return;
+        }
+        VirtualFile testFile=taskDir.findChild(testsTemplate.getName() + "." + testsTemplate.getExtension());
+        if (testFile == null) {
+          return;
+        }
+        executeTests(project,virtualFile,taskDir,testFile);
+      }
+    }
+  }
+);
+}

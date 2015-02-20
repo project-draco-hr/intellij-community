@@ -1,0 +1,62 @@
+{
+  Channel channel=context.channel();
+  WebServerPathToFileManager pathToFileManager=WebServerPathToFileManager.getInstance(project);
+  VirtualFile result=pathToFileManager.pathToFileCache.getIfPresent(path);
+  boolean indexUsed=false;
+  if (result == null || !result.isValid()) {
+    result=pathToFileManager.findByRelativePath(project,path);
+    if (result == null) {
+      if (path.isEmpty()) {
+        Responses.sendStatus(HttpResponseStatus.NOT_FOUND,channel,"Index file doesn't exist.",request);
+        return true;
+      }
+ else {
+        return false;
+      }
+    }
+ else     if (result.isDirectory()) {
+      if (!endsWithSlash(decodedRawPath)) {
+        redirectToDirectory(request,channel,isCustomHost ? path : (projectName + '/' + path));
+        return true;
+      }
+      result=BuiltInWebServer.findIndexFile(result);
+      if (result == null) {
+        Responses.sendStatus(HttpResponseStatus.NOT_FOUND,channel,"Index file doesn't exist.",request);
+        return true;
+      }
+      indexUsed=true;
+    }
+    pathToFileManager.pathToFileCache.put(path,result);
+  }
+ else   if (!path.endsWith(result.getName())) {
+    if (endsWithSlash(decodedRawPath)) {
+      indexUsed=true;
+    }
+ else {
+      if (path.endsWith(result.getParent().getName())) {
+        redirectToDirectory(request,channel,isCustomHost ? path : (projectName + '/' + path));
+        return true;
+      }
+    }
+  }
+  StringBuilder canonicalRequestPath=new StringBuilder();
+  canonicalRequestPath.append('/');
+  if (!isCustomHost) {
+    canonicalRequestPath.append(projectName).append('/');
+  }
+  canonicalRequestPath.append(path);
+  if (indexUsed) {
+    canonicalRequestPath.append('/').append(result.getName());
+  }
+  for (  WebServerFileHandler fileHandler : WebServerFileHandler.EP_NAME.getExtensions()) {
+    try {
+      if (fileHandler.process(result,canonicalRequestPath,project,request,channel,isCustomHost)) {
+        return true;
+      }
+    }
+ catch (    Throwable e) {
+      BuiltInWebServer.LOG.error(e);
+    }
+  }
+  return false;
+}
