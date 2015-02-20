@@ -1,0 +1,65 @@
+{
+  SsiProcessingState ssiProcessingState=new SsiProcessingState(ssiExternalResolver,lastModifiedDate);
+  int index=0;
+  boolean inside=false;
+  StringBuilder command=new StringBuilder();
+  try {
+    while (index < fileContents.length()) {
+      char c=fileContents.charAt(index);
+      if (inside) {
+        if (c == COMMAND_END.charAt(0) && charCmp(fileContents,index,COMMAND_END)) {
+          inside=false;
+          index+=COMMAND_END.length();
+          String commandName=parseCommand(command);
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("SSIProcessor.process -- processing command: " + commandName);
+          }
+          List<String> paramNames=parseParamNames(command,commandName.length());
+          String[] paramValues=parseParamValues(command,commandName.length(),paramNames.size());
+          String configErrMsg=ssiProcessingState.configErrorMessage;
+          SsiCommand ssiCommand=commands.get(commandName.toLowerCase(Locale.ENGLISH));
+          String errorMessage=null;
+          if (ssiCommand == null) {
+            errorMessage="Unknown command: " + commandName;
+          }
+ else           if (paramValues == null) {
+            errorMessage="Error parsing directive parameters.";
+          }
+ else           if (paramNames.size() != paramValues.length) {
+            errorMessage="Parameter names count does not match parameter values count on command: " + commandName;
+          }
+ else {
+            if (!ssiProcessingState.conditionalState.processConditionalCommandsOnly || ssiCommand instanceof SsiConditional) {
+              long newLastModified=ssiCommand.process(ssiProcessingState,commandName,paramNames,paramValues,writer);
+              if (newLastModified > lastModifiedDate) {
+                lastModifiedDate=newLastModified;
+              }
+            }
+          }
+          if (errorMessage != null) {
+            LOG.warn(errorMessage);
+            writer.write(configErrMsg);
+          }
+        }
+ else {
+          command.append(c);
+          index++;
+        }
+      }
+ else       if (c == COMMAND_START.charAt(0) && charCmp(fileContents,index,COMMAND_START)) {
+        inside=true;
+        index+=COMMAND_START.length();
+        command.setLength(0);
+      }
+ else {
+        if (!ssiProcessingState.conditionalState.processConditionalCommandsOnly) {
+          writer.write(c);
+        }
+        index++;
+      }
+    }
+  }
+ catch (  SsiStopProcessingException e) {
+  }
+  return lastModifiedDate;
+}

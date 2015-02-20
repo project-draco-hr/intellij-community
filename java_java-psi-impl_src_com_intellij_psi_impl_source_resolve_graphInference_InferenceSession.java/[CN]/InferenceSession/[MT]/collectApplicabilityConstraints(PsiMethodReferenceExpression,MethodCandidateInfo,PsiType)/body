@@ -6,25 +6,31 @@
   final MethodSignature signature=interfaceMethod.getSignature(functionalInterfaceSubstitutor);
   final boolean varargs=candidateInfo.isVarargs();
   final PsiMethod method=candidateInfo.getElement();
+  final PsiClass methodContainingClass=method.getContainingClass();
   final PsiMethodReferenceUtil.QualifierResolveResult qualifierResolveResult=PsiMethodReferenceUtil.getQualifierResolveResult(reference);
   final PsiClass containingClass=qualifierResolveResult.getContainingClass();
   LOG.assertTrue(containingClass != null,myContext);
   final PsiParameter[] functionalMethodParameters=interfaceMethod.getParameterList().getParameters();
   final PsiParameter[] parameters=method.getParameterList().getParameters();
   final boolean isStatic=method.hasModifierProperty(PsiModifier.STATIC);
+  PsiSubstitutor psiSubstitutor=qualifierResolveResult.getSubstitutor();
   if (parameters.length == functionalMethodParameters.length && !varargs || isStatic && varargs) {
-    if (method.isConstructor() && PsiUtil.isRawSubstitutor(containingClass,qualifierResolveResult.getSubstitutor())) {
+    if (method.isConstructor() && PsiUtil.isRawSubstitutor(containingClass,psiSubstitutor)) {
       initBounds(containingClass.getTypeParameters());
+      psiSubstitutor=PsiSubstitutor.EMPTY;
+    }
+    if (methodContainingClass != null) {
+      psiSubstitutor=TypeConversionUtil.getClassSubstitutor(methodContainingClass,containingClass,psiSubstitutor);
+      LOG.assertTrue(psiSubstitutor != null);
     }
     for (int i=0; i < functionalMethodParameters.length; i++) {
       final PsiType pType=signature.getParameterTypes()[i];
-      addConstraint(new TypeCompatibilityConstraint(substituteWithInferenceVariables(getParameterType(parameters,i,qualifierResolveResult.getSubstitutor(),varargs)),PsiImplUtil.normalizeWildcardTypeByPosition(pType,reference)));
+      addConstraint(new TypeCompatibilityConstraint(substituteWithInferenceVariables(getParameterType(parameters,i,psiSubstitutor,varargs)),PsiImplUtil.normalizeWildcardTypeByPosition(pType,reference)));
     }
   }
  else   if (parameters.length + 1 == functionalMethodParameters.length && !varargs || !isStatic && varargs && functionalMethodParameters.length > 0 && PsiMethodReferenceUtil.hasReceiver(reference,method)) {
     initBounds(containingClass.getTypeParameters());
     final PsiType pType=signature.getParameterTypes()[0];
-    PsiSubstitutor psiSubstitutor=qualifierResolveResult.getSubstitutor();
     if (PsiUtil.isRawSubstitutor(containingClass,psiSubstitutor)) {
       final PsiClassType.ClassResolveResult pResult=PsiUtil.resolveGenericsClassInType(PsiImplUtil.normalizeWildcardTypeByPosition(pType,(PsiExpression)myContext));
       final PsiClass pClass=pResult.getElement();
