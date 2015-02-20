@@ -1,18 +1,24 @@
 {
   return new FutureTask<Boolean>(new Callable<Boolean>(){
+    private Document myDocument;
     @Override public Boolean call() throws Exception {
       FormattingProgressTask.FORMATTING_CANCELLED_FLAG.set(false);
       try {
         Collection<TextRange> ranges=getRangesToFormat(processChangedTextOnly,file);
+        CharSequence before=null;
+        if (getInfoCollector() != null) {
+          myDocument=PsiDocumentManager.getInstance(myProject).getDocument(file);
+          LOG.assertTrue(myDocument != null);
+          before=myDocument.getImmutableCharSequence();
+        }
         CodeStyleManager.getInstance(myProject).reformatText(file,ranges);
+        if (before != null) {
+          prepareUserNotificationMessage(myDocument,before);
+        }
         return !FormattingProgressTask.FORMATTING_CANCELLED_FLAG.get();
       }
  catch (      FilesTooBigForDiffException e) {
-        LOG.info("Error while calculating changed ranges for: " + file.getVirtualFile(),e);
-        if (!ApplicationManager.getApplication().isUnitTestMode()) {
-          Notification notification=new Notification(ApplicationBundle.message("reformat.changed.text.file.too.big.notification.groupId"),ApplicationBundle.message("reformat.changed.text.file.too.big.notification.title"),ApplicationBundle.message("reformat.changed.text.file.too.big.notification.text",file.getName()),NotificationType.INFORMATION);
-          notification.notify(file.getProject());
-        }
+        handleFileTooBigException(LOG,e,file);
         return false;
       }
 catch (      IncorrectOperationException e) {
