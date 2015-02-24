@@ -1,0 +1,37 @@
+{
+  String path=PathUtilRt.getParentPath(canonicalRequestPath.toString());
+  if (!isCustomHost) {
+    path=path.substring(path.indexOf('/',1) + 1);
+  }
+  if (ssiProcessor == null) {
+    ssiProcessor=new SsiProcessor(false);
+  }
+  ByteBuf buffer=channel.alloc().ioBuffer();
+  boolean keepAlive;
+  boolean releaseBuffer=true;
+  try {
+    long lastModified=ssiProcessor.process(new SsiExternalResolver(project,request,path,file.getParent()),VfsUtilCore.loadText(file),file.getTimeStamp(),new ByteBufUtf8Writer(buffer));
+    HttpResponse response=FileResponses.prepareSend(request,channel,lastModified,file.getPath());
+    if (response == null) {
+      return;
+    }
+    keepAlive=addKeepAliveIfNeed(response,request);
+    if (request.method() != HttpMethod.HEAD) {
+      HttpHeaderUtil.setContentLength(response,buffer.readableBytes());
+    }
+    channel.write(response);
+    if (request.method() != HttpMethod.HEAD) {
+      releaseBuffer=false;
+      channel.write(buffer);
+    }
+  }
+  finally {
+    if (releaseBuffer) {
+      buffer.release();
+    }
+  }
+  ChannelFuture future=channel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+  if (!keepAlive) {
+    future.addListener(ChannelFutureListener.CLOSE);
+  }
+}

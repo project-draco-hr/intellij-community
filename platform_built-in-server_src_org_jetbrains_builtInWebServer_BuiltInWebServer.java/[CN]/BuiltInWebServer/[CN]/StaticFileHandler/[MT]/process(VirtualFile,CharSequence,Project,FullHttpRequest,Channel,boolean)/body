@@ -1,0 +1,35 @@
+{
+  if (file.isInLocalFileSystem()) {
+    CharSequence nameSequence=file.getNameSequence();
+    if (StringUtilRt.endsWithIgnoreCase(nameSequence,".shtml") || StringUtilRt.endsWithIgnoreCase(nameSequence,".stm") || StringUtilRt.endsWithIgnoreCase(nameSequence,".shtm")) {
+      processSsi(file,canonicalRequestPath,project,request,channel,isCustomHost);
+      return true;
+    }
+    File ioFile=VfsUtilCore.virtualToIoFile(file);
+    if (hasAccess(ioFile)) {
+      FileResponses.sendFile(request,channel,ioFile);
+    }
+ else {
+      Responses.sendStatus(HttpResponseStatus.FORBIDDEN,channel,request);
+    }
+  }
+ else {
+    HttpResponse response=FileResponses.prepareSend(request,channel,file.getTimeStamp(),file.getPath());
+    if (response == null) {
+      return true;
+    }
+    boolean keepAlive=addKeepAliveIfNeed(response,request);
+    if (request.method() != HttpMethod.HEAD) {
+      HttpHeaderUtil.setContentLength(response,file.getLength());
+    }
+    channel.write(response);
+    if (request.method() != HttpMethod.HEAD) {
+      channel.write(new ChunkedStream(file.getInputStream()));
+    }
+    ChannelFuture future=channel.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+    if (!keepAlive) {
+      future.addListener(ChannelFutureListener.CLOSE);
+    }
+  }
+  return true;
+}

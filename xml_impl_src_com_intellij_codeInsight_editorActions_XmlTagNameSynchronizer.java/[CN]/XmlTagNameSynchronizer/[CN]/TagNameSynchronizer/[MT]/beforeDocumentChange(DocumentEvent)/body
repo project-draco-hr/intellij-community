@@ -2,9 +2,22 @@
   if (!WebEditorOptions.getInstance().isSyncTagEditing())   return;
   if (myState == State.APPLYING)   return;
   final Document document=event.getDocument();
+  final int offset=event.getOffset();
+  final int oldLength=event.getOldLength();
+  final CharSequence fragment=event.getNewFragment();
+  final int newLength=event.getNewLength();
+  if (document.getUserData(XmlTagInsertHandler.ENFORCING_TAG) == Boolean.TRUE) {
+    return;
+  }
+  for (int i=0; i < newLength; i++) {
+    if (!XmlUtil.isValidTagNameChar(fragment.charAt(i))) {
+      clearMarkers();
+      return;
+    }
+  }
   if (myState == State.INITIAL) {
     final PsiFile file=myDocumentManager.getPsiFile(document);
-    if (file == null)     return;
+    if (file == null || myDocumentManager.getSynchronizer().isInSynchronization(document))     return;
     final SmartList<RangeMarker> leaders=new SmartList<RangeMarker>();
     for (    Caret caret : myEditor.getCaretModel().getAllCarets()) {
       final RangeMarker leader=createTagNameMarker(caret);
@@ -32,31 +45,14 @@
       support.setGreedyToRight(true);
       myMarkers.add(Couple.of(leader,support));
     }
-    myState=State.TRACKING;
-  }
-  if (myMarkers.isEmpty())   return;
-  final CharSequence fragment=event.getNewFragment();
-  final int offset=event.getOffset();
-  final int newLength=event.getNewLength();
-  final int oldLength=event.getOldLength();
-  if (document.getUserData(XmlTagInsertHandler.ENFORCING_TAG) == Boolean.TRUE) {
-    return;
-  }
-  for (int i=0; i < newLength; i++) {
-    if (!XmlUtil.isValidTagNameChar(fragment.charAt(i))) {
+    if (!fitsInMarker(offset,oldLength)) {
       clearMarkers();
       return;
     }
+    myState=State.TRACKING;
   }
-  boolean fitsInMarker=false;
-  for (  Couple<RangeMarker> leaderAndSupport : myMarkers) {
-    final RangeMarker leader=leaderAndSupport.first;
-    if (!leader.isValid()) {
-      fitsInMarker=false;
-      break;
-    }
-    fitsInMarker|=offset >= leader.getStartOffset() && offset + oldLength <= leader.getEndOffset();
-  }
+  if (myMarkers.isEmpty())   return;
+  boolean fitsInMarker=fitsInMarker(offset,oldLength);
   if (!fitsInMarker) {
     clearMarkers();
     beforeDocumentChange(event);

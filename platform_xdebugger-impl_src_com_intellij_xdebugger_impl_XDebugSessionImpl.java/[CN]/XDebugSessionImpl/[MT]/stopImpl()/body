@@ -1,40 +1,45 @@
 {
-  if (myStopped)   return;
-  myDebugProcess.stop();
-  if (!myProject.isDisposed()) {
-    myProject.getMessageBus().syncPublisher(XDebuggerManager.TOPIC).processStopped(myDebugProcess);
+  if (!myStopped.compareAndSet(false,true)) {
+    return;
   }
-  if (mySessionTab != null) {
-    ((XWatchesViewImpl)mySessionTab.getWatchesView()).updateSessionData();
-    mySessionTab.detachFromSession();
-  }
- else   if (myConsoleView != null) {
-    Disposer.dispose(myConsoleView);
-  }
-  myTopFramePosition=null;
-  myCurrentExecutionStack=null;
-  myCurrentStackFrame=null;
-  mySuspendContext=null;
-  if (myDebuggerManager.getCurrentSession() == this) {
-    myDebuggerManager.updateExecutionPoint(null,false,null);
-  }
-  if (breakpointsInitialized) {
-    XBreakpointManagerImpl breakpointManager=myDebuggerManager.getBreakpointManager();
-    if (myBreakpointListener != null) {
-      breakpointManager.removeBreakpointListener(myBreakpointListener);
+  myDebugProcess.stopAsync().done(new Consumer<Void>(){
+    @Override public void consume(    Void aVoid){
+      if (!myProject.isDisposed()) {
+        myProject.getMessageBus().syncPublisher(XDebuggerManager.TOPIC).processStopped(myDebugProcess);
+      }
+      if (mySessionTab != null) {
+        ((XWatchesViewImpl)mySessionTab.getWatchesView()).updateSessionData();
+        mySessionTab.detachFromSession();
+      }
+ else       if (myConsoleView != null) {
+        Disposer.dispose(myConsoleView);
+      }
+      myTopFramePosition=null;
+      myCurrentExecutionStack=null;
+      myCurrentStackFrame=null;
+      mySuspendContext=null;
+      if (myDebuggerManager.getCurrentSession() == XDebugSessionImpl.this) {
+        myDebuggerManager.updateExecutionPoint(null,false,null);
+      }
+      if (breakpointsInitialized) {
+        XBreakpointManagerImpl breakpointManager=myDebuggerManager.getBreakpointManager();
+        if (myBreakpointListener != null) {
+          breakpointManager.removeBreakpointListener(myBreakpointListener);
+        }
+        if (myDependentBreakpointListener != null) {
+          breakpointManager.getDependentBreakpointManager().removeListener(myDependentBreakpointListener);
+        }
+      }
+      if (myValueMarkers != null) {
+        myValueMarkers.clear();
+      }
+      if (XDebuggerSettingsManager.getInstanceImpl().getGeneralSettings().isUnmuteOnStop()) {
+        mySessionData.setBreakpointsMuted(false);
+      }
+      myDebuggerManager.removeSession(XDebugSessionImpl.this);
+      myDispatcher.getMulticaster().sessionStopped();
+      myProject.putUserData(XDebuggerEditorLinePainter.CACHE,null);
     }
-    if (myDependentBreakpointListener != null) {
-      breakpointManager.getDependentBreakpointManager().removeListener(myDependentBreakpointListener);
-    }
   }
-  if (myValueMarkers != null) {
-    myValueMarkers.clear();
-  }
-  if (XDebuggerSettingsManager.getInstanceImpl().getGeneralSettings().isUnmuteOnStop()) {
-    mySessionData.setBreakpointsMuted(false);
-  }
-  myStopped=true;
-  myDebuggerManager.removeSession(this);
-  myDispatcher.getMulticaster().sessionStopped();
-  myProject.putUserData(XDebuggerEditorLinePainter.CACHE,null);
+);
 }

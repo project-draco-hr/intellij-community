@@ -1,0 +1,45 @@
+{
+  StringBuilder builder=new StringBuilder();
+  while (buffer.isReadable()) {
+    builder.setLength(0);
+    String key=null;
+    boolean valueExpected=true;
+    while (true) {
+      int b=buffer.readByte();
+      if (b < 0 || b == '\n') {
+        break;
+      }
+      if (b != '\r') {
+        if (valueExpected && b == ':') {
+          valueExpected=false;
+          key=builder.toString();
+          builder.setLength(0);
+          MessageDecoder.skipWhitespace(buffer);
+        }
+ else {
+          builder.append((char)b);
+        }
+      }
+    }
+    if (builder.length() == 0) {
+      return;
+    }
+    if (StringUtil.isEmpty(key) || StringUtilRt.startsWithIgnoreCase(key,"http") || StringUtilRt.startsWithIgnoreCase(key,"X-Accel-")) {
+      continue;
+    }
+    String value=builder.toString();
+    if (key.equalsIgnoreCase("status")) {
+      int index=value.indexOf(' ');
+      if (index == -1) {
+        LOG.warn("Cannot parse status: " + value);
+        response.setStatus(HttpResponseStatus.OK);
+      }
+ else {
+        response.setStatus(HttpResponseStatus.valueOf(Integer.parseInt(value.substring(0,index))));
+      }
+    }
+ else     if (!(key.startsWith("http") || key.startsWith("HTTP"))) {
+      response.headers().add(key,value);
+    }
+  }
+}

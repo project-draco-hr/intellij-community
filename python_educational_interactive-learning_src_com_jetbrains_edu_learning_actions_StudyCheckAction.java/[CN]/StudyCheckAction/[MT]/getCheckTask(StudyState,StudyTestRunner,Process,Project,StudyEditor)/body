@@ -1,18 +1,18 @@
 {
   final Task task=studyState.getTask();
   final VirtualFile taskDir=studyState.getTaskDir();
-  final StudyStatus statusBeforeCheck=task.getStatus();
+  final StudyTaskManager taskManager=StudyTaskManager.getInstance(project);
+  final StudyStatus statusBeforeCheck=taskManager.getStatus(task);
   return new com.intellij.openapi.progress.Task.Backgroundable(project,"Checking task",true){
     @Override public void onSuccess(){
       StudyUtils.updateStudyToolWindow(project);
-      drawAllTaskWindows(project,task,taskDir);
+      drawAllPlaceholders(project,task,taskDir);
       ProjectView.getInstance(project).refresh();
       deleteWindowDescriptions(task,taskDir);
       selectedEditor.getCheckButton().setEnabled(true);
     }
     @Override public void onCancel(){
-      StudyStatus currentStatus=task.getStatus();
-      task.setStatus(statusBeforeCheck,currentStatus);
+      taskManager.setStatus(task,statusBeforeCheck);
       deleteWindowDescriptions(task,taskDir);
       selectedEditor.getCheckButton().setEnabled(true);
     }
@@ -31,7 +31,7 @@
       }
       final String failedMessage=testRunner.getTestsOutput(output);
       if (StudyTestRunner.TEST_OK.equals(failedMessage)) {
-        task.setStatus(StudyStatus.Solved,statusBeforeCheck);
+        taskManager.setStatus(task,StudyStatus.Solved);
         ApplicationManager.getApplication().invokeLater(new Runnable(){
           @Override public void run(){
             showTestResultPopUp("Congratulations!",MessageType.INFO.getPopupBackground(),project);
@@ -43,12 +43,12 @@
         ApplicationManager.getApplication().invokeLater(new Runnable(){
           @Override public void run(){
             if (taskDir == null)             return;
-            task.setStatus(StudyStatus.Failed,statusBeforeCheck);
+            taskManager.setStatus(task,StudyStatus.Failed);
             for (            Map.Entry<String,TaskFile> entry : taskFiles.entrySet()) {
               final String name=entry.getKey();
               final TaskFile taskFile=entry.getValue();
-              if (taskFile.getTaskWindows().size() < 2) {
-                taskFile.setStatus(StudyStatus.Failed,StudyStatus.Unchecked);
+              if (taskFile.getAnswerPlaceholders().size() < 2) {
+                taskManager.setStatus(taskFile,StudyStatus.Failed);
                 continue;
               }
               CommandProcessor.getInstance().runUndoTransparentAction(new Runnable(){
@@ -64,7 +64,7 @@
 );
             }
             showTestResultPopUp(failedMessage,MessageType.ERROR.getPopupBackground(),project);
-            navigateToFailedTaskWindow(studyState,task,taskDir,project);
+            navigateToFailedPlaceholder(studyState,task,taskDir,project);
           }
         }
 );

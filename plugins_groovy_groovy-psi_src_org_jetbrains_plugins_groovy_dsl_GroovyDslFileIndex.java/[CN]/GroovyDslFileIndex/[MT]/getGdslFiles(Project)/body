@@ -1,0 +1,39 @@
+{
+  List<VirtualFile> result=ContainerUtil.newArrayList();
+  for (  File file : getBundledScriptFolders()) {
+    if (file.exists()) {
+      File[] children=file.listFiles();
+      if (children != null) {
+        for (        File child : children) {
+          final String fileName=child.getName();
+          if (fileName.endsWith(".gdsl")) {
+            String path=FileUtil.toSystemIndependentName(child.getPath());
+            String url=VirtualFileManager.constructUrl(URLUtil.FILE_PROTOCOL,path);
+            ContainerUtil.addIfNotNull(result,VirtualFileManager.getInstance().refreshAndFindFileByUrl(url));
+          }
+        }
+      }
+    }
+  }
+  final ProjectFileIndex fileIndex=ProjectRootManager.getInstance(project).getFileIndex();
+  final GlobalSearchScope scope=GlobalSearchScope.allScope(project);
+  for (  VirtualFile vfile : FileBasedIndex.getInstance().getContainingFiles(NAME,OUR_KEY,scope)) {
+    if (!vfile.isValid()) {
+      continue;
+    }
+    if (vfile.isDirectory() || !vfile.getName().endsWith(".gdsl")) {
+      LOG.error("Index returned non-gdsl file: " + vfile);
+      continue;
+    }
+    if (fileIndex.isInLibrarySource(vfile)) {
+      continue;
+    }
+    if (!fileIndex.isInLibraryClasses(vfile)) {
+      if (!fileIndex.isInSourceContent(vfile) || !isActivated(vfile)) {
+        continue;
+      }
+    }
+    result.add(vfile);
+  }
+  return result;
+}

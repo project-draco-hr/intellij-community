@@ -9,7 +9,8 @@
   final PsiTypeParameter[] typeParameters2=method2.getTypeParameters();
   final PsiSubstitutor classSubstitutor1=info1.getSubstitutor(false);
   final PsiSubstitutor classSubstitutor2=info2.getSubstitutor(false);
-  final int max=Math.max(params1.length,params2.length);
+  final int argsLength=languageLevel.isAtLeast(LanguageLevel.JDK_1_8) && (method1.isVarArgs() || method2.isVarArgs()) ? getActualParametersLength() : 0;
+  final int max=Math.max(Math.max(params1.length,params2.length),argsLength);
   PsiType[] types1=PsiType.createArray(max);
   PsiType[] types2=PsiType.createArray(max);
   final boolean varargsPosition=applicabilityLevel == MethodCandidateInfo.ApplicabilityLevel.VARARGS;
@@ -81,49 +82,11 @@
       if (abstract2 && !abstract1) {
         return Specifics.FIRST;
       }
-    }
-    if (languageLevel.isAtLeast(LanguageLevel.JDK_1_8) && myArgumentsList instanceof PsiExpressionList && (typeParameters1.length == 0 || typeParameters2.length == 0)) {
-      boolean toCompareFunctional=false;
-      if (types1.length > 0 && types2.length > 0) {
-        for (int i=0; i < getActualParametersLength(); i++) {
-          final PsiType type1=types1[Math.min(i,types1.length - 1)];
-          final PsiType type2=types2[Math.min(i,types2.length - 1)];
-          if (LambdaUtil.isFunctionalType(type1) && !TypeConversionUtil.erasure(type1).isAssignableFrom(type2) && LambdaUtil.isFunctionalType(type2)&& !TypeConversionUtil.erasure(type2).isAssignableFrom(type1)) {
-            types1AtSite[Math.min(i,types1.length - 1)]=PsiType.NULL;
-            types2AtSite[Math.min(i,types2.length - 1)]=PsiType.NULL;
-            toCompareFunctional=true;
-          }
-        }
+      if (method1.hasModifierProperty(PsiModifier.DEFAULT) && method2.hasModifierProperty(PsiModifier.STATIC)) {
+        return Specifics.FIRST;
       }
-      if (toCompareFunctional) {
-        final boolean applicable12ignoreFunctionalType=isApplicableTo(types2AtSite,method1,languageLevel,varargsPosition,calculateMethodSubstitutor(typeParameters1,method1,siteSubstitutor1,types1,types2AtSite,languageLevel),null);
-        final boolean applicable21ignoreFunctionalType=isApplicableTo(types1AtSite,method2,languageLevel,varargsPosition,calculateMethodSubstitutor(typeParameters2,method2,siteSubstitutor2,types2,types1AtSite,languageLevel),null);
-        if (applicable12ignoreFunctionalType || applicable21ignoreFunctionalType) {
-          Specifics specifics=null;
-          for (int i=0; i < getActualParametersLength(); i++) {
-            if (types1AtSite[Math.min(i,types1.length - 1)] == PsiType.NULL && types2AtSite[Math.min(i,types2.length - 1)] == PsiType.NULL) {
-              Specifics specific=isFunctionalTypeMoreSpecific(info1,info2,((PsiExpressionList)myArgumentsList).getExpressions()[i],i);
-              if (specific == Specifics.NEITHER) {
-                specifics=Specifics.NEITHER;
-                break;
-              }
-              if (specifics == null) {
-                specifics=specific;
-              }
- else               if (specifics != specific) {
-                specifics=Specifics.NEITHER;
-                break;
-              }
-            }
-          }
-          if (!applicable12ignoreFunctionalType && applicable21ignoreFunctionalType) {
-            return specifics == Specifics.FIRST ? Specifics.FIRST : Specifics.NEITHER;
-          }
-          if (!applicable21ignoreFunctionalType && applicable12ignoreFunctionalType) {
-            return specifics == Specifics.SECOND ? Specifics.SECOND : Specifics.NEITHER;
-          }
-          return specifics;
-        }
+      if (method2.hasModifierProperty(PsiModifier.DEFAULT) && method1.hasModifierProperty(PsiModifier.STATIC)) {
+        return Specifics.SECOND;
       }
     }
   }

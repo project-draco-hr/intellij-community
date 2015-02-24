@@ -1,0 +1,42 @@
+{
+  ChannelPipeline pipeline=context.pipeline();
+  if (detectSsl && SslHandler.isEncrypted(buffer)) {
+    SSLEngine engine=SSL_SERVER_CONTEXT.getValue().createSSLEngine();
+    engine.setUseClientMode(false);
+    pipeline.addLast(new SslHandler(engine),new ChunkedWriteHandler(),new PortUnificationServerHandler(delegatingHttpRequestHandler,false,detectGzip));
+  }
+ else {
+    int magic1=buffer.getUnsignedByte(buffer.readerIndex());
+    int magic2=buffer.getUnsignedByte(buffer.readerIndex() + 1);
+    if (detectGzip && magic1 == 31 && magic2 == 139) {
+      pipeline.addLast(ZlibCodecFactory.newZlibEncoder(ZlibWrapper.GZIP),ZlibCodecFactory.newZlibDecoder(ZlibWrapper.GZIP),new PortUnificationServerHandler(delegatingHttpRequestHandler,detectSsl,false));
+    }
+ else     if (isHttp(magic1,magic2)) {
+      NettyUtil.addHttpServerCodec(pipeline);
+      pipeline.addLast("delegatingHttpHandler",delegatingHttpRequestHandler);
+      if (BuiltInServer.LOG.isDebugEnabled()) {
+        pipeline.addLast(new ChannelOutboundHandlerAdapter(){
+          @Override public void write(          ChannelHandlerContext context,          Object message,          ChannelPromise promise) throws Exception {
+            if (message instanceof HttpResponse) {
+              HttpResponse response=(HttpResponse)message;
+              BuiltInServer.LOG.debug("OUT HTTP: " + response.status().code() + " "+ response.headers().get(CONTENT_TYPE));
+            }
+            super.write(context,message,promise);
+          }
+        }
+);
+      }
+    }
+ else     if (magic1 == 'C' && magic2 == 'H') {
+      buffer.skipBytes(2);
+      pipeline.addLast(new CustomHandlerDelegator());
+    }
+ else {
+      BuiltInServer.LOG.warn("unknown request, first two bytes " + magic1 + " "+ magic2);
+      context.close();
+    }
+  }
+  pipeline.remove(this);
+  buffer.retain();
+  context.fireChannelRead(buffer);
+}

@@ -15,25 +15,28 @@
   if (lessonDir == null) {
     return;
   }
-  Course course=CCProjectService.getInstance(project).getCourse();
+  final CCProjectService service=CCProjectService.getInstance(project);
+  Course course=service.getCourse();
   if (course == null) {
     return;
   }
-  Lesson lesson=course.getLesson(lessonDir.getName());
-  Task task=lesson.getTask(taskDir.getName());
-  TaskFile taskFile=task.getTaskFile(file.getName());
-  final Map<TaskFile,TaskFile> taskFilesCopy=new HashMap<TaskFile,TaskFile>();
-  for (  final Map.Entry<String,TaskFile> entry : task.getTaskFiles().entrySet()) {
-    if (entry.getValue() == taskFile) {
-      ApplicationManager.getApplication().runWriteAction(new Runnable(){
-        @Override public void run(){
-          CCCreateCourseArchive.createUserFile(project,taskFilesCopy,taskDir.getVirtualFile(),taskDir.getVirtualFile(),entry);
-        }
-      }
-);
+  TaskFile taskFile=service.getTaskFile(file.getVirtualFile());
+  if (taskFile == null) {
+    return;
+  }
+  final TaskFile taskFileCopy=new TaskFile();
+  TaskFile.copy(taskFile,taskFileCopy);
+  final String taskFileName=CCProjectService.getRealTaskFileName(file.getVirtualFile().getName());
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    @Override public void run(){
+      EduUtils.createStudentFileFromAnswer(project,taskDir.getVirtualFile(),taskDir.getVirtualFile(),new AbstractMap.SimpleEntry<String,TaskFile>(taskFileName,taskFileCopy));
     }
   }
-  String userFileName=FileUtil.getNameWithoutExtension(file.getName()) + ".py";
+);
+  String userFileName=CCProjectService.getRealTaskFileName(file.getName());
+  if (userFileName == null) {
+    return;
+  }
   VirtualFile userFile=taskDir.getVirtualFile().findChild(userFileName);
   if (userFile == null) {
     LOG.info("Generated file " + userFileName + "was not found");
@@ -54,8 +57,8 @@
     }
   }
 );
-  for (  TaskWindow taskWindow : taskFile.getTaskWindows()) {
-    taskWindow.drawHighlighter(createdEditor,true);
+  for (  AnswerPlaceholder answerPlaceholder : taskFileCopy.getAnswerPlaceholders()) {
+    EduAnswerPlaceholderPainter.drawAnswerPlaceholder(createdEditor,answerPlaceholder,true,JBColor.BLUE);
   }
   JPanel header=new JPanel();
   header.setLayout(new BoxLayout(header,BoxLayout.Y_AXIS));
@@ -68,5 +71,4 @@
   createdEditor.setCaretEnabled(false);
   showPreviewFrame.setComponent(labeledEditor);
   showPreviewFrame.show();
-  CCCreateCourseArchive.resetTaskFiles(taskFilesCopy);
 }
