@@ -1,2 +1,87 @@
 {
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("visitMethodCallExpression " + expression);
+  }
+  final PsiExpressionList argumentList=expression.getArgumentList();
+  final PsiExpression[] argExpressions=argumentList.getExpressions();
+  Evaluator[] argumentEvaluators=new Evaluator[argExpressions.length];
+  for (int idx=0; idx < argExpressions.length; idx++) {
+    final PsiExpression psiExpression=argExpressions[idx];
+    psiExpression.accept(this);
+    if (myResult == null) {
+      throwEvaluateException(DebuggerBundle.message("evaluation.error.invalid.expression",psiExpression.getText()));
+    }
+    argumentEvaluators[idx]=new DisableGC(myResult);
+  }
+  PsiReferenceExpression methodExpr=expression.getMethodExpression();
+  final JavaResolveResult resolveResult=methodExpr.advancedResolve(false);
+  final PsiMethod psiMethod=(PsiMethod)resolveResult.getElement();
+  PsiExpression qualifier=methodExpr.getQualifierExpression();
+  Evaluator objectEvaluator;
+  JVMName contextClass=null;
+  if (psiMethod != null) {
+    PsiClass methodPsiClass=psiMethod.getContainingClass();
+    contextClass=JVMNameUtil.getJVMQualifiedName(methodPsiClass);
+    if (psiMethod.hasModifierProperty(PsiModifier.STATIC)) {
+      objectEvaluator=new TypeEvaluator(contextClass);
+    }
+ else     if (qualifier != null) {
+      qualifier.accept(this);
+      objectEvaluator=myResult;
+    }
+ else {
+      int iterationCount=0;
+      final PsiElement currentFileResolveScope=resolveResult.getCurrentFileResolveScope();
+      if (currentFileResolveScope instanceof PsiClass) {
+        PsiClass aClass=getContextPsiClass();
+        while (aClass != null && !aClass.equals(currentFileResolveScope)) {
+          aClass=getOuterClass(aClass);
+          iterationCount++;
+        }
+      }
+      objectEvaluator=new ThisEvaluator(iterationCount);
+    }
+  }
+ else {
+    if (qualifier != null) {
+      PsiType type=qualifier.getType();
+      if (type != null) {
+        contextClass=JVMNameUtil.getJVMQualifiedName(type);
+      }
+      if (qualifier instanceof PsiReferenceExpression && ((PsiReferenceExpression)qualifier).resolve() instanceof PsiClass) {
+        if (contextClass == null) {
+          contextClass=JVMNameUtil.getJVMRawText(((PsiReferenceExpression)qualifier).getQualifiedName());
+        }
+        objectEvaluator=new TypeEvaluator(contextClass);
+      }
+ else {
+        qualifier.accept(this);
+        objectEvaluator=myResult;
+      }
+    }
+ else {
+      objectEvaluator=new ThisEvaluator();
+      contextClass=JVMNameUtil.getContextClassJVMQualifiedName(myPosition);
+      if (contextClass == null && myContextPsiClass != null) {
+        contextClass=JVMNameUtil.getJVMQualifiedName(myContextPsiClass);
+      }
+    }
+  }
+  if (objectEvaluator == null) {
+    throwEvaluateException(DebuggerBundle.message("evaluation.error.invalid.expression",expression.getText()));
+  }
+  if (psiMethod != null && !psiMethod.isConstructor()) {
+    if (psiMethod.getReturnType() == null) {
+      throwEvaluateException(DebuggerBundle.message("evaluation.error.unknown.method.return.type",psiMethod.getText()));
+    }
+  }
+  boolean defaultInterfaceMethod=false;
+  boolean mustBeVararg=false;
+  if (psiMethod != null) {
+    processBoxingConversions(psiMethod.getParameterList().getParameters(),argExpressions,resolveResult.getSubstitutor(),argumentEvaluators);
+    argumentEvaluators=wrapVarargs(psiMethod.getParameterList().getParameters(),argExpressions,resolveResult.getSubstitutor(),argumentEvaluators);
+    defaultInterfaceMethod=psiMethod.hasModifierProperty(PsiModifier.DEFAULT);
+    mustBeVararg=psiMethod.isVarArgs();
+  }
+  myResult=new MethodEvaluator(objectEvaluator,contextClass,methodExpr.getReferenceName(),psiMethod != null ? JVMNameUtil.getJVMSignature(psiMethod) : null,argumentEvaluators,defaultInterfaceMethod,mustBeVararg);
 }

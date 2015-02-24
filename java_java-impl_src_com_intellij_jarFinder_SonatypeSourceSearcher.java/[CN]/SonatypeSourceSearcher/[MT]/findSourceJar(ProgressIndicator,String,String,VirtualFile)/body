@@ -1,0 +1,39 @@
+{
+  try {
+    indicator.setIndeterminate(true);
+    indicator.setText("Connecting to https://oss.sonatype.org");
+    indicator.checkCanceled();
+    String url="https://oss.sonatype.org/service/local/lucene/search?collapseresults=true&c=sources&a=" + artifactId + "&v="+ version;
+    String groupId=findMavenGroupId(classesJar,artifactId);
+    if (groupId != null) {
+      url+=("&g=" + groupId);
+    }
+    List<Element> artifactList=(List<Element>)XPath.newInstance("/searchNGResponse/data/artifact").selectNodes(readDocumentCancelable(indicator,url));
+    if (artifactList.isEmpty()) {
+      return null;
+    }
+    Element element;
+    if (artifactList.size() == 1) {
+      element=artifactList.get(0);
+    }
+ else {
+      return null;
+    }
+    List<Element> artifactHintList=(List<Element>)XPath.newInstance("artifactHits/artifactHit/artifactLinks/artifactLink/classifier[text()='sources']/../../..").selectNodes(element);
+    if (artifactHintList.isEmpty()) {
+      return null;
+    }
+    groupId=element.getChildTextTrim("groupId");
+    String repositoryId=artifactHintList.get(0).getChildTextTrim("repositoryId");
+    return "https://oss.sonatype.org/service/local/artifact/maven/redirect?r=" + repositoryId + "&g="+ groupId+ "&a="+ artifactId+ "&v="+ version+ "&e=jar&c=sources";
+  }
+ catch (  JDOMException e) {
+    LOG.warn(e);
+    throw new SourceSearchException("Failed to parse response from server. See log for more details.");
+  }
+catch (  IOException e) {
+    indicator.checkCanceled();
+    LOG.warn(e);
+    throw new SourceSearchException("Connection problem. See log for more details.");
+  }
+}

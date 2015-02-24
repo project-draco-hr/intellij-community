@@ -25,13 +25,16 @@
     Module moduleContext=LangDataKeys.MODULE_CONTEXT.getData(dataContext);
     if (projectContext != null || moduleContext != null) {
       final String text;
+      final boolean hasChanges;
       if (moduleContext != null) {
         text=CodeInsightBundle.message("process.scope.module",moduleContext.getName());
+        hasChanges=FormatChangedTextUtil.hasChanges(moduleContext);
       }
  else {
         text=CodeInsightBundle.message("process.scope.project",projectContext.getPresentableUrl());
+        hasChanges=FormatChangedTextUtil.hasChanges(projectContext);
       }
-      DialogWrapper dialog=new OptimizeOnModuleDialog(project,text);
+      DialogWrapper dialog=new OptimizeImportsDialog(project,text,hasChanges);
       if (!dialog.showAndGet()) {
         return;
       }
@@ -57,26 +60,20 @@
       dir=file.getContainingDirectory();
     }
   }
-  boolean processDirectory;
-  boolean includeSubdirectories;
-  if (ApplicationManager.getApplication().isUnitTestMode()) {
-    includeSubdirectories=processDirectory=false;
-  }
- else   if (!EditorSettingsExternalizable.getInstance().getOptions().SHOW_OPIMIZE_IMPORTS_DIALOG && file != null) {
-    includeSubdirectories=processDirectory=false;
-  }
- else {
-    final LayoutCodeDialog dialog=new LayoutCodeDialog(project,CodeInsightBundle.message("process.optimize.imports"),file,dir,null,HELP_ID);
-    if (!dialog.showAndGet()) {
+  boolean processDirectory=false;
+  boolean processOnlyVcsChangedFiles=false;
+  if (!ApplicationManager.getApplication().isUnitTestMode() && file == null && dir != null) {
+    String message=CodeInsightBundle.message("process.scope.directory",dir.getName());
+    OptimizeImportsDialog dialog=new OptimizeImportsDialog(project,message,FormatChangedTextUtil.hasChanges(dir));
+    dialog.show();
+    if (!dialog.isOK()) {
       return;
     }
-    EditorSettingsExternalizable.getInstance().getOptions().SHOW_OPIMIZE_IMPORTS_DIALOG=!dialog.isDoNotAskMe();
-    ReformatCodeAction.updateShowDialogSetting(dialog,"\"Optimize Imports\" dialog disabled");
-    processDirectory=dialog.isProcessDirectory();
-    includeSubdirectories=dialog.isIncludeSubdirectories();
+    processDirectory=true;
+    processOnlyVcsChangedFiles=dialog.isProcessOnlyVcsChangedFiles();
   }
   if (processDirectory) {
-    new OptimizeImportsProcessor(project,dir,includeSubdirectories).run();
+    new OptimizeImportsProcessor(project,dir,true,processOnlyVcsChangedFiles).run();
   }
  else {
     new OptimizeImportsProcessor(project,file).run();
