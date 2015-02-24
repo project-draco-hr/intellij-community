@@ -1,14 +1,15 @@
 {
+  mySettings=generalSettings;
   myProgressManager=progressManager;
   myIdleListener=new Runnable(){
     @Override public void run(){
-      if (generalSettings.isAutoSaveIfInactive() && canSyncOrSave()) {
+      if (mySettings.isAutoSaveIfInactive() && canSyncOrSave()) {
         ((FileDocumentManagerImpl)fileDocumentManager).saveAllDocuments(false);
       }
     }
   }
 ;
-  IdeEventQueue.getInstance().addIdleListener(myIdleListener,generalSettings.getInactiveTimeout() * 1000);
+  IdeEventQueue.getInstance().addIdleListener(myIdleListener,mySettings.getInactiveTimeout() * 1000);
   myGeneralSettingsListener=new PropertyChangeListener(){
     @Override public void propertyChange(    @NotNull PropertyChangeEvent e){
       if (GeneralSettings.PROP_INACTIVE_TIMEOUT.equals(e.getPropertyName())) {
@@ -20,7 +21,16 @@
     }
   }
 ;
-  generalSettings.addPropertyChangeListener(myGeneralSettingsListener);
+  mySettings.addPropertyChangeListener(myGeneralSettingsListener);
+  myRefreshDelayAlarm=new SingleAlarm(new Runnable(){
+    @Override public void run(){
+      if (canSyncOrSave()) {
+        refreshOpenFiles();
+      }
+      maybeRefresh(ModalityState.NON_MODAL);
+    }
+  }
+,300);
   frameStateManager.addListener(new FrameStateListener(){
     @Override public void onFrameDeactivated(){
       if (canSyncOrSave()) {
@@ -28,12 +38,9 @@
       }
     }
     @Override public void onFrameActivated(){
-      if (ApplicationManager.getApplication().isDisposed() || !generalSettings.isSyncOnFrameActivation()) {
-        return;
+      if (!ApplicationManager.getApplication().isDisposed() && mySettings.isSyncOnFrameActivation()) {
+        scheduleRefresh();
       }
-      LOG.debug("enter: refreshFiles()");
-      myRefreshDelayAlarm.cancelAndRequest();
-      LOG.debug("exit: refreshFiles()");
     }
   }
 );
