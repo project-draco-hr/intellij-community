@@ -1,0 +1,131 @@
+{
+  super(project,false);
+  variables=_variables;
+  model=_model;
+  setTitle(SSRBundle.message("editvarcontraints.edit.variables"));
+  regexp.getDocument().addDocumentListener(new MyDocumentListener(notRegexp,wholeWordsOnly));
+  regexp.getDocument().addDocumentListener(new DocumentAdapter(){
+    @Override public void documentChanged(    DocumentEvent e){
+      applyWithinTypeHierarchy.setEnabled(e.getDocument().getTextLength() > 0 && fileType == StdFileTypes.JAVA);
+    }
+  }
+);
+  read.addChangeListener(new MyChangeListener(notRead,false));
+  write.addChangeListener(new MyChangeListener(notWrite,false));
+  regexprForExprType.getDocument().addDocumentListener(new MyDocumentListener(exprTypeWithinHierarchy,notExprType));
+  formalArgType.getDocument().addDocumentListener(new MyDocumentListener(formalArgTypeWithinHierarchy,invertFormalArgType));
+  containedInConstraints.setVisible(false);
+  withinCombo.getComboBox().setEditable(true);
+  withinCombo.getButton().addActionListener(new ActionListener(){
+    public void actionPerformed(    @NotNull final ActionEvent e){
+      final SelectTemplateDialog dialog=new SelectTemplateDialog(project,false,false);
+      dialog.show();
+      if (dialog.getExitCode() == OK_EXIT_CODE) {
+        final Configuration[] selectedConfigurations=dialog.getSelectedConfigurations();
+        if (selectedConfigurations.length == 1) {
+          withinCombo.getComboBox().getEditor().setItem(selectedConfigurations[0].getMatchOptions().getSearchPattern());
+        }
+      }
+    }
+  }
+);
+  boolean hasContextVar=false;
+  for (  Variable var : variables) {
+    if (Configuration.CONTEXT_VAR_NAME.equals(var.getName())) {
+      hasContextVar=true;
+      break;
+    }
+  }
+  if (!hasContextVar) {
+    variables.add(new Variable(Configuration.CONTEXT_VAR_NAME,"","",true));
+  }
+  if (fileType == StdFileTypes.JAVA) {
+    formalArgTypeWithinHierarchy.setEnabled(true);
+    invertFormalArgType.setEnabled(true);
+    formalArgType.setEnabled(true);
+    exprTypeWithinHierarchy.setEnabled(true);
+    notExprType.setEnabled(true);
+    regexprForExprType.setEnabled(true);
+    read.setEnabled(true);
+    notRead.setEnabled(false);
+    write.setEnabled(true);
+    notWrite.setEnabled(false);
+    applyWithinTypeHierarchy.setEnabled(true);
+  }
+ else {
+    formalArgTypeWithinHierarchy.setEnabled(false);
+    invertFormalArgType.setEnabled(false);
+    formalArgType.setEnabled(false);
+    exprTypeWithinHierarchy.setEnabled(false);
+    notExprType.setEnabled(false);
+    regexprForExprType.setEnabled(false);
+    read.setEnabled(false);
+    notRead.setEnabled(false);
+    write.setEnabled(false);
+    notWrite.setEnabled(false);
+    applyWithinTypeHierarchy.setEnabled(false);
+  }
+  parameterList.setModel(new AbstractListModel(){
+    public Object getElementAt(    int index){
+      return variables.get(index);
+    }
+    public int getSize(){
+      return variables.size();
+    }
+  }
+);
+  parameterList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+  parameterList.getSelectionModel().addListSelectionListener(new ListSelectionListener(){
+    boolean rollingBackSelection;
+    public void valueChanged(    @NotNull ListSelectionEvent e){
+      if (e.getValueIsAdjusting())       return;
+      if (rollingBackSelection) {
+        rollingBackSelection=false;
+        return;
+      }
+      final Variable var=variables.get(parameterList.getSelectedIndex());
+      if (validateParameters()) {
+        if (current != null)         copyValuesFromUI(current);
+        ApplicationManager.getApplication().runWriteAction(new Runnable(){
+          public void run(){
+            copyValuesToUI(var);
+          }
+        }
+);
+        current=var;
+      }
+ else {
+        rollingBackSelection=true;
+        parameterList.setSelectedIndex(e.getFirstIndex() == parameterList.getSelectedIndex() ? e.getLastIndex() : e.getFirstIndex());
+      }
+    }
+  }
+);
+  parameterList.setCellRenderer(new DefaultListCellRenderer(){
+    public Component getListCellRendererComponent(    @NotNull JList list,    Object value,    int index,    boolean isSelected,    boolean cellHasFocus){
+      String name=((Variable)value).getName();
+      if (Configuration.CONTEXT_VAR_NAME.equals(name))       name=SSRBundle.message("complete.match.variable.name");
+      if (isReplacementVariable(name)) {
+        name=stripReplacementVarDecoration(name);
+      }
+      return super.getListCellRendererComponent(list,name,index,isSelected,cellHasFocus);
+    }
+  }
+);
+  maxoccursUnlimited.addChangeListener(new MyChangeListener(maxoccurs,true));
+  customScriptCode.getButton().addActionListener(new ActionListener(){
+    public void actionPerformed(    @NotNull final ActionEvent e){
+      final List<String> variableNames=ContainerUtil.newArrayList(model.getConfig().getMatchOptions().getVariableConstraintNames());
+      variableNames.remove(current.getName());
+      variableNames.remove(CompiledPattern.ALL_CLASS_UNMATCHED_CONTENT_VAR_ARTIFICIAL_NAME);
+      final EditScriptDialog dialog=new EditScriptDialog(project,customScriptCode.getChildComponent().getText(),variableNames);
+      dialog.show();
+      if (dialog.getExitCode() == OK_EXIT_CODE) {
+        customScriptCode.getChildComponent().setText(dialog.getScriptText());
+      }
+    }
+  }
+);
+  init();
+  if (variables.size() > 0)   parameterList.setSelectedIndex(0);
+}
