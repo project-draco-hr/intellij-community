@@ -1,0 +1,34 @@
+{
+  try {
+    ClassLoaderReference classLoader=evaluationContext.getClassLoader();
+    return (ClassType)process.findClass(evaluationContext,name,classLoader);
+  }
+ catch (  EvaluateException e) {
+    Throwable cause=e.getCause();
+    if (cause instanceof InvocationException) {
+      if ("java.lang.ClassNotFoundException".equals(((InvocationException)cause).exception().type().name())) {
+        ClassLoaderReference classLoader=getClassLoader(evaluationContext,process);
+        InputStream stream=ImageSerializer.class.getResourceAsStream("/" + name.replaceAll("[.]","/") + ".class");
+        try {
+          if (stream == null)           return null;
+          defineClass(name,StreamUtil.loadFromStream(stream),evaluationContext,process,classLoader);
+          ((EvaluationContextImpl)evaluationContext).setClassLoader(classLoader);
+          return (ClassType)process.findClass(evaluationContext,name,classLoader);
+        }
+ catch (        IOException ioe) {
+          throw new EvaluateException("Unable to read " + name + " class bytes",ioe);
+        }
+ finally {
+          try {
+            if (stream != null) {
+              stream.close();
+            }
+          }
+ catch (          IOException ignored) {
+          }
+        }
+      }
+    }
+    throw e;
+  }
+}
