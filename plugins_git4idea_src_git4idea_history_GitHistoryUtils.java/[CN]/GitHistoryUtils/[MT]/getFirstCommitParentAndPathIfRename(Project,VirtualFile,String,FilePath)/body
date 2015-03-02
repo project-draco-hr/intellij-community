@@ -1,0 +1,28 @@
+{
+  final GitSimpleHandler h=new GitSimpleHandler(project,root,GitCommand.SHOW);
+  final GitLogParser parser=new GitLogParser(project,GitLogParser.NameStatus.STATUS,HASH,COMMIT_TIME,PARENTS);
+  h.setStdoutSuppressed(true);
+  h.addParameters("-M","--name-status",parser.getPretty(),"--encoding=UTF-8",commit);
+  GitVcs vcs=GitVcs.getInstance(project);
+  if (vcs != null && !GitVersionSpecialty.FOLLOW_IS_BUGGY_IN_THE_LOG.existsIn(vcs.getVersion())) {
+    h.addParameters("--follow");
+    h.endOptions();
+    h.addRelativePaths(filePath);
+  }
+ else {
+    h.endOptions();
+  }
+  final String output=h.run();
+  final List<GitLogRecord> records=parser.parse(output);
+  if (records.isEmpty())   return null;
+  GitLogRecord record=records.get(0);
+  final List<Change> changes=record.parseChanges(project,root);
+  for (  Change change : changes) {
+    if ((change.isMoved() || change.isRenamed()) && filePath.equals(change.getAfterRevision().getFile())) {
+      final String[] parents=record.getParentsHashes();
+      String parent=parents.length > 0 ? parents[0] : null;
+      return Pair.create(parent,change.getBeforeRevision().getFile());
+    }
+  }
+  return null;
+}
