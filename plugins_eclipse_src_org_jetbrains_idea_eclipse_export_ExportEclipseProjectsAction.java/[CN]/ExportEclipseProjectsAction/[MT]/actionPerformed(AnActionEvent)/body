@@ -9,7 +9,10 @@
   for (  Module module : ModuleManager.getInstance(project).getModules()) {
     if (!JpsEclipseClasspathSerializer.CLASSPATH_STORAGE_ID.equals(ClassPathStorageUtil.getStorageType(module))) {
       try {
-        ClasspathStorage.getProvider(JpsEclipseClasspathSerializer.CLASSPATH_STORAGE_ID).assertCompatible(ModuleRootManager.getInstance(module));
+        ClasspathStorageProvider provider=ClasspathStorage.getProvider(JpsEclipseClasspathSerializer.CLASSPATH_STORAGE_ID);
+        if (provider != null) {
+          provider.assertCompatible(ModuleRootManager.getInstance(module));
+        }
         modules.add(module);
       }
  catch (      ConfigurationException ignored) {
@@ -43,21 +46,25 @@
   }
  else {
     for (    Module module : dialog.getSelectedModules()) {
-      final ModuleRootModel model=ModuleRootManager.getInstance(module);
-      final VirtualFile[] contentRoots=model.getContentRoots();
-      final String storageRoot=contentRoots.length == 1 ? contentRoots[0].getPath() : ClasspathStorage.getStorageRootFromOptions(module);
+      ModuleRootModel model=ModuleRootManager.getInstance(module);
+      VirtualFile[] contentRoots=model.getContentRoots();
+      String storageRoot=contentRoots.length == 1 ? contentRoots[0].getPath() : ClasspathStorage.getStorageRootFromOptions(module);
       try {
         Element classpathElement=new Element(EclipseXml.CLASSPATH_TAG);
-        final EclipseClasspathWriter classpathWriter=new EclipseClasspathWriter(model);
+        EclipseClasspathWriter classpathWriter=new EclipseClasspathWriter(model);
         classpathWriter.writeClasspath(classpathElement,null);
-        final File classpathFile=new File(storageRoot,EclipseXml.CLASSPATH_FILE);
-        if (!FileUtil.createIfDoesntExist(classpathFile))         continue;
-        EclipseJDOMUtil.output(new Document(classpathElement),classpathFile,project);
+        File classpathFile=new File(storageRoot,EclipseXml.CLASSPATH_FILE);
+        if (!FileUtil.createIfDoesntExist(classpathFile)) {
+          continue;
+        }
+        EclipseJDOMUtil.output(classpathElement,classpathFile,project);
         final Element ideaSpecific=new Element(IdeaXml.COMPONENT_TAG);
         if (IdeaSpecificSettings.writeIDEASpecificClasspath(ideaSpecific,model)) {
-          final File emlFile=new File(storageRoot,module.getName() + EclipseXml.IDEA_SETTINGS_POSTFIX);
-          if (!FileUtil.createIfDoesntExist(emlFile))           continue;
-          EclipseJDOMUtil.output(new Document(ideaSpecific),emlFile,project);
+          File emlFile=new File(storageRoot,module.getName() + EclipseXml.IDEA_SETTINGS_POSTFIX);
+          if (!FileUtil.createIfDoesntExist(emlFile)) {
+            continue;
+          }
+          EclipseJDOMUtil.output(ideaSpecific,emlFile,project);
         }
         DotProjectFileHelper.saveDotProjectFile(module,storageRoot);
       }
