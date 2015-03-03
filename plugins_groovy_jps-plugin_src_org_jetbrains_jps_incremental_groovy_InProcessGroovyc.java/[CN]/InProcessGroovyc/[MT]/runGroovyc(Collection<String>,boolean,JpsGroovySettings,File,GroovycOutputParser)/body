@@ -1,5 +1,16 @@
 {
-synchronized (ourInProcessGroovycLock) {
-    runGroovycInThisProcess(compilationClassPath,forStubs,settings,tempFile,parser);
+  final LinkedBlockingQueue<String> mailbox=forStubs && SystemProperties.getBooleanProperty("groovyc.joint.compilation",true) ? new LinkedBlockingQueue<String>() : null;
+  final UrlClassLoader loader=createCompilationClassLoader(compilationClassPath);
+  final Future<Void> future=ourExecutor.submit(new Callable<Void>(){
+    @Override public Void call() throws Exception {
+      runGroovycInThisProcess(loader,forStubs,settings,tempFile,parser,mailbox);
+      return null;
+    }
   }
+);
+  if (mailbox == null) {
+    future.get();
+    return null;
+  }
+  return waitForStubGeneration(future,mailbox,parser,loader);
 }
