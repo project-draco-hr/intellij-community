@@ -1,19 +1,21 @@
 {
-  final Module module=WriteCommandAction.runWriteCommandAction(null,new Computable<Module>(){
-    @Override public Module compute(){
-      return ModuleManager.getInstance(project).newModule(path + "/" + EclipseProjectFinder.findProjectName(path)+ IdeaXml.IML_EXT,StdModuleTypes.JAVA.getId());
-    }
+  Module module;
+  AccessToken token=WriteAction.start();
+  try {
+    module=ModuleManager.getInstance(project).newModule(path + '/' + EclipseProjectFinder.findProjectName(path)+ IdeaXml.IML_EXT,StdModuleTypes.JAVA.getId());
   }
-);
+  finally {
+    token.finish();
+  }
   replaceRoot(path,EclipseXml.DOT_CLASSPATH_EXT,project);
-  EclipseClasspathStorageProvider.EclipseClasspathConverter converter=new EclipseClasspathStorageProvider.EclipseClasspathConverter(module);
-  final ModifiableRootModel rootModel=ModuleRootManager.getInstance(module).getModifiableModel();
-  converter.getClasspath(rootModel,JDOMUtil.load(new File(path,EclipseXml.DOT_CLASSPATH_EXT)));
-  ApplicationManager.getApplication().runWriteAction(new Runnable(){
-    public void run(){
-      rootModel.commit();
-    }
+  ModifiableRootModel rootModel=ModuleRootManager.getInstance(module).getModifiableModel();
+  new EclipseClasspathConverter(module).readClasspath(rootModel);
+  token=WriteAction.start();
+  try {
+    rootModel.commit();
   }
-);
+  finally {
+    token.finish();
+  }
   return module;
 }
