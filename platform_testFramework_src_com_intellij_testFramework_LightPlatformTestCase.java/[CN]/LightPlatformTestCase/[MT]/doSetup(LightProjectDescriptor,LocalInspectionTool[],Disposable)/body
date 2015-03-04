@@ -1,0 +1,36 @@
+{
+  assertNull("Previous test " + ourTestCase + " hasn't called tearDown(). Probably overridden without super call.",ourTestCase);
+  IdeaLogger.ourErrorsOccurred=null;
+  ApplicationManager.getApplication().assertIsDispatchThread();
+  if (ourProject == null || ourProjectDescriptor == null || !ourProjectDescriptor.equals(descriptor)) {
+    initProject(descriptor);
+  }
+  ((ProjectImpl)ourProject).setTemporarilyDisposed(false);
+  ProjectManagerEx projectManagerEx=ProjectManagerEx.getInstanceEx();
+  projectManagerEx.openTestProject(ourProject);
+  clearUncommittedDocuments(getProject());
+  CodeInsightTestFixtureImpl.configureInspections(localInspectionTools,getProject(),Collections.<String>emptyList(),parentDisposable);
+  assertFalse(getPsiManager().isDisposed());
+  Boolean passed=null;
+  try {
+    passed=StartupManagerEx.getInstanceEx(getProject()).startupActivityPassed();
+  }
+ catch (  Exception e) {
+  }
+  assertTrue("open: " + getProject().isOpen() + "; disposed:"+ getProject().isDisposed()+ "; startup passed:"+ passed+ "; all open projects: "+ Arrays.asList(ProjectManager.getInstance().getOpenProjects()),getProject().isInitialized());
+  CodeStyleSettingsManager.getInstance(getProject()).setTemporarySettings(new CodeStyleSettings());
+  final FileDocumentManager manager=FileDocumentManager.getInstance();
+  if (manager instanceof FileDocumentManagerImpl) {
+    Document[] unsavedDocuments=manager.getUnsavedDocuments();
+    manager.saveAllDocuments();
+    ApplicationManager.getApplication().runWriteAction(new Runnable(){
+      @Override public void run(){
+        ((FileDocumentManagerImpl)manager).dropAllUnsavedDocuments();
+      }
+    }
+);
+    assertEmpty("There are unsaved documents",Arrays.asList(unsavedDocuments));
+  }
+  UIUtil.dispatchAllInvocationEvents();
+  ((FileTypeManagerImpl)FileTypeManager.getInstance()).drainReDetectQueue();
+}
