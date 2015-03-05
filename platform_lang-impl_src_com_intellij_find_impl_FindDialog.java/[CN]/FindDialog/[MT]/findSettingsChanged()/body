@@ -20,10 +20,12 @@
     myResultsPreviewTable.setModel(model);
     if (result != null) {
       myResultsPreviewTable.getEmptyText().setText(UIBundle.message("message.nothingToShow"));
+      myContent.setTitleAt(RESULTS_PREVIEW_TAB_INDEX,PREVIEW_TITLE);
       return;
     }
     myResultsPreviewTable.getColumnModel().getColumn(0).setCellRenderer(new UsageTableCellRenderer());
     myResultsPreviewTable.getEmptyText().setText("Searching...");
+    myContent.setTitleAt(RESULTS_PREVIEW_TAB_INDEX,PREVIEW_TITLE);
     final AtomicInteger resultsCount=new AtomicInteger();
     ProgressIndicatorUtils.scheduleWithWriteActionPriority(myResultsPreviewSearchProgress,new ReadTask(){
       @Override public void computeInReadAction(      @NotNull ProgressIndicator indicator){
@@ -47,11 +49,14 @@
           }
         }
 ,processPresentation);
-        if (resultsCount.get() == 0 && !progressIndicatorWhenSearchStarted.isCanceled()) {
+        boolean succeeded=!progressIndicatorWhenSearchStarted.isCanceled();
+        if (succeeded) {
           ApplicationManager.getApplication().invokeLater(new Runnable(){
             @Override public void run(){
               if (progressIndicatorWhenSearchStarted == myResultsPreviewSearchProgress) {
-                myResultsPreviewTable.getEmptyText().setText(UIBundle.message("message.nothingToShow"));
+                int occurrences=resultsCount.get();
+                if (occurrences == 0)                 myResultsPreviewTable.getEmptyText().setText(UIBundle.message("message.nothingToShow"));
+                myContent.setTitleAt(RESULTS_PREVIEW_TAB_INDEX,PREVIEW_TITLE + " (" + (occurrences != ShowUsagesAction.USAGES_PAGE_SIZE ? Integer.valueOf(occurrences) : occurrences + "+")+ ")");
               }
             }
           }
@@ -60,13 +65,7 @@
       }
       @Override public void onCanceled(      @NotNull ProgressIndicator indicator){
         if (isShowing() && progressIndicatorWhenSearchStarted == myResultsPreviewSearchProgress) {
-          mySearchRescheduleOnCancellationsAlarm.cancelAllRequests();
-          mySearchRescheduleOnCancellationsAlarm.addRequest(new Runnable(){
-            @Override public void run(){
-              findSettingsChanged();
-            }
-          }
-,100);
+          scheduleResultsUpdate();
         }
       }
     }

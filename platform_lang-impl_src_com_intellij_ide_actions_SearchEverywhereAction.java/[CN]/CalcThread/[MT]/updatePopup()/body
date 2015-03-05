@@ -3,13 +3,31 @@
   SwingUtilities.invokeLater(new Runnable(){
     @Override public void run(){
       myListModel.update();
+      myList.revalidate();
+      myList.repaint();
       myRenderer.recalculateWidth();
       if (myBalloon == null || myBalloon.isDisposed()) {
         return;
       }
       if (myPopup == null || !myPopup.isVisible()) {
         final ActionCallback callback=ListDelegationUtil.installKeyboardDelegation(getField().getTextEditor(),myList);
-        JScrollPane content=ScrollPaneFactory.createScrollPane(myList,true);
+        JBScrollPane content=new JBScrollPane(myList){
+{
+            setBorder(null);
+          }
+          @Override public Dimension getPreferredSize(){
+            Dimension size=super.getPreferredSize();
+            Dimension listSize=myList.getPreferredSize();
+            if (size.height > listSize.height || myList.getModel().getSize() == 0) {
+              size.height=Math.max(JBUI.scale(30),listSize.height);
+            }
+            if (size.width < myBalloon.getSize().width) {
+              size.width=myBalloon.getSize().width;
+            }
+            return size;
+          }
+        }
+;
         content.setMinimumSize(new Dimension(myBalloon.getSize().width,30));
         final ComponentPopupBuilder builder=JBPopupFactory.getInstance().createComponentPopupBuilder(content,null);
         myPopup=builder.setRequestFocus(false).setCancelKeyEnabled(false).setCancelCallback(new Computable<Boolean>(){
@@ -17,9 +35,8 @@
             return myBalloon == null || myBalloon.isDisposed() || (!getField().getTextEditor().hasFocus() && !mySkipFocusGain);
           }
         }
-).createPopup();
-        myPopup.setMinimumSize(new Dimension(myBalloon.getSize().width,30));
-        myPopup.getContent().setBorder(new EmptyBorder(0,0,0,0));
+).setShowShadow(false).setShowBorder(false).createPopup();
+        myPopup.getContent().setBorder(null);
         Disposer.register(myPopup,new Disposable(){
           @Override public void dispose(){
             callback.setDone();
@@ -39,13 +56,16 @@
           }
         }
 );
+        updatePopupBounds();
         myPopup.show(new RelativePoint(getField().getParent(),new Point(0,getField().getParent().getHeight())));
         ActionManager.getInstance().addAnActionListener(new AnActionListener.Adapter(){
           @Override public void beforeActionPerformed(          AnAction action,          DataContext dataContext,          AnActionEvent event){
             if (action instanceof TextComponentEditorAction) {
               return;
             }
-            if (myPopup != null)             myPopup.cancel();
+            if (myPopup != null) {
+              myPopup.cancel();
+            }
           }
         }
 ,myPopup);
