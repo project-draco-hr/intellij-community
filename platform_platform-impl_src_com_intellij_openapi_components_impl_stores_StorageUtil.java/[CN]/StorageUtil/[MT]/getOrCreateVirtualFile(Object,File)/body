@@ -2,11 +2,17 @@
   VirtualFile virtualFile=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(ioFile);
   if (virtualFile == null) {
     File parentFile=ioFile.getParentFile();
-    VirtualFile parentVirtualFile=parentFile == null ? null : LocalFileSystem.getInstance().refreshAndFindFileByIoFile(parentFile);
+    final VirtualFile parentVirtualFile=parentFile == null ? null : LocalFileSystem.getInstance().refreshAndFindFileByIoFile(parentFile);
     if (parentVirtualFile == null) {
       throw new IOException(ProjectBundle.message("project.configuration.save.file.not.found",parentFile == null ? "" : parentFile.getPath()));
     }
-    virtualFile=parentVirtualFile.createChildData(requestor,ioFile.getName());
+    boolean underWriteAction=ApplicationManager.getApplication().isWriteAccessAllowed();
+    virtualFile=underWriteAction ? parentVirtualFile.createChildData(requestor,ioFile.getName()) : ApplicationManager.getApplication().runWriteAction(new ThrowableComputable<VirtualFile,IOException>(){
+      @Override public VirtualFile compute() throws IOException {
+        return parentVirtualFile.createChildData(requestor,ioFile.getName());
+      }
+    }
+);
   }
   return virtualFile;
 }
