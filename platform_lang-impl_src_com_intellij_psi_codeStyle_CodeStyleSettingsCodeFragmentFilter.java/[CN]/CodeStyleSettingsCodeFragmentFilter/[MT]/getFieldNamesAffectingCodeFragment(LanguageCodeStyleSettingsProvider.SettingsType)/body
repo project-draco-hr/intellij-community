@@ -1,0 +1,33 @@
+{
+  CodeStyleSettingsManager codeStyleSettingsManager=CodeStyleSettingsManager.getInstance(myProject);
+  CodeStyleSettings clonedSettings=codeStyleSettingsManager.getCurrentSettings().clone();
+  myCommonSettings=clonedSettings.getCommonSettings(myProvider.getLanguage());
+  try {
+    codeStyleSettingsManager.setTemporarySettings(clonedSettings);
+    SequentialModalProgressTask progressTask=new SequentialModalProgressTask(myProject,"Configure Code Style");
+    progressTask.setCancelText("Skip");
+    CompositeSequentialTask compositeTask=new CompositeSequentialTask(progressTask);
+    compositeTask.setProgressText("Filtering settings affecting selected code fragment...");
+    compositeTask.setProgressText2("Press 'Skip' to show all settings");
+    final Map<LanguageCodeStyleSettingsProvider.SettingsType,FilterFieldsTask> typeToTask=ContainerUtil.newHashMap();
+    for (    LanguageCodeStyleSettingsProvider.SettingsType type : types) {
+      Set<String> fields=myProvider.getSupportedFields(type);
+      FilterFieldsTask task=new FilterFieldsTask(fields);
+      compositeTask.addTask(task);
+      typeToTask.put(type,task);
+    }
+    progressTask.setTask(compositeTask);
+    progressTask.setMinIterationTime(10);
+    ProgressManager.getInstance().run(progressTask);
+    return new CodeStyleSettingsToShow(){
+      @Override public List<String> getSettings(      LanguageCodeStyleSettingsProvider.SettingsType type){
+        FilterFieldsTask task=typeToTask.get(type);
+        return task.getAffectedFields();
+      }
+    }
+;
+  }
+  finally {
+    codeStyleSettingsManager.dropTemporarySettings();
+  }
+}
