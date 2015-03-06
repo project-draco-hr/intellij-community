@@ -63,7 +63,19 @@
           ((EditableTreeNode)node).fireOnCancel();
         }
  else {
-          ((EditableTreeNode)node).fireOnChange();
+          if (mySyncStrategy) {
+            resetEditSync();
+            ContainerUtil.process(getChildNodesByType(root,RepositoryNode.class),new Processor<RepositoryNode>(){
+              @Override public boolean process(              RepositoryNode node){
+                node.fireOnChange();
+                return true;
+              }
+            }
+);
+          }
+ else {
+            ((EditableTreeNode)node).fireOnChange();
+          }
         }
       }
       myTree.firePropertyChange(PushLogTreeUtil.EDIT_MODE_PROP,true,false);
@@ -73,6 +85,7 @@
       if (node != null && node instanceof EditableTreeNode) {
         ((EditableTreeNode)node).fireOnCancel();
       }
+      resetEditSync();
       myTree.firePropertyChange(PushLogTreeUtil.EDIT_MODE_PROP,true,false);
     }
   }
@@ -109,8 +122,23 @@
   myChangesBrowser.addToolbarAction(editSourceAction);
   setDefaultEmptyText();
   Splitter splitter=new Splitter(false,0.7f);
-  myScrollPane=ScrollPaneFactory.createScrollPane(myTree);
+  final JComponent syncStrategyPanel=allowSyncStrategy ? createStrategyPanel() : null;
+  myScrollPane=new JBScrollPane(myTree){
+    @Override public void layout(){
+      super.layout();
+      if (syncStrategyPanel != null) {
+        Rectangle bounds=this.getViewport().getBounds();
+        int height=bounds.height - syncStrategyPanel.getPreferredSize().height;
+        this.getViewport().setBounds(bounds.x,bounds.y,bounds.width,height);
+        syncStrategyPanel.setBounds(bounds.x,bounds.y + height,bounds.width,syncStrategyPanel.getPreferredSize().height);
+      }
+    }
+  }
+;
   myScrollPane.setOpaque(false);
+  if (syncStrategyPanel != null) {
+    myScrollPane.add(syncStrategyPanel);
+  }
   splitter.setFirstComponent(myScrollPane);
   splitter.setSecondComponent(myChangesBrowser);
   setLayout(new BorderLayout());
