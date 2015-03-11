@@ -1,0 +1,52 @@
+{
+  if (myUseNewRendering)   return myView.visualPositionToXY(visible,leanTowardsLargerColumns);
+  int y=visibleLineToY(visible.line);
+  LogicalPosition logical=visualToLogicalPosition(new VisualPosition(visible.line,0));
+  int logLine=logical.line;
+  int lineStartOffset=-1;
+  int reserved=0;
+  int column=visible.column;
+  if (logical.softWrapLinesOnCurrentLogicalLine > 0) {
+    int linesToSkip=logical.softWrapLinesOnCurrentLogicalLine;
+    List<? extends SoftWrap> softWraps=getSoftWrapModel().getSoftWrapsForLine(logLine);
+    for (    SoftWrap softWrap : softWraps) {
+      if (myFoldingModel.isOffsetCollapsed(softWrap.getStart()) && myFoldingModel.isOffsetCollapsed(softWrap.getStart() - 1)) {
+        continue;
+      }
+      linesToSkip--;
+      if (linesToSkip > 0) {
+        continue;
+      }
+      lineStartOffset=softWrap.getStart();
+      int widthInColumns=softWrap.getIndentInColumns();
+      int widthInPixels=softWrap.getIndentInPixels();
+      if (widthInColumns <= column) {
+        column-=widthInColumns;
+        reserved=widthInPixels;
+      }
+ else {
+        char[] softWrapChars=softWrap.getChars();
+        int i=CharArrayUtil.lastIndexOf(softWrapChars,'\n',0,softWrapChars.length);
+        int start=0;
+        if (i >= 0) {
+          start=i + 1;
+        }
+        return new Point(EditorUtil.textWidth(this,softWrap.getText(),start,column + 1,Font.PLAIN,0),y);
+      }
+      break;
+    }
+  }
+  if (logLine < 0) {
+    lineStartOffset=0;
+  }
+ else   if (lineStartOffset < 0) {
+    if (logLine >= myDocument.getLineCount()) {
+      lineStartOffset=myDocument.getTextLength();
+    }
+ else {
+      lineStartOffset=myDocument.getLineStartOffset(logLine);
+    }
+  }
+  int x=getTabbedTextWidth(lineStartOffset,column,reserved);
+  return new Point(x,y);
+}
