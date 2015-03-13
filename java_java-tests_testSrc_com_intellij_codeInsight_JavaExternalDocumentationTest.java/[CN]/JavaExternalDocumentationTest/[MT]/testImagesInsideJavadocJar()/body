@@ -1,0 +1,39 @@
+{
+  final VirtualFile libClasses=getJarFile("library.jar");
+  final VirtualFile libJavadocJar=getJarFile("library-javadoc.jar");
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    @Override public void run(){
+      final Library library=LibraryTablesRegistrar.getInstance().getLibraryTable(myProject).createLibrary("myLib");
+      final Library.ModifiableModel model=library.getModifiableModel();
+      model.addRoot(libClasses,OrderRootType.CLASSES);
+      model.addRoot(libJavadocJar,JavadocOrderRootType.getInstance());
+      model.commit();
+      Module[] modules=ModuleManager.getInstance(myProject).getModules();
+      assertSize(1,modules);
+      ModuleRootModificationUtil.addDependency(modules[0],library);
+    }
+  }
+);
+  PsiFile psiFile=PsiFileFactory.getInstance(myProject).createFileFromText(JavaLanguage.INSTANCE,"class Foo { com.jetbrains.Test field; }");
+  Document document=PsiDocumentManager.getInstance(myProject).getDocument(psiFile);
+  assertNotNull(document);
+  Editor editor=EditorFactory.getInstance().createEditor(document,myProject);
+  try {
+    editor.getCaretModel().moveToOffset(document.getText().indexOf("Test"));
+    DocumentationManager documentationManager=DocumentationManager.getInstance(myProject);
+    documentationManager.showJavaDocInfo(editor,psiFile,false);
+    JBPopup popup=documentationManager.getDocInfoHint();
+    assertNotNull(popup);
+    DocumentationComponent documentationComponent=(DocumentationComponent)popup.getContent().getComponent(0);
+    try {
+      byte[] imageData=getImageDataFromDocumentationComponent(documentationComponent);
+      assertEquals(228,imageData.length);
+    }
+  finally {
+      Disposer.dispose(documentationComponent);
+    }
+  }
+  finally {
+    EditorFactory.getInstance().releaseEditor(editor);
+  }
+}
