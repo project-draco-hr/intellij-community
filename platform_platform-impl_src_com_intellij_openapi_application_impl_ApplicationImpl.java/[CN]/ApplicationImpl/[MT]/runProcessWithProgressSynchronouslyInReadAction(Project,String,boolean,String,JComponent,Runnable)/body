@@ -7,15 +7,17 @@
   final ProgressWindow progress=new ProgressWindow(canBeCanceled,false,project,parentComponent,cancelText);
   Disposer.register(this,progress);
   progress.setTitle(progressTitle);
-  final CountDownLatch readActionAcquired=new CountDownLatch(1);
-  final CountDownLatch modalityEntered=new CountDownLatch(1);
+  final Semaphore readActionAcquired=new Semaphore();
+  readActionAcquired.down();
+  final Semaphore modalityEntered=new Semaphore();
+  modalityEntered.down();
   executeOnPooledThread(new Runnable(){
     @Override public void run(){
       try {
         ApplicationManager.getApplication().runReadAction(new Runnable(){
           @Override public void run(){
-            readActionAcquired.countDown();
-            waitFor(modalityEntered);
+            readActionAcquired.up();
+            modalityEntered.waitFor();
             ProgressManager.getInstance().runProcess(process,progress);
           }
         }
@@ -31,10 +33,10 @@ catch (      RuntimeException e) {
     }
   }
 );
-  waitFor(readActionAcquired);
+  readActionAcquired.waitFor();
   progress.startBlocking(new Runnable(){
     @Override public void run(){
-      modalityEntered.countDown();
+      modalityEntered.up();
     }
   }
 );
