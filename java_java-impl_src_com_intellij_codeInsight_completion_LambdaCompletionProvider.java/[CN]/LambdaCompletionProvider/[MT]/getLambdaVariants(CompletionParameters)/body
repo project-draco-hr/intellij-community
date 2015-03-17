@@ -1,0 +1,41 @@
+{
+  if (!PsiUtil.isLanguageLevel8OrHigher(parameters.getOriginalFile()))   return Collections.emptyList();
+  List<LookupElement> result=ContainerUtil.newArrayList();
+  for (  ExpectedTypeInfo expectedType : JavaSmartCompletionContributor.getExpectedTypes(parameters)) {
+    final PsiType defaultType=expectedType.getDefaultType();
+    if (LambdaUtil.isFunctionalType(defaultType)) {
+      final PsiType functionalInterfaceType=FunctionalInterfaceParameterizationUtil.getGroundTargetType(defaultType);
+      final PsiMethod method=LambdaUtil.getFunctionalInterfaceMethod(functionalInterfaceType);
+      if (method != null) {
+        PsiParameter[] params=method.getParameterList().getParameters();
+        final Project project=method.getProject();
+        final PsiElement originalPosition=parameters.getOriginalPosition();
+        final JVMElementFactory jvmElementFactory=originalPosition != null ? JVMElementFactories.getFactory(originalPosition.getLanguage(),project) : null;
+        final JavaCodeStyleManager javaCodeStyleManager=JavaCodeStyleManager.getInstance(project);
+        if (jvmElementFactory != null) {
+          final PsiSubstitutor substitutor=LambdaUtil.getSubstitutor(method,PsiUtil.resolveGenericsClassInType(functionalInterfaceType));
+          params=GenerateMembersUtil.overriddenParameters(params,jvmElementFactory,javaCodeStyleManager,substitutor,originalPosition);
+        }
+        String paramsString=params.length == 1 ? getParamName(params[0],javaCodeStyleManager,originalPosition) : "(" + StringUtil.join(params,new Function<PsiParameter,String>(){
+          @Override public String fun(          PsiParameter parameter){
+            return getParamName(parameter,javaCodeStyleManager,originalPosition);
+          }
+        }
+,",") + ")";
+        final CodeStyleManager codeStyleManager=CodeStyleManager.getInstance(project);
+        PsiLambdaExpression lambdaExpression=(PsiLambdaExpression)JavaPsiFacade.getElementFactory(project).createExpressionFromText(paramsString + " -> {}",null);
+        lambdaExpression=(PsiLambdaExpression)codeStyleManager.reformat(lambdaExpression);
+        paramsString=lambdaExpression.getParameterList().getText();
+        final LookupElementBuilder builder=LookupElementBuilder.create(paramsString).withPresentableText(paramsString + " -> {}").withInsertHandler(new InsertHandler<LookupElement>(){
+          @Override public void handleInsert(          InsertionContext context,          LookupElement item){
+            final Editor editor=context.getEditor();
+            EditorModificationUtil.insertStringAtCaret(editor," -> ");
+          }
+        }
+);
+        result.add(builder.withAutoCompletionPolicy(AutoCompletionPolicy.NEVER_AUTOCOMPLETE));
+      }
+    }
+  }
+  return result;
+}

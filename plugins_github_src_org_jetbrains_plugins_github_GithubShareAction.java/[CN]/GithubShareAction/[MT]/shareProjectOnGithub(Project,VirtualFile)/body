@@ -4,19 +4,24 @@
   final boolean gitDetected=gitRepository != null;
   final VirtualFile root=gitDetected ? gitRepository.getRoot() : project.getBaseDir();
   final GithubAuthDataHolder authHolder=GithubAuthDataHolder.createFromSettings();
-  boolean externalRemoteDetected=false;
+  Set<String> existingRemotes=Collections.emptySet();
   if (gitDetected) {
     final String githubRemote=GithubUtil.findGithubRemoteUrl(gitRepository);
     if (githubRemote != null) {
       if (!checkExistingRemote(project,authHolder,githubRemote))       return;
     }
-    externalRemoteDetected=!gitRepository.getRemotes().isEmpty();
+    existingRemotes=ContainerUtil.map2Set(gitRepository.getRemotes(),new Function<GitRemote,String>(){
+      @Override public String fun(      GitRemote remote){
+        return remote.getName();
+      }
+    }
+);
   }
   final GithubInfo githubInfo=loadGithubInfoWithModal(authHolder,project);
   if (githubInfo == null) {
     return;
   }
-  final GithubShareDialog shareDialog=new GithubShareDialog(project,githubInfo.getRepositoryNames(),githubInfo.getUser().canCreatePrivateRepo());
+  final GithubShareDialog shareDialog=new GithubShareDialog(project,githubInfo.getRepositoryNames(),existingRemotes,githubInfo.getUser().canCreatePrivateRepo());
   DialogManager.show(shareDialog);
   if (!shareDialog.isOK()) {
     return;
@@ -24,7 +29,7 @@
   final boolean isPrivate=shareDialog.isPrivate();
   final String name=shareDialog.getRepositoryName();
   final String description=shareDialog.getDescription();
-  final boolean finalExternalRemoteDetected=externalRemoteDetected;
+  final String remoteName=shareDialog.getRemoteName();
   new Task.Backgroundable(project,"Sharing project on GitHub..."){
     @Override public void run(    @NotNull ProgressIndicator indicator){
       LOG.info("Creating GitHub repository");
@@ -44,13 +49,11 @@
       }
       GitRepositoryManager repositoryManager=GitUtil.getRepositoryManager(project);
       final GitRepository repository=repositoryManager.getRepositoryForRoot(root);
-      LOG.assertTrue(repository != null,"GitRepository is null for root " + root);
       if (repository == null) {
         GithubNotifications.showError(project,"Failed to create GitHub Repository","Can't find Git repository");
         return;
       }
       final String remoteUrl=GithubUrlUtil.getCloneUrl(githubInfo.getUser().getLogin(),name);
-      final String remoteName=finalExternalRemoteDetected ? "github" : "origin";
       LOG.info("Adding GitHub as a remote host");
       indicator.setText("Adding GitHub as a remote host...");
       if (!GithubUtil.addGithubRemote(project,repository,remoteName,remoteUrl)) {

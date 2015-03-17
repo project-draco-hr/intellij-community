@@ -1,0 +1,46 @@
+{
+  if (!StringUtil.isEmptyOrSpaces(code.getText())) {
+    myIpythonInputPromptCount+=1;
+  }
+  if (myConsoleCommunication != null) {
+    final boolean waitedForInputBefore=myConsoleCommunication.isWaitingForInput();
+    if (myConsoleCommunication.isWaitingForInput()) {
+      myInputBuffer.setLength(0);
+    }
+ else {
+      executingPrompt();
+    }
+    myConsoleCommunication.execInterpreter(code,new Function<InterpreterResponse,Object>(){
+      @Override public Object fun(      final InterpreterResponse interpreterResponse){
+        myInputBuffer=null;
+        getConsoleCommunication().notifyCommandExecuted(interpreterResponse.more);
+        if (interpreterResponse.more) {
+          more();
+          if (myCurrentIndentSize == 0) {
+            setCurrentIndentSize(IndentHelperImpl.getIndent(getProject(),PythonFileType.INSTANCE,lastLine(code.getText()),false) + getPythonIndent());
+            final EditorEx editor=myConsoleView.getConsoleEditor();
+            UIUtil.invokeLaterIfNeeded(new Runnable(){
+              @Override public void run(){
+                indentEditor(editor,myCurrentIndentSize);
+              }
+            }
+);
+          }
+        }
+ else {
+          if (!myConsoleCommunication.isWaitingForInput()) {
+            inPrompt();
+          }
+          setCurrentIndentSize(0);
+        }
+        return null;
+      }
+    }
+);
+    if (waitedForInputBefore && !myConsoleCommunication.isWaitingForInput()) {
+      myIpythonInputPromptCount-=1;
+      inPrompt();
+      setCurrentIndentSize(0);
+    }
+  }
+}

@@ -1,5 +1,14 @@
 {
+  final Project project=clazz.getProject();
   selectedMemberInfos=new ArrayList<PyMemberInfo<PyElement>>(selectedMemberInfos);
+  final RefactoringEventData beforeData=new RefactoringEventData();
+  beforeData.addElements(FluentIterable.from(selectedMemberInfos).transform(new Function<PyMemberInfo<PyElement>,PsiElement>(){
+    @Override public PsiElement fun(    PyMemberInfo<PyElement> info){
+      return info.getMember();
+    }
+  }
+).toList());
+  project.getMessageBus().syncPublisher(RefactoringEventListener.REFACTORING_EVENT_TOPIC).refactoringStarted(getRefactoringId(),beforeData);
   final PyMemberInfo<PyElement> objectMember=MembersManager.findMember(selectedMemberInfos,ALLOW_OBJECT);
   if (LanguageLevel.forElement(clazz).isPy3K()) {
     if (objectMember != null) {
@@ -14,7 +23,6 @@
       }
     }
   }
-  final Project project=clazz.getProject();
   final String text="class " + superBaseName + ":\n  pass"+ "\n";
   PyClass newClass=PyElementGenerator.getInstance(project).createFromText(LanguageLevel.getDefault(),PyClass.class,text);
   newClass=placeNewClass(project,newClass,clazz,targetFile);
@@ -23,4 +31,7 @@
     PyClassRefactoringUtil.optimizeImports(clazz.getContainingFile());
   }
   PyClassRefactoringUtil.addSuperclasses(project,clazz,null,newClass);
+  final RefactoringEventData afterData=new RefactoringEventData();
+  afterData.addElement(newClass);
+  project.getMessageBus().syncPublisher(RefactoringEventListener.REFACTORING_EVENT_TOPIC).refactoringDone(getRefactoringId(),afterData);
 }

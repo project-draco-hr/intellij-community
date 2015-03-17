@@ -1,0 +1,51 @@
+{
+  if (!PsiUtil.isLanguageLevel8OrHigher(holder.getFile())) {
+    return PsiElementVisitor.EMPTY_VISITOR;
+  }
+  return new PsiElementVisitor(){
+    @Override public void visitElement(    PsiElement element){
+      if (element instanceof PsiMethodCallExpression) {
+        final PsiMethodCallExpression methodCallExpression=(PsiMethodCallExpression)element;
+        String qName=methodCallExpression.getMethodExpression().getQualifiedName();
+        if (qName == null) {
+          return;
+        }
+        final int dotIndex=qName.lastIndexOf('.');
+        if (dotIndex >= 0) {
+          qName=qName.substring(dotIndex + 1);
+        }
+        final Collection<StaticPseudoFunctionalStyleMethodOptions.PipelineElement> handlerInfos=myOptions.findElementsByMethodName(qName);
+        if (handlerInfos.isEmpty()) {
+          return;
+        }
+        final PsiMethod method=methodCallExpression.resolveMethod();
+        if (method == null) {
+          return;
+        }
+        final PsiClass aClass=method.getContainingClass();
+        if (aClass == null) {
+          return;
+        }
+        final String classQualifiedName=aClass.getQualifiedName();
+        if (classQualifiedName == null) {
+          return;
+        }
+        StaticPseudoFunctionalStyleMethodOptions.PipelineElement suitableHandler=null;
+        for (        StaticPseudoFunctionalStyleMethodOptions.PipelineElement h : handlerInfos) {
+          if (h.getHandlerClass().equals(classQualifiedName)) {
+            suitableHandler=h;
+            break;
+          }
+        }
+        if (suitableHandler == null) {
+          return;
+        }
+        final int lambdaIndex=validateMethodParameters(methodCallExpression,method);
+        if (lambdaIndex != -1) {
+          holder.registerProblem(methodCallExpression.getMethodExpression(),"",new ReplacePseudoLambdaWithLambda(lambdaIndex,methodCallExpression,method,suitableHandler));
+        }
+      }
+    }
+  }
+;
+}

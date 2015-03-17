@@ -3,10 +3,24 @@
   final StringBuilder buf=new StringBuilder();
   StringBuilder miscBuffer=null;
   int anonymousTypedVarsCount=0;
-  for (int index=0; index < pattern.length(); ++index) {
+  boolean targetFound=false;
+  final int length=pattern.length();
+  for (int index=0; index < length; ++index) {
     char ch=pattern.charAt(index);
-    if (ch == '\'') {
-      final int length=pattern.length();
+    if (index == 0 && ch == '[') {
+      if (miscBuffer == null)       miscBuffer=new StringBuilder();
+ else       miscBuffer.setLength(0);
+      final MatchVariableConstraint constraint=new MatchVariableConstraint();
+      constraint.setName(Configuration.CONTEXT_VAR_NAME);
+      index=eatTypedVarCondition(0,pattern,miscBuffer,constraint);
+      options.addVariableConstraint(constraint);
+      if (index == length)       break;
+      ch=pattern.charAt(index);
+    }
+    if (ch == '\\' && index + 1 < length) {
+      ch=pattern.charAt(++index);
+    }
+ else     if (ch == '\'') {
       if (index + 1 < length && pattern.charAt(index + 1) == '\'') {
         index++;
       }
@@ -39,8 +53,8 @@
           miscBuffer.append(ch);
           buf.append(ch);
         }
-        boolean anonymous=false;
         if (miscBuffer.length() == 0)         throw new MalformedPatternException(SSRBundle.message("error.expected.character"));
+        boolean anonymous=false;
         if (miscBuffer.charAt(0) == '_') {
           anonymous=true;
           if (miscBuffer.length() == 1) {
@@ -65,22 +79,22 @@
           constraint.setName(typedVar);
           constraintCreated=true;
         }
+        final int savedIndex=index;
         if (index < length) {
-          char possibleQuantifier=pattern.charAt(index);
-          if (possibleQuantifier == '+') {
+          if (ch == '+') {
             maxOccurs=Integer.MAX_VALUE;
             ++index;
           }
- else           if (possibleQuantifier == '?') {
+ else           if (ch == '?') {
             minOccurs=0;
             ++index;
           }
- else           if (possibleQuantifier == '*') {
+ else           if (ch == '*') {
             minOccurs=0;
             maxOccurs=Integer.MAX_VALUE;
             ++index;
           }
- else           if (possibleQuantifier == '{') {
+ else           if (ch == '{') {
             ++index;
             minOccurs=0;
             while (index < length && (ch=pattern.charAt(index)) >= '0' && ch <= '9') {
@@ -121,6 +135,13 @@
           constraint.setMaxCount(maxOccurs);
           constraint.setGreedy(greedy);
           constraint.setPartOfSearchResults(!anonymous);
+          if (targetFound && !anonymous) {
+            throw new MalformedPatternException("Only one target allowed");
+          }
+          targetFound=!anonymous;
+        }
+ else         if (savedIndex != index) {
+          throw new MalformedPatternException("Constraints only allowed on first of variable");
         }
         if (index < length && pattern.charAt(index) == ':') {
           ++index;
@@ -130,17 +151,18 @@
             buf.append(ch);
           }
  else {
+            if (!constraintCreated) {
+              throw new MalformedPatternException("Constraints only allowed on first of variable");
+            }
             index=eatTypedVarCondition(index,pattern,miscBuffer,constraint);
           }
         }
         if (constraintCreated) {
-          if (constraint.getWithinConstraint().length() > 0) {
-            constraint.setName(Configuration.CONTEXT_VAR_NAME);
-          }
           options.addVariableConstraint(constraint);
         }
         if (index == length)         break;
-        ch=pattern.charAt(index);
+        index--;
+        continue;
       }
     }
     buf.append(ch);

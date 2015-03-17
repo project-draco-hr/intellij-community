@@ -3,7 +3,8 @@
   long start=0;
   try {
     JpsGroovySettings settings=JpsGroovySettings.getSettings(context.getProjectDescriptor().getProject());
-    final List<File> toCompile=collectChangedFiles(context,dirtyFilesHolder,myForStubs,false);
+    Ref<Boolean> hasStubExcludes=Ref.create(false);
+    final List<File> toCompile=collectChangedFiles(context,dirtyFilesHolder,myForStubs,false,hasStubExcludes);
     if (toCompile.isEmpty()) {
       return hasFilesToCompileForNextRound(context) ? ExitCode.ADDITIONAL_PASS_REQUIRED : ExitCode.NOTHING_DONE;
     }
@@ -15,31 +16,12 @@
       return ExitCode.ABORT;
     }
     start=System.currentTimeMillis();
-    final Set<String> toCompilePaths=getPathsToCompile(toCompile);
-    JpsSdk<JpsDummyElement> jdk=getJdk(chunk);
-    String version=jdk == null ? SystemInfo.JAVA_RUNTIME_VERSION : jdk.getVersionString();
-    boolean inProcess="true".equals(System.getProperty("groovyc.in.process","true"));
-    boolean mayDependOnUtilJar=version != null && StringUtil.compareVersionNumbers(version,"1.6") >= 0;
-    boolean optimizeClassLoading=!inProcess && mayDependOnUtilJar && ourOptimizeThreshold != 0 && toCompilePaths.size() >= ourOptimizeThreshold;
-    Map<String,String> class2Src=buildClassToSourceMap(chunk,context,toCompilePaths,finalOutputs);
-    final String encoding=context.getProjectDescriptor().getEncodingConfiguration().getPreferredModuleChunkEncoding(chunk);
-    List<String> patchers=new ArrayList<String>();
-    for (    GroovyBuilderExtension extension : JpsServiceManager.getInstance().getExtensions(GroovyBuilderExtension.class)) {
-      patchers.addAll(extension.getCompilationUnitPatchers(context,chunk));
-    }
     Map<ModuleBuildTarget,String> generationOutputs=myForStubs ? getStubGenerationOutputs(chunk,context) : finalOutputs;
     String compilerOutput=generationOutputs.get(chunk.representativeTarget());
-    Collection<String> classpath=generateClasspath(context,chunk);
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Optimized class loading: " + optimizeClassLoading);
-      LOG.debug("Groovyc classpath: " + classpath);
-    }
-    final File tempFile=GroovycOutputParser.fillFileWithGroovycParameters(compilerOutput,toCompilePaths,finalOutputs.values(),class2Src,encoding,patchers,optimizeClassLoading ? StringUtil.join(classpath,File.pathSeparator) : "");
-    GroovycFlavor groovyc=inProcess ? new InProcessGroovyc(finalOutputs.values()) : new ForkedGroovyc(optimizeClassLoading,chunk);
-    GroovycOutputParser parser=new GroovycOutputParser(chunk,context);
-    groovyc.runGroovyc(classpath,myForStubs,settings,tempFile,parser);
+    GroovycOutputParser parser=runGroovycOrContinuation(context,chunk,settings,finalOutputs,compilerOutput,toCompile,hasStubExcludes.get());
     Map<ModuleBuildTarget,Collection<GroovycOutputParser.OutputItem>> compiled=processCompiledFiles(context,chunk,generationOutputs,compilerOutput,parser.getSuccessfullyCompiled());
     if (checkChunkRebuildNeeded(context,parser)) {
+      clearContinuation(context,chunk);
       return ExitCode.CHUNK_REBUILD_REQUIRED;
     }
     if (myForStubs) {

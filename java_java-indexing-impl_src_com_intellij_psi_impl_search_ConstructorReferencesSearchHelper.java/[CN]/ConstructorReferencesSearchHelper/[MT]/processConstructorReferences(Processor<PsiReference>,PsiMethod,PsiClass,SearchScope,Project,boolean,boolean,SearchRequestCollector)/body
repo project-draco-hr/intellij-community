@@ -1,0 +1,64 @@
+{
+  final boolean[] constructorCanBeCalledImplicitly=new boolean[1];
+  final boolean[] isEnum=new boolean[1];
+  final boolean[] isUnder18=new boolean[1];
+  DumbService.getInstance(project).runReadActionInSmartMode(new Runnable(){
+    @Override public void run(){
+      constructorCanBeCalledImplicitly[0]=constructor.getParameterList().getParametersCount() == 0;
+      isEnum[0]=containingClass.isEnum();
+      isUnder18[0]=PsiUtil.getLanguageLevel(containingClass).isAtLeast(LanguageLevel.JDK_1_8);
+    }
+  }
+);
+  if (isEnum[0]) {
+    if (!processEnumReferences(processor,constructor,project,containingClass))     return false;
+  }
+  PairProcessor<PsiReference,SearchRequestCollector> processor1=new PairProcessor<PsiReference,SearchRequestCollector>(){
+    @Override public boolean process(    PsiReference reference,    SearchRequestCollector collector){
+      PsiElement parent=reference.getElement().getParent();
+      if (parent instanceof PsiAnonymousClass) {
+        parent=parent.getParent();
+      }
+      if (parent instanceof PsiNewExpression) {
+        PsiMethod constructor1=((PsiNewExpression)parent).resolveConstructor();
+        if (constructor1 != null) {
+          if (isStrictSignatureSearch) {
+            if (myManager.areElementsEquivalent(constructor,constructor1)) {
+              return processor.process(reference);
+            }
+          }
+ else {
+            if (myManager.areElementsEquivalent(containingClass,constructor1.getContainingClass())) {
+              return processor.process(reference);
+            }
+          }
+        }
+      }
+      return true;
+    }
+  }
+;
+  ReferencesSearch.searchOptimized(containingClass,searchScope,ignoreAccessScope,collector,true,processor1);
+  if (isUnder18[0]) {
+    if (!process18MethodPointers(processor,constructor,project,containingClass,searchScope))     return false;
+  }
+  if (!DumbService.getInstance(project).runReadActionInSmartMode(new Computable<Boolean>(){
+    @Override public Boolean compute(){
+      return processSuperOrThis(containingClass,constructor,constructorCanBeCalledImplicitly[0],searchScope,project,isStrictSignatureSearch,PsiKeyword.THIS,processor);
+    }
+  }
+)) {
+    return false;
+  }
+  Processor<PsiClass> processor2=new Processor<PsiClass>(){
+    @Override public boolean process(    PsiClass inheritor){
+      final PsiElement navigationElement=inheritor.getNavigationElement();
+      if (navigationElement instanceof PsiClass) {
+        return processSuperOrThis((PsiClass)navigationElement,constructor,constructorCanBeCalledImplicitly[0],searchScope,project,isStrictSignatureSearch,PsiKeyword.SUPER,processor);
+      }
+      return true;
+    }
+  }
+;
+  return ClassInheritorsSearch.search(containingClass,searchScope,false).forEach(processor2);
+}

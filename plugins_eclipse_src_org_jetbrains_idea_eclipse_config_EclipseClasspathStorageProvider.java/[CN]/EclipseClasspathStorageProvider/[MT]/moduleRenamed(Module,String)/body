@@ -1,23 +1,21 @@
 {
-  if (ClassPathStorageUtil.getStorageType(module).equals(JpsEclipseClasspathSerializer.CLASSPATH_STORAGE_ID)) {
-    try {
-      final String oldEmlName=module.getName() + EclipseXml.IDEA_SETTINGS_POSTFIX;
-      final String root=getFileCache(module).getParent(oldEmlName);
-      final File source=new File(root,oldEmlName);
-      if (source.exists()) {
-        final File target=new File(root,newName + EclipseXml.IDEA_SETTINGS_POSTFIX);
-        FileUtil.rename(source,target);
-        LocalFileSystem.getInstance().refreshAndFindFileByIoFile(target);
+  try {
+    CachedXmlDocumentSet fileSet=getFileCache(module);
+    VirtualFile root=LocalFileSystem.getInstance().findFileByPath(ClasspathStorage.getModuleDir(module));
+    VirtualFile source=root == null ? null : root.findChild(module.getName() + EclipseXml.IDEA_SETTINGS_POSTFIX);
+    if (source != null && source.isValid()) {
+      AccessToken token=ApplicationManager.getApplication().acquireWriteActionLock(DocumentRunnable.IgnoreDocumentRunnable.class);
+      try {
+        source.rename(this,newName + EclipseXml.IDEA_SETTINGS_POSTFIX);
       }
-      final CachedXmlDocumentSet fileCache=getFileCache(module);
-      DotProjectFileHelper.saveDotProjectFile(module,fileCache.getParent(EclipseXml.PROJECT_FILE));
-      fileCache.delete(oldEmlName);
-      fileCache.register(newName + EclipseXml.IDEA_SETTINGS_POSTFIX,ClasspathStorage.getModuleDir(module));
-      fileCache.load(newName + EclipseXml.IDEA_SETTINGS_POSTFIX,true);
+  finally {
+        token.finish();
+      }
     }
- catch (    IOException ignore) {
-    }
-catch (    JDOMException ignored) {
-    }
+    DotProjectFileHelper.saveDotProjectFile(module,fileSet.getParent(EclipseXml.PROJECT_FILE));
+    fileSet.register(newName + EclipseXml.IDEA_SETTINGS_POSTFIX,ClasspathStorage.getModuleDir(module));
+  }
+ catch (  IOException e) {
+    EclipseClasspathWriter.LOG.warn(e);
   }
 }

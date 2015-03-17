@@ -1,0 +1,33 @@
+{
+  CodeStyleSettingsManager codeStyleSettingsManager=CodeStyleSettingsManager.getInstance(myProject);
+  CodeStyleSettings clonedSettings=codeStyleSettingsManager.getCurrentSettings().clone();
+  myCommonSettings=clonedSettings.getCommonSettings(myProvider.getLanguage());
+  try {
+    codeStyleSettingsManager.setTemporarySettings(clonedSettings);
+    SequentialModalProgressTask progressTask=new SequentialModalProgressTask(myProject,CodeInsightBundle.message("configure.code.style.on.fragment.dialog.title"));
+    progressTask.setCancelText(CodeInsightBundle.message("configure.code.style.on.fragment.dialog.cancel"));
+    CompositeSequentialTask compositeTask=new CompositeSequentialTask(progressTask);
+    compositeTask.setProgressText(CodeInsightBundle.message("configure.code.style.on.fragment.dialog.progress.text"));
+    compositeTask.setProgressText2(CodeInsightBundle.message("configure.code.style.on.fragment.dialog.progress.text.under"));
+    final Map<LanguageCodeStyleSettingsProvider.SettingsType,FilterFieldsTask> typeToTask=ContainerUtil.newHashMap();
+    for (    LanguageCodeStyleSettingsProvider.SettingsType type : types) {
+      Set<String> fields=myProvider.getSupportedFields(type);
+      FilterFieldsTask task=new FilterFieldsTask(fields);
+      compositeTask.addTask(task);
+      typeToTask.put(type,task);
+    }
+    progressTask.setTask(compositeTask);
+    progressTask.setMinIterationTime(10);
+    ProgressManager.getInstance().run(progressTask);
+    return new CodeStyleSettingsToShow(){
+      @Override public List<String> getSettings(      LanguageCodeStyleSettingsProvider.SettingsType type){
+        FilterFieldsTask task=typeToTask.get(type);
+        return task.getAffectedFields();
+      }
+    }
+;
+  }
+  finally {
+    codeStyleSettingsManager.dropTemporarySettings();
+  }
+}

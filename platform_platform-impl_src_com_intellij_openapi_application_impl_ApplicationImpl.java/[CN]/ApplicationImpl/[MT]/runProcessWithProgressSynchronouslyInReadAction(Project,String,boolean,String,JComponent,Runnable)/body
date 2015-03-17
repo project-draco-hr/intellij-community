@@ -1,0 +1,45 @@
+{
+  assertIsDispatchThread();
+  boolean writeAccessAllowed=isInsideWriteActionEDTOnly();
+  if (writeAccessAllowed) {
+    throw new IncorrectOperationException("Starting process with progress from within write action makes no sense");
+  }
+  final ProgressWindow progress=new ProgressWindow(canBeCanceled,false,project,parentComponent,cancelText);
+  Disposer.register(this,progress);
+  progress.setTitle(progressTitle);
+  final Semaphore readActionAcquired=new Semaphore();
+  readActionAcquired.down();
+  final Semaphore modalityEntered=new Semaphore();
+  modalityEntered.down();
+  executeOnPooledThread(new Runnable(){
+    @Override public void run(){
+      try {
+        ApplicationManager.getApplication().runReadAction(new Runnable(){
+          @Override public void run(){
+            readActionAcquired.up();
+            modalityEntered.waitFor();
+            ProgressManager.getInstance().runProcess(process,progress);
+          }
+        }
+);
+      }
+ catch (      ProcessCanceledException e) {
+        progress.cancel();
+      }
+catch (      RuntimeException e) {
+        progress.cancel();
+        throw e;
+      }
+    }
+  }
+);
+  readActionAcquired.waitFor();
+  progress.startBlocking(new Runnable(){
+    @Override public void run(){
+      modalityEntered.up();
+    }
+  }
+);
+  LOG.assertTrue(!progress.isRunning());
+  return !progress.isCanceled();
+}

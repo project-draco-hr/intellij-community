@@ -3,16 +3,43 @@
   try {
 synchronized (myAttribute.getId()) {
       final BufferExposingByteArrayOutputStream _out=(BufferExposingByteArrayOutputStream)out;
-      final int page;
-      try {
+      if (inlineAttributes && _out.size() < MAX_SMALL_ATTR_SIZE) {
         w.lock();
-        incModCount(myFileId);
-        page=findAttributePage(myFileId,myAttribute,true);
-      }
+        try {
+          rewriteDirectoryRecordWithAttrContent(_out);
+          incModCount(myFileId);
+          return;
+        }
   finally {
-        w.unlock();
+          w.unlock();
+        }
       }
-      getAttributesStorage().writeBytes(page,new ByteSequence(_out.getInternalBuffer(),0,_out.size()),myAttribute.isFixedSize());
+ else {
+        int page;
+        w.lock();
+        try {
+          incModCount(myFileId);
+          page=findAttributePage(myFileId,myAttribute,true);
+          if (inlineAttributes && page < 0) {
+            rewriteDirectoryRecordWithAttrContent(new BufferExposingByteArrayOutputStream());
+            page=findAttributePage(myFileId,myAttribute,true);
+          }
+        }
+  finally {
+          w.unlock();
+        }
+        if (bulkAttrReadSupport) {
+          BufferExposingByteArrayOutputStream stream=new BufferExposingByteArrayOutputStream();
+          BufferExposingByteArrayOutputStream oldOut=_out;
+          out=stream;
+          writeRecordHeader(DbConnection.getAttributeId(myAttribute.getId()),myFileId,this);
+          write(oldOut.getInternalBuffer(),0,oldOut.size());
+          getAttributesStorage().writeBytes(page,new ByteSequence(stream.getInternalBuffer(),0,stream.size()),myAttribute.isFixedSize());
+        }
+ else {
+          getAttributesStorage().writeBytes(page,new ByteSequence(_out.getInternalBuffer(),0,_out.size()),myAttribute.isFixedSize());
+        }
+      }
     }
   }
  catch (  Throwable e) {

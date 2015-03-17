@@ -1,0 +1,44 @@
+{
+  List<DependencyOnPlugin> dependencies=ExternalDependenciesManager.getInstance(project).getDependencies(DependencyOnPlugin.class);
+  if (dependencies.isEmpty())   return;
+  final List<String> errorMessages=new ArrayList<String>();
+  final List<IdeaPluginDescriptor> disabled=new ArrayList<IdeaPluginDescriptor>();
+  for (  DependencyOnPlugin dependency : dependencies) {
+    IdeaPluginDescriptor plugin=PluginManager.getPlugin(PluginId.getId(dependency.getPluginId()));
+    if (plugin == null) {
+      errorMessages.add("Plugin '" + dependency.getPluginId() + "' required for '"+ project.getName()+ "' project isn't installed.");
+      continue;
+    }
+    if (!plugin.isEnabled()) {
+      errorMessages.add("Plugin '" + plugin.getName() + "' required for '"+ project.getName()+ "' project is disabled.");
+      disabled.add(plugin);
+      continue;
+    }
+    String minVersion=dependency.getMinVersion();
+    if (minVersion != null && VersionComparatorUtil.compare(plugin.getVersion(),minVersion) < 0) {
+      errorMessages.add("Project '" + project.getName() + "' requires '"+ plugin.getName()+ "' plugin of version at least '"+ minVersion+ "', but '"+ plugin.getVersion()+ "' is installed.");
+    }
+    String maxVersion=dependency.getMaxVersion();
+    if (maxVersion != null && VersionComparatorUtil.compare(plugin.getVersion(),maxVersion) > 0) {
+      errorMessages.add("Project '" + project.getName() + "' requires '"+ plugin.getName()+ "' plugin of version at most '"+ maxVersion+ "', but '"+ plugin.getVersion()+ "' is installed.");
+    }
+  }
+  if (!errorMessages.isEmpty()) {
+    if (!disabled.isEmpty()) {
+      String plugins=disabled.size() == 1 ? disabled.get(0).getName() : "required plugins";
+      errorMessages.add("<a href=\"enable\">Enable " + plugins + "</a>");
+    }
+    NOTIFICATION_GROUP.createNotification("Required plugins weren't loaded",StringUtil.join(errorMessages,"<br>"),NotificationType.ERROR,new NotificationListener(){
+      @Override public void hyperlinkUpdate(      @NotNull Notification notification,      @NotNull HyperlinkEvent event){
+        if (event.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
+          notification.expire();
+          for (          IdeaPluginDescriptor descriptor : disabled) {
+            PluginManagerCore.enablePlugin(descriptor.getPluginId().getIdString());
+          }
+          PluginManagerMain.notifyPluginsUpdated(project);
+        }
+      }
+    }
+).notify(project);
+  }
+}

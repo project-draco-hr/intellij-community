@@ -1,5 +1,17 @@
 {
-synchronized (ourInProcessGroovycLock) {
-    runGroovycInThisProcess(compilationClassPath,forStubs,settings,tempFile,parser);
+  boolean jointPossible=forStubs && !myHasStubExcludes;
+  final LinkedBlockingQueue<String> mailbox=jointPossible && SystemProperties.getBooleanProperty("groovyc.joint.compilation",true) ? new LinkedBlockingQueue<String>() : null;
+  final JointCompilationClassLoader loader=createCompilationClassLoader(compilationClassPath);
+  final Future<Void> future=ourExecutor.submit(new Callable<Void>(){
+    @Override public Void call() throws Exception {
+      runGroovycInThisProcess(loader,forStubs,settings,tempFile,parser,mailbox);
+      return null;
+    }
   }
+);
+  if (mailbox == null) {
+    future.get();
+    return null;
+  }
+  return waitForStubGeneration(future,mailbox,parser,loader);
 }

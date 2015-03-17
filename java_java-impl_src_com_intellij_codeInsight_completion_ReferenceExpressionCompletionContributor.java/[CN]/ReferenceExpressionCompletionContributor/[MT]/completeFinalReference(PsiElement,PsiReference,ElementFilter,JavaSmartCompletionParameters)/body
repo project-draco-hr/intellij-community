@@ -1,2 +1,36 @@
 {
+  final Set<PsiField> used=parameters.getParameters().getInvocationCount() < 2 ? findConstantsUsedInSwitch(element) : Collections.<PsiField>emptySet();
+  final Set<LookupElement> elements=JavaSmartCompletionContributor.completeReference(element,reference,new AndFilter(filter,new ElementFilter(){
+    @Override public boolean isAcceptable(    Object o,    PsiElement context){
+      if (o instanceof CandidateInfo) {
+        final CandidateInfo info=(CandidateInfo)o;
+        final PsiElement member=info.getElement();
+        final PsiType expectedType=parameters.getExpectedType();
+        if (expectedType.equals(PsiType.VOID)) {
+          return member instanceof PsiMethod;
+        }
+        if (member instanceof PsiEnumConstant && used.contains(CompletionUtil.getOriginalOrSelf(member))) {
+          return false;
+        }
+        return AssignableFromFilter.isAcceptable(member,element,expectedType,info.getSubstitutor());
+      }
+      return false;
+    }
+    @Override public boolean isClassAcceptable(    Class hintClass){
+      return true;
+    }
+  }
+),false,true,parameters.getParameters(),PrefixMatcher.ALWAYS_TRUE);
+  for (  LookupElement lookupElement : elements) {
+    if (lookupElement.getObject() instanceof PsiMethod) {
+      final JavaMethodCallElement item=lookupElement.as(JavaMethodCallElement.CLASS_CONDITION_KEY);
+      if (item != null) {
+        final PsiMethod method=(PsiMethod)lookupElement.getObject();
+        if (SmartCompletionDecorator.hasUnboundTypeParams(method,parameters.getExpectedType())) {
+          item.setInferenceSubstitutor(SmartCompletionDecorator.calculateMethodReturnTypeSubstitutor(method,parameters.getExpectedType()),element);
+        }
+      }
+    }
+  }
+  return elements;
 }
