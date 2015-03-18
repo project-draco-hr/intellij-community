@@ -17,12 +17,20 @@
     }
   }
 ;
+  SettingsBuilder settingsBuilder=null;
   Class cliRequestClass;
   try {
     cliRequestClass=MavenCli.class.getClassLoader().loadClass("org.apache.maven.cli.MavenCli$CliRequest");
   }
  catch (  ClassNotFoundException e) {
-    throw new RuntimeException("Class \"org.apache.maven.cli.MavenCli$CliRequest\" not found");
+    try {
+      cliRequestClass=MavenCli.class.getClassLoader().loadClass("org.apache.maven.cli.CliRequest");
+      System.setProperty("maven.multiModuleProjectDirectory",new File("").getPath());
+      settingsBuilder=new DefaultSettingsBuilderFactory().newInstance();
+    }
+ catch (    ClassNotFoundException e1) {
+      throw new RuntimeException("unable to find maven CliRequest class");
+    }
   }
   Object cliRequest;
   try {
@@ -52,10 +60,13 @@
     throw new RuntimeException(e);
   }
   myContainer.getLoggerManager().setThreshold(settings.getLoggingLevel());
-  mySystemProperties=FieldAccessor.<Properties>get(cliRequestClass,cliRequest,"systemProperties");
+  mySystemProperties=FieldAccessor.get(cliRequestClass,cliRequest,"systemProperties");
   if (settings.getProjectJdk() != null) {
     mySystemProperties.setProperty("java.home",settings.getProjectJdk());
   }
-  myMavenSettings=buildSettings(FieldAccessor.<SettingsBuilder>get(MavenCli.class,cli,"settingsBuilder"),settings,mySystemProperties,FieldAccessor.<Properties>get(cliRequestClass,cliRequest,"userProperties"));
+  if (settingsBuilder == null) {
+    settingsBuilder=FieldAccessor.get(MavenCli.class,cli,"settingsBuilder");
+  }
+  myMavenSettings=buildSettings(settingsBuilder,settings,mySystemProperties,FieldAccessor.<Properties>get(cliRequestClass,cliRequest,"userProperties"));
   myLocalRepository=createLocalRepository();
 }
