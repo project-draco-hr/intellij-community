@@ -10,11 +10,23 @@
   ControlBinder binder=new ControlBinder(manager.getState());
   binder.bindAnnotations(this);
   binder.reset();
-  myTaskStateLabel.setLabelFor(myTaskStateCombo);
-  if (!TaskStateCombo.isStateSupportedFor(task)) {
-    myTaskStateLabel.setVisible(false);
+  if (!TaskStateCombo.stateUpdatesSupportedFor(task)) {
+    myUpdateState.setVisible(false);
     myTaskStateCombo.setVisible(false);
   }
+  final boolean stateUpdatesEnabled=PropertiesComponent.getInstance(project).getBoolean(UPDATE_STATE_ENABLED,true);
+  myUpdateState.setSelected(stateUpdatesEnabled);
+  myUpdateState.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      final boolean selected=myUpdateState.isSelected();
+      PropertiesComponent.getInstance(project).setValue(UPDATE_STATE_ENABLED,String.valueOf(selected));
+      updateFields(false);
+      if (selected) {
+        myTaskStateCombo.scheduleUpdateOnce();
+      }
+    }
+  }
+);
   TaskManagerImpl.Config state=taskManager.getState();
   myClearContext.setSelected(state.clearContext);
   AbstractVcs vcs=manager.getActiveVcs();
@@ -84,12 +96,14 @@
     }
     myBranchName.setText(taskManager.suggestBranchName(task));
     myChangelistName.setText(taskManager.getChangelistName(task));
-    updateFields(true);
   }
+  updateFields(true);
   final JComponent preferredFocusedComponent=getPreferredFocusedComponent();
   if (preferredFocusedComponent != null) {
     myTaskStateCombo.registerUpDownAction(preferredFocusedComponent);
   }
-  myTaskStateCombo.scheduleUpdate();
+  if (myUpdateState.isSelected()) {
+    myTaskStateCombo.scheduleUpdateOnce();
+  }
   init();
 }
