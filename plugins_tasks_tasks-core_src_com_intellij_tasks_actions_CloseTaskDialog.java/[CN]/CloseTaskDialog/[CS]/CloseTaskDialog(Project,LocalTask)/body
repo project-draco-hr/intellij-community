@@ -5,15 +5,28 @@
   setTitle("Close Task");
   myTaskLabel.setText(TaskUtil.getTrimmedSummary(task));
   myTaskLabel.setIcon(task.getIcon());
-  myStateComboBoxLabel.setLabelFor(myStateCombo);
-  if (!TaskStateCombo.isStateSupportedFor(task)) {
-    myStateComboBoxLabel.setVisible(false);
+  if (!TaskStateCombo.stateUpdatesSupportedFor(task)) {
     myStateCombo.setVisible(false);
   }
+  final boolean stateUpdatesEnabled=PropertiesComponent.getInstance(myProject).getBoolean(UPDATE_STATE_ENABLED,false);
+  myUpdateState.setSelected(stateUpdatesEnabled);
+  myStateCombo.setEnabled(stateUpdatesEnabled);
+  myUpdateState.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      final boolean selected=myUpdateState.isSelected();
+      myStateCombo.setEnabled(selected);
+      PropertiesComponent.getInstance(myProject).setValue(UPDATE_STATE_ENABLED,String.valueOf(selected));
+      if (selected) {
+        myStateCombo.scheduleUpdateOnce();
+      }
+    }
+  }
+);
   myTaskManager=(TaskManagerImpl)TaskManager.getManager(project);
   if (myTaskManager.isVcsEnabled()) {
-    myCommitChanges.setEnabled(!task.getChangeLists().isEmpty());
-    myCommitChanges.setSelected(myTaskManager.getState().commitChanges);
+    boolean hasChanges=!task.getChangeLists().isEmpty();
+    myCommitChanges.setEnabled(hasChanges);
+    myCommitChanges.setSelected(hasChanges && myTaskManager.getState().commitChanges);
     if (myTaskManager.getActiveVcs().getType() == VcsType.distributed) {
       boolean enabled=!task.getBranches(true).isEmpty() && !task.getBranches(false).isEmpty();
       myMergeBranches.setEnabled(enabled);
@@ -30,6 +43,8 @@
   if (preferredFocusedComponent != null) {
     myStateCombo.registerUpDownAction(preferredFocusedComponent);
   }
-  myStateCombo.scheduleUpdate();
+  if (myUpdateState.isSelected()) {
+    myStateCombo.scheduleUpdateOnce();
+  }
   init();
 }
