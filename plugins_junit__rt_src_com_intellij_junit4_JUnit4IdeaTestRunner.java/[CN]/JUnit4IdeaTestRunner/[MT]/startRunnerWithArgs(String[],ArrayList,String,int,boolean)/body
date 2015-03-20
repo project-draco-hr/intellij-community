@@ -1,0 +1,82 @@
+{
+  final Request request=JUnit4TestRunnerUtil.buildRequest(args,name,sendTree);
+  if (request == null)   return -1;
+  final Runner testRunner=request.getRunner();
+  try {
+    Description description=testRunner.getDescription();
+    if (description == null) {
+      System.err.println("Nothing found to run. Runner " + testRunner.getClass().getName() + " provides no description.");
+      return -1;
+    }
+    if (request instanceof ClassRequest) {
+      description=getSuiteMethodDescription(request,description);
+    }
+ else     if (request instanceof FilterRequest) {
+      description=getFilteredDescription(request,description);
+    }
+    TreeSender.sendTree(this,description,sendTree);
+  }
+ catch (  Exception e) {
+    System.err.println("Internal Error occured.");
+    e.printStackTrace(System.err);
+  }
+  try {
+    final JUnitCore runner=new JUnitCore();
+    runner.addListener(myTestsListener);
+    for (Iterator iterator=listeners.iterator(); iterator.hasNext(); ) {
+      final IDEAJUnitListener junitListener=(IDEAJUnitListener)Class.forName((String)iterator.next()).newInstance();
+      runner.addListener(new RunListener(){
+        public void testStarted(        Description description) throws Exception {
+          junitListener.testStarted(JUnit4ReflectionUtil.getClassName(description),JUnit4ReflectionUtil.getMethodName(description));
+        }
+        public void testFinished(        Description description) throws Exception {
+          junitListener.testFinished(JUnit4ReflectionUtil.getClassName(description),JUnit4ReflectionUtil.getMethodName(description));
+        }
+      }
+);
+    }
+    long startTime=System.currentTimeMillis();
+    Result result;
+    if (count == 1) {
+      result=runner.run(testRunner);
+    }
+ else {
+      if (count > 0) {
+        boolean success=true;
+        int i=0;
+        while (i++ < count) {
+          result=runner.run(testRunner);
+          success&=result.wasSuccessful();
+        }
+        long endTime=System.currentTimeMillis();
+        long runTime=endTime - startTime;
+        if (sendTree)         new TimeSender(myRegistry).printHeader(runTime);
+        return success ? 0 : -1;
+      }
+ else {
+        boolean success=true;
+        while (true) {
+          result=runner.run(testRunner);
+          success&=result.wasSuccessful();
+          if (count == -2 && !success) {
+            long endTime=System.currentTimeMillis();
+            long runTime=endTime - startTime;
+            if (sendTree)             new TimeSender(myRegistry).printHeader(runTime);
+            return -1;
+          }
+        }
+      }
+    }
+    long endTime=System.currentTimeMillis();
+    long runTime=endTime - startTime;
+    if (sendTree)     new TimeSender(myRegistry).printHeader(runTime);
+    if (!result.wasSuccessful()) {
+      return -1;
+    }
+    return 0;
+  }
+ catch (  Exception e) {
+    e.printStackTrace(System.err);
+    return -2;
+  }
+}
