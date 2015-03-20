@@ -65,7 +65,77 @@
       super.visitTypeInsn(opcode,type);
     }
     @Override public void visitFieldInsn(    int opcode,    String owner,    String name,    String desc){
-      final int fieldName=myContext.get(name);
+      registerFieldUsage(opcode,owner,name,desc);
+      super.visitFieldInsn(opcode,owner,name,desc);
+    }
+    @Override public void visitMethodInsn(    int opcode,    String owner,    String name,    String desc,    boolean itf){
+      registerMethodUsage(owner,name,desc);
+      super.visitMethodInsn(opcode,owner,name,desc,itf);
+    }
+    @Override public void visitInvokeDynamicInsn(    String methodName,    String desc,    Handle bsm,    Object... bsmArgs){
+      final Type returnType=Type.getReturnType(desc);
+      addClassUsage(TypeRepr.getType(myContext,returnType));
+      for (      Object arg : bsmArgs) {
+        if (arg instanceof Type) {
+          final Type type=(Type)arg;
+          if (type.getSort() == Type.METHOD) {
+            for (            Type argType : type.getArgumentTypes()) {
+              addClassUsage(TypeRepr.getType(myContext,argType));
+            }
+            addClassUsage(TypeRepr.getType(myContext,type.getReturnType()));
+          }
+ else {
+            addClassUsage(TypeRepr.getType(myContext,type));
+          }
+        }
+ else         if (arg instanceof Handle) {
+          processMethodHandle((Handle)arg);
+        }
+      }
+      if (LAMBDA_FACTORY_CLASS.equals(bsm.getOwner())) {
+        if (returnType.getSort() == Type.OBJECT && bsmArgs.length >= 3) {
+          if (bsmArgs[0] instanceof Type) {
+            final Type samMethodType=(Type)bsmArgs[0];
+            if (samMethodType.getSort() == Type.METHOD) {
+              registerMethodUsage(returnType.getInternalName(),methodName,samMethodType.getDescriptor());
+            }
+          }
+        }
+      }
+      super.visitInvokeDynamicInsn(methodName,desc,bsm,bsmArgs);
+    }
+    private void processMethodHandle(    Handle handle){
+      final String memberOwner=handle.getOwner();
+      if (myContext.get(memberOwner) != myName) {
+        final String memberName=handle.getName();
+        final String memberDescriptor=handle.getDesc();
+        if (isFieldAccessHandle(handle)) {
+          final int tag=handle.getTag();
+          int opCode;
+          if (tag == Opcodes.H_GETFIELD) {
+            opCode=Opcodes.GETFIELD;
+          }
+ else           if (tag == Opcodes.H_GETSTATIC) {
+            opCode=Opcodes.GETSTATIC;
+          }
+ else           if (tag == Opcodes.H_PUTFIELD) {
+            opCode=Opcodes.PUTFIELD;
+          }
+ else           if (tag == Opcodes.H_PUTSTATIC) {
+            opCode=Opcodes.PUTSTATIC;
+          }
+ else {
+            opCode=Opcodes.H_GETFIELD;
+          }
+          registerFieldUsage(opCode,memberOwner,memberName,memberDescriptor);
+        }
+ else {
+          registerMethodUsage(memberOwner,memberName,memberDescriptor);
+        }
+      }
+    }
+    private void registerFieldUsage(    int opcode,    String owner,    String fName,    String desc){
+      final int fieldName=myContext.get(fName);
       final int fieldOwner=myContext.get(owner);
       final int descr=myContext.get(desc);
       if (opcode == Opcodes.PUTFIELD || opcode == Opcodes.PUTSTATIC) {
@@ -75,15 +145,15 @@
         addClassUsage(TypeRepr.getType(myContext,descr));
       }
       myUsages.add(UsageRepr.createFieldUsage(myContext,fieldName,fieldOwner,descr));
-      super.visitFieldInsn(opcode,owner,name,desc);
     }
-    @Override public void visitMethodInsn(    int opcode,    String owner,    String name,    String desc,    boolean itf){
-      final int methodName=myContext.get(name);
+    private void registerMethodUsage(    String owner,    String name,    @Nullable String desc){
       final int methodOwner=myContext.get(owner);
-      myUsages.add(UsageRepr.createMethodUsage(myContext,methodName,methodOwner,desc));
+      final int methodName=myContext.get(name);
       myUsages.add(UsageRepr.createMetaMethodUsage(myContext,methodName,methodOwner));
-      addClassUsage(TypeRepr.getType(myContext,Type.getReturnType(desc)));
-      super.visitMethodInsn(opcode,owner,name,desc,itf);
+      if (desc != null) {
+        myUsages.add(UsageRepr.createMethodUsage(myContext,methodName,methodOwner,desc));
+        addClassUsage(TypeRepr.getType(myContext,Type.getReturnType(desc)));
+      }
     }
     private void addClassUsage(    final TypeRepr.AbstractType type){
       TypeRepr.ClassType classType=null;
