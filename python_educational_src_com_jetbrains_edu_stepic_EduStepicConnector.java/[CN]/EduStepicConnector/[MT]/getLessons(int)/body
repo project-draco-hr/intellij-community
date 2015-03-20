@@ -1,30 +1,18 @@
 {
-  final SectionWrapper sectionWrapper=HttpRequests.request(stepicApiUrl + "sections/" + String.valueOf(sectionId)).connect(new HttpRequests.RequestProcessor<SectionWrapper>(){
-    @Override public SectionWrapper process(    @NotNull HttpRequests.Request request) throws IOException {
-      final BufferedReader reader=request.getReader();
-      Gson gson=new GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create();
-      return gson.fromJson(reader,SectionWrapper.class);
-    }
+  final SectionWrapper sectionWrapper=getFromStepic("sections/" + String.valueOf(sectionId),SectionWrapper.class);
+  List<Integer> unitIds=sectionWrapper.sections.get(0).units;
+  final List<Lesson> lessons=new ArrayList<Lesson>();
+  for (  Integer unitId : unitIds) {
+    UnitWrapper unit=getFromStepic("units/" + String.valueOf(unitId),UnitWrapper.class);
+    int lessonID=unit.units.get(0).lesson;
+    LessonContainer lesson=getFromStepic("lessons/" + String.valueOf(lessonID),LessonContainer.class);
+    Lesson realLesson=lesson.lessons.get(0);
+    lessons.add(realLesson);
   }
-);
-  final List<Lesson> lessons=getSortedLessons(sectionWrapper);
   for (  Lesson lesson : lessons) {
     lesson.taskList=new ArrayList<Task>();
     for (    Integer s : lesson.steps) {
-      final Step step=getStep(s);
-      final Task task=new Task();
-      task.setName(step.name);
-      task.setText(step.text);
-      for (      TestFileWrapper wrapper : step.options.test) {
-        task.setTestsTexts(wrapper.name,wrapper.text);
-      }
-      task.taskFiles=new HashMap<String,TaskFile>();
-      if (step.options.files != null) {
-        for (        TaskFile taskFile : step.options.files) {
-          task.taskFiles.put(taskFile.name,taskFile);
-        }
-      }
-      lesson.taskList.add(task);
+      createTask(lesson,s);
     }
   }
   return lessons;
