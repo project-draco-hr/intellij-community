@@ -38,14 +38,30 @@
       }
     }
   }
-  if (myEqualInference) {
+  if (myInferredType != null) {
     final PsiElement resolved=expression.resolve();
     if (resolved instanceof PsiParameter && ((PsiParameter)resolved).getDeclarationScope() == myMethod) {
+      if (!(myInferredType instanceof PsiClassType)) {
+        myBodyContainsForbiddenRefs=true;
+        return;
+      }
       final int parameterIndex=myMethod.getParameterList().getParameterIndex((PsiParameter)resolved);
       for (      PsiMethod superMethod : myMethod.findDeepestSuperMethods()) {
-        if (PsiUtil.resolveClassInType(superMethod.getParameterList().getParameters()[parameterIndex].getType()) instanceof PsiTypeParameter) {
-          myBodyContainsForbiddenRefs=true;
-          return;
+        final PsiType paramType=superMethod.getParameterList().getParameters()[parameterIndex].getType();
+        final PsiClass superClass=superMethod.getContainingClass();
+        if (superClass != null) {
+          final PsiClassType.ClassResolveResult classResolveResult=((PsiClassType)myInferredType).resolveGenerics();
+          final PsiClass classCandidate=classResolveResult.getElement();
+          if (classCandidate == null) {
+            myBodyContainsForbiddenRefs=true;
+            return;
+          }
+          final PsiSubstitutor inferredSubstitutor=TypeConversionUtil.getClassSubstitutor(superClass,classCandidate,classResolveResult.getSubstitutor());
+          final PsiSubstitutor substitutor=TypeConversionUtil.getSuperClassSubstitutor(superClass,myAnonymClass.getBaseClassType());
+          if (inferredSubstitutor == null || !Comparing.equal(inferredSubstitutor.substitute(paramType),substitutor.substitute(paramType))) {
+            myBodyContainsForbiddenRefs=true;
+            return;
+          }
         }
       }
     }
