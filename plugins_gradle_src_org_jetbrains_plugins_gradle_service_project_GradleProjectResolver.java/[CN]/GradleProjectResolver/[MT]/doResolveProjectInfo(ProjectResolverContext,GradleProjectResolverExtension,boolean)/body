@@ -15,6 +15,11 @@
   for (  KeyValue<String,String> jvmArg : extraJvmArgs) {
     parametersList.addProperty(jvmArg.getKey(),jvmArg.getValue());
   }
+  final BuildEnvironment buildEnvironment=GradleExecutionHelper.getBuildEnvironment(resolverCtx.getConnection());
+  GradleVersion gradleVersion=null;
+  if (buildEnvironment != null) {
+    gradleVersion=GradleVersion.version(buildEnvironment.getGradle().getGradleVersion());
+  }
   BuildActionExecuter<ProjectImportAction.AllModels> buildActionExecutor=resolverCtx.getConnection().action(projectImportAction);
   File initScript=GradleExecutionHelper.generateInitScript(isBuildSrcProject,toolingExtensionClasses);
   if (initScript != null) {
@@ -27,6 +32,9 @@
     buildActionExecutor.withCancellationToken(cancellationTokenSource.token());
 synchronized (myCancellationMap) {
       myCancellationMap.putValue(resolverCtx.getExternalSystemTaskId(),cancellationTokenSource);
+      if (gradleVersion != null && gradleVersion.compareTo(GradleVersion.version("2.1")) < 0) {
+        myCancellationMap.putValue(resolverCtx.getExternalSystemTaskId(),new UnsupportedCancellationToken());
+      }
     }
     allModels=buildActionExecutor.run();
     if (allModels == null) {
@@ -44,7 +52,6 @@ synchronized (myCancellationMap) {
       myCancellationMap.remove(resolverCtx.getExternalSystemTaskId(),cancellationTokenSource);
     }
   }
-  final BuildEnvironment buildEnvironment=getBuildEnvironment(resolverCtx);
   allModels.setBuildEnvironment(buildEnvironment);
   resolverCtx.setModels(allModels);
   ProjectData projectData=projectResolverChain.createProject();
