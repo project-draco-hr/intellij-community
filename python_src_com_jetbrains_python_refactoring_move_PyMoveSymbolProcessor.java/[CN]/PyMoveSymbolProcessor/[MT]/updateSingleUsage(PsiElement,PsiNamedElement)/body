@@ -5,10 +5,7 @@
       return;
     }
     if (expr.isQualified()) {
-      final PyElementGenerator generator=PyElementGenerator.getInstance(expr.getProject());
-      final PyExpression generated=generator.createExpressionFromText(LanguageLevel.forElement(expr),expr.getName());
-      final PsiElement newExpr=expr.replace(generated);
-      PyClassRefactoringUtil.insertImport(newExpr,newElement,null,true);
+      insertImportFromAndReplaceReference(newElement,expr);
     }
   }
   if (usage instanceof PyStringLiteralExpression) {
@@ -28,10 +25,21 @@
     if (importStmt != null) {
       PyClassRefactoringUtil.updateImportOfElement(importStmt,newElement);
     }
+    if (belongsToSomeMovedElement(usage)) {
+      return;
+    }
     final PsiFile usageFile=usage.getContainingFile();
-    final PsiElement oldElementBody=PyMoveModuleMembersHelper.expandNamedElementBody(myMovedElement);
-    if (usageFile == myMovedElement.getContainingFile() && !PsiTreeUtil.isAncestor(oldElementBody,usage,false)) {
-      PyClassRefactoringUtil.insertImport(myMovedElement,newElement);
+    if (usageFile == myMovedElement.getContainingFile() && usage instanceof PyQualifiedExpression) {
+      if (usage.getParent() instanceof PyGlobalStatement) {
+        myScopeOwnersWithGlobal.add(ScopeUtil.getScopeOwner(usage));
+        usage.delete();
+      }
+ else       if (myScopeOwnersWithGlobal.contains(ScopeUtil.getScopeOwner(usage))) {
+        insertQualifiedImportAndReplaceReference(newElement,(PyQualifiedExpression)usage);
+      }
+ else {
+        insertImportFromAndReplaceReference(newElement,(PyQualifiedExpression)usage);
+      }
     }
     if (resolvesToLocalStarImport(usage)) {
       PyClassRefactoringUtil.insertImport(usage,newElement);
