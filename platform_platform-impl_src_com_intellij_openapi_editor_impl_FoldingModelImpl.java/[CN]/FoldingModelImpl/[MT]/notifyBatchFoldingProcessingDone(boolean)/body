@@ -7,50 +7,46 @@
   myEditor.recalculateSizeAndRepaint();
   myEditor.getGutterComponentEx().updateSize();
   myEditor.getGutterComponentEx().repaint();
-  LogicalPosition caretPosition=myEditor.getCaretModel().getLogicalPosition();
-  if (caretPosition.visualPositionAware) {
-    caretPosition=new LogicalPosition(caretPosition.line,caretPosition.column);
-  }
-  int caretOffset=myEditor.logicalPositionToOffset(caretPosition);
-  int selectionStart=myEditor.getSelectionModel().getSelectionStart();
-  int selectionEnd=myEditor.getSelectionModel().getSelectionEnd();
-  int column=-1;
-  int line=-1;
-  int offsetToUse=-1;
-  FoldRegion collapsed=myFoldTree.fetchOutermost(caretOffset);
-  if (myCaretPositionSaved) {
-    int savedOffset=myEditor.logicalPositionToOffset(new LogicalPosition(mySavedCaretY,mySavedCaretX));
-    FoldRegion collapsedAtSaved=myFoldTree.fetchOutermost(savedOffset);
-    if (collapsedAtSaved == null) {
-      column=mySavedCaretX;
-      line=mySavedCaretY;
-    }
+  for (  Caret caret : myEditor.getCaretModel().getAllCarets()) {
+    LogicalPosition caretPosition=caret.getLogicalPosition().withoutVisualPositionInfo();
+    int caretOffset=myEditor.logicalPositionToOffset(caretPosition);
+    int selectionStart=caret.getSelectionStart();
+    int selectionEnd=caret.getSelectionEnd();
+    LogicalPosition positionToUse=null;
+    int offsetToUse=-1;
+    FoldRegion collapsed=myFoldTree.fetchOutermost(caretOffset);
+    LogicalPosition savedPosition=caret.getUserData(SAVED_CARET_POSITION);
+    if (savedPosition != null) {
+      int savedOffset=myEditor.logicalPositionToOffset(savedPosition);
+      FoldRegion collapsedAtSaved=myFoldTree.fetchOutermost(savedOffset);
+      if (collapsedAtSaved == null) {
+        positionToUse=savedPosition;
+      }
  else {
-      offsetToUse=collapsedAtSaved.getStartOffset();
+        offsetToUse=collapsedAtSaved.getStartOffset();
+      }
     }
-  }
-  if (collapsed != null && column == -1) {
-    line=collapsed.getDocument().getLineNumber(collapsed.getStartOffset());
-    column=myEditor.offsetToLogicalPosition(collapsed.getStartOffset()).column;
-  }
-  boolean oldCaretPositionSaved=myCaretPositionSaved;
-  if (moveCaretFromCollapsedRegion && myEditor.getCaretModel().isUpToDate()) {
-    if (offsetToUse >= 0) {
-      myEditor.getCaretModel().moveToOffset(offsetToUse);
+    if (collapsed != null && positionToUse == null) {
+      positionToUse=myEditor.offsetToLogicalPosition(collapsed.getStartOffset());
     }
- else     if (column != -1) {
-      myEditor.getCaretModel().moveToLogicalPosition(new LogicalPosition(line,column));
-    }
+    if (moveCaretFromCollapsedRegion && caret.isUpToDate()) {
+      if (offsetToUse >= 0) {
+        caret.moveToOffset(offsetToUse);
+      }
+ else       if (positionToUse != null) {
+        caret.moveToLogicalPosition(positionToUse);
+      }
  else {
-      myEditor.getCaretModel().moveToLogicalPosition(caretPosition);
+        caret.moveToLogicalPosition(caretPosition);
+      }
     }
-  }
-  myCaretPositionSaved=oldCaretPositionSaved;
-  if (isOffsetInsideCollapsedRegion(selectionStart) || isOffsetInsideCollapsedRegion(selectionEnd)) {
-    myEditor.getSelectionModel().removeSelection();
-  }
- else   if (selectionStart < myEditor.getDocument().getTextLength()) {
-    myEditor.getSelectionModel().setSelection(selectionStart,selectionEnd);
+    caret.putUserData(SAVED_CARET_POSITION,savedPosition);
+    if (isOffsetInsideCollapsedRegion(selectionStart) || isOffsetInsideCollapsedRegion(selectionEnd)) {
+      caret.removeSelection();
+    }
+ else     if (selectionStart < myEditor.getDocument().getTextLength()) {
+      caret.setSelection(selectionStart,selectionEnd);
+    }
   }
   if (mySavedCaretShift > 0) {
     final ScrollingModel scrollingModel=myEditor.getScrollingModel();
