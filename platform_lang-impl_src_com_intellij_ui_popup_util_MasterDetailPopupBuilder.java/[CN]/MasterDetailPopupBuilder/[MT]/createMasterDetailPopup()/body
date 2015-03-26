@@ -1,12 +1,13 @@
 {
-  setupRenderer();
-  myPathLabel=new JLabel(" ");
-  myPathLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-  final Font font=myPathLabel.getFont();
-  myPathLabel.setFont(font.deriveFont((float)10));
+  if (myChooserComponent instanceof JList) {
+    ((JList)myChooserComponent).setCellRenderer(new ListItemRenderer(myProject,myDelegate));
+  }
   if (myDetailView == null) {
     myDetailView=new DetailViewImpl(myProject);
   }
+  myPathLabel=new JLabel(" ");
+  myPathLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+  myPathLabel.setFont(myPathLabel.getFont().deriveFont((float)10));
   JPanel footerPanel=new JPanel(new BorderLayout()){
     @Override protected void paintComponent(    Graphics g){
       super.paintComponent(g);
@@ -15,38 +16,36 @@
     }
   }
 ;
-  Runnable runnable=new Runnable(){
+  footerPanel.setBorder(BorderFactory.createEmptyBorder(4,4,4,4));
+  footerPanel.add(myPathLabel);
+  Runnable itemCallback=new Runnable(){
     @Override public void run(){
       IdeFocusManager.getInstance(myProject).doWhenFocusSettlesDown(new Runnable(){
         @Override public void run(){
-          Object[] values=getSelectedItems();
-          if (values.length == 1) {
-            myDelegate.itemChosen((ItemWrapper)values[0],myProject,myPopup,false);
-          }
- else {
-            for (            Object value : values) {
-              if (value instanceof ItemWrapper) {
-                myDelegate.itemChosen((ItemWrapper)value,myProject,myPopup,false);
-              }
-            }
-          }
+          chooseItems(false);
         }
       }
 );
     }
   }
 ;
-  footerPanel.setBorder(BorderFactory.createEmptyBorder(4,4,4,4));
-  footerPanel.add(myPathLabel);
   JComponent toolBar=null;
   if (myActions != null) {
-    myActionToolbar=ActionManager.getInstance().createActionToolbar("",myActions,true);
-    myActionToolbar.setReservePlaceAutoPopupIcon(false);
-    myActionToolbar.setMinimumButtonSize(new Dimension(20,20));
-    toolBar=myActionToolbar.getComponent();
+    ActionToolbar actionToolbar=ActionManager.getInstance().createActionToolbar("",myActions,true);
+    actionToolbar.setReservePlaceAutoPopupIcon(false);
+    actionToolbar.setMinimumButtonSize(new Dimension(20,20));
+    toolBar=actionToolbar.getComponent();
     toolBar.setOpaque(false);
   }
-  final PopupChooserBuilder builder=createInnerBuilder().setMovable(true).setResizable(true).setAutoselectOnMouseMove(false).setSettingButton(toolBar).setSouthComponent(footerPanel).setCancelOnWindowDeactivation(myCancelOnWindowDeactivation).setCancelOnClickOutside(myCancelOnClickOutside).setUseDimensionServiceForXYLocation(myUseDimensionServiceForXYLocation);
+  PopupChooserBuilder builder=createInnerBuilder().setMovable(true).setResizable(true).setAutoselectOnMouseMove(false).setMayBeParent(true).setDimensionServiceKey(myDimensionServiceKey).setSettingButton(toolBar).setSouthComponent(footerPanel).setItemChoosenCallback(itemCallback).setFilteringEnabled(new Function<Object,String>(){
+    @Override public String fun(    Object o){
+      return ((ItemWrapper)o).speedSearchText();
+    }
+  }
+);
+  if (myPopupTuner != null) {
+    myPopupTuner.consume(builder);
+  }
   if (myDoneRunnable != null) {
     ActionListener actionListener=new ActionListener(){
       @Override public void actionPerformed(      ActionEvent event){
@@ -58,9 +57,7 @@
       final JButton done=new JButton("Done");
       done.setMnemonic('o');
       done.addActionListener(actionListener);
-      builder.setCommandButton(new ActiveComponent(){
-        @Override public void setActive(        boolean active){
-        }
+      builder.setCommandButton(new ActiveComponent.Adapter(){
         @Override public JComponent getComponent(){
           return done;
         }
@@ -68,27 +65,17 @@
 );
     }
  else {
-      builder.setCommandButton(new InplaceButton(new IconButton("Close",AllIcons.Actions.Close,AllIcons.Actions.CloseHovered),actionListener));
+      IconButton close=new IconButton("Close",AllIcons.Actions.Close,AllIcons.Actions.CloseHovered);
+      builder.setCommandButton(new InplaceButton(close,actionListener));
     }
   }
   String title=myDelegate.getTitle();
   if (title != null) {
     builder.setTitle(title);
   }
-  builder.setItemChoosenCallback(runnable).setCloseOnEnter(myCloseOnEnter).setMayBeParent(true).setDimensionServiceKey(myDimensionServiceKey).setFilteringEnabled(new Function<Object,String>(){
-    @Override public String fun(    Object o){
-      return ((ItemWrapper)o).speedSearchText();
-    }
-  }
-);
-  if (myMinSize != null) {
-    builder.setMinSize(myMinSize);
-  }
   myPopup=builder.createPopup();
   builder.getScrollPane().setBorder(IdeBorderFactory.createBorder(SideBorder.RIGHT));
-  myPopup.addListener(new JBPopupListener(){
-    @Override public void beforeShown(    LightweightWindowEvent event){
-    }
+  myPopup.addListener(new JBPopupListener.Adapter(){
     @Override public void onClosed(    LightweightWindowEvent event){
       myDetailView.clearEditor();
     }
