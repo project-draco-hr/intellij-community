@@ -2,34 +2,43 @@
   if (project.isDisposed()) {
     return;
   }
+  List<Runnable> tasks=new ArrayList<Runnable>();
   final ProjectFileIndex projectFileIndex=ProjectRootManager.getInstance(project).getFileIndex();
-  projectFileIndex.iterateContent(processor);
-  if (project.isDisposed()) {
-    return;
+  tasks.add(new Runnable(){
+    @Override public void run(){
+      projectFileIndex.iterateContent(processor);
+    }
   }
-  Set<VirtualFile> visitedRoots=new THashSet<VirtualFile>();
+);
+  final Set<VirtualFile> visitedRoots=new THashSet<VirtualFile>();
   for (  IndexedRootsProvider provider : Extensions.getExtensions(IndexedRootsProvider.EP_NAME)) {
     if (project.isDisposed()) {
       return;
     }
-    for (    VirtualFile root : IndexableSetContributor.getRootsToIndex(provider)) {
+    for (    final VirtualFile root : IndexableSetContributor.getRootsToIndex(provider)) {
       if (visitedRoots.add(root)) {
-        iterateRecursively(root,processor,indicator,visitedRoots,null);
+        tasks.add(new Runnable(){
+          @Override public void run(){
+            if (project.isDisposed() || !root.isValid())             return;
+            iterateRecursively(root,processor,indicator,visitedRoots,null);
+          }
+        }
+);
       }
     }
-    for (    VirtualFile root : IndexableSetContributor.getProjectRootsToIndex(provider,project)) {
+    for (    final VirtualFile root : IndexableSetContributor.getProjectRootsToIndex(provider,project)) {
       if (visitedRoots.add(root)) {
-        iterateRecursively(root,processor,indicator,visitedRoots,null);
+        tasks.add(new Runnable(){
+          @Override public void run(){
+            if (project.isDisposed() || !root.isValid())             return;
+            iterateRecursively(root,processor,indicator,visitedRoots,null);
+          }
+        }
+);
       }
     }
   }
-  if (project.isDisposed()) {
-    return;
-  }
-  for (  Module module : ModuleManager.getInstance(project).getModules()) {
-    if (module.isDisposed()) {
-      return;
-    }
+  for (  final Module module : ModuleManager.getInstance(project).getModules()) {
     OrderEntry[] orderEntries=ModuleRootManager.getInstance(module).getOrderEntries();
     for (    OrderEntry orderEntry : orderEntries) {
       if (orderEntry instanceof LibraryOrSdkOrderEntry) {
@@ -38,14 +47,32 @@
           final VirtualFile[] libSources=entry.getRootFiles(OrderRootType.SOURCES);
           final VirtualFile[] libClasses=entry.getRootFiles(OrderRootType.CLASSES);
           for (          VirtualFile[] roots : new VirtualFile[][]{libSources,libClasses}) {
-            for (            VirtualFile root : roots) {
+            for (            final VirtualFile root : roots) {
               if (visitedRoots.add(root)) {
-                iterateRecursively(root,processor,indicator,null,projectFileIndex);
+                tasks.add(new Runnable(){
+                  @Override public void run(){
+                    if (project.isDisposed() || module.isDisposed() || !root.isValid())                     return;
+                    iterateRecursively(root,processor,indicator,null,projectFileIndex);
+                  }
+                }
+);
               }
             }
           }
         }
       }
     }
+  }
+  if (Registry.is("idea.concurrent.scanning.files.to.index")) {
+    JobLauncher.getInstance().invokeConcurrentlyUnderProgress(tasks,indicator,true,false,new Processor<Runnable>(){
+      @Override public boolean process(      Runnable runnable){
+        runnable.run();
+        return true;
+      }
+    }
+);
+  }
+ else {
+    for (    Runnable r : tasks)     r.run();
   }
 }
