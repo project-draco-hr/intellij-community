@@ -1,0 +1,67 @@
+{
+  if (project.isDisposed()) {
+    return Collections.emptyList();
+  }
+  List<Runnable> tasks=new ArrayList<Runnable>();
+  final ProjectFileIndex projectFileIndex=ProjectRootManager.getInstance(project).getFileIndex();
+  tasks.add(new Runnable(){
+    @Override public void run(){
+      projectFileIndex.iterateContent(processor);
+    }
+  }
+);
+  final Set<VirtualFile> visitedRoots=new THashSet<VirtualFile>();
+  for (  IndexedRootsProvider provider : Extensions.getExtensions(IndexedRootsProvider.EP_NAME)) {
+    if (project.isDisposed()) {
+      return null;
+    }
+    for (    final VirtualFile root : IndexableSetContributor.getRootsToIndex(provider)) {
+      if (visitedRoots.add(root)) {
+        tasks.add(new Runnable(){
+          @Override public void run(){
+            if (project.isDisposed() || !root.isValid())             return;
+            iterateRecursively(root,processor,indicator,visitedRoots,null);
+          }
+        }
+);
+      }
+    }
+    for (    final VirtualFile root : IndexableSetContributor.getProjectRootsToIndex(provider,project)) {
+      if (visitedRoots.add(root)) {
+        tasks.add(new Runnable(){
+          @Override public void run(){
+            if (project.isDisposed() || !root.isValid())             return;
+            iterateRecursively(root,processor,indicator,visitedRoots,null);
+          }
+        }
+);
+      }
+    }
+  }
+  for (  final Module module : ModuleManager.getInstance(project).getModules()) {
+    OrderEntry[] orderEntries=ModuleRootManager.getInstance(module).getOrderEntries();
+    for (    OrderEntry orderEntry : orderEntries) {
+      if (orderEntry instanceof LibraryOrSdkOrderEntry) {
+        if (orderEntry.isValid()) {
+          final LibraryOrSdkOrderEntry entry=(LibraryOrSdkOrderEntry)orderEntry;
+          final VirtualFile[] libSources=entry.getRootFiles(OrderRootType.SOURCES);
+          final VirtualFile[] libClasses=entry.getRootFiles(OrderRootType.CLASSES);
+          for (          VirtualFile[] roots : new VirtualFile[][]{libSources,libClasses}) {
+            for (            final VirtualFile root : roots) {
+              if (visitedRoots.add(root)) {
+                tasks.add(new Runnable(){
+                  @Override public void run(){
+                    if (project.isDisposed() || module.isDisposed() || !root.isValid())                     return;
+                    iterateRecursively(root,processor,indicator,null,projectFileIndex);
+                  }
+                }
+);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return tasks;
+}
