@@ -1,0 +1,56 @@
+{
+  if (myCollectionClassesToCheck.isEmpty()) {
+    return PsiElementVisitor.EMPTY_VISITOR;
+  }
+  return new JavaRecursiveElementWalkingVisitor(){
+    @Override public void visitMethodCallExpression(    PsiMethodCallExpression expression){
+      final String methodName=expression.getMethodExpression().getReferenceName();
+      if ("addAll".equals(methodName)) {
+        if (expression.getArgumentList().getExpressions().length != 1) {
+          return;
+        }
+        final PsiExpression qualifierExpression=expression.getMethodExpression().getQualifierExpression();
+        if (!(qualifierExpression instanceof PsiReferenceExpression)) {
+          return;
+        }
+        final PsiElement resolvedReference=((PsiReferenceExpression)qualifierExpression).resolve();
+        if (!(resolvedReference instanceof PsiLocalVariable)) {
+          return;
+        }
+        PsiLocalVariable variable=(PsiLocalVariable)resolvedReference;
+        final PsiType variableType=variable.getType();
+        if (!(variableType instanceof PsiClassType)) {
+          return;
+        }
+        final PsiClass variableClass=((PsiClassType)variableType).resolve();
+        if (variableClass == null || !InheritanceUtil.isInheritor(variableClass,CommonClassNames.JAVA_UTIL_COLLECTION)) {
+          return;
+        }
+        PsiNewExpression assignmentExpression;
+        final Pair<Boolean,PsiNewExpression> pair=isProperAssignmentStatementFound(variable,expression);
+        if (pair.getFirst()) {
+          assignmentExpression=pair.getSecond();
+          if (assignmentExpression == null) {
+            if (checkLocalVariableAssignmentOrInitializer(variable.getInitializer())) {
+              assignmentExpression=(PsiNewExpression)variable.getInitializer();
+            }
+ else {
+              return;
+            }
+          }
+        }
+ else {
+          return;
+        }
+        if (!checkUsages(variable,expression,assignmentExpression)) {
+          return;
+        }
+        final PsiMethod method=expression.resolveMethod();
+        if (method != null) {
+          holder.registerProblem(expression,QuickFixBundle.message("collection.addall.can.be.replaced.with.constructor.fix.description"),new ReplaceAddAllWithConstructorFix(assignmentExpression,expression));
+        }
+      }
+    }
+  }
+;
+}
