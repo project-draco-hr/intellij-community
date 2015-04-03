@@ -1,45 +1,43 @@
 {
   super(findWindow(component));
-  final Window window=findWindow(component);
+  Window window=findWindow(component);
   setModal(window instanceof JDialog && ((JDialog)window).isModal());
   myComponent=component;
   myUiInspector=uiInspector;
   getRootPane().setBorder(BorderFactory.createEmptyBorder(5,5,5,5));
   setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
   setLayout(new BorderLayout());
-  final String simpleName=component.getClass().getSimpleName();
-  setTitle(simpleName.length() == 0 ? component.getClass().getName() : simpleName);
-  JToolBar bar=new JToolBar(SwingConstants.HORIZONTAL);
-  bar.setFloatable(false);
-  bar.add(new AbstractAction("Highlight",AllIcons.Toolbar.Unknown){
-    public void actionPerformed(    ActionEvent e){
-      myHighlighted=!myHighlighted;
-      highlight(myComponent,!myHighlighted);
+  setTitle(component.getClass().getName());
+  DefaultActionGroup actions=new DefaultActionGroup();
+  actions.addAction(new IconWithTextAction("Highlight"){
+    @Override public void actionPerformed(    AnActionEvent e){
+      setHighlightingEnabled(myHighlightComponent == null);
     }
-    @Override public boolean isEnabled(){
-      return myComponent.isVisible();
+    @Override public void update(    AnActionEvent e){
+      e.getPresentation().setEnabled(myComponent != null && myComponent.isVisible());
     }
   }
 );
-  bar.addSeparator();
-  bar.add(new AbstractAction("Refresh",AllIcons.Actions.Refresh){
-    public void actionPerformed(    ActionEvent e){
+  actions.addSeparator();
+  actions.add(new IconWithTextAction("Refresh"){
+    @Override public void actionPerformed(    AnActionEvent e){
       getCurrentTable().refresh();
     }
-    @Override public boolean isEnabled(){
-      return myComponent.isVisible();
+    @Override public void update(    AnActionEvent e){
+      e.getPresentation().setEnabled(myComponent != null && myComponent.isVisible());
     }
   }
 );
-  add(bar,BorderLayout.NORTH);
+  ActionToolbar toolbar=ActionManager.getInstance().createActionToolbar(ActionPlaces.CONTEXT_TOOLBAR,actions,true);
+  add(toolbar.getComponent(),BorderLayout.NORTH);
   myWrapperPanel=new JPanel(new BorderLayout());
-  add(new JLabel(component.getClass().getName()),BorderLayout.SOUTH);
   myInspectorTable=new InspectorTable(component);
   myHierarchyTree=new HierarchyTree(component){
     @Override public void onComponentChanged(    Component c){
-      highlight(myComponent,true);
+      boolean wasHighlighted=myHighlightComponent != null;
+      setHighlightingEnabled(false);
       switchInfo(c);
-      if (myHighlighted)       highlight(c,false);
+      setHighlightingEnabled(wasHighlighted);
     }
   }
 ;
@@ -53,19 +51,16 @@
   myHierarchyTree.expandPath();
   addWindowListener(new WindowAdapter(){
     @Override public void windowClosing(    WindowEvent e){
-      myUiInspector.closed(InspectorWindow.this);
       close();
     }
   }
 );
   getRootPane().getActionMap().put("CLOSE",new AbstractAction(){
     public void actionPerformed(    ActionEvent e){
-      myUiInspector.closed(InspectorWindow.this);
       close();
-      InspectorWindow.this.setVisible(false);
-      InspectorWindow.this.dispose();
     }
   }
 );
+  setHighlightingEnabled(true);
   getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE,0),"CLOSE");
 }
