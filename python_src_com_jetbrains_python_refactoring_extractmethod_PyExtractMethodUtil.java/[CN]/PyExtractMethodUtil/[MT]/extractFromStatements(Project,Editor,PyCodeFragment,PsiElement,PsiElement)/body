@@ -1,6 +1,6 @@
 {
   if (!fragment.getOutputVariables().isEmpty() && fragment.isReturnInstructionInside()) {
-    CommonRefactoringUtil.showErrorHint(project,editor,PyBundle.message("refactoring.extract.method.error.cannot.perform.refactoring.with.local"),RefactoringBundle.message("error.title"),"refactoring.extractMethod");
+    CommonRefactoringUtil.showErrorHint(project,editor,PyBundle.message("refactoring.extract.method.error.local.variable.modifications.and.returns"),RefactoringBundle.message("error.title"),"refactoring.extractMethod");
     return;
   }
   final PyFunction function=PsiTreeUtil.getParentOfType(statement1,PyFunction.class);
@@ -9,7 +9,7 @@
   final boolean isStaticMethod=flags != null && flags.isStaticMethod();
   final List<PsiElement> elementsRange=PyPsiUtils.collectElements(statement1,statement2);
   if (elementsRange.isEmpty()) {
-    CommonRefactoringUtil.showErrorHint(project,editor,"Cannot perform refactoring from empty code fragment",RefactoringBundle.message("extract.method.title"),"refactoring.extractMethod");
+    CommonRefactoringUtil.showErrorHint(project,editor,PyBundle.message("refactoring.extract.method.error.empty.fragment"),RefactoringBundle.message("extract.method.title"),"refactoring.extractMethod");
     return;
   }
   final Pair<String,AbstractVariableData[]> data=getNameAndVariableData(project,fragment,statement1,isClassMethod,isStaticMethod);
@@ -29,14 +29,11 @@
           final StringBuilder builder=new StringBuilder();
           final List<PsiElement> newMethodElements=new ArrayList<PsiElement>(elementsRange);
           final boolean hasOutputVariables=!fragment.getOutputVariables().isEmpty();
+          final PyElementGenerator generator=PyElementGenerator.getInstance(project);
+          final LanguageLevel languageLevel=LanguageLevel.forElement(statement1);
           if (hasOutputVariables) {
-            for (            String s : fragment.getOutputVariables()) {
-              if (builder.length() != 0) {
-                builder.append(", ");
-              }
-              builder.append(s);
-            }
-            final PsiElement returnStatement=PyElementGenerator.getInstance(project).createFromText(LanguageLevel.forElement(statement1),PyElement.class,"return " + builder.toString());
+            StringUtil.join(fragment.getOutputVariables(),", ",builder);
+            final PsiElement returnStatement=generator.createFromText(languageLevel,PyElement.class,"return " + builder.toString());
             newMethodElements.add(returnStatement);
           }
           PyFunction generatedMethod=generateMethodFromElements(project,methodName,variableData,newMethodElements,flags);
@@ -60,7 +57,7 @@
           }
           builder.append(methodName).append("(");
           builder.append(createCallArgsString(variableData)).append(")");
-          PsiElement callElement=PyElementGenerator.getInstance(project).createFromText(LanguageLevel.forElement(statement1),PyElement.class,builder.toString());
+          PsiElement callElement=generator.createFromText(languageLevel,PyElement.class,builder.toString());
           callElement=replaceElements(elementsRange,callElement);
           callElement=CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(callElement);
           if (callElement != null) {
@@ -75,5 +72,5 @@
 );
     }
   }
-,"Extract method",null);
+,PyBundle.message("refactoring.extract.method"),null);
 }
