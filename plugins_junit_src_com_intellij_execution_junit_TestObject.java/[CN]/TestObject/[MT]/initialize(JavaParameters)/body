@@ -1,0 +1,50 @@
+{
+  String parameters=myConfiguration.getProgramParameters();
+  myConfiguration.getPersistentData().setProgramParameters(null);
+  try {
+    JavaParametersUtil.configureConfiguration(javaParameters,myConfiguration);
+  }
+  finally {
+    myConfiguration.getPersistentData().setProgramParameters(parameters);
+  }
+  javaParameters.setMainClass(JUnitConfiguration.JUNIT_START_CLASS);
+  final Module module=myConfiguration.getConfigurationModule().getModule();
+  if (javaParameters.getJdk() == null) {
+    javaParameters.setJdk(module != null ? ModuleRootManager.getInstance(module).getSdk() : ProjectRootManager.getInstance(myEnvironment.getProject()).getProjectSdk());
+  }
+  configureAdditionalClasspath(javaParameters);
+  javaParameters.getProgramParametersList().add(JUnitStarter.IDE_VERSION + JUnitStarter.VERSION);
+  if (!StringUtil.isEmptyOrSpaces(parameters)) {
+    javaParameters.getProgramParametersList().add("@name" + parameters);
+  }
+  for (  RunConfigurationExtension ext : Extensions.getExtensions(RunConfigurationExtension.EP_NAME)) {
+    ext.updateJavaParameters(myConfiguration,javaParameters,getRunnerSettings());
+  }
+  final Object[] listeners=Extensions.getExtensions(IDEAJUnitListener.EP_NAME);
+  final StringBuilder buf=new StringBuilder();
+  for (  final Object listener : listeners) {
+    boolean enabled=true;
+    for (    RunConfigurationExtension ext : Extensions.getExtensions(RunConfigurationExtension.EP_NAME)) {
+      if (ext.isListenerDisabled(myConfiguration,listener,getRunnerSettings())) {
+        enabled=false;
+        break;
+      }
+    }
+    if (enabled) {
+      final Class classListener=listener.getClass();
+      buf.append(classListener.getName()).append("\n");
+      javaParameters.getClassPath().add(PathUtil.getJarPathForClass(classListener));
+    }
+  }
+  if (buf.length() > 0) {
+    try {
+      myListenersFile=FileUtil.createTempFile("junit_listeners_","");
+      myListenersFile.deleteOnExit();
+      javaParameters.getProgramParametersList().add("@@" + myListenersFile.getPath());
+      FileUtil.writeToFile(myListenersFile,buf.toString().getBytes(CharsetToolkit.UTF8_CHARSET));
+    }
+ catch (    IOException e) {
+      LOG.error(e);
+    }
+  }
+}
