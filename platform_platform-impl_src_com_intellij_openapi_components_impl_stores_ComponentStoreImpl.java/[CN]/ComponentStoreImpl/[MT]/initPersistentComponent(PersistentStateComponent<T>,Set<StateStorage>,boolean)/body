@@ -8,7 +8,7 @@
     return name;
   }
   Class<T> stateClass=ComponentSerializationUtil.getStateClass(component.getClass());
-  if (LOG.isDebugEnabled()) {
+  if (LOG.isDebugEnabled() && getDefaultState(component,name,stateClass) != null) {
     LOG.error(name + " has default state, but not marked to load it");
   }
   T state=stateSpec.defaultStateAsResource() ? getDefaultState(component,name,stateClass) : null;
@@ -20,8 +20,12 @@
       continue;
     }
     StateStorage stateStorage=getStateStorageManager().getStateStorage(storageSpec);
-    if (stateStorage != null && (stateStorage.hasState(component,name,stateClass,reloadData) || (changedStorages != null && changedStorages.contains(stateStorage)))) {
+    boolean forcedState=false;
+    if (stateStorage != null && (stateStorage.hasState(component,name,stateClass,reloadData) || (forcedState=changedStorages != null && changedStorages.contains(stateStorage)))) {
       state=stateStorage.getState(component,name,stateClass,state);
+      if (state == null && forcedState) {
+        state=DefaultStateSerializer.deserializeState(new Element("state"),stateClass,null);
+      }
       break;
     }
   }

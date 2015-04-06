@@ -1,0 +1,49 @@
+{
+  Map<String,Node<ConfigurableWrapper>> tree=ContainerUtil.newHashMap();
+  for (  Configurable configurable : configurables) {
+    if (configurable instanceof ConfigurableWrapper) {
+      ConfigurableWrapper wrapper=(ConfigurableWrapper)configurable;
+      String id=wrapper.getId();
+      Node<ConfigurableWrapper> node=Node.get(tree,id);
+      if (node.myValue != null) {
+        LOG.warn("ignore configurable with duplicated id: " + id);
+      }
+ else {
+        String parentId=wrapper.getParentId();
+        String groupId=wrapper.getExtensionPoint().groupId;
+        if (groupId != null) {
+          if (parentId != null) {
+            LOG.warn("ignore deprecated groupId: " + groupId + " for id: "+ id);
+          }
+ else {
+            parentId=groupId;
+          }
+        }
+        if (parentId == null) {
+          parentId="other";
+        }
+        if (Node.cyclic(tree,parentId,node)) {
+          LOG.warn("ignore cyclic dependency: " + parentId + " cannot contain "+ id);
+          parentId="other";
+        }
+        node.myParent=Node.add(tree,parentId,node);
+        node.myValue=wrapper;
+      }
+    }
+ else {
+      Node.add(tree,"other",configurable);
+    }
+  }
+  Map<String,List<Configurable>> map=ContainerUtil.newHashMap();
+  for (  String id : tree.keySet().toArray(new String[tree.size()])) {
+    Node<ConfigurableWrapper> node=tree.get(id);
+    if (node != null) {
+      List<Configurable> list=getConfigurables(tree,node);
+      if (list != null) {
+        map.put(id,list);
+        tree.remove(id);
+      }
+    }
+  }
+  return map;
+}

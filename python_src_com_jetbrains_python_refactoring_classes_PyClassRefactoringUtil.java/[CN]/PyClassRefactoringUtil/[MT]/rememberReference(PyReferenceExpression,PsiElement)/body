@@ -3,11 +3,23 @@
   if (qualifier != null && !(resolveExpression(qualifier) instanceof PyImportedModule)) {
     return;
   }
-  final PsiElement target=resolveExpression(node);
+  final List<PsiElement> allResolveResults=multiResolveExpression(node);
+  PsiElement target=ContainerUtil.getFirstItem(allResolveResults);
   if (target instanceof PsiNamedElement && !PsiTreeUtil.isAncestor(element,target,false)) {
     final NameDefiner importElement=getImportElement(node);
     if (!PyUtil.inSameFile(element,target) && importElement == null && !(target instanceof PsiFileSystemItem)) {
       return;
+    }
+    if (target instanceof PyTargetExpression && PyNames.ALL.equals(((PyTargetExpression)target).getName())) {
+      for (      PsiElement result : allResolveResults) {
+        if (result instanceof PyImportElement) {
+          final QualifiedName importedQName=((PyImportElement)result).getImportedQName();
+          if (importedQName != null) {
+            target=new DynamicNamedElement(target.getContainingFile(),importedQName.toString());
+            break;
+          }
+        }
+      }
     }
     node.putCopyableUserData(ENCODED_IMPORT,(PsiNamedElement)target);
     if (importElement instanceof PyImportElement) {

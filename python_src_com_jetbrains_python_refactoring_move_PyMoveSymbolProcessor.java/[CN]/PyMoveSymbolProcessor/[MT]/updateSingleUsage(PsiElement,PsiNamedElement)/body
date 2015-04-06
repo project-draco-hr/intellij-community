@@ -1,0 +1,54 @@
+{
+  final PsiFile usageFile=usage.getContainingFile();
+  if (belongsToSomeMovedElement(usage)) {
+    return;
+  }
+  if (usage instanceof PyQualifiedExpression) {
+    final PyQualifiedExpression qualifiedExpr=(PyQualifiedExpression)usage;
+    if (myMovedElement instanceof PyClass && PyNames.INIT.equals(qualifiedExpr.getName())) {
+      return;
+    }
+ else     if (qualifiedExpr.isQualified()) {
+      insertQualifiedImportAndReplaceReference(newElement,qualifiedExpr);
+    }
+ else     if (usageFile == myMovedElement.getContainingFile()) {
+      if (usage.getParent() instanceof PyGlobalStatement) {
+        myScopeOwnersWithGlobal.add(ScopeUtil.getScopeOwner(usage));
+        if (((PyGlobalStatement)usage.getParent()).getGlobals().length == 1) {
+          PyUtil.deleteElementSafely(usage.getParent());
+        }
+ else {
+          usage.delete();
+        }
+      }
+ else       if (myScopeOwnersWithGlobal.contains(ScopeUtil.getScopeOwner(usage))) {
+        insertQualifiedImportAndReplaceReference(newElement,qualifiedExpr);
+      }
+ else {
+        insertImportFromAndReplaceReference(newElement,qualifiedExpr);
+      }
+    }
+ else {
+      final PyImportStatementBase importStmt=getImportStatementByElement(usage);
+      if (importStmt != null) {
+        PyClassRefactoringUtil.updateImportOfElement(importStmt,newElement);
+      }
+    }
+    if (resolvesToLocalStarImport(usage)) {
+      PyClassRefactoringUtil.insertImport(usage,newElement);
+      myOptimizeImportTargets.add(usageFile);
+    }
+  }
+ else   if (usage instanceof PyStringLiteralExpression) {
+    for (    PsiReference ref : usage.getReferences()) {
+      if (ref instanceof PyDunderAllReference) {
+        usage.delete();
+      }
+ else {
+        if (ref.isReferenceTo(myMovedElement)) {
+          ref.bindToElement(newElement);
+        }
+      }
+    }
+  }
+}
