@@ -30,11 +30,16 @@
     }
   }
  else   if (type instanceof PyUnionType && allowUnions) {
+    final PyUnionType unionType=(PyUnionType)type;
     if (type instanceof PyDynamicallyEvaluatedType || PyTypeChecker.isUnknown(type)) {
-      result=new UnknownType(build(((PyUnionType)type).excludeNull(myContext),true));
+      result=new UnknownType(build(unionType.excludeNull(myContext),true));
     }
  else {
-      result=new OneOf(Collections2.transform(((PyUnionType)type).getMembers(),new Function<PyType,TypeModel>(){
+      final PyType optionalType=getOptionalType(unionType);
+      if (optionalType != null) {
+        return new OptionalType(build(optionalType,true));
+      }
+      result=new OneOf(Collections2.transform(unionType.getMembers(),new Function<PyType,TypeModel>(){
         @Override public TypeModel apply(        PyType t){
           return build(t,false);
         }
@@ -44,6 +49,15 @@
   }
  else   if (type instanceof PyCallableType && !(type instanceof PyClassLikeType)) {
     result=build((PyCallableType)type);
+  }
+ else   if (type instanceof PyTupleType) {
+    final List<TypeModel> elementModels=new ArrayList<TypeModel>();
+    final PyTupleType tupleType=(PyTupleType)type;
+    for (int i=0; i < tupleType.getElementCount(); i++) {
+      final PyType elementType=tupleType.getElementType(i);
+      elementModels.add(build(elementType,true));
+    }
+    result=new TupleType(elementModels);
   }
   if (result == null) {
     result=type != null ? _(type.getName()) : _(PyNames.UNKNOWN_TYPE);
