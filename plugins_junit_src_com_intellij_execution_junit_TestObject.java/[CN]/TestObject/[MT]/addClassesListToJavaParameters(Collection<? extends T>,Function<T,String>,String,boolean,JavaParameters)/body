@@ -1,0 +1,78 @@
+{
+  try {
+    if (createTempFile) {
+      createTempFiles(javaParameters);
+    }
+    final Map<Module,List<String>> perModule=forkPerModule() ? new TreeMap<Module,List<String>>(new Comparator<Module>(){
+      @Override public int compare(      Module o1,      Module o2){
+        return StringUtil.compare(o1.getName(),o2.getName(),true);
+      }
+    }
+) : null;
+    final List<String> testNames=new ArrayList<String>();
+    for (    final T element : elements) {
+      final String name=nameFunction.fun(element);
+      if (name == null) {
+        LOG.error("invalid element " + element);
+        return;
+      }
+      if (perModule != null && element instanceof PsiElement) {
+        final Module module=ModuleUtilCore.findModuleForPsiElement((PsiElement)element);
+        if (module != null) {
+          List<String> list=perModule.get(module);
+          if (list == null) {
+            list=new ArrayList<String>();
+            perModule.put(module,list);
+          }
+          list.add(name);
+        }
+      }
+ else {
+        testNames.add(name);
+      }
+    }
+    final JUnitConfiguration.Data data=getConfiguration().getPersistentData();
+    if (perModule != null) {
+      for (      List<String> perModuleClasses : perModule.values()) {
+        Collections.sort(perModuleClasses);
+        testNames.addAll(perModuleClasses);
+      }
+    }
+ else     if (JUnitConfiguration.TEST_PACKAGE.equals(data.TEST_OBJECT)) {
+      Collections.sort(testNames);
+    }
+    final String category=JUnitConfiguration.TEST_CATEGORY.equals(data.TEST_OBJECT) ? data.getCategory() : "";
+    JUnitStarter.printClassesList(testNames,packageName,category,myTempFile);
+    if (perModule != null && perModule.size() > 1) {
+      final String classpath=getConfiguration().getPersistentData().getScope() == TestSearchScope.WHOLE_PROJECT ? null : javaParameters.getClassPath().getPathsString();
+      final PrintWriter wWriter=new PrintWriter(myWorkingDirsFile,CharsetToolkit.UTF8);
+      try {
+        wWriter.println(packageName);
+        for (        Module module : perModule.keySet()) {
+          final String moduleDir=PathMacroUtil.getModuleDir(module.getModuleFilePath());
+          wWriter.println(moduleDir);
+          if (classpath == null) {
+            final JavaParameters parameters=new JavaParameters();
+            configureAdditionalClasspath(parameters);
+            JavaParametersUtil.configureModule(module,parameters,JavaParameters.JDK_AND_CLASSES_AND_TESTS,getConfiguration().isAlternativeJrePathEnabled() ? getConfiguration().getAlternativeJrePath() : null);
+            wWriter.println(parameters.getClassPath().getPathsString());
+          }
+ else {
+            wWriter.println(classpath);
+          }
+          final List<String> classNames=perModule.get(module);
+          wWriter.println(classNames.size());
+          for (          String className : classNames) {
+            wWriter.println(className);
+          }
+        }
+      }
+  finally {
+        wWriter.close();
+      }
+    }
+  }
+ catch (  IOException e) {
+    LOG.error(e);
+  }
+}
