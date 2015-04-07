@@ -28,16 +28,20 @@
         if (isJunit4) {
           final VirtualFile location=PsiUtilCore.getVirtualFile(reference.getElement());
           boolean inTests=location != null && ModuleRootManager.getInstance(currentModule).getFileIndex().isInTestSourceContent(location);
+          DumbService.getInstance(project).setAlternativeResolveEnabled(true);
           try {
             addJUnit4Library(inTests,currentModule);
             final GlobalSearchScope scope=GlobalSearchScope.moduleWithLibrariesScope(currentModule);
             final PsiClass aClass=JavaPsiFacade.getInstance(project).findClass(className,scope);
-            if (aClass != null && editor != null && !DumbService.isDumb(project)) {
+            if (aClass != null && editor != null) {
               new AddImportAction(project,reference,editor,aClass).execute();
             }
           }
  catch (          ClassNotFoundException e) {
             throw new RuntimeException(e);
+          }
+ finally {
+            DumbService.getInstance(project).setAlternativeResolveEnabled(false);
           }
         }
  else {
@@ -130,10 +134,15 @@
           @Override public boolean isAvailable(          @NotNull Project project,          Editor editor,          PsiFile file){
             return !project.isDisposed() && !currentModule.isDisposed() && libraryEntry.isValid();
           }
-          @Override public void invoke(          @NotNull Project project,          @Nullable Editor editor,          PsiFile file){
+          @Override public void invoke(          @NotNull final Project project,          @Nullable final Editor editor,          PsiFile file){
             OrderEntryUtil.addLibraryToRoots(libraryEntry,currentModule);
-            if (editor != null && !DumbService.isDumb(project)) {
-              new AddImportAction(project,reference,editor,aClass).execute();
+            if (editor != null) {
+              DumbService.getInstance(project).withAlternativeResolveEnabled(new Runnable(){
+                @Override public void run(){
+                  new AddImportAction(project,reference,editor,aClass).execute();
+                }
+              }
+);
             }
           }
         }
