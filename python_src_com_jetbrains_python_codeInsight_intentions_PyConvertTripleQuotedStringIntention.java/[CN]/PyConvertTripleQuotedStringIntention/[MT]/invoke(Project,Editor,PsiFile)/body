@@ -14,14 +14,63 @@
       }
       final boolean inLastNode=i == nodeInfos.size() - 1;
       for (int j=0; j < lines.size(); j++) {
+        final String line=lines.get(j);
         final boolean inLastLine=j == lines.size() - 1;
-        result.append(info.prefix);
-        result.append(info.quote);
-        result.append(convertToValidSubString(lines.get(j),info.quote,info.isTripleQuoted));
-        if (!inLastLine || lastLineExcluded) {
-          result.append("\\n");
+        if (StringUtil.containsIgnoreCase(info.prefix,"r")) {
+          boolean singleQuoteUsed=false, doubleQuoteUsed=false;
+          int chunkStart=0;
+          boolean firstChunk=true;
+          for (int k=0; k < line.length(); k++) {
+            if (line.charAt(k) == '\'') {
+              singleQuoteUsed=true;
+              if (doubleQuoteUsed) {
+                if (!firstChunk) {
+                  result.append(" ");
+                }
+                result.append(info.prefix).append('\'').append(line.substring(chunkStart,k)).append('\'');
+                chunkStart=k;
+                doubleQuoteUsed=false;
+                firstChunk=false;
+              }
+            }
+ else             if (line.charAt(k) == '"') {
+              doubleQuoteUsed=true;
+              if (singleQuoteUsed) {
+                if (!firstChunk) {
+                  result.append(" ");
+                }
+                result.append(info.prefix).append('"').append(line.substring(chunkStart,k)).append('"');
+                chunkStart=k;
+                singleQuoteUsed=false;
+                firstChunk=false;
+              }
+            }
+          }
+          if (!firstChunk) {
+            result.append(" ");
+          }
+          if (singleQuoteUsed) {
+            result.append(info.prefix).append('"').append(line.substring(chunkStart)).append('"');
+          }
+ else           if (doubleQuoteUsed) {
+            result.append(info.prefix).append('\'').append(line.substring(chunkStart)).append('\'');
+          }
+ else {
+            result.append(info.prefix).append(info.quote).append(line.substring(chunkStart)).append(info.quote);
+          }
+          if (!inLastLine || lastLineExcluded) {
+            result.append(" ").append(info.quote).append("\\n").append(info.quote);
+          }
         }
-        result.append(info.quote);
+ else {
+          result.append(info.prefix);
+          result.append(info.quote);
+          result.append(convertToValidSubString(line,info.quote,info.isTripleQuoted));
+          if (!inLastLine || lastLineExcluded) {
+            result.append("\\n");
+          }
+          result.append(info.quote);
+        }
         if (!(inLastNode && inLastLine)) {
           result.append("\n");
         }
@@ -33,7 +82,7 @@
     }
     PyExpression expression=elementGenerator.createExpressionFromText(LanguageLevel.forElement(pyString),result.toString());
     final PsiElement parent=pyString.getParent();
-    if ((parent instanceof PyParenthesizedExpression || parent instanceof PyTupleExpression) && expression instanceof PyParenthesizedExpression) {
+    if (expression instanceof PyParenthesizedExpression && (parent instanceof PyParenthesizedExpression || parent instanceof PyTupleExpression || parent instanceof PyArgumentList && ArrayUtil.getFirstElement(((PyArgumentList)parent).getArguments()) == pyString)) {
       expression=((PyParenthesizedExpression)expression).getContainedExpression();
     }
     if (expression != null) {
