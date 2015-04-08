@@ -1,10 +1,12 @@
 {
   super(new BorderLayout());
-  final AnAction[] recentProjectActions=RecentProjectsManager.getInstance().getRecentProjectsActions(false);
+  final AnAction[] recentProjectActions=RecentProjectsManager.getInstance().getRecentProjectsActions(false,isUseGroups());
   myPathShortener=new UniqueNameBuilder<ReopenProjectAction>(SystemProperties.getUserHome(),File.separator,40);
   for (  AnAction action : recentProjectActions) {
-    ReopenProjectAction item=(ReopenProjectAction)action;
-    myPathShortener.addPath(item,item.getProjectPath());
+    if (action instanceof ReopenProjectAction) {
+      final ReopenProjectAction item=(ReopenProjectAction)action;
+      myPathShortener.addPath(item,item.getProjectPath());
+    }
   }
   myList=createList(recentProjectActions,getPreferredScrollableViewportSize());
   myList.setCellRenderer(createRenderer(myPathShortener));
@@ -42,14 +44,16 @@
       if (selection != null && selection.length > 0) {
         final int rc=Messages.showOkCancelDialog(RecentProjectPanel.this,"Remove '" + StringUtil.join(selection,new Function<Object,String>(){
           @Override public String fun(          Object action){
-            return ((ReopenProjectAction)action).getTemplatePresentation().getText();
+            return ((AnAction)action).getTemplatePresentation().getText();
           }
         }
 ,"'\n'") + "' from recent projects list?","Remove Recent Project",Messages.getQuestionIcon());
         if (rc == Messages.OK) {
           RecentProjectsManager manager=RecentProjectsManagerBase.getInstance();
           for (          Object projectAction : selection) {
-            manager.removePath(((ReopenProjectAction)projectAction).getProjectPath());
+            if (projectAction instanceof ReopenProjectAction) {
+              manager.removePath(((ReopenProjectAction)projectAction).getProjectPath());
+            }
           }
           ListUtil.removeSelectedItems(myList);
         }
@@ -67,13 +71,19 @@
   scroll.setBorder(null);
   JComponent list=recentProjectActions.length == 0 ? myList : ListWithFilter.wrap(myList,scroll,new Function<Object,String>(){
     @Override public String fun(    Object o){
-      ReopenProjectAction item=(ReopenProjectAction)o;
-      String home=SystemProperties.getUserHome();
-      String path=item.getProjectPath();
-      if (FileUtil.startsWith(path,home)) {
-        path=path.substring(home.length());
+      if (o instanceof ReopenProjectAction) {
+        ReopenProjectAction item=(ReopenProjectAction)o;
+        String home=SystemProperties.getUserHome();
+        String path=item.getProjectPath();
+        if (FileUtil.startsWith(path,home)) {
+          path=path.substring(home.length());
+        }
+        return item.getProjectName() + " " + path;
       }
-      return item.getProjectName() + " " + path;
+ else       if (o instanceof ProjectGroupActionGroup) {
+        return ((ProjectGroupActionGroup)o).getGroup().getName();
+      }
+      return o.toString();
     }
   }
 );
