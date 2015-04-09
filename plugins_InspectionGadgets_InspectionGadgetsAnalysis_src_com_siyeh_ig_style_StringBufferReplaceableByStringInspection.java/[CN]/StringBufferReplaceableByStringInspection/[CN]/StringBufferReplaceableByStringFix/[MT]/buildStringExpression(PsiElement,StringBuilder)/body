@@ -1,6 +1,6 @@
 {
-  if (expression instanceof PsiNewExpression) {
-    final PsiNewExpression newExpression=(PsiNewExpression)expression;
+  if (element instanceof PsiNewExpression) {
+    final PsiNewExpression newExpression=(PsiNewExpression)element;
     final PsiExpressionList argumentList=newExpression.getArgumentList();
     if (argumentList == null) {
       return null;
@@ -21,33 +21,42 @@
         }
       }
     }
-    final PsiElement parent=expression.getParent();
-    if (result.length() == 0 && parent instanceof PsiVariable) {
-      result.append("\"\"");
-    }
+    return result;
   }
- else   if (expression instanceof PsiMethodCallExpression) {
-    final PsiMethodCallExpression methodCallExpression=(PsiMethodCallExpression)expression;
-    final PsiReferenceExpression methodExpression=methodCallExpression.getMethodExpression();
-    final PsiExpression qualifier=methodExpression.getQualifierExpression();
-    result=buildStringExpression(qualifier,result);
-    if (result == null) {
+  for (  PsiElement child : element.getChildren()) {
+    if (child instanceof PsiExpressionList) {
+      continue;
+    }
+    if (buildStringExpression(child,result) == null) {
       return null;
     }
-    if ("toString".equals(methodExpression.getReferenceName())) {
+  }
+  if (element instanceof PsiWhiteSpace) {
+    if (element.getText().contains("\n")) {
+      result.append('\n');
+    }
+  }
+ else   if (element instanceof PsiComment) {
+    result.append(element.getText());
+  }
+ else   if (element instanceof PsiMethodCallExpression) {
+    final PsiMethodCallExpression methodCallExpression=(PsiMethodCallExpression)element;
+    final PsiExpressionList argumentList=methodCallExpression.getArgumentList();
+    final PsiReferenceExpression methodExpression=methodCallExpression.getMethodExpression();
+    final String referenceName=methodExpression.getReferenceName();
+    if ("toString".equals(referenceName)) {
       if (result.length() == 0) {
         result.append("\"\"");
       }
     }
- else {
-      final PsiExpressionList argumentList=methodCallExpression.getArgumentList();
+ else     if ("append".equals(referenceName)) {
       final PsiExpression[] arguments=argumentList.getExpressions();
       if (arguments.length == 0) {
         return null;
       }
  else       if (arguments.length > 1) {
         if (result.length() != 0) {
-          result.append('+');
+          insertPlus(result);
         }
         result.append("String.valueOf").append(argumentList.getText());
         return result;
@@ -56,7 +65,7 @@
       final PsiType type=argument.getType();
       final String argumentText=argument.getText();
       if (result.length() != 0) {
-        result.append('+');
+        insertPlus(result);
         if (ParenthesesUtils.getPrecedence(argument) > ParenthesesUtils.ADDITIVE_PRECEDENCE || (type instanceof PsiPrimitiveType && ParenthesesUtils.getPrecedence(argument) == ParenthesesUtils.ADDITIVE_PRECEDENCE)) {
           result.append('(').append(argumentText).append(')');
         }
