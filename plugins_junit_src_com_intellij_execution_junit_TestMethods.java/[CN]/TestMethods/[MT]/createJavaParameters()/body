@@ -3,27 +3,19 @@
   final JUnitConfiguration.Data data=getConfiguration().getPersistentData();
   RunConfigurationModule module=getConfiguration().getConfigurationModule();
   final Project project=module.getProject();
-  final LinkedHashSet<TestInfo> methods=new LinkedHashSet<TestInfo>();
   final GlobalSearchScope searchScope=getConfiguration().getConfigurationModule().getSearchScope();
-  for (  AbstractTestProxy failedTest : myFailedTests) {
-    Location location=failedTest.getLocation(project,searchScope);
-    if (location instanceof PsiMemberParameterizedLocation) {
-      final PsiElement element=location.getPsiElement();
-      if (element instanceof PsiMethod) {
-        location=MethodLocation.elementInClass(((PsiMethod)element),((PsiMemberParameterizedLocation)location).getContainingClass());
-      }
-    }
-    if (!(location instanceof MethodLocation))     continue;
-    PsiElement psiElement=location.getPsiElement();
-    LOG.assertTrue(psiElement instanceof PsiMethod);
-    methods.add(((TestProxy)failedTest).getInfo());
-  }
-  addClassesListToJavaParameters(methods,new Function<TestInfo,String>(){
-    @Override public String fun(    TestInfo testInfo){
+  addClassesListToJavaParameters(myFailedTests,new Function<AbstractTestProxy,String>(){
+    @Override public String fun(    AbstractTestProxy testInfo){
       if (testInfo != null) {
-        final MethodLocation location=(MethodLocation)testInfo.getLocation(project,searchScope);
+        final Location location=testInfo.getLocation(project,searchScope);
         LOG.assertTrue(location != null);
-        return JavaExecutionUtil.getRuntimeQualifiedName(location.getContainingClass()) + "," + testInfo.getName();
+        final PsiElement element=location.getPsiElement();
+        if (element instanceof PsiMethod) {
+          final PsiClass containingClass=location instanceof MethodLocation ? ((MethodLocation)location).getContainingClass() : ((PsiMethod)element).getContainingClass();
+          if (containingClass != null) {
+            return JavaExecutionUtil.getRuntimeQualifiedName(containingClass) + "," + testInfo.getName();
+          }
+        }
       }
       return null;
     }
