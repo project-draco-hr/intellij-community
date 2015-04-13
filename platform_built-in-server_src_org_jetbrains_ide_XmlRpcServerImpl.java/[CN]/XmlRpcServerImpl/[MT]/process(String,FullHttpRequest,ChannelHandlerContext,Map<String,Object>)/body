@@ -4,7 +4,12 @@
   }
   if (request.method() == HttpMethod.POST) {
     ByteBuf result;
-    ByteBufInputStream in=new ByteBufInputStream(request.content());
+    ByteBuf content=request.content();
+    if (content.readableBytes() == 0) {
+      Responses.sendStatus(HttpResponseStatus.BAD_REQUEST,context.channel(),request);
+      return true;
+    }
+    ByteBufInputStream in=new ByteBufInputStream(content);
     try {
       XmlRpcServerRequest xmlRpcServerRequest=new XmlRpcRequestProcessor().decodeRequest(in);
       if (StringUtil.isEmpty(xmlRpcServerRequest.getMethodName())) {
@@ -14,7 +19,12 @@
       Object response=invokeHandler(getHandler(xmlRpcServerRequest.getMethodName(),handlers == null ? handlerMapping : handlers),xmlRpcServerRequest);
       result=Unpooled.wrappedBuffer(new XmlRpcResponseProcessor().encodeResponse(response,CharsetToolkit.UTF8));
     }
- catch (    Throwable e) {
+ catch (    SAXParseException e) {
+      LOG.warn(e);
+      Responses.sendStatus(HttpResponseStatus.BAD_REQUEST,context.channel(),request);
+      return true;
+    }
+catch (    Throwable e) {
       context.channel().close();
       LOG.error(e);
       return true;
