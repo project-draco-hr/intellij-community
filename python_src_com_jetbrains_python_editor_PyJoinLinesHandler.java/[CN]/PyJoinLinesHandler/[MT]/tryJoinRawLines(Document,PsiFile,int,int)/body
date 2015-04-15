@@ -1,60 +1,28 @@
 {
   if (!(file instanceof PyFile))   return CANNOT_JOIN;
-  int i=start;
   final CharSequence text=document.getCharsSequence();
-  if (i >= 0 && text.charAt(i) == '\n')   i-=1;
-  if (i >= 0 && text.charAt(i) == '\\')   i-=1;
-  while (i >= 0 && text.charAt(i) == ' ' || text.charAt(i) == '\t')   i-=1;
-  if (i < 0)   return CANNOT_JOIN;
-  final PsiElement leftElement=file.findElementAt(i);
+  if (start >= 0 && text.charAt(start) == '\n')   start-=1;
+  if (start >= 0 && text.charAt(start) == '\\')   start-=1;
+  while (start >= 0 && text.charAt(start) == ' ' || text.charAt(start) == '\t') {
+    start-=1;
+  }
+  if (start < 0) {
+    return CANNOT_JOIN;
+  }
+  final PsiElement leftElement=file.findElementAt(start);
   final PsiElement rightElement=file.findElementAt(end);
   if (leftElement != null && rightElement != null) {
-    PyExpression leftExpr=PsiTreeUtil.getParentOfType(leftElement,PyExpression.class);
-    if (leftExpr instanceof PsiFile)     leftExpr=null;
-    PyExpression rightExpr=PsiTreeUtil.getParentOfType(rightElement,PyExpression.class);
-    if (rightExpr instanceof PsiFile)     rightExpr=null;
-    final Joiner[] joiners={new OpenBracketJoiner(),new CloseBracketJoiner(),new StringLiteralJoiner(),new StmtJoiner(),new BinaryExprJoiner(),new ListLikeExprJoiner(),new CommentJoiner()};
-    final Request request=new Request(document,leftElement,leftExpr,rightElement,rightExpr);
-    for (    Joiner joiner : joiners) {
+    final PyExpression leftExpr=PsiTreeUtil.getParentOfType(leftElement,PyExpression.class);
+    final PyExpression rightExpr=PsiTreeUtil.getParentOfType(rightElement,PyExpression.class);
+    final Request request=new Request(document,start,end,leftElement,leftExpr,rightElement,rightExpr);
+    for (    Joiner joiner : JOINERS) {
       final Result res=joiner.join(request);
       if (res != null) {
-        final int cutStart=i + 1 - res.getCutFromLeft();
-        document.deleteString(cutStart,end + res.getCutIntoRight());
-        document.insertString(cutStart,res.getInsert());
-        return cutStart + res.getCursorOffset();
+        final int cutStart=start + 1 - res.cutFromLeft;
+        document.replaceString(cutStart,end + res.cutIntoRight,res.replacement);
+        return cutStart + res.caretOffset;
       }
     }
-    final PyExpression leftExpression=request.leftExpr();
-    final PyExpression rightExpression=request.rightExpr();
-    if (request.leftElem() == request.rightElem()) {
-      final IElementType type=request.leftElem().getNode().getElementType();
-      if (PyTokenTypes.SINGLE_QUOTED_STRING == type || PyTokenTypes.SINGLE_QUOTED_UNICODE == type) {
-        if (leftExpression == null)         return CANNOT_JOIN;
-        if (removeBackSlash(document,leftExpression,false)) {
-          return leftExpression.getTextOffset();
-        }
-      }
-    }
-    PsiElement expression=null;
-    if (leftExpression != null && rightExpression != null) {
-      if (PsiTreeUtil.isAncestor(leftExpression,rightExpression,false)) {
-        expression=leftExpression;
-      }
- else       if (PsiTreeUtil.isAncestor(rightExpression,leftExpression,false)) {
-        expression=rightExpression;
-      }
-      if (expression != null && !(expression instanceof PyStringLiteralExpression)) {
-        if (removeBackSlash(document,expression,true)) {
-          return expression.getTextOffset();
-        }
-      }
-    }
-  }
-  final String sequence=text.subSequence(i + 1,end).toString();
-  final int index=sequence.indexOf('\\');
-  if (index >= 0) {
-    document.replaceString(i + 1,end,sequence.substring(0,index));
-    return i + 1 + index;
   }
   return CANNOT_JOIN;
 }
