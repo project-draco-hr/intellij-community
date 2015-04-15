@@ -1,16 +1,16 @@
 {
-  Map<String,Collection<String>> map=new LinkedHashMap<String,Collection<String>>();
+  Map<String,Map<String,List<String>>> map=new LinkedHashMap<String,Map<String,List<String>>>();
   final boolean findTestMethodsForClass=shouldSearchForTestMethods();
-  for (  final Map.Entry<PsiClass,Collection<PsiMethod>> entry : myClasses.entrySet()) {
-    final Collection<PsiMethod> depMethods=entry.getValue();
-    Collection<String> methods=new LinkedHashSet<String>(depMethods.size());
-    for (    PsiMethod method : depMethods) {
-      methods.add(method.getName());
+  for (  final Map.Entry<PsiClass,Map<PsiMethod,List<String>>> entry : myClasses.entrySet()) {
+    final Map<PsiMethod,List<String>> depMethods=entry.getValue();
+    LinkedHashMap<String,List<String>> methods=new LinkedHashMap<String,List<String>>();
+    for (    Map.Entry<PsiMethod,List<String>> method : depMethods.entrySet()) {
+      methods.put(method.getKey().getName(),method.getValue());
     }
     if (findTestMethodsForClass && depMethods.isEmpty()) {
       for (      PsiMethod method : entry.getKey().getMethods()) {
         if (TestNGUtil.hasTest(method)) {
-          methods.add(method.getName());
+          methods.put(method.getName(),Collections.<String>emptyList());
         }
       }
     }
@@ -45,8 +45,52 @@
  catch (  Exception e) {
     logLevel=1;
   }
-  LaunchSuite suite=SuiteGenerator.createSuite(myProject.getName(),null,map,groupNames,testParams,"jdk",logLevel);
-  File xmlFile=suite.save(new File(PathManager.getSystemPath()));
+  File xmlFile;
+  if (groupNames != null) {
+    final LinkedHashMap<String,Collection<String>> methodNames=new LinkedHashMap<String,Collection<String>>();
+    for (    Map.Entry<String,Map<String,List<String>>> entry : map.entrySet()) {
+      methodNames.put(entry.getKey(),entry.getValue().keySet());
+    }
+    LaunchSuite suite=SuiteGenerator.createSuite(myProject.getName(),null,methodNames,groupNames,testParams,"jdk",logLevel);
+    xmlFile=suite.save(new File(PathManager.getSystemPath()));
+  }
+ else {
+    final XmlSuite xmlSuite=new XmlSuite();
+    XmlTest xmlTest=new XmlTest(xmlSuite);
+    xmlTest.setName(myProject.getName());
+    xmlTest.setParameters(testParams);
+    List<XmlClass> xmlClasses=new ArrayList<XmlClass>();
+    int idx=0;
+    for (    String className : map.keySet()) {
+      final XmlClass xmlClass=new XmlClass(className,idx++,false);
+      final ArrayList<XmlInclude> includedMethods=new ArrayList<XmlInclude>();
+      final Map<String,List<String>> collection=map.get(className);
+      int mIdx=0;
+      for (      String methodName : collection.keySet()) {
+        final List<Integer> includes=new ArrayList<Integer>();
+        for (        String include : collection.get(methodName)) {
+          try {
+            includes.add(Integer.parseInt(include));
+          }
+ catch (          NumberFormatException e) {
+            LOG.error(e);
+          }
+        }
+        includedMethods.add(new XmlInclude(methodName,includes,mIdx++));
+      }
+      xmlClass.setIncludedMethods(includedMethods);
+      xmlClasses.add(xmlClass);
+    }
+    xmlTest.setXmlClasses(xmlClasses);
+    xmlFile=new File(PathManager.getSystemPath(),"temp-testng-customsuite.xml");
+    final String toXml=xmlSuite.toXml();
+    try {
+      FileUtil.writeToFile(xmlFile,toXml);
+    }
+ catch (    IOException e) {
+      LOG.error(e);
+    }
+  }
   String path=xmlFile.getAbsolutePath() + "\n";
   try {
     FileUtil.writeToFile(myTempFile,path.getBytes(CharsetToolkit.UTF8_CHARSET),true);
