@@ -1,11 +1,12 @@
 {
+  LOG.assertTrue(!ApplicationManager.getApplication().isReadAccessAllowed(),"Must not run under read action, too unresponsive");
   final List<InspectionToolWrapper> needRepeatSearchRequest=new ArrayList<InspectionToolWrapper>();
-  final boolean surelyNoExternalUsages=scope.getScopeType() == AnalysisScope.PROJECT;
+  final boolean canBeExternalUsages=scope.getScopeType() != AnalysisScope.PROJECT;
   for (  Tools tools : globalTools) {
     for (    ScopeToolState state : tools.getTools()) {
-      InspectionToolWrapper toolWrapper=state.getTool();
-      GlobalInspectionTool tool=(GlobalInspectionTool)toolWrapper.getTool();
-      InspectionToolPresentation toolPresentation=getPresentation(toolWrapper);
+      final InspectionToolWrapper toolWrapper=state.getTool();
+      final GlobalInspectionTool tool=(GlobalInspectionTool)toolWrapper.getTool();
+      final InspectionToolPresentation toolPresentation=getPresentation(toolWrapper);
       try {
         if (tool.isGraphNeeded()) {
           try {
@@ -16,10 +17,15 @@
             throw e;
           }
         }
-        tool.runInspection(scope,inspectionManager,this,toolPresentation);
-        if (!surelyNoExternalUsages && tool.queryExternalUsagesRequests(inspectionManager,this,toolPresentation)) {
-          needRepeatSearchRequest.add(toolWrapper);
+        ApplicationManager.getApplication().runReadAction(new Runnable(){
+          @Override public void run(){
+            tool.runInspection(scope,inspectionManager,GlobalInspectionContextImpl.this,toolPresentation);
+            if (canBeExternalUsages && tool.queryExternalUsagesRequests(inspectionManager,GlobalInspectionContextImpl.this,toolPresentation)) {
+              needRepeatSearchRequest.add(toolWrapper);
+            }
+          }
         }
+);
       }
  catch (      ProcessCanceledException e) {
         throw e;
