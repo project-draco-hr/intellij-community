@@ -9,8 +9,8 @@
       return new TestNGRunnableState(env,configuration){
         @Override public SearchingForTestsTask createSearchingForTestsTask(){
           return new SearchingForTestsTask(myServerSocket,getConfiguration(),myTempFile,client){
-            @Override protected void fillTestObjects(            final Map<PsiClass,Collection<PsiMethod>> classes) throws CantRunException {
-              final HashMap<PsiClass,Collection<PsiMethod>> fullClassList=ContainerUtil.newHashMap();
+            @Override protected void fillTestObjects(            final Map<PsiClass,Map<PsiMethod,List<String>>> classes) throws CantRunException {
+              final HashMap<PsiClass,Map<PsiMethod,List<String>>> fullClassList=ContainerUtil.newHashMap();
               super.fillTestObjects(fullClassList);
               for (              final PsiClass aClass : fullClassList.keySet()) {
                 if (!ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
@@ -33,7 +33,7 @@
 );
               }
             }
-            private void includeFailedTestWithDependencies(            Map<PsiClass,Collection<PsiMethod>> classes,            GlobalSearchScope scope,            Project project,            AbstractTestProxy proxy){
+            private void includeFailedTestWithDependencies(            Map<PsiClass,Map<PsiMethod,List<String>>> classes,            GlobalSearchScope scope,            Project project,            AbstractTestProxy proxy){
               final Location location=proxy.getLocation(project,scope);
               if (location != null) {
                 final PsiElement element=location.getPsiElement();
@@ -47,12 +47,23 @@
                       psiClass=(PsiClass)elt;
                     }
                   }
-                  Collection<PsiMethod> psiMethods=classes.get(psiClass);
+                  Map<PsiMethod,List<String>> psiMethods=classes.get(psiClass);
                   if (psiMethods == null) {
-                    psiMethods=new ArrayList<PsiMethod>();
+                    psiMethods=new LinkedHashMap<PsiMethod,List<String>>();
                     classes.put(psiClass,psiMethods);
                   }
-                  psiMethods.add(psiMethod);
+                  List<String> strings=psiMethods.get(psiMethod);
+                  if (strings == null) {
+                    strings=new ArrayList<String>();
+                  }
+                  if (location instanceof PsiMemberParameterizedLocation) {
+                    final String paramSetName=((PsiMemberParameterizedLocation)location).getParamSetName();
+                    final String invocationNumber=TestNGConfigurationProducer.getInvocationNumber(paramSetName);
+                    if (invocationNumber != null) {
+                      strings.add(invocationNumber);
+                    }
+                  }
+                  psiMethods.put(psiMethod,strings);
                 }
               }
             }
