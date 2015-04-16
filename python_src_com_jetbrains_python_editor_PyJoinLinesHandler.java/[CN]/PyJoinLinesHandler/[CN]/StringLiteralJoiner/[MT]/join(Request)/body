@@ -3,23 +3,23 @@
     final PsiElement parent=req.rightElem.getParent();
     if ((req.leftElem.getParent() == parent && parent instanceof PyStringLiteralExpression) || (req.leftExpr instanceof PyStringLiteralExpression && req.rightExpr instanceof PyStringLiteralExpression)) {
       final CharSequence text=req.document.getCharsSequence();
-      final StrMod leftMod=new StrMod(text,req.leftElem.getTextRange());
-      final StrMod rightMod=new StrMod(text,req.rightElem.getTextRange());
-      if (leftMod.isOk() && rightMod.isOk()) {
-        final String lquo=leftMod.quote();
-        if (leftMod.equals(rightMod)) {
-          return new Result("",0,lquo.length(),rightMod.getStartPadding());
+      final StringNodeInfo leftNodeInfo=new StringNodeInfo(req.leftElem);
+      final StringNodeInfo rightNodeInfo=new StringNodeInfo(req.rightElem);
+      if (leftNodeInfo.isTerminated() && rightNodeInfo.isTerminated()) {
+        final int rightNodeContentOffset=rightNodeInfo.getContentRange().getStartOffset();
+        if (leftNodeInfo.equals(rightNodeInfo)) {
+          return new Result("",0,leftNodeInfo.getQuote().length(),rightNodeContentOffset);
         }
- else         if (leftMod.compatibleTo(rightMod) && lquo.length() == 1 && rightMod.quote().length() == 1) {
-          if (!containsChar(text,rightMod.getInnerRange(),leftMod.quote().charAt(0))) {
-            final int quotePos=rightMod.getInnerRange().getEndOffset();
-            req.document.replaceString(quotePos,quotePos + 1,leftMod.quote());
-            return new Result("",0,leftMod.quote().length(),rightMod.getStartPadding());
+        if (haveSamePrefixes(leftNodeInfo,rightNodeInfo) && !leftNodeInfo.isTripleQuoted() && !rightNodeInfo.isTripleQuoted()) {
+          if (!rightNodeInfo.getContent().contains(leftNodeInfo.getQuote())) {
+            final int quotePos=rightNodeInfo.getAbsoluteContentRange().getEndOffset();
+            req.document.replaceString(quotePos,quotePos + 1,leftNodeInfo.getQuote());
+            return new Result("",0,1,rightNodeContentOffset);
           }
- else           if (!containsChar(text,leftMod.getInnerRange(),rightMod.quote().charAt(0))) {
-            final int quotePos=leftMod.getInnerRange().getStartOffset() - 1;
-            req.document.replaceString(quotePos,quotePos + 1,rightMod.quote());
-            return new Result("",0,leftMod.quote().length(),rightMod.getStartPadding());
+ else           if (!leftNodeInfo.getContent().contains(rightNodeInfo.getQuote())) {
+            final int quotePos=leftNodeInfo.getAbsoluteContentRange().getStartOffset() - 1;
+            req.document.replaceString(quotePos,quotePos + 1,rightNodeInfo.getQuote());
+            return new Result("",0,1,rightNodeContentOffset);
           }
         }
       }
