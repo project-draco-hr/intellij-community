@@ -6,6 +6,8 @@
     if (languageLevel.isAtLeast(LanguageLevel.JDK_1_8)) {
       final PsiTypeElement[] conjuncts=PsiTreeUtil.getChildrenOfType(castTypeElement,PsiTypeElement.class);
       if (conjuncts != null) {
+        final Set<PsiType> erasures=new HashSet<PsiType>(conjuncts.length);
+        erasures.add(TypeConversionUtil.erasure(conjuncts[0].getType()));
         final List<PsiTypeElement> conjList=new ArrayList<PsiTypeElement>(Arrays.asList(conjuncts));
         for (int i=1; i < conjuncts.length; i++) {
           final PsiTypeElement conjunct=conjuncts[i];
@@ -18,6 +20,33 @@
               return errorResult;
             }
           }
+ else {
+            return HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(conjunct).descriptionAndTooltip("Unexpected type: class is expected").create();
+          }
+          if (!erasures.add(TypeConversionUtil.erasure(conjType))) {
+            return HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(conjunct).descriptionAndTooltip("Repeated interface").create();
+          }
+        }
+        final List<PsiType> typeList=ContainerUtil.map(conjList,new Function<PsiTypeElement,PsiType>(){
+          @Override public PsiType fun(          PsiTypeElement element){
+            return element.getType();
+          }
+        }
+);
+        final Ref<String> differentArgumentsMessage=new Ref<String>();
+        final PsiClass sameGenericParameterization=InferenceSession.findParameterizationOfTheSameGenericClass(typeList,new Processor<Pair<PsiType,PsiType>>(){
+          @Override public boolean process(          Pair<PsiType,PsiType> pair){
+            if (!TypesDistinctProver.provablyDistinct(pair.first,pair.second)) {
+              return true;
+            }
+            differentArgumentsMessage.set(pair.first.getPresentableText() + " and " + pair.second.getPresentableText());
+            return false;
+          }
+        }
+);
+        if (sameGenericParameterization != null) {
+          final String message=formatClass(sameGenericParameterization) + " cannot be inherited with different arguments: " + differentArgumentsMessage.get();
+          return HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(expression).descriptionAndTooltip(message).create();
         }
       }
     }
