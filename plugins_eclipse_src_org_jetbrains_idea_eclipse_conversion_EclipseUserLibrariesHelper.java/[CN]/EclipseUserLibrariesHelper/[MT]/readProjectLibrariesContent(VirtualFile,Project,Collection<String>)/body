@@ -1,0 +1,44 @@
+{
+  if (!exportedFile.isValid()) {
+    return;
+  }
+  LibraryTable libraryTable=ProjectLibraryTable.getInstance(project);
+  Element element=JDOMUtil.load(exportedFile.getInputStream());
+  AccessToken token=WriteAction.start();
+  try {
+    for (    Element libElement : element.getChildren("library")) {
+      String libName=libElement.getAttributeValue("name");
+      Library libraryByName=libraryTable.getLibraryByName(libName);
+      if (libraryByName == null) {
+        LibraryTable.ModifiableModel model=libraryTable.getModifiableModel();
+        libraryByName=model.createLibrary(libName);
+        model.commit();
+      }
+      if (libraryByName != null) {
+        Library.ModifiableModel model=libraryByName.getModifiableModel();
+        for (        Element a : libElement.getChildren("archive")) {
+          String rootPath=a.getAttributeValue("path");
+          LocalFileSystem fileSystem=LocalFileSystem.getInstance();
+          VirtualFile localFile=fileSystem.findFileByPath(rootPath);
+          if (rootPath.startsWith("/") && (localFile == null || !localFile.isValid())) {
+            rootPath=project.getBaseDir().getPath() + rootPath;
+            localFile=fileSystem.findFileByPath(rootPath);
+          }
+          String url=localFile == null ? VfsUtilCore.pathToUrl(rootPath) : localFile.getUrl();
+          if (localFile != null) {
+            VirtualFile jarFile=JarFileSystem.getInstance().getJarRootForLocalFile(localFile);
+            if (jarFile != null) {
+              url=jarFile.getUrl();
+            }
+          }
+          model.addRoot(url,OrderRootType.CLASSES);
+        }
+        model.commit();
+      }
+      unknownLibraries.remove(libName);
+    }
+  }
+  finally {
+    token.finish();
+  }
+}
