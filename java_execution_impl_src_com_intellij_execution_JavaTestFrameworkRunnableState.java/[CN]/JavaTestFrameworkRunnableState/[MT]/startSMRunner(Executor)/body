@@ -1,5 +1,5 @@
 {
-  if (!Registry.is(getFrameworkId() + "_sm_runner")) {
+  if (!isSmRunnerUsed()) {
     return null;
   }
   getJavaParameters().getVMParametersList().addProperty("idea." + getFrameworkId() + ".sm_runner");
@@ -7,22 +7,27 @@
   final RunnerSettings runnerSettings=getRunnerSettings();
   final TestConsoleProperties testConsoleProperties=createTestConsoleProperties(executor);
   testConsoleProperties.setIfUndefined(TestConsoleProperties.HIDE_PASSED_TESTS,false);
-  final BaseTestsOutputConsoleView consoleView=SMTestRunnerConnectionUtil.createConsoleWithCustomLocator(getFrameworkName(),testConsoleProperties,getEnvironment(),null);
+  final BaseTestsOutputConsoleView consoleView=SMTestRunnerConnectionUtil.createConsole(getFrameworkName(),testConsoleProperties,getEnvironment());
   final SMTestRunnerResultsForm viewer=((SMTRunnerConsoleView)consoleView).getResultsViewer();
   Disposer.register(getConfiguration().getProject(),consoleView);
   final OSProcessHandler handler=createHandler(executor);
   consoleView.attachToProcess(handler);
   handler.addProcessListener(new ProcessAdapter(){
+    @Override public void startNotified(    ProcessEvent event){
+      if (getConfiguration().isSaveOutputToFile()) {
+        viewer.getRoot().setOutputFilePath(getConfiguration().getOutputFilePath());
+      }
+    }
     @Override public void processTerminated(    ProcessEvent event){
       Runnable runnable=new Runnable(){
         public void run(){
-          if (viewer.hasTestSuites() || !ResetConfigurationModuleAdapter.tryWithAnotherModule(getConfiguration(),testConsoleProperties.isDebug())) {
-            TestsUIUtil.notifyByBalloon(testConsoleProperties.getProject(),viewer.hasTestSuites(),viewer.getRoot(),testConsoleProperties,null);
-          }
+          viewer.getRoot().flush();
+          deleteTempFiles();
+          clear();
         }
       }
 ;
-      SwingUtilities.invokeLater(runnable);
+      UIUtil.invokeLaterIfNeeded(runnable);
       handler.removeProcessListener(this);
     }
   }

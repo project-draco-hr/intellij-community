@@ -3,10 +3,9 @@
   final PsiMethodPattern method=psiMethod().withName(methodName).definedInClass(IconLoader.class.getName());
   final PsiJavaElementPattern.Capture<PsiLiteralExpression> javaFile=literalExpression().and(psiExpression().methodCallParameter(0,method));
   final PsiJavaElementPattern.Capture<PsiLiteralExpression> annotationValue=literalExpression().annotationParam("com.intellij.ide.presentation.Presentation","icon");
-  final XmlAttributeValuePattern pluginXml=XmlPatterns.xmlAttributeValue().withLocalName("icon");
   registrar.registerReferenceProvider(annotationValue,new PsiReferenceProvider(){
     @NotNull @Override public PsiReference[] getReferencesByElement(    @NotNull final PsiElement element,    @NotNull ProcessingContext context){
-      if (!PsiUtil.isIdeaProject(element.getProject()))       return PsiReference.EMPTY_ARRAY;
+      if (!PsiUtil.isPluginProject(element.getProject()))       return PsiReference.EMPTY_ARRAY;
       return new PsiReference[]{new PsiReferenceBase<PsiElement>(element,true){
         @Override public PsiElement resolve(){
           String value=(String)((PsiLiteralExpression)element).getValue();
@@ -14,7 +13,7 @@
             List<String> path=StringUtil.split(value,".");
             if (path.size() > 1 && path.get(0).endsWith("Icons")) {
               Project project=element.getProject();
-              PsiClass cur=JavaPsiFacade.getInstance(project).findClass(fqnIconsClass(path.get(0)),GlobalSearchScope.projectScope(project));
+              PsiClass cur=findIconClass(project,path.get(0));
               if (cur == null) {
                 return null;
               }
@@ -92,8 +91,11 @@
     }
   }
 );
-  registrar.registerReferenceProvider(pluginXml,new PsiReferenceProvider(){
+  registrar.registerReferenceProvider(XmlPatterns.xmlAttributeValue().withLocalName("icon"),new PsiReferenceProvider(){
     @NotNull @Override public PsiReference[] getReferencesByElement(    @NotNull final PsiElement element,    @NotNull ProcessingContext context){
+      if (!PsiUtil.isPluginProject(element.getProject()) || !DescriptorUtil.isPluginXml(element.getContainingFile())) {
+        return PsiReference.EMPTY_ARRAY;
+      }
       return new PsiReference[]{new PsiReferenceBase<PsiElement>(element,true){
         @Override public PsiElement resolve(){
           String value=((XmlAttributeValue)element).getValue();
@@ -105,7 +107,7 @@
             List<String> path=StringUtil.split(value,".");
             if (path.size() > 1 && path.get(0).endsWith("Icons")) {
               Project project=element.getProject();
-              PsiClass cur=JavaPsiFacade.getInstance(project).findClass(fqnIconsClass(path.get(0)),GlobalSearchScope.projectScope(project));
+              PsiClass cur=findIconClass(project,path.get(0));
               if (cur == null)               return null;
               for (int i=1; i < path.size() - 1; i++) {
                 cur=cur.findInnerClassByName(path.get(i),false);
