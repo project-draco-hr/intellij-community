@@ -1,6 +1,6 @@
 {
   try {
-    final IpnbConnection connection=new IpnbConnection(new URI(url),new IpnbConnectionListenerBase(){
+    final IpnbConnectionListenerBase listener=new IpnbConnectionListenerBase(){
       @Override public void onOpen(      @NotNull IpnbConnection connection){
         final String messageId=connection.execute(codePanel.getCell().getSourceAsString());
         myUpdateMap.put(messageId,codePanel);
@@ -12,8 +12,30 @@
         cell.updatePanel(outputs);
       }
     }
+;
+    final URI url=new URI(urlString);
+    HttpRequests.request(urlString + "/api").connect(new HttpRequests.RequestProcessor<Object>(){
+      @Override public Object process(      @NotNull HttpRequests.Request request) throws IOException {
+        final IpnbConnection connection;
+        try {
+          if (request.isSuccessful()) {
+            connection=new IpnbConnectionV3(url,listener);
+          }
+ else {
+            connection=new IpnbConnection(url,listener);
+          }
+          myKernels.put(path,connection);
+        }
+ catch (        URISyntaxException e) {
+          if (showNotification) {
+            showWarning(codePanel.getFileEditor(),"IPython Notebook connection refused");
+          }
+          LOG.warn("IPython Notebook connection refused: " + e.getMessage());
+        }
+        return null;
+      }
+    }
 );
-    myKernels.put(path,connection);
   }
  catch (  URISyntaxException e) {
     if (showNotification)     showWarning(codePanel.getFileEditor(),"Please, check IPython Notebook URL in <a href=\"\">Settings->Tools->IPython Notebook</a>",new HyperlinkAdapter(){
