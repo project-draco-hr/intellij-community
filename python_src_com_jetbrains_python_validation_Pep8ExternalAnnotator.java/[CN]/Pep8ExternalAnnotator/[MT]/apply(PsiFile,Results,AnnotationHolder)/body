@@ -8,7 +8,6 @@
   Project project=file.getProject();
   final Document document=PsiDocumentManager.getInstance(project).getDocument(file);
   for (  Problem problem : annotationResult.problems) {
-    if (ignoreDueToSettings(project,problem))     continue;
     final int line=problem.myLine - 1;
     final int column=problem.myColumn - 1;
     int offset;
@@ -19,16 +18,22 @@
       offset=StringUtil.lineColToOffset(text,line,column);
     }
     PsiElement problemElement=file.findElementAt(offset);
-    if (!(problemElement instanceof PsiWhiteSpace) && !(problem.myCode.startsWith("E3"))) {
-      final PsiElement elementAfter=file.findElementAt(offset + 1);
-      if (elementAfter instanceof PsiWhiteSpace) {
-        problemElement=elementAfter;
+    if (!(problemElement instanceof PsiWhiteSpace) && problem.myCode.startsWith("E3")) {
+      final PsiElement elementBefore=file.findElementAt(Math.max(0,offset - 1));
+      if (elementBefore instanceof PsiWhiteSpace) {
+        problemElement=elementBefore;
       }
+    }
+    if (problemElement == null && document != null && offset == document.getTextLength() && problem.myCode.equals("W292")) {
+      problemElement=file.findElementAt(Math.max(0,offset - 1));
+    }
+    if (ignoreDueToSettings(project,problem,problemElement)) {
+      continue;
     }
     if (problemElement != null) {
       TextRange problemRange=problemElement.getTextRange();
-      if (crossesLineBoundary(document,text,problemRange)) {
-        int lineEndOffset;
+      if (!(problemElement instanceof PsiWhiteSpace) && crossesLineBoundary(document,text,problemRange)) {
+        final int lineEndOffset;
         if (document != null) {
           lineEndOffset=line >= document.getLineCount() ? document.getTextLength() - 1 : document.getLineEndOffset(line);
         }
