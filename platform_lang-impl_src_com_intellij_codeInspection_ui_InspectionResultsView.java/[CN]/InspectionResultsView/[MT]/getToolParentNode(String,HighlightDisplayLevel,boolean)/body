@@ -2,25 +2,23 @@
   if (groupName.isEmpty()) {
     return getRelativeRootNode(groupedBySeverity,errorLevel);
   }
-  if (myGroups == null) {
-    myGroups=new HashMap<HighlightDisplayLevel,Map<String,InspectionGroupNode>>();
-  }
-  Map<String,InspectionGroupNode> map=myGroups.get(errorLevel);
+  ConcurrentMap<String,InspectionGroupNode> map=myGroups.get(errorLevel);
   if (map == null) {
-    map=new HashMap<String,InspectionGroupNode>();
-    myGroups.put(errorLevel,map);
+    map=ConcurrencyUtil.cacheOrGet(myGroups,errorLevel,ContainerUtil.<String,InspectionGroupNode>newConcurrentMap());
   }
-  Map<String,InspectionGroupNode> searchMap=new HashMap<String,InspectionGroupNode>(map);
-  if (!groupedBySeverity) {
+  InspectionGroupNode group;
+  if (groupedBySeverity) {
+    group=map.get(groupName);
+  }
+ else {
+    group=null;
     for (    Map<String,InspectionGroupNode> groupMap : myGroups.values()) {
-      searchMap.putAll(groupMap);
+      if ((group=groupMap.get(groupName)) != null)       break;
     }
   }
-  InspectionGroupNode group=searchMap.get(groupName);
   if (group == null) {
-    group=new InspectionGroupNode(groupName);
-    map.put(groupName,group);
-    getRelativeRootNode(groupedBySeverity,errorLevel).add(group);
+    group=ConcurrencyUtil.cacheOrGet(map,groupName,new InspectionGroupNode(groupName));
+    addChildNodeInEDT(getRelativeRootNode(groupedBySeverity,errorLevel),group);
   }
   return group;
 }
