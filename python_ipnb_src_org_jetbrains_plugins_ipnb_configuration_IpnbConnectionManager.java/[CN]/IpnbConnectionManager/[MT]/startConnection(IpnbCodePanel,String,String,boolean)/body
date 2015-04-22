@@ -1,6 +1,6 @@
 {
   try {
-    final IpnbConnection connection=new IpnbConnection(new URI(url),new IpnbConnectionListenerBase(){
+    final IpnbConnectionListenerBase listener=new IpnbConnectionListenerBase(){
       @Override public void onOpen(      @NotNull IpnbConnection connection){
         final String messageId=connection.execute(codePanel.getCell().getSourceAsString());
         myUpdateMap.put(messageId,codePanel);
@@ -12,22 +12,35 @@
         cell.updatePanel(outputs);
       }
     }
-);
-    myKernels.put(path,connection);
-  }
- catch (  URISyntaxException e) {
-    if (showNotification)     showWarning(codePanel.getFileEditor(),"Please, check IPython Notebook URL in <a href=\"\">Settings->Tools->IPython Notebook</a>",new HyperlinkAdapter(){
-      @Override protected void hyperlinkActivated(      HyperlinkEvent e){
-        ShowSettingsUtil.getInstance().showSettingsDialog(myProject,"IPython Notebook");
+;
+    HttpRequests.request(urlString + "/api").connect(new HttpRequests.RequestProcessor<Object>(){
+      @Override public Object process(      @NotNull HttpRequests.Request request) throws IOException {
+        final IpnbConnection connection;
+        try {
+          if (request.isSuccessful()) {
+            connection=new IpnbConnectionV3(urlString,listener);
+          }
+ else {
+            connection=new IpnbConnection(urlString,listener);
+          }
+          myKernels.put(path,connection);
+        }
+ catch (        URISyntaxException e) {
+          if (showNotification) {
+            showWarning(codePanel.getFileEditor(),"Please, check IPython Notebook URL in <a href=\"\">Settings->Tools->IPython Notebook</a>",new IpnbSettingsAdapter());
+            LOG.warn("IPython Notebook connection refused: " + e.getMessage());
+          }
+        }
+        return null;
       }
     }
 );
-    LOG.warn("IPython Notebook URI Syntax Error: " + e.getMessage());
-    return false;
   }
-catch (  IOException e) {
-    if (showNotification)     showWarning(codePanel.getFileEditor(),"IPython Notebook connection refused");
-    LOG.warn("IPython Notebook connection refused: " + e.getMessage());
+ catch (  IOException e) {
+    if (showNotification) {
+      showWarning(codePanel.getFileEditor(),"IPython Notebook connection refused",null);
+      LOG.warn("IPython Notebook connection refused: " + e.getMessage());
+    }
     return false;
   }
   return true;
