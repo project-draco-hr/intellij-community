@@ -10,39 +10,27 @@
   Editor activeEditor=isDisposeInProgress ? null : CommonDataKeys.EDITOR.getData(dataContext);
   boolean isVirtualSpaceEnabled=activeEditor == null || activeEditor.getSettings().isVirtualSpace();
   boolean markAsNeedsStrippingLater;
-  if (activeEditor != null && activeEditor.getCaretModel().supportsMultipleCarets()) {
-    final List<Caret> carets=activeEditor.getCaretModel().getAllCarets();
-    final List<VisualPosition> visualCarets=new ArrayList<VisualPosition>(carets.size());
-    int[] caretOffsets=new int[carets.size()];
-    for (int i=0; i < carets.size(); i++) {
-      Caret caret=carets.get(i);
-      visualCarets.add(caret.getVisualPosition());
-      caretOffsets[i]=caret.getOffset();
-    }
-    markAsNeedsStrippingLater=((DocumentImpl)document).stripTrailingSpaces(activeEditor.getProject(),inChangedLinesOnly,isVirtualSpaceEnabled,caretOffsets);
-    if (!ShutDownTracker.isShutdownHookRunning()) {
-      activeEditor.getCaretModel().runBatchCaretOperation(new Runnable(){
-        @Override public void run(){
-          for (int i=0; i < carets.size(); i++) {
-            Caret caret=carets.get(i);
-            if (caret.isValid()) {
-              caret.moveToVisualPosition(visualCarets.get(i));
-            }
+  final List<Caret> carets=activeEditor == null ? Collections.<Caret>emptyList() : activeEditor.getCaretModel().getAllCarets();
+  final List<VisualPosition> visualCarets=new ArrayList<VisualPosition>(carets.size());
+  int[] caretOffsets=new int[carets.size()];
+  for (int i=0; i < carets.size(); i++) {
+    Caret caret=carets.get(i);
+    visualCarets.add(caret.getVisualPosition());
+    caretOffsets[i]=caret.getOffset();
+  }
+  markAsNeedsStrippingLater=((DocumentImpl)document).stripTrailingSpaces(activeEditor == null ? null : activeEditor.getProject(),inChangedLinesOnly,isVirtualSpaceEnabled,caretOffsets);
+  if (activeEditor != null && !ShutDownTracker.isShutdownHookRunning()) {
+    activeEditor.getCaretModel().runBatchCaretOperation(new Runnable(){
+      @Override public void run(){
+        for (int i=0; i < carets.size(); i++) {
+          Caret caret=carets.get(i);
+          if (caret.isValid()) {
+            caret.moveToVisualPosition(visualCarets.get(i));
           }
         }
       }
+    }
 );
-    }
-  }
- else {
-    VisualPosition visualCaret=activeEditor == null ? null : activeEditor.getCaretModel().getVisualPosition();
-    int caretLine=activeEditor == null ? -1 : activeEditor.getCaretModel().getLogicalPosition().line;
-    int caretOffset=activeEditor == null ? -1 : activeEditor.getCaretModel().getOffset();
-    final Project project=activeEditor == null ? null : activeEditor.getProject();
-    markAsNeedsStrippingLater=((DocumentImpl)document).stripTrailingSpaces(project,inChangedLinesOnly,isVirtualSpaceEnabled,caretLine,caretOffset);
-    if (!ShutDownTracker.isShutdownHookRunning() && activeEditor != null) {
-      activeEditor.getCaretModel().moveToVisualPosition(visualCaret);
-    }
   }
   return !markAsNeedsStrippingLater;
 }

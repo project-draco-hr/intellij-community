@@ -4,52 +4,64 @@
   if (externalProjectNode != null) {
     beforeCommit(externalProjectNode,project);
   }
-  StartupManager.getInstance(project).runWhenProjectIsInitialized(new Runnable(){
-    @SuppressWarnings("unchecked") @Override public void run(){
-      AbstractExternalSystemSettings systemSettings=ExternalSystemApiUtil.getSettings(project,myExternalSystemId);
-      final ExternalProjectSettings projectSettings=getCurrentExternalProjectSettings();
-      Set<ExternalProjectSettings> projects=ContainerUtilRt.newHashSet(systemSettings.getLinkedProjectsSettings());
-      projects.remove(projectSettings);
-      projects.add(projectSettings);
-      systemSettings.copyFrom(myControl.getSystemSettings());
-      systemSettings.setLinkedProjectsSettings(projects);
-      if (externalProjectNode != null) {
-        ExternalSystemUtil.ensureToolWindowInitialized(project,myExternalSystemId);
-        ExternalSystemApiUtil.executeProjectChangeAction(new DisposeAwareProjectChange(project){
-          @Override public void execute(){
-            ProjectRootManagerEx.getInstanceEx(project).mergeRootsChangesDuring(new Runnable(){
-              @Override public void run(){
-                myProjectDataManager.importData(externalProjectNode.getKey(),Collections.singleton(externalProjectNode),project,true);
-                myExternalProjectNode=null;
-              }
-            }
-);
-          }
-        }
-);
-        final Runnable resolveDependenciesTask=new Runnable(){
-          @Override public void run(){
-            String progressText=ExternalSystemBundle.message("progress.resolve.libraries",myExternalSystemId.getReadableName());
-            ProgressManager.getInstance().run(new Task.Backgroundable(project,progressText,false){
-              @Override public void run(              @NotNull final ProgressIndicator indicator){
-                if (project.isDisposed())                 return;
-                ExternalSystemResolveProjectTask task=new ExternalSystemResolveProjectTask(myExternalSystemId,project,projectSettings.getExternalProjectPath(),false);
-                task.execute(indicator,ExternalSystemTaskNotificationListener.EP_NAME.getExtensions());
-                DataNode<ProjectData> projectWithResolvedLibraries=task.getExternalProject();
-                if (projectWithResolvedLibraries == null) {
-                  return;
-                }
-                setupLibraries(projectWithResolvedLibraries,project);
-              }
-            }
-);
-          }
-        }
-;
-        UIUtil.invokeLaterIfNeeded(resolveDependenciesTask);
-      }
+  boolean isFromUI=model != null;
+  final List<Module> modules=ContainerUtil.newSmartList();
+  final PlatformFacade platformFacade=isFromUI ? new PlatformFacadeImpl(){
+    @NotNull @Override public Collection<Module> getModules(    @NotNull Project project){
+      return ContainerUtil.list(modulesProvider.getModules());
+    }
+    @Override public Module newModule(    Project project,    @NotNull @NonNls String filePath,    String moduleTypeId){
+      final Module module=model.newModule(filePath,moduleTypeId);
+      modules.add(module);
+      return module;
     }
   }
+ : ServiceManager.getService(PlatformFacade.class);
+  AbstractExternalSystemSettings systemSettings=ExternalSystemApiUtil.getSettings(project,myExternalSystemId);
+  final ExternalProjectSettings projectSettings=getCurrentExternalProjectSettings();
+  Set<ExternalProjectSettings> projects=ContainerUtilRt.newHashSet(systemSettings.getLinkedProjectsSettings());
+  projects.remove(projectSettings);
+  projects.add(projectSettings);
+  systemSettings.copyFrom(myControl.getSystemSettings());
+  systemSettings.setLinkedProjectsSettings(projects);
+  if (externalProjectNode != null) {
+    ExternalSystemApiUtil.executeProjectChangeAction(new DisposeAwareProjectChange(project){
+      @Override public void execute(){
+        ProjectRootManagerEx.getInstanceEx(project).mergeRootsChangesDuring(new Runnable(){
+          @Override public void run(){
+            myProjectDataManager.importData(externalProjectNode.getKey(),Collections.singleton(externalProjectNode),project,platformFacade,true);
+            myExternalProjectNode=null;
+          }
+        }
 );
-  return Collections.emptyList();
+      }
+    }
+);
+    final Runnable resolveDependenciesTask=new Runnable(){
+      @Override public void run(){
+        ExternalSystemUtil.refreshProject(project,myExternalSystemId,projectSettings.getExternalProjectPath(),false,ProgressExecutionMode.IN_BACKGROUND_ASYNC);
+      }
+    }
+;
+    if (!isFromUI) {
+      resolveDependenciesTask.run();
+    }
+ else {
+      ExternalSystemUtil.invokeLater(project,ModalityState.NON_MODAL,new Runnable(){
+        @Override public void run(){
+          final Module[] committedModules=ModuleManager.getInstance(project).getModules();
+          if (ContainerUtil.list(committedModules).containsAll(modules)) {
+            resolveDependenciesTask.run();
+          }
+ else {
+            ExternalSystemApiUtil.getLocalSettings(project,myExternalSystemId).forgetExternalProjects(Collections.singleton(projectSettings.getExternalProjectPath()));
+            ExternalSystemApiUtil.getSettings(project,myExternalSystemId).unlinkExternalProject(projectSettings.getExternalProjectPath());
+            ExternalProjectsManager.getInstance(project).forgetExternalProjectData(myExternalSystemId,projectSettings.getExternalProjectPath());
+          }
+        }
+      }
+);
+    }
+  }
+  return modules;
 }
