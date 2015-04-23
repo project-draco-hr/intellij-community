@@ -1,0 +1,32 @@
+{
+  final Gson gson=new Gson();
+  final Message msg=gson.fromJson(message,Message.class);
+  final Header header=msg.getHeader();
+  final Header parentHeader=gson.fromJson(msg.getParentHeader(),Header.class);
+  final String messageType=header.getMessageType();
+  if ("pyout".equals(messageType) || "display_data".equals(messageType) || "execute_result".equals(messageType)) {
+    final PyOutContent content=gson.fromJson(msg.getContent(),PyOutContent.class);
+    addCellOutput(content,myOutput);
+  }
+ else   if ("pyerr".equals(messageType) || "error".equals(messageType)) {
+    final PyErrContent content=gson.fromJson(msg.getContent(),PyErrContent.class);
+    addCellOutput(content,myOutput);
+  }
+ else   if ("stream".equals(messageType)) {
+    final PyStreamContent content=gson.fromJson(msg.getContent(),PyStreamContent.class);
+    addCellOutput(content,myOutput);
+  }
+ else   if ("pyin".equals(messageType) || "execute_input".equals(messageType)) {
+    final JsonElement executionCount=msg.getContent().get("execution_count");
+    if (executionCount != null) {
+      myExecCount=executionCount.getAsInt();
+    }
+  }
+ else   if ("status".equals(messageType)) {
+    final PyStatusContent content=gson.fromJson(msg.getContent(),PyStatusContent.class);
+    if (content.getExecutionState().equals("idle")) {
+      myListener.onOutput(IpnbConnection.this,parentHeader.getMessageId(),(List<IpnbOutputCell>)myOutput.clone(),myExecCount);
+      myOutput.clear();
+    }
+  }
+}
