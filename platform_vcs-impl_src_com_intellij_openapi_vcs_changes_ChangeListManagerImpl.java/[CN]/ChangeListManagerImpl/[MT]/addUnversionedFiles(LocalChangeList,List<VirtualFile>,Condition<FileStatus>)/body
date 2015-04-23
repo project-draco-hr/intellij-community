@@ -5,14 +5,22 @@
     @Override public void process(    final AbstractVcs vcs,    final List<VirtualFile> items){
       final CheckinEnvironment environment=vcs.getCheckinEnvironment();
       if (environment != null) {
-        Set<VirtualFile> descendants=getUnversionedDescendantsRecursively(items,statusChecker);
+        final Set<VirtualFile> descendants=getUnversionedDescendantsRecursively(items,statusChecker);
         Set<VirtualFile> parents=vcs.areDirectoriesVersionedItems() ? getUnversionedParents(items,statusChecker) : Collections.<VirtualFile>emptySet();
-        List<VcsException> result=environment.scheduleUnversionedFilesForAddition(ContainerUtil.newArrayList(descendants));
+        final List<VcsException> result=ContainerUtil.newArrayList();
+        ProgressManager.getInstance().run(new Task.Modal(myProject,"Adding files to VCS...",true){
+          @Override public void run(          @NotNull ProgressIndicator indicator){
+            indicator.setIndeterminate(true);
+            List<VcsException> exs=environment.scheduleUnversionedFilesForAddition(ContainerUtil.newArrayList(descendants));
+            if (exs != null) {
+              ContainerUtil.addAll(result,exs);
+            }
+          }
+        }
+);
         allProcessedFiles.addAll(descendants);
         allProcessedFiles.addAll(parents);
-        if (result != null) {
-          exceptions.addAll(result);
-        }
+        exceptions.addAll(result);
       }
     }
   }
