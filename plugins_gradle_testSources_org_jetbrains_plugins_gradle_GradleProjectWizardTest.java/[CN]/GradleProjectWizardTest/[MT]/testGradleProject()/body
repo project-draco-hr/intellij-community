@@ -1,12 +1,29 @@
 {
+  final String projectName="testProject";
   Project project=createProject(new Consumer<Step>(){
     @Override public void consume(    Step step){
       if (step instanceof ProjectTypeStep) {
         assertTrue(((ProjectTypeStep)step).setSelectedTemplate("Gradle",null));
         List<ModuleWizardStep> steps=myWizard.getSequence().getSelectedSteps();
-        assertEquals(3,steps.size());
+        assertEquals(5,steps.size());
+        final ProjectBuilder projectBuilder=myWizard.getProjectBuilder();
+        assertInstanceOf(projectBuilder,GradleModuleBuilder.class);
+        ((GradleModuleBuilder)projectBuilder).setName(projectName);
       }
     }
   }
 );
+  assertEquals(projectName,project.getName());
+  Module[] modules=ModuleManager.getInstance(project).getModules();
+  assertEquals(1,modules.length);
+  final Module module=modules[0];
+  assertTrue(ModuleRootManager.getInstance(module).isSdkInherited());
+  assertEquals(projectName,module.getName());
+  VirtualFile root=ProjectRootManager.getInstance(project).getContentRoots()[0];
+  VirtualFile settingsScript=VfsUtilCore.findRelativeFile("settings.gradle",root);
+  assertNotNull(settingsScript);
+  assertEquals(String.format("rootProject.name = '%s'\n\n",projectName),StringUtil.convertLineSeparators(VfsUtilCore.loadText(settingsScript)));
+  VirtualFile buildScript=VfsUtilCore.findRelativeFile("build.gradle",root);
+  assertNotNull(buildScript);
+  assertEquals("apply plugin: 'java'\n" + "\n" + "sourceCompatibility = 1.5\n"+ "\n"+ "group '" + projectName + "'\n"+ "version '1.0-SNAPSHOT'\n"+ "\n"+ "repositories {\n"+ "    mavenCentral()\n"+ "}\n"+ "\n"+ "dependencies {\n"+ "    testCompile group: 'junit', name: 'junit', version: '4.11'\n"+ "}",StringUtil.convertLineSeparators(VfsUtilCore.loadText(buildScript)));
 }
