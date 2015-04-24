@@ -1,25 +1,25 @@
 {
-  if (req.leftElem() != req.rightElem()) {
-    final PsiElement parent=req.rightElem().getParent();
-    if ((req.leftElem().getParent() == parent && parent instanceof PyStringLiteralExpression) || (req.leftExpr() instanceof PyStringLiteralExpression && req.rightExpr() instanceof PyStringLiteralExpression)) {
-      CharSequence text=req.document().getCharsSequence();
-      StrMod left_mod=new StrMod(text,req.leftElem().getTextRange());
-      StrMod right_mod=new StrMod(text,req.rightElem().getTextRange());
-      if (left_mod.isOk() && right_mod.isOk()) {
-        final String lquo=left_mod.quote();
-        if (left_mod.equals(right_mod)) {
-          return new Result("",0,lquo.length(),right_mod.getStartPadding());
+  if (req.leftElem != req.rightElem) {
+    final PsiElement parent=req.rightElem.getParent();
+    if ((req.leftElem.getParent() == parent && parent instanceof PyStringLiteralExpression) || (req.leftExpr instanceof PyStringLiteralExpression && req.rightExpr instanceof PyStringLiteralExpression)) {
+      final CharSequence text=req.document.getCharsSequence();
+      final StringNodeInfo leftNodeInfo=new StringNodeInfo(req.leftElem);
+      final StringNodeInfo rightNodeInfo=new StringNodeInfo(req.rightElem);
+      if (leftNodeInfo.isTerminated() && rightNodeInfo.isTerminated()) {
+        final int rightNodeContentOffset=rightNodeInfo.getContentRange().getStartOffset();
+        if (leftNodeInfo.equals(rightNodeInfo)) {
+          return new Result("",0,leftNodeInfo.getQuote().length(),rightNodeContentOffset);
         }
- else         if (left_mod.compatibleTo(right_mod) && lquo.length() == 1 && right_mod.quote().length() == 1) {
-          if (!containsChar(text,right_mod.getInnerRange(),left_mod.quote().charAt(0))) {
-            int quote_pos=right_mod.getInnerRange().getEndOffset();
-            req.document().replaceString(quote_pos,quote_pos + 1,left_mod.quote());
-            return new Result("",0,left_mod.quote().length(),right_mod.getStartPadding());
+        if (haveSamePrefixes(leftNodeInfo,rightNodeInfo) && !leftNodeInfo.isTripleQuoted() && !rightNodeInfo.isTripleQuoted()) {
+          if (!rightNodeInfo.getContent().contains(leftNodeInfo.getQuote())) {
+            final int quotePos=rightNodeInfo.getAbsoluteContentRange().getEndOffset();
+            req.document.replaceString(quotePos,quotePos + 1,leftNodeInfo.getQuote());
+            return new Result("",0,1,rightNodeContentOffset);
           }
- else           if (!containsChar(text,left_mod.getInnerRange(),right_mod.quote().charAt(0))) {
-            int quote_pos=left_mod.getInnerRange().getStartOffset() - 1;
-            req.document().replaceString(quote_pos,quote_pos + 1,right_mod.quote());
-            return new Result("",0,left_mod.quote().length(),right_mod.getStartPadding());
+ else           if (!leftNodeInfo.getContent().contains(rightNodeInfo.getQuote())) {
+            final int quotePos=leftNodeInfo.getAbsoluteContentRange().getStartOffset() - 1;
+            req.document.replaceString(quotePos,quotePos + 1,rightNodeInfo.getQuote());
+            return new Result("",0,1,rightNodeContentOffset);
           }
         }
       }

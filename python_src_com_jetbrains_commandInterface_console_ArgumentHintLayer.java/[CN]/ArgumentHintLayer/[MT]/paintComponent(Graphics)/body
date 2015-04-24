@@ -4,15 +4,31 @@
   if (nextArg == null) {
     return;
   }
-  final EditorEx editor=myConsole.getCurrentEditor();
-  @SuppressWarnings("NumericCastThatLosesPrecision") final int y=((int)Math.floor(editor.getComponent().getLocation().getY())) + myLineHeightPx - 1;
-  final int spaceToRight=myCharWidthPx * SPACES_BEFORE_ARG;
-  final int cursorOffset=editor.getCaretModel().getOffset();
-  final int lengthInChars=Math.max(cursorOffset,myDocumentLengthInChars);
-  final int x=myPromptWidthPx + spaceToRight + lengthInChars * myCharWidthPx;
-  final boolean required=nextArg.first;
+  final EditorImpl consoleEditor=PyUtil.as(myConsole.getConsoleEditor(),EditorImpl.class);
+  if (consoleEditor == null) {
+    Logger.getInstance(ArgumentHintLayer.class).warn("Bad editor: " + myConsole.getConsoleEditor());
+    return;
+  }
+  final int consoleFontType=consoleEditor.getCaretModel().getTextAttributes().getFontType();
+  final FontMetrics consoleFontMetrics=consoleEditor.getFontMetrics(consoleFontType);
+  final Font consoleFont=consoleFontMetrics.getFont();
+  final boolean argumentRequired=nextArg.first;
   final String argumentText=nextArg.second.getHelp().getHelpString();
-  g.setColor(myArgumentColor);
-  final String textToShow=StringUtil.isEmpty(argumentText) ? PyBundle.message("commandLine.argumentHint.defaultName") : argumentText;
-  g.drawString(wrapBracesIfNeeded(required,textToShow),x,y);
+  g.setFont(consoleFont);
+  g.setColor(argumentRequired ? myRequiredColor : myOptionalColor);
+  final String textToShow=wrapBracesIfNeeded(argumentRequired,StringUtil.isEmpty(argumentText) ? PyBundle.message("commandLine.argumentHint.defaultName") : argumentText);
+  final CaretRectangle[] locations=consoleEditor.getCaretLocations();
+  if (locations != null) {
+    final CaretRectangle rectangle=locations[0];
+    myCaretPositionPx=rectangle.myPoint.x;
+  }
+  final int consoleEditorTop=consoleEditor.getComponent().getLocation().y;
+  final double textHeight=Math.floor(consoleFont.getStringBounds(textToShow,consoleFontMetrics.getFontRenderContext()).getY());
+  @SuppressWarnings("NumericCastThatLosesPrecision") final int y=(int)(consoleEditorTop - textHeight);
+  final Point scrollLocation=consoleEditor.getContentComponent().getLocation();
+  final int spaceWidth=EditorUtil.getSpaceWidth(consoleFontType,consoleEditor);
+  final String trimmedDocument=StringUtil.trimTrailing(consoleEditor.getDocument().getText());
+  final double trimmedDocumentWidth=consoleFont.getStringBounds(trimmedDocument,consoleFontMetrics.getFontRenderContext()).getWidth();
+  @SuppressWarnings("NumericCastThatLosesPrecision") final int contentWidth=(int)Math.ceil(trimmedDocumentWidth + consoleEditor.getPrefixTextWidthInPixels());
+  g.drawString(textToShow,Math.max(myCaretPositionPx,contentWidth) + scrollLocation.x + spaceWidth,y + scrollLocation.y);
 }
