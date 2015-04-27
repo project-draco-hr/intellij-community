@@ -68,8 +68,33 @@
   final CompilerWorkspaceConfiguration config=CompilerWorkspaceConfiguration.getInstance(project);
   final GeneralCommandLine cmdLine=new GeneralCommandLine();
   cmdLine.setExePath(vmExecutablePath);
-  final int heapSize=projectConfig.getBuildProcessHeapSize(JavacConfiguration.getOptions(project,JavacConfiguration.class).MAXIMUM_HEAP_SIZE);
-  cmdLine.addParameter("-Xmx" + heapSize + "m");
+  boolean isProfilingMode=false;
+  String userDefinedHeapSize=null;
+  final List<String> userAdditionalOptionsList=new SmartList<String>();
+  final String userAdditionalVMOptions=config.COMPILER_PROCESS_ADDITIONAL_VM_OPTIONS;
+  final String additionalOptions=!StringUtil.isEmptyOrSpaces(userAdditionalVMOptions) ? userAdditionalVMOptions : projectConfig.getBuildProcessVMOptions();
+  if (!StringUtil.isEmptyOrSpaces(additionalOptions)) {
+    final StringTokenizer tokenizer=new StringTokenizer(additionalOptions," ",false);
+    while (tokenizer.hasMoreTokens()) {
+      final String option=tokenizer.nextToken();
+      if (StringUtil.startsWithIgnoreCase(option,"-Xmx")) {
+        userDefinedHeapSize=option;
+      }
+ else {
+        if ("-Dprofiling.mode=true".equals(option)) {
+          isProfilingMode=true;
+        }
+        userAdditionalOptionsList.add(option);
+      }
+    }
+  }
+  if (userDefinedHeapSize != null) {
+    cmdLine.addParameter(userDefinedHeapSize);
+  }
+ else {
+    final int heapSize=projectConfig.getBuildProcessHeapSize(JavacConfiguration.getOptions(project,JavacConfiguration.class).MAXIMUM_HEAP_SIZE);
+    cmdLine.addParameter("-Xmx" + heapSize + "m");
+  }
   if (SystemInfo.isMac && sdkVersion != null && JavaSdkVersion.JDK_1_6.equals(sdkVersion) && Registry.is("compiler.process.32bit.vm.on.mac")) {
     cmdLine.addParameter("-d32");
   }
@@ -95,18 +120,8 @@
     cmdLine.addParameter("-Djava.net.preferIPv4Stack=true");
   }
   cmdLine.addParameter("-Dio.netty.initialSeedUniquifier=" + ThreadLocalRandom.getInitialSeedUniquifier());
-  boolean isProfilingMode=false;
-  final String userAdditionalVMOptions=config.COMPILER_PROCESS_ADDITIONAL_VM_OPTIONS;
-  final String additionalOptions=!StringUtil.isEmptyOrSpaces(userAdditionalVMOptions) ? userAdditionalVMOptions : projectConfig.getBuildProcessVMOptions();
-  if (!StringUtil.isEmptyOrSpaces(additionalOptions)) {
-    final StringTokenizer tokenizer=new StringTokenizer(additionalOptions," ",false);
-    while (tokenizer.hasMoreTokens()) {
-      final String option=tokenizer.nextToken();
-      if ("-Dprofiling.mode=true".equals(option)) {
-        isProfilingMode=true;
-      }
-      cmdLine.addParameter(option);
-    }
+  for (  String option : userAdditionalOptionsList) {
+    cmdLine.addParameter(option);
   }
   if (isProfilingMode) {
     cmdLine.addParameter("-agentlib:yjpagent=disablealloc,delay=10000,sessionname=ExternalBuild");
