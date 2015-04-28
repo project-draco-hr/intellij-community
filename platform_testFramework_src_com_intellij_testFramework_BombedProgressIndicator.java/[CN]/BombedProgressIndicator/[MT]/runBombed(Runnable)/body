@@ -1,0 +1,51 @@
+{
+  myThread=Thread.currentThread();
+  final Semaphore canStart=new Semaphore();
+  canStart.down();
+  final Semaphore finished=new Semaphore();
+  finished.down();
+  Future<?> future=ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+    @Override public void run(){
+      final ProgressIndicatorBase mockIndicator=new ProgressIndicatorBase();
+      ProgressManager.getInstance().runProcess(new Runnable(){
+        @Override public void run(){
+          mockIndicator.cancel();
+          canStart.up();
+          finished.waitFor();
+          try {
+            ProgressManager.checkCanceled();
+            TestCase.fail();
+          }
+ catch (          ProcessCanceledException ignored) {
+          }
+        }
+      }
+,mockIndicator);
+    }
+  }
+);
+  ProgressManager.getInstance().runProcess(new Runnable(){
+    @Override public void run(){
+      canStart.waitFor();
+      try {
+        runnable.run();
+      }
+ catch (      ProcessCanceledException ignore) {
+      }
+ finally {
+        finished.up();
+      }
+    }
+  }
+,this);
+  try {
+    future.get();
+  }
+ catch (  InterruptedException e) {
+    throw new RuntimeException(e);
+  }
+catch (  ExecutionException e) {
+    throw new RuntimeException(e);
+  }
+  return isCanceled();
+}
