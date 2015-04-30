@@ -1,12 +1,36 @@
 {
-  MavenExecutionRequest request=new DefaultMavenExecutionRequest();
-  request.setRemoteRepositories(repos);
-  try {
-    getComponent(MavenExecutionRequestPopulator.class).populateFromSettings(request,myMavenSettings);
-    getComponent(MavenExecutionRequestPopulator.class).populateDefaults(request);
+  if (USE_MVN2_COMPATIBLE_DEPENDENCY_RESOLVING) {
+    MavenExecutionRequest request=new DefaultMavenExecutionRequest();
+    request.setRemoteRepositories(repos);
+    try {
+      getComponent(MavenExecutionRequestPopulator.class).populateFromSettings(request,myMavenSettings);
+      getComponent(MavenExecutionRequestPopulator.class).populateDefaults(request);
+    }
+ catch (    MavenExecutionRequestPopulationException e) {
+      throw new RuntimeException(e);
+    }
+    getComponent(ArtifactResolver.class).resolve(artifact,request.getRemoteRepositories(),myLocalRepository);
+    return artifact;
   }
- catch (  MavenExecutionRequestPopulationException e) {
-    throw new RuntimeException(e);
+ else {
+    final MavenExecutionRequest request=createRequest(null,Collections.<String>emptyList(),Collections.<String>emptyList(),Collections.<String>emptyList());
+    for (    ArtifactRepository artifactRepository : repos) {
+      request.addRemoteRepository(artifactRepository);
+    }
+    DefaultMaven maven=(DefaultMaven)getComponent(Maven.class);
+    RepositorySystemSession repositorySystemSession=maven.newRepositorySession(request);
+    final org.eclipse.aether.impl.ArtifactResolver artifactResolver=getComponent(org.eclipse.aether.impl.ArtifactResolver.class);
+    final MyLoggerFactory loggerFactory=new MyLoggerFactory();
+    if (artifactResolver instanceof DefaultArtifactResolver) {
+      ((DefaultArtifactResolver)artifactResolver).setLoggerFactory(loggerFactory);
+    }
+    final org.eclipse.aether.RepositorySystem repositorySystem=getComponent(org.eclipse.aether.RepositorySystem.class);
+    if (repositorySystem instanceof DefaultRepositorySystem) {
+      ((DefaultRepositorySystem)repositorySystem).setLoggerFactory(loggerFactory);
+    }
+    List<RemoteRepository> repositories=RepositoryUtils.toRepos(request.getRemoteRepositories());
+    repositories=repositorySystem.newResolutionRepositories(repositorySystemSession,repositories);
+    final ArtifactResult artifactResult=repositorySystem.resolveArtifact(repositorySystemSession,new ArtifactRequest(RepositoryUtils.toArtifact(artifact),repositories,null));
+    return RepositoryUtils.toArtifact(artifactResult.getArtifact());
   }
-  getComponent(ArtifactResolver.class).resolve(artifact,request.getRemoteRepositories(),myLocalRepository);
 }
