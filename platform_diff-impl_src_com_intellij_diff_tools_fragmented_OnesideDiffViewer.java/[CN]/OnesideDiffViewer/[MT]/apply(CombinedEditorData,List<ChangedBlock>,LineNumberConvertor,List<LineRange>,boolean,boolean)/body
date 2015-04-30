@@ -8,7 +8,13 @@
       myEditor.getGutterComponentEx().setLineNumberConvertor(mergeConverters(data.getLineConvertor1(),separatorLines),mergeConverters(data.getLineConvertor2(),separatorLines));
       ApplicationManager.getApplication().runWriteAction(new Runnable(){
         @Override public void run(){
-          myDocument.setText(data.getText());
+          myDuringOnesideDocumentModification=true;
+          try {
+            myDocument.setText(data.getText());
+          }
+  finally {
+            myDuringOnesideDocumentModification=false;
+          }
         }
       }
 );
@@ -19,7 +25,18 @@
       for (      ChangedBlock block : blocks) {
         diffChanges.add(new OnesideDiffChange(OnesideDiffViewer.this,block,innerFragments));
       }
-      myChangedBlockData=new ChangedBlockData(diffChanges,convertor);
+      List<RangeMarker> guarderRangeBlocks=new ArrayList<RangeMarker>();
+      if (!myEditor.isViewer()) {
+        for (        ChangedBlock block : blocks) {
+          int start=myMasterSide.select(block.getStartOffset2(),block.getStartOffset1());
+          int end=myMasterSide.select(block.getEndOffset2() - 1,block.getEndOffset1() - 1);
+          if (start >= end)           continue;
+          guarderRangeBlocks.add(createGuardedBlock(start,end));
+        }
+        int textLength=myDocument.getTextLength();
+        guarderRangeBlocks.add(createGuardedBlock(textLength,textLength));
+      }
+      myChangedBlockData=new ChangedBlockData(diffChanges,guarderRangeBlocks,convertor);
       myFoldingModel.install(changedLines,myRequest,getFoldingModelSettings());
       myScrollToLineHelper.onRediff();
       myStatusPanel.update();
