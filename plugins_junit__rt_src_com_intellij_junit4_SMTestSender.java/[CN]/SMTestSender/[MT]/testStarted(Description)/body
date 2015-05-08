@@ -1,46 +1,29 @@
 {
   final String methodName=JUnit4ReflectionUtil.getMethodName(description);
   final String classFQN=JUnit4ReflectionUtil.getClassName(description);
-  final int paramStart=methodName.indexOf('[');
-  if (myParamName != null) {
-    myPrintStream.println("##teamcity[testSuiteFinished name=\'" + escapeName(myParamName) + "\']");
-    myParamName=null;
-  }
-  final List suites=(List)myParents.get(description);
-  if (suites != null && !suites.isEmpty()) {
-    String currentSuite=(String)suites.get(0);
-    List descriptors=(List)mySuites.get(currentSuite);
-    if (descriptors.isEmpty()) {
-      currentSuite=(String)suites.get(1);
-      descriptors=(List)mySuites.get(currentSuite);
+  final List parents=(List)myParents.get(description);
+  if (parents != null) {
+    List parentsHierarchy=(List)parents.remove(0);
+    int idx=0;
+    String currentClass;
+    String currentParent;
+    while (idx < myStartedSuites.size() && idx < parentsHierarchy.size()) {
+      currentClass=(String)myStartedSuites.get(idx);
+      currentParent=getShortName(JUnit4ReflectionUtil.getClassName((Description)parentsHierarchy.get(parentsHierarchy.size() - 1 - idx)));
+      if (!currentClass.equals(currentParent))       break;
+      idx++;
     }
-    if (!currentSuite.equals(myCurrentSuiteName)) {
-      finishCurrentSuite();
-      myCurrentSuiteName=currentSuite;
-      myPrintStream.println("##teamcity[testSuiteStarted name =\'" + escapeName(getShortName(myCurrentSuiteName)) + "\']");
+    for (int i=myStartedSuites.size() - 1; i >= idx; i--) {
+      currentClass=(String)myStartedSuites.remove(i);
+      myPrintStream.println("##teamcity[testSuiteFinished name=\'" + escapeName(currentClass) + "\']");
     }
-    descriptors.remove(description);
-  }
- else   if (myCurrentSuiteName != null) {
-    finishCurrentSuite();
-    myCurrentSuiteName=null;
-  }
-  String className=getShortName(classFQN);
-  if (!myEmptyTests.isEmpty() && isWarning(methodName,classFQN)) {
-    className=(String)myEmptyTests.remove(0);
-  }
-  if (!className.equals(myCurrentClassName)) {
-    if (myCurrentClassName != null) {
-      myPrintStream.println("##teamcity[testSuiteFinished name=\'" + escapeName(myCurrentClassName) + "\']");
-    }
-    myCurrentClassName=className;
-    myPrintStream.println("##teamcity[testSuiteStarted name =\'" + escapeName(myCurrentClassName) + "\']");
-  }
-  if (paramStart > -1) {
-    final String paramName=methodName.substring(paramStart,methodName.length());
-    if (!paramName.equals(myParamName)) {
-      myParamName=paramName;
-      myPrintStream.println("##teamcity[testSuiteStarted name =\'" + escapeName(myParamName) + "\']");
+    for (int i=idx; i < parentsHierarchy.size(); i++) {
+      Description parent=(Description)parentsHierarchy.get(parentsHierarchy.size() - 1 - i);
+      final String className=getShortName(JUnit4ReflectionUtil.getClassName(parent));
+      if (!className.equals(myRootName)) {
+        myPrintStream.println("##teamcity[testSuiteStarted name=\'" + escapeName(className) + "\']");
+        myStartedSuites.add(className);
+      }
     }
   }
   myPrintStream.println("##teamcity[testStarted name=\'" + escapeName(methodName) + "\' "+ getTestMethodLocation(methodName,classFQN)+ "]");
