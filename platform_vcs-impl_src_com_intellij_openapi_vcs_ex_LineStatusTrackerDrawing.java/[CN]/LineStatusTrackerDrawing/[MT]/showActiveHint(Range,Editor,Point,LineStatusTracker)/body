@@ -44,12 +44,39 @@
 ;
   emptyPanel.addMouseListener(listener);
   component.add(toolbarPanel,BorderLayout.NORTH);
+  final List<RangeHighlighter> highlighters=new ArrayList<RangeHighlighter>();
   if (range.getType() != Range.INSERTED) {
     final DocumentEx doc=(DocumentEx)tracker.getVcsDocument();
     final EditorEx uEditor=(EditorEx)EditorFactory.getInstance().createViewer(doc,tracker.getProject());
     uEditor.setColorsScheme(editor.getColorsScheme());
     final EditorHighlighter highlighter=EditorHighlighterFactory.getInstance().createEditorHighlighter(tracker.getProject(),getFileName(tracker.getDocument()));
     uEditor.setHighlighter(highlighter);
+    try {
+      if (range.getType() == Range.MODIFIED) {
+        final CharSequence vcsContent=tracker.getVcsContent(range);
+        final CharSequence currentContent=tracker.getCurrentContent(range);
+        List<DiffFragment> diff=BackgroundTaskUtil.tryComputeFast(new Function<ProgressIndicator,List<DiffFragment>>(){
+          @Override public List<DiffFragment> fun(          ProgressIndicator indicator){
+            return ByWord.compare(vcsContent,currentContent,ComparisonPolicy.DEFAULT,indicator);
+          }
+        }
+,Registry.intValue("diff.status.tracker.byword.delay"));
+        if (diff == null)         throw new DiffTooBigException();
+        int vcsStartShift=tracker.getVcsRange(range).getStartOffset();
+        int currentStartShift=tracker.getCurrentTextRange(range).getStartOffset();
+        for (        DiffFragment fragment : diff) {
+          int vcsStart=vcsStartShift + fragment.getStartOffset1();
+          int vcsEnd=vcsStartShift + fragment.getEndOffset1();
+          int currentStart=currentStartShift + fragment.getStartOffset2();
+          int currentEnd=currentStartShift + fragment.getEndOffset2();
+          TextDiffType type=DiffUtil.getDiffType(fragment);
+          DiffDrawUtil.createInlineHighlighter(uEditor,vcsStart,vcsEnd,type);
+          highlighters.add(DiffDrawUtil.createInlineHighlighter(editor,currentStart,currentEnd,type));
+        }
+      }
+    }
+ catch (    DiffTooBigException ignore) {
+    }
     final EditorFragmentComponent editorFragmentComponent=EditorFragmentComponent.createEditorFragmentComponent(uEditor,range.getVcsLine1(),range.getVcsLine2(),false,false);
     component.add(editorFragmentComponent,BorderLayout.CENTER);
     offsetX-=editorFragmentComponent.getBorder().getBorderInsets(editorFragmentComponent).left;
@@ -64,6 +91,9 @@
       actionList.remove(copyRange);
       actionList.remove(localShowPrevAction);
       actionList.remove(localShowNextAction);
+      for (      RangeHighlighter highlighter : highlighters) {
+        highlighter.dispose();
+      }
     }
   }
 ;
