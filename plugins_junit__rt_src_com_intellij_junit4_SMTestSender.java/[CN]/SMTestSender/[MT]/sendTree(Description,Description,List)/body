@@ -1,32 +1,25 @@
 {
+  List pParents=new ArrayList(3);
+  pParents.addAll(currentParents);
+  if (parent != null && !myRootName.equals(JUnit4ReflectionUtil.getClassName(parent))) {
+    pParents.add(0,parent);
+  }
   String className=JUnit4ReflectionUtil.getClassName(description);
   if (description.getChildren().isEmpty()) {
     final String methodName=JUnit4ReflectionUtil.getMethodName((Description)description);
     if (methodName != null) {
-      if (isWarning(methodName,className)) {
-        className=JUnit4ReflectionUtil.getClassName(parent);
-        myEmptyTests.add(getShortName(className));
-      }
-      myPrintStream.println("##teamcity[suiteTreeNode name=\'" + escapeName(methodName) + "\' "+ getTestMethodLocation(methodName,className)+ "]");
-    }
-    if (suiteParent != null) {
-      final String parentFQName=JUnit4ReflectionUtil.getClassName(suiteParent);
-      if (!myCurrentClassName.equals(parentFQName)) {
+      if (parent != null) {
         List parents=(List)myParents.get(description);
         if (parents == null) {
-          parents=new ArrayList();
+          parents=new ArrayList(1);
           myParents.put(description,parents);
         }
-        if (!parents.contains(parentFQName)) {
-          parents.add(parentFQName);
-        }
-        List descriptors=(List)mySuites.get(parentFQName);
-        if (descriptors == null) {
-          descriptors=new ArrayList();
-          mySuites.put(parentFQName,descriptors);
-        }
-        descriptors.add(description);
+        parents.add(pParents);
       }
+      if (isWarning(methodName,className)) {
+        className=JUnit4ReflectionUtil.getClassName(parent);
+      }
+      myPrintStream.println("##teamcity[suiteTreeNode name=\'" + escapeName(methodName) + "\' "+ getTestMethodLocation(methodName,className)+ "]");
     }
     return;
   }
@@ -35,8 +28,7 @@
   for (Iterator iterator=tests.iterator(); iterator.hasNext(); ) {
     final Object next=iterator.next();
     final Description nextDescription=(Description)next;
-    final List childTests=nextDescription.getChildren();
-    if ((myCurrentClassName == null || !myCurrentClassName.equals(className)) && !pass) {
+    if ((myRootName == null || !myRootName.equals(className)) && !pass) {
       pass=true;
       String locationHint=className;
       if (isParameter((Description)description)) {
@@ -51,7 +43,7 @@
       }
       myPrintStream.println("##teamcity[suiteTreeStarted name=\'" + escapeName(getShortName(className)) + "\' locationHint=\'java:suite://"+ escapeName(locationHint)+ "\']");
     }
-    sendTree(nextDescription,description,isParameter(description) ? null : childTests.isEmpty() && parent != null ? parent : description);
+    sendTree(nextDescription,description,pParents);
   }
   if (pass) {
     myPrintStream.println("##teamcity[suiteTreeEnded name=\'" + escapeName(getShortName(JUnit4ReflectionUtil.getClassName((Description)description))) + "\']");
