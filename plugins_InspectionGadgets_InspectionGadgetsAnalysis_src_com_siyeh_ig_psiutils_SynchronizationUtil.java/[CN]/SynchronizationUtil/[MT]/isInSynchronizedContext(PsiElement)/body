@@ -1,11 +1,19 @@
 {
-  final PsiElement context=PsiTreeUtil.getParentOfType(element,PsiMethod.class,PsiSynchronizedStatement.class);
+  final PsiElement context=PsiTreeUtil.getParentOfType(element,PsiMethod.class,PsiSynchronizedStatement.class,PsiClass.class,PsiLambdaExpression.class);
   if (context instanceof PsiSynchronizedStatement) {
     return true;
   }
-  if (context == null) {
-    return false;
+  if (context instanceof PsiMethod) {
+    final PsiModifierListOwner modifierListOwner=(PsiModifierListOwner)context;
+    if (modifierListOwner.hasModifierProperty(PsiModifier.SYNCHRONIZED)) {
+      return true;
+    }
   }
-  final PsiModifierListOwner modifierListOwner=(PsiModifierListOwner)context;
-  return modifierListOwner.hasModifierProperty(PsiModifier.SYNCHRONIZED);
+  if (context instanceof PsiMethod || context instanceof PsiLambdaExpression) {
+    final HoldsLockAssertionVisitor visitor=new HoldsLockAssertionVisitor();
+    context.accept(visitor);
+    final PsiAssertStatement assertStatement=visitor.getAssertStatement();
+    return assertStatement != null && assertStatement.getTextOffset() + assertStatement.getTextLength() < element.getTextOffset();
+  }
+  return false;
 }
