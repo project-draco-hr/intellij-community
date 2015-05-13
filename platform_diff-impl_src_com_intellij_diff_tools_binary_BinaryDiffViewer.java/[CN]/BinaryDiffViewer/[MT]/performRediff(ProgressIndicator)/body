@@ -6,7 +6,7 @@
       return new Runnable(){
         @Override public void run(){
           clearDiffPresentation();
-          myPanel.addInsertedContentNotification();
+          myPanel.addNotification(DiffNotifications.INSERTED_CONTENT);
         }
       }
 ;
@@ -15,12 +15,12 @@
       return new Runnable(){
         @Override public void run(){
           clearDiffPresentation();
-          myPanel.addRemovedContentNotification();
+          myPanel.addNotification(DiffNotifications.REMOVED_CONTENT);
         }
       }
 ;
     }
-    if (!(contents.get(0) instanceof BinaryFileContent) || !(contents.get(1) instanceof BinaryFileContent)) {
+    if (!(contents.get(0) instanceof FileContent) || !(contents.get(1) instanceof FileContent)) {
       return new Runnable(){
         @Override public void run(){
           clearDiffPresentation();
@@ -28,15 +28,35 @@
       }
 ;
     }
-    final BinaryFileContent content1=(BinaryFileContent)contents.get(0);
-    final BinaryFileContent content2=(BinaryFileContent)contents.get(1);
-    byte[] bytes1=content1.getBytes();
-    byte[] bytes2=content2.getBytes();
-    final boolean equal=Arrays.equals(bytes1,bytes2);
+    final VirtualFile file1=((FileContent)contents.get(0)).getFile();
+    final VirtualFile file2=((FileContent)contents.get(1)).getFile();
+    if (!file1.isValid() || !file2.isValid()) {
+      return new Runnable(){
+        @Override public void run(){
+          myPanel.addNotification(DiffNotifications.ERROR);
+          clearDiffPresentation();
+        }
+      }
+;
+    }
+    final boolean equal=ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
+      @Override public Boolean compute(){
+        try {
+          byte[] bytes1=file1.contentsToByteArray();
+          byte[] bytes2=file2.contentsToByteArray();
+          return Arrays.equals(bytes1,bytes2);
+        }
+ catch (        IOException e) {
+          LOG.warn(e);
+          return false;
+        }
+      }
+    }
+);
     return new Runnable(){
       @Override public void run(){
         clearDiffPresentation();
-        if (equal)         myPanel.addContentsEqualNotification();
+        if (equal)         myPanel.addNotification(DiffNotifications.EQUAL_CONTENTS);
       }
     }
 ;
@@ -45,7 +65,7 @@
     return new Runnable(){
       @Override public void run(){
         clearDiffPresentation();
-        myPanel.addOperationCanceledNotification();
+        myPanel.addNotification(DiffNotifications.OPERATION_CANCELED);
       }
     }
 ;
@@ -55,7 +75,7 @@ catch (  Throwable e) {
     return new Runnable(){
       @Override public void run(){
         clearDiffPresentation();
-        myPanel.addDiffErrorNotification();
+        myPanel.addNotification(DiffNotifications.ERROR);
       }
     }
 ;
