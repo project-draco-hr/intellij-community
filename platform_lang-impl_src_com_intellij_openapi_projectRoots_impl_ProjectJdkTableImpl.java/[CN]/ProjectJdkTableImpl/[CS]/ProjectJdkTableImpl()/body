@@ -1,27 +1,49 @@
 {
   myMessageBus=ApplicationManager.getApplication().getMessageBus();
   myListenerList=new MessageListenerList<Listener>(myMessageBus,JDK_TABLE_TOPIC);
-  VirtualFileManager.getInstance().addVirtualFileListener(new VirtualFileAdapter(){
+  final MessageBusConnection connection=ApplicationManager.getApplication().getMessageBus().connect();
+  connection.subscribe(VirtualFileManager.VFS_CHANGES,new BulkFileListener(){
     private FileTypeManager myFileTypeManager=FileTypeManager.getInstance();
-    @Override public void fileCreated(    @NotNull VirtualFileEvent event){
-      updateJdks(event.getFile());
+    public void before(    @NotNull List<? extends VFileEvent> events){
     }
-    private void updateJdks(    VirtualFile file){
-      if (file.isDirectory() || !FileTypes.ARCHIVE.equals(myFileTypeManager.getFileTypeByFileName(file.getName()))) {
-        return;
+    public void after(    @NotNull List<? extends VFileEvent> events){
+      if (!events.isEmpty()) {
+        final Set<Sdk> affected=new SmartHashSet<Sdk>();
+        for (        VFileEvent event : events) {
+          addAffectedJavaSdk(event,affected);
+        }
+        if (!affected.isEmpty()) {
+          for (          Sdk sdk : affected) {
+            ((SdkType)sdk.getSdkType()).setupSdkPaths(sdk);
+          }
+        }
+      }
+    }
+    private void addAffectedJavaSdk(    VFileEvent event,    Set<Sdk> affected){
+      final VirtualFile file=event.getFile();
+      String fileName=null;
+      if (file != null && file.isValid()) {
+        if (file.isDirectory()) {
+          return;
+        }
+        fileName=file.getName();
+      }
+      final String eventPath=event.getPath();
+      if (fileName == null) {
+        fileName=VfsUtil.extractFileName(eventPath);
+      }
+      if (fileName != null) {
+        if (!FileTypes.ARCHIVE.equals(myFileTypeManager.getFileTypeByFileName(fileName))) {
+          return;
+        }
       }
       for (      Sdk sdk : mySdks) {
-        final SdkType sdkType=(SdkType)sdk.getSdkType();
-        if (!(sdkType instanceof JavaSdkType)) {
-          continue;
-        }
-        final VirtualFile home=sdk.getHomeDirectory();
-        if (home == null) {
-          continue;
-        }
-        if (VfsUtilCore.isAncestor(home,file,true)) {
-          sdkType.setupSdkPaths(sdk);
-          break;
+        if (sdk.getSdkType() instanceof JavaSdkType && !affected.contains(sdk)) {
+          final String homePath=sdk.getHomePath();
+          if (!StringUtil.isEmpty(homePath) && FileUtil.isAncestor(homePath,eventPath,true)) {
+            affected.add(sdk);
+            break;
+          }
         }
       }
     }
