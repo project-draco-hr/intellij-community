@@ -9,7 +9,7 @@
   final PyClass superClass=superClasses[0];
   final PyFunction superInit=superClass.findMethodByName(PyNames.INIT,true);
   if (superInit == null)   return;
-  boolean addComma=true;
+  final boolean addComma;
   if (klass.isNewStyleClass()) {
     addComma=false;
     if (LanguageLevel.forElement(klass).isPy3K()) {
@@ -20,11 +20,23 @@
     }
   }
  else {
+    addComma=true;
     superCall.append(superClass.getName());
     superCall.append(".__init__(self");
   }
   final StringBuilder newFunction=new StringBuilder("def __init__(self");
-  buildParameterList(problemFunction,superInit,superCall,newFunction,addComma);
+  final Couple<List<String>> couple=buildNewFunctionParamsAndSuperInitCallArgs(problemFunction,superInit);
+  final List<String> newParameters=couple.getFirst();
+  if (!newParameters.isEmpty()) {
+    newFunction.append(", ");
+  }
+  StringUtil.join(newParameters,", ",newFunction);
+  newFunction.append("):\n\t");
+  final List<String> superCallArguments=couple.getSecond();
+  if (addComma && !superCallArguments.isEmpty()) {
+    superCall.append(", ");
+  }
+  StringUtil.join(superCallArguments,", ",superCall);
   superCall.append(")");
   final PyStatementList statementList=problemFunction.getStatementList();
   PyExpression docstring=null;
@@ -35,7 +47,6 @@
       docstring=st.getExpression();
     }
   }
-  newFunction.append("):\n\t");
   if (docstring != null) {
     newFunction.append(docstring.getText()).append("\n\t");
   }
