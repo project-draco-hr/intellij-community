@@ -7,7 +7,8 @@
     return;
   }
   final XmlAttributeDescriptor attrDescriptor=descriptor.getAttributeDescriptor(myAttrName,myTag);
-  boolean indirectSyntax=XmlExtension.getExtension(myTag.getContainingFile()).isIndirectSyntax(attrDescriptor);
+  final boolean indirectSyntax=XmlExtension.getExtension(myTag.getContainingFile()).isIndirectSyntax(attrDescriptor);
+  boolean insertShorthand=myTag instanceof HtmlTag && attrDescriptor != null && HtmlUtil.isBooleanAttribute(attrDescriptor,myTag);
   PsiElement anchor=SourceTreeToPsiMap.treeElementToPsi(XmlChildRole.EMPTY_TAG_END_FINDER.findChild(treeElement));
   final boolean anchorIsEmptyTag=anchor != null;
   if (anchor == null) {
@@ -20,7 +21,7 @@
     template.addTextSegment("<jsp:attribute name=\"" + myAttrName + "\">");
   }
  else {
-    template.addTextSegment(" " + myAttrName + "=\"");
+    template.addTextSegment(" " + myAttrName + (!insertShorthand ? "=\"" : ""));
   }
   Expression expression=new Expression(){
     final TextResult result=new TextResult("");
@@ -39,25 +40,24 @@
     }
   }
 ;
-  template.addVariable(NAME_TEMPLATE_VARIABLE,expression,expression,true);
+  if (!insertShorthand)   template.addVariable(NAME_TEMPLATE_VARIABLE,expression,expression,true);
   if (indirectSyntax) {
     template.addTextSegment("</jsp:attribute>");
     template.addEndVariable();
     if (anchorIsEmptyTag)     template.addTextSegment("</" + myTag.getName() + ">");
   }
- else {
+ else   if (!insertShorthand) {
     template.addTextSegment("\"");
   }
   final PsiElement anchor1=anchor;
-  final boolean indirectSyntax1=indirectSyntax;
   final Runnable runnable=new Runnable(){
     @Override public void run(){
       ApplicationManager.getApplication().runWriteAction(new Runnable(){
         @Override public void run(){
           int textOffset=anchor1.getTextOffset();
-          if (!anchorIsEmptyTag && indirectSyntax1)           ++textOffset;
+          if (!anchorIsEmptyTag && indirectSyntax)           ++textOffset;
           editor.getCaretModel().moveToOffset(textOffset);
-          if (anchorIsEmptyTag && indirectSyntax1) {
+          if (anchorIsEmptyTag && indirectSyntax) {
             editor.getDocument().deleteString(textOffset,textOffset + 2);
           }
           TemplateManager.getInstance(project).startTemplate(editor,template);

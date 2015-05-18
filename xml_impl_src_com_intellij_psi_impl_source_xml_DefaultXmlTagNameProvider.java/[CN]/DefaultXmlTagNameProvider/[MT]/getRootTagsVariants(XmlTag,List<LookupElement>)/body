@@ -1,0 +1,49 @@
+{
+  elements.add(LookupElementBuilder.create("?xml version=\"1.0\" encoding=\"\" ?>").withPresentableText("<?xml version=\"1.0\" encoding=\"\" ?>").withInsertHandler(new InsertHandler<LookupElement>(){
+    @Override public void handleInsert(    InsertionContext context,    LookupElement item){
+      int offset=context.getEditor().getCaretModel().getOffset();
+      context.getEditor().getCaretModel().moveToOffset(offset - 4);
+      AutoPopupController.getInstance(context.getProject()).scheduleAutoPopup(context.getEditor());
+    }
+  }
+));
+  final FileBasedIndex fbi=FileBasedIndex.getInstance();
+  CommonProcessors.CollectProcessor<String> processor=new CommonProcessors.CollectProcessor<String>();
+  fbi.processAllKeys(XmlNamespaceIndex.NAME,processor,tag.getProject());
+  Collection<String> results=processor.getResults();
+  final GlobalSearchScope scope=new EverythingGlobalScope();
+  for (  final String ns : results) {
+    if (ns.startsWith("file://"))     continue;
+    fbi.processValues(XmlNamespaceIndex.NAME,ns,null,new FileBasedIndex.ValueProcessor<XsdNamespaceBuilder>(){
+      @Override public boolean process(      final VirtualFile file,      XsdNamespaceBuilder value){
+        List<String> tags=value.getRootTags();
+        for (        String s : tags) {
+          elements.add(LookupElementBuilder.create(s).withTypeText(ns).withInsertHandler(new XmlTagInsertHandler(){
+            @Override public void handleInsert(            InsertionContext context,            LookupElement item){
+              final Editor editor=context.getEditor();
+              final Document document=context.getDocument();
+              final int caretOffset=editor.getCaretModel().getOffset();
+              final RangeMarker caretMarker=document.createRangeMarker(caretOffset,caretOffset);
+              caretMarker.setGreedyToRight(true);
+              XmlFile psiFile=(XmlFile)context.getFile();
+              boolean incomplete=XmlUtil.getTokenOfType(tag,XmlTokenType.XML_TAG_END) == null && XmlUtil.getTokenOfType(tag,XmlTokenType.XML_EMPTY_ELEMENT_END) == null;
+              XmlNamespaceHelper.getHelper(psiFile).insertNamespaceDeclaration(psiFile,editor,Collections.singleton(ns),null,null);
+              editor.getCaretModel().moveToOffset(caretMarker.getEndOffset());
+              XmlTag rootTag=psiFile.getRootTag();
+              if (incomplete) {
+                XmlToken token=XmlUtil.getTokenOfType(rootTag,XmlTokenType.XML_EMPTY_ELEMENT_END);
+                if (token != null)                 token.delete();
+                PsiDocumentManager.getInstance(context.getProject()).doPostponedOperationsAndUnblockDocument(document);
+                super.handleInsert(context,item);
+              }
+            }
+          }
+));
+        }
+        return true;
+      }
+    }
+,scope);
+  }
+  return elements;
+}

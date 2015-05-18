@@ -1,41 +1,10 @@
 {
   myChangedFilesCollector.tryToEnsureAllInvalidateTasksCompleted();
-  ProjectIndexableFilesFilter indexableFilesFilter=projectIndexableFiles(project);
-  UpdateSemaphore updateSemaphore;
-  do {
-    updateSemaphore=obtainForceUpdateSemaphore();
-    try {
-      int filesFromOtherProjectUpdated=0;
-      for (      VirtualFile file : getAllFilesToUpdate()) {
-        boolean fileOutOfCurrentProject=false;
-        if (indexableFilesFilter != null && file instanceof VirtualFileWithId && !indexableFilesFilter.containsFileId(((VirtualFileWithId)file).getId())) {
-          if (filesFromOtherProjectUpdated >= MAX_FILES_TO_UPDATE_FROM_OTHER_PROJECT || restrictedTo != null)           continue;
-          fileOutOfCurrentProject=true;
-        }
-        if (filter == null || filter.accept(file) || fileOutOfCurrentProject || Comparing.equal(file,restrictedTo)) {
-          try {
-            updateSemaphore.down();
-            boolean processed=processFileImpl(project,new com.intellij.ide.caches.FileContent(file));
-            if (fileOutOfCurrentProject && processed)             ++filesFromOtherProjectUpdated;
-          }
- catch (          ProcessCanceledException e) {
-            updateSemaphore.reportUpdateCanceled();
-            throw e;
-          }
- finally {
-            updateSemaphore.up();
-          }
-        }
-      }
-      while (!updateSemaphore.waitFor(500)) {
-        if (Thread.holdsLock(PsiLock.LOCK)) {
-          break;
-        }
-      }
-    }
-  finally {
-      releaseForceUpdateSemaphore(updateSemaphore);
+  Collection<VirtualFile> allFilesToUpdate=getAllFilesToUpdate();
+  if (!allFilesToUpdate.isEmpty()) {
+    List<VirtualFile> virtualFilesToBeUpdatedForProject=ContainerUtil.filter(allFilesToUpdate,new ProjectFilesCondition(projectIndexableFiles(project),filter,restrictedTo));
+    if (!virtualFilesToBeUpdatedForProject.isEmpty()) {
+      myForceUpdateTask.processAll(virtualFilesToBeUpdatedForProject,project);
     }
   }
- while (updateSemaphore.isUpdateCanceled());
 }

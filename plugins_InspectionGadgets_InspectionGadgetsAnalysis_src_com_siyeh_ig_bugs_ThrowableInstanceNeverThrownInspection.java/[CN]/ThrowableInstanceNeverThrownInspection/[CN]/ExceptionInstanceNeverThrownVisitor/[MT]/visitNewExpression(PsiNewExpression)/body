@@ -4,41 +4,18 @@
     return;
   }
   final PsiElement parent=getParent(expression.getParent());
-  if (parent instanceof PsiThrowStatement || parent instanceof PsiReturnStatement) {
+  if (canBeThrown(parent)) {
     return;
   }
   if (PsiTreeUtil.getParentOfType(parent,PsiCallExpression.class) != null) {
     return;
   }
   final PsiElement typedParent=PsiTreeUtil.getParentOfType(expression,PsiAssignmentExpression.class,PsiVariable.class);
-  final PsiLocalVariable variable;
-  if (typedParent instanceof PsiAssignmentExpression) {
-    final PsiAssignmentExpression assignmentExpression=(PsiAssignmentExpression)typedParent;
-    final PsiExpression rhs=assignmentExpression.getRExpression();
-    if (!PsiTreeUtil.isAncestor(rhs,expression,false)) {
-      return;
-    }
-    final PsiExpression lhs=assignmentExpression.getLExpression();
-    if (!(lhs instanceof PsiReferenceExpression)) {
-      return;
-    }
-    final PsiReferenceExpression referenceExpression=(PsiReferenceExpression)lhs;
-    final PsiElement target=referenceExpression.resolve();
-    if (!(target instanceof PsiLocalVariable)) {
-      return;
-    }
-    variable=(PsiLocalVariable)target;
+  final PsiElement variable=ThrowableResultOfMethodCallIgnoredInspection.getVariable(typedParent,expression);
+  if (typedParent != null && variable == null) {
+    return;
   }
- else   if (typedParent instanceof PsiVariable) {
-    if (!(typedParent instanceof PsiLocalVariable)) {
-      return;
-    }
-    variable=(PsiLocalVariable)typedParent;
-  }
- else {
-    variable=null;
-  }
-  if (variable != null) {
+  if (variable instanceof PsiLocalVariable) {
     final Query<PsiReference> query=ReferencesSearch.search(variable,variable.getUseScope());
     for (    PsiReference reference : query) {
       final PsiElement usage=reference.getElement();
@@ -46,7 +23,7 @@
       while (usageParent instanceof PsiParenthesizedExpression) {
         usageParent=usageParent.getParent();
       }
-      if (usageParent instanceof PsiThrowStatement || usageParent instanceof PsiReturnStatement) {
+      if (canBeThrown(usageParent)) {
         return;
       }
       if (PsiTreeUtil.getParentOfType(usageParent,PsiCallExpression.class) != null) {

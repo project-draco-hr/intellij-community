@@ -1,0 +1,46 @@
+{
+  final Gson gson=new Gson();
+  final Message msg=gson.fromJson(message,Message.class);
+  final Header header=msg.getHeader();
+  final Header parentHeader=gson.fromJson(msg.getParentHeader(),Header.class);
+  final String messageType=header.getMessageType();
+  if ("pyout".equals(messageType) || "display_data".equals(messageType) || "execute_result".equals(messageType)) {
+    final PyOutContent content=gson.fromJson(msg.getContent(),PyOutContent.class);
+    addCellOutput(content,myOutput);
+  }
+  if ("execute_reply".equals(messageType)) {
+    final PyExecuteReplyContent content=gson.fromJson(msg.getContent(),PyExecuteReplyContent.class);
+    final List<Payload> payloads=content.payload;
+    if (payloads != null && !payloads.isEmpty()) {
+      final Payload payload=payloads.get(0);
+      if (payload.replace) {
+        myListener.onPayload(payload.text,parentHeader.getMessageId());
+      }
+    }
+ else {
+      myListener.onPayload(null,parentHeader.getMessageId());
+    }
+  }
+ else   if ("pyerr".equals(messageType) || "error".equals(messageType)) {
+    final PyErrContent content=gson.fromJson(msg.getContent(),PyErrContent.class);
+    addCellOutput(content,myOutput);
+  }
+ else   if ("stream".equals(messageType)) {
+    final PyStreamContent content=gson.fromJson(msg.getContent(),PyStreamContent.class);
+    addCellOutput(content,myOutput);
+  }
+ else   if ("pyin".equals(messageType) || "execute_input".equals(messageType)) {
+    final JsonElement executionCount=msg.getContent().get("execution_count");
+    if (executionCount != null) {
+      myExecCount=executionCount.getAsInt();
+    }
+  }
+ else   if ("status".equals(messageType)) {
+    final PyStatusContent content=gson.fromJson(msg.getContent(),PyStatusContent.class);
+    final String executionState=content.getExecutionState();
+    if ("idle".equals(executionState)) {
+      myListener.onOutput(IpnbConnection.this,parentHeader.getMessageId());
+      myOutput.clear();
+    }
+  }
+}

@@ -1,4 +1,29 @@
 {
+  parameters=new ArrayList(parameters);
+  int debugAddress=-1;
+  if (myDebugPort > -1) {
+    debugAddress=findAvailableSocketPort();
+    boolean found=false;
+    for (int i=0; i < parameters.size(); i++) {
+      String parameter=(String)parameters.get(i);
+      final String debuggerParam="transport=dt_socket";
+      final int indexOf=parameter.indexOf(debuggerParam);
+      if (indexOf >= 0) {
+        if (debugAddress > -1) {
+          parameter=parameter.substring(0,indexOf) + "transport=dt_socket,server=n,suspend=y,address=" + debugAddress;
+          parameters.set(i,parameter);
+          found=true;
+        }
+ else {
+          parameters.remove(parameter);
+        }
+        break;
+      }
+    }
+    if (!found) {
+      parameters.add("-agentlib:jdwp=transport=dt_socket,server=n,suspend=y,address=" + debugAddress);
+    }
+  }
   final File tempFile=File.createTempFile("fork","test");
   tempFile.deleteOnExit();
   final String testOutputPath=tempFile.getAbsolutePath();
@@ -43,6 +68,12 @@
   builder.add(description);
   builder.add(listeners);
   builder.setWorkingDir(workingDir);
+  if (debugAddress > -1) {
+    Socket socket=getDebugSocket();
+    DataOutputStream stream=new DataOutputStream(socket.getOutputStream());
+    stream.writeInt(debugAddress);
+    int read=socket.getInputStream().read();
+  }
   final Process exec=builder.createProcess();
   final int result=exec.waitFor();
   ForkedVMWrapper.readWrapped(testOutputPath,JUnitStarter.SM_RUNNER ? ((PrintStream)out) : ((SegmentedOutputStream)out).getPrintStream(),JUnitStarter.SM_RUNNER ? ((PrintStream)err) : ((SegmentedOutputStream)err).getPrintStream());
