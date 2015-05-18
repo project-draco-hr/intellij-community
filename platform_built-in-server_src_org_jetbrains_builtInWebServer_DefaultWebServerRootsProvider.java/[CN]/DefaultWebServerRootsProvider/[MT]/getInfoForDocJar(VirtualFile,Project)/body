@@ -1,0 +1,41 @@
+{
+  final OrderRootType javaDocRootType=JavadocOrderRootType.getInstance();
+  if (javaDocRootType == null) {
+    return null;
+  }
+  final Ref<PathInfo> result=Ref.create();
+  Processor<Library> processor=new Processor<Library>(){
+    @Override public boolean process(    Library library){
+      for (      VirtualFile root : library.getFiles(javaDocRootType)) {
+        if (VfsUtilCore.isAncestor(root,file,true)) {
+          result.set(new PathInfo(file,root,null,true));
+          return false;
+        }
+      }
+      return true;
+    }
+  }
+;
+  AccessToken token=ReadAction.start();
+  try {
+    ModuleManager moduleManager=ModuleManager.getInstance(project);
+    for (    Module module : moduleManager.getModules()) {
+      if (module.isDisposed()) {
+        continue;
+      }
+      ModuleRootManager.getInstance(module).orderEntries().forEachLibrary(processor);
+      if (!result.isNull()) {
+        return result.get();
+      }
+    }
+    for (    Library library : LibraryTablesRegistrar.getInstance().getLibraryTable(project).getLibraries()) {
+      if (!processor.process(library)) {
+        return result.get();
+      }
+    }
+  }
+  finally {
+    token.finish();
+  }
+  return null;
+}
