@@ -1,5 +1,5 @@
 {
-  PyFunction problemFunction=PsiTreeUtil.getParentOfType(descriptor.getPsiElement(),PyFunction.class);
+  final PyFunction problemFunction=PsiTreeUtil.getParentOfType(descriptor.getPsiElement(),PyFunction.class);
   if (problemFunction == null)   return;
   final StringBuilder superCall=new StringBuilder();
   final PyClass klass=problemFunction.getContainingClass();
@@ -9,28 +9,51 @@
   final PyClass superClass=superClasses[0];
   final PyFunction superInit=superClass.findMethodByName(PyNames.INIT,true);
   if (superInit == null)   return;
-  boolean addComma=true;
+  final boolean addComma;
   if (klass.isNewStyleClass()) {
     addComma=false;
-    if (LanguageLevel.forElement(klass).isPy3K())     superCall.append("super().__init__(");
- else     superCall.append("super(").append(klass.getName()).append(", self).__init__(");
+    if (LanguageLevel.forElement(klass).isPy3K()) {
+      superCall.append("super().__init__(");
+    }
+ else {
+      superCall.append("super(").append(klass.getName()).append(", self).__init__(");
+    }
   }
  else {
+    addComma=true;
     superCall.append(superClass.getName());
     superCall.append(".__init__(self");
   }
-  StringBuilder newFunction=new StringBuilder("def __init__(self");
-  buildParameterList(problemFunction,superInit,superCall,newFunction,addComma);
+  final StringBuilder newFunction=new StringBuilder("def __init__(self");
+  final Couple<List<String>> couple=buildNewFunctionParamsAndSuperInitCallArgs(problemFunction,superInit);
+  final List<String> newParameters=couple.getFirst();
+  if (!newParameters.isEmpty()) {
+    newFunction.append(", ");
+  }
+  StringUtil.join(newParameters,", ",newFunction);
+  newFunction.append(")");
+  if (problemFunction.getAnnotation() != null) {
+    newFunction.append(problemFunction.getAnnotation().getText());
+  }
+  newFunction.append(":\n\t");
+  final List<String> superCallArguments=couple.getSecond();
+  if (addComma && !superCallArguments.isEmpty()) {
+    superCall.append(", ");
+  }
+  StringUtil.join(superCallArguments,", ",superCall);
   superCall.append(")");
   final PyStatementList statementList=problemFunction.getStatementList();
   PyExpression docstring=null;
   final PyStatement[] statements=statementList.getStatements();
   if (statements.length != 0 && statements[0] instanceof PyExpressionStatement) {
-    PyExpressionStatement st=(PyExpressionStatement)statements[0];
-    if (st.getExpression() instanceof PyStringLiteralExpression)     docstring=st.getExpression();
+    final PyExpressionStatement st=(PyExpressionStatement)statements[0];
+    if (st.getExpression() instanceof PyStringLiteralExpression) {
+      docstring=st.getExpression();
+    }
   }
-  newFunction.append("):\n\t");
-  if (docstring != null)   newFunction.append(docstring.getText()).append("\n\t");
+  if (docstring != null) {
+    newFunction.append(docstring.getText()).append("\n\t");
+  }
   newFunction.append(superCall).append("\n\t");
   boolean first=true;
   for (  PyStatement statement : statements) {
@@ -40,5 +63,6 @@
     }
     newFunction.append(statement.getText()).append("\n\t");
   }
-  problemFunction.replace(PyElementGenerator.getInstance(project).createFromText(LanguageLevel.forElement(problemFunction),PyFunction.class,newFunction.toString()));
+  final PyElementGenerator generator=PyElementGenerator.getInstance(project);
+  problemFunction.replace(generator.createFromText(LanguageLevel.forElement(problemFunction),PyFunction.class,newFunction.toString()));
 }
