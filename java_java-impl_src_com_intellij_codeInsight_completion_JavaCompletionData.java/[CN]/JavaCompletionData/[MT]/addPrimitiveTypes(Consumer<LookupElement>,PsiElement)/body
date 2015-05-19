@@ -1,0 +1,30 @@
+{
+  if (AFTER_DOT.accepts(position)) {
+    return;
+  }
+  boolean afterNew=psiElement().afterLeaf(psiElement().withText(PsiKeyword.NEW).andNot(psiElement().afterLeaf(PsiKeyword.THROW,"."))).accepts(position);
+  if (afterNew) {
+    PsiElementFactory factory=JavaPsiFacade.getElementFactory(position.getProject());
+    for (    String primitiveType : PRIMITIVE_TYPES) {
+      result.consume(PsiTypeLookupItem.createLookupItem(factory.createTypeFromText(primitiveType + "[]",null),null));
+    }
+    result.consume(PsiTypeLookupItem.createLookupItem(factory.createTypeFromText("void[]",null),null));
+    return;
+  }
+  boolean inCast=psiElement().afterLeaf(psiElement().withText("(").withParent(psiElement(PsiParenthesizedExpression.class,PsiTypeCastExpression.class))).accepts(position);
+  boolean typeFragment=position.getContainingFile() instanceof PsiTypeCodeFragment && PsiTreeUtil.prevVisibleLeaf(position) == null;
+  boolean declaration=DECLARATION_START.accepts(position);
+  boolean expressionPosition=isExpressionPosition(position);
+  boolean inGenerics=PsiTreeUtil.getParentOfType(position,PsiReferenceParameterList.class) != null;
+  if (START_FOR.accepts(position) || isInsideParameterList(position) || inGenerics|| VARIABLE_AFTER_FINAL.accepts(position)|| inCast|| declaration|| typeFragment|| expressionPosition|| isStatementPosition(position)) {
+    for (    String primitiveType : PRIMITIVE_TYPES) {
+      result.consume(createKeyword(position,primitiveType));
+    }
+  }
+  if (declaration) {
+    result.consume(new OverrideableSpace(createKeyword(position,PsiKeyword.VOID),TailType.HUMBLE_SPACE_BEFORE_WORD));
+  }
+ else   if (typeFragment && ((PsiTypeCodeFragment)position.getContainingFile()).isVoidValid()) {
+    result.consume(createKeyword(position,PsiKeyword.VOID));
+  }
+}
