@@ -1,31 +1,35 @@
 {
+  myPerformActualDrawing=false;
   if (myProgress.isCanceled()) {
     return NO_SUCH_PAGE;
   }
   final Graphics2D g2d=(Graphics2D)g;
   if (myNumberOfPages < 0) {
     myProgress.setText(CodeEditorBundle.message("print.file.calculating.number.of.pages.progress"));
-    myPerformActualDrawing=false;
     if (!calculateNumberOfPages(g2d,pageFormat)) {
       return NO_SUCH_PAGE;
     }
   }
-  myPerformActualDrawing=true;
-  return ApplicationManager.getApplication().runReadAction(new Computable<Integer>(){
-    @Override public Integer compute(){
-      if (!isValidRange(myRangeToPrint)) {
+  if (pageIndex >= myNumberOfPages) {
+    return NO_SUCH_PAGE;
+  }
+  isPrintingPass=!isPrintingPass;
+  if (!isPrintingPass) {
+    while (++myPageIndex < pageIndex) {
+      if (!printPageInReadAction(g2d,pageFormat,"print.skip.page.progress")) {
         return NO_SUCH_PAGE;
       }
-      isPrintingPass=!isPrintingPass;
-      if (!isPrintingPass) {
-        return PAGE_EXISTS;
-      }
-      myProgress.setText(CodeEditorBundle.message("print.file.page.progress",myShortFileName,(pageIndex + 1),myNumberOfPages));
-      myPageIndex=pageIndex;
-      RangeMarker newRange=printPage(g2d,pageFormat,myRangeToPrint);
-      setSegment(newRange);
-      return PAGE_EXISTS;
     }
-  }
+    return ApplicationManager.getApplication().runReadAction(new Computable<Integer>(){
+      @Override public Integer compute(){
+        return isValidRange(myRangeToPrint) ? PAGE_EXISTS : NO_SUCH_PAGE;
+      }
+    }
 );
+  }
+ else {
+    myPerformActualDrawing=true;
+    printPageInReadAction(g2d,pageFormat,"print.file.page.progress");
+    return PAGE_EXISTS;
+  }
 }
