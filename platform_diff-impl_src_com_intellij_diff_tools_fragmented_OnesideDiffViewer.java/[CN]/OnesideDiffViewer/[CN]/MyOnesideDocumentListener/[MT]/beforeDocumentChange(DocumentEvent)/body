@@ -1,2 +1,40 @@
 {
+  if (myDuringOnesideDocumentModification)   return;
+  if (myChangedBlockData == null) {
+    LOG.warn("oneside beforeDocumentChange - myChangedBlockData == null");
+    return;
+  }
+  try {
+    myDuringTwosideDocumentModification=true;
+    Document twosideDocument=getDocument(myMasterSide);
+    int offset1=e.getOffset();
+    int offset2=e.getOffset() + e.getOldLength();
+    if (StringUtil.endsWithChar(e.getOldFragment(),'\n') && StringUtil.endsWithChar(e.getNewFragment(),'\n')) {
+      offset2--;
+    }
+    LineCol onesideStartPosition=LineCol.fromOffset(myDocument,offset1);
+    LineCol onesideEndPosition=LineCol.fromOffset(myDocument,offset2);
+    int shift=StringUtil.countNewLines(e.getNewFragment()) - StringUtil.countNewLines(e.getOldFragment());
+    int twosideStartLine=transferLineFromOnesideStrict(myMasterSide,onesideStartPosition.line);
+    int twosideEndLine=transferLineFromOnesideStrict(myMasterSide,onesideEndPosition.line);
+    if (twosideStartLine == -1 || twosideEndLine == -1) {
+      logDebugInfo(e,onesideStartPosition,onesideEndPosition,twosideStartLine,twosideEndLine);
+      markSuppressEditorTyping();
+      return;
+    }
+    int twosideStartOffset=twosideDocument.getLineStartOffset(twosideStartLine) + onesideStartPosition.column;
+    int twosideEndOffset=twosideDocument.getLineStartOffset(twosideEndLine) + onesideEndPosition.column;
+    twosideDocument.replaceString(twosideStartOffset,twosideEndOffset,e.getNewFragment());
+    for (    OnesideDiffChange change : myChangedBlockData.getDiffChanges()) {
+      change.processChange(onesideStartPosition.line,onesideEndPosition.line + 1,shift);
+    }
+    LineNumberConvertor lineNumberConvertor=myChangedBlockData.getLineNumberConvertor();
+    lineNumberConvertor.handleOnesideChange(onesideStartPosition.line,onesideEndPosition.line + 1,shift,myMasterSide);
+  }
+  finally {
+    markStateIsOutOfDate();
+    myFoldingModel.onDocumentChanged(e);
+    scheduleRediff();
+    myDuringTwosideDocumentModification=false;
+  }
 }
