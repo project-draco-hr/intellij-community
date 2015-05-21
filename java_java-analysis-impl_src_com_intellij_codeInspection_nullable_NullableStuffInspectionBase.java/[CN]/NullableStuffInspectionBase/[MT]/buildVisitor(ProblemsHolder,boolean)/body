@@ -1,2 +1,54 @@
 {
+  if (!PsiUtil.isLanguageLevel5OrHigher(holder.getFile())) {
+    return new PsiElementVisitor(){
+    }
+;
+  }
+  return new JavaElementVisitor(){
+    @Override public void visitMethod(    PsiMethod method){
+      checkNullableStuffForMethod(method,holder);
+    }
+    @Override public void visitField(    PsiField field){
+      final PsiType type=field.getType();
+      final Annotated annotated=check(field,holder,type);
+      if (TypeConversionUtil.isPrimitiveAndNotNull(type)) {
+        return;
+      }
+      Project project=holder.getProject();
+      final NullableNotNullManager manager=NullableNotNullManager.getInstance(project);
+      if (annotated.isDeclaredNotNull ^ annotated.isDeclaredNullable) {
+        final String anno=annotated.isDeclaredNotNull ? manager.getDefaultNotNull() : manager.getDefaultNullable();
+        final List<String> annoToRemove=annotated.isDeclaredNotNull ? manager.getNullables() : manager.getNotNulls();
+        if (!checkNonStandardAnnotations(field,annotated,manager,anno,holder))         return;
+        checkAccessors(field,annotated,project,manager,anno,annoToRemove,holder);
+        if (REQUIRE_NOTNULL_FIELDS_INITIALIZED) {
+          checkNotNullFieldsInitialized(field,annotated,manager,holder);
+        }
+        checkConstructorParameters(field,annotated,manager,anno,annoToRemove,holder);
+      }
+    }
+    @Override public void visitParameter(    PsiParameter parameter){
+      check(parameter,holder,parameter.getType());
+    }
+    @Override public void visitAnnotation(    PsiAnnotation annotation){
+      if (!AnnotationUtil.NOT_NULL.equals(annotation.getQualifiedName()))       return;
+      PsiAnnotationMemberValue value=annotation.findDeclaredAttributeValue("exception");
+      if (value instanceof PsiClassObjectAccessExpression) {
+        PsiClass psiClass=PsiUtil.resolveClassInClassTypeOnly(((PsiClassObjectAccessExpression)value).getOperand().getType());
+        if (psiClass != null && !hasStringConstructor(psiClass)) {
+          holder.registerProblem(value,"Custom exception class should have a constructor with a single message parameter of String type",ProblemHighlightType.GENERIC_ERROR_OR_WARNING);
+        }
+      }
+    }
+    private boolean hasStringConstructor(    PsiClass aClass){
+      for (      PsiMethod method : aClass.getConstructors()) {
+        PsiParameterList list=method.getParameterList();
+        if (list.getParametersCount() == 1 && list.getParameters()[0].getType().equalsToText(CommonClassNames.JAVA_LANG_STRING)) {
+          return true;
+        }
+      }
+      return false;
+    }
+  }
+;
 }
