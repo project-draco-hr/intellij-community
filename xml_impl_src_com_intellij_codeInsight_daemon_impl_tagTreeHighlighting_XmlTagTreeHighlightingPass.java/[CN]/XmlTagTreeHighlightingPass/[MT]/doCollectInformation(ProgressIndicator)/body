@@ -5,12 +5,28 @@
   if (!WebEditorOptions.getInstance().isTagTreeHighlightingEnabled()) {
     return;
   }
-  final PsiElement[] elements=BreadcrumbsXmlWrapper.getLinePsiElements(myEditor.getCaretModel().getOffset(),myFile.getVirtualFile(),myProject,myInfoProvider);
+  final int offset=myEditor.getCaretModel().getOffset();
+  PsiElement[] elements=BreadcrumbsXmlWrapper.getLinePsiElements(offset,myFile.getVirtualFile(),myProject,myInfoProvider);
   if (elements == null || elements.length == 0) {
     return;
   }
   if (!XmlTagTreeHighlightingUtil.containsTagsWithSameName(elements)) {
-    return;
+    elements=PsiElement.EMPTY_ARRAY;
+    final FileViewProvider provider=myFile.getViewProvider();
+    for (    Language language : provider.getLanguages()) {
+      PsiElement element=provider.findElementAt(offset,language);
+      if (!isTagStartOrEnd(element)) {
+        element=null;
+      }
+      if (element == null && offset > 0) {
+        element=provider.findElementAt(offset - 1,language);
+        if (!isTagStartOrEnd(element))         element=null;
+      }
+      final XmlTag tag=PsiTreeUtil.getParentOfType(element,XmlTag.class);
+      if (tag != null) {
+        elements=new PsiElement[]{tag};
+      }
+    }
   }
   for (int i=elements.length - 1; i >= 0; i--) {
     if (elements[i] instanceof XmlTag) {
