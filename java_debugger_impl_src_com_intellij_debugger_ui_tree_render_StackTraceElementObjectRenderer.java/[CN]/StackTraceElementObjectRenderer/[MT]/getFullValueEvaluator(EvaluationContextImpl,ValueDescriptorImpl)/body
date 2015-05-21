@@ -1,0 +1,43 @@
+{
+  return new JavaValue.JavaFullValueEvaluator(DebuggerBundle.message("message.node.navigate"),evaluationContext){
+    @Override public void evaluate(    @NotNull XFullValueEvaluationCallback callback) throws Exception {
+      Value value=valueDescriptor.getValue();
+      ClassType type=((ClassType)value.type());
+      Method toString=type.concreteMethodByName("toString","()Ljava/lang/String;");
+      if (toString != null) {
+        try {
+          Value res=evaluationContext.getDebugProcess().invokeMethod(evaluationContext,(ObjectReference)value,toString,Collections.emptyList());
+          if (res instanceof StringReference) {
+            callback.evaluated("");
+            final String line=((StringReference)res).value();
+            ApplicationManager.getApplication().runReadAction(new Runnable(){
+              @Override public void run(){
+                ExceptionFilter filter=new ExceptionFilter(evaluationContext.getDebugProcess().getSession().getSearchScope());
+                Filter.Result result=filter.applyFilter(line,line.length());
+                if (result != null) {
+                  final HyperlinkInfo info=result.getFirstHyperlinkInfo();
+                  if (info != null) {
+                    DebuggerUIUtil.invokeLater(new Runnable(){
+                      @Override public void run(){
+                        info.navigate(valueDescriptor.getProject());
+                      }
+                    }
+);
+                  }
+                }
+              }
+            }
+);
+          }
+        }
+ catch (        EvaluateException e) {
+          LOG.info("Exception while getting stack info",e);
+        }
+      }
+    }
+    @Override public boolean isShowValuePopup(){
+      return false;
+    }
+  }
+;
+}
