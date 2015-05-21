@@ -22,13 +22,11 @@
     fieldText.append(expressions[0].getText());
   }
   @NonNls final String methodName=methodExpression.getReferenceName();
-  if ("replace".equals(methodName)) {
+  final boolean literalReplacement="replace".equals(methodName);
+  if (literalReplacement) {
     fieldText.append(", java.util.regex.Pattern.LITERAL");
   }
   fieldText.append(");");
-  final PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
-  final PsiField newField=factory.createFieldFromText(fieldText.toString(),element);
-  final PsiElement field=aClass.add(newField);
   @NonNls final StringBuilder expressionText=new StringBuilder("PATTERN.");
   final PsiExpression qualifier=methodExpression.getQualifierExpression();
   @NonNls final String qualifierText=(qualifier == null) ? "this" : qualifier.getText();
@@ -43,21 +41,30 @@
   }
  else {
     expressionText.append("matcher(").append(qualifierText).append(").");
-    if ("replace".equals(methodName)) {
+    if (literalReplacement) {
       expressionText.append("replaceAll");
     }
  else {
       expressionText.append(methodName);
     }
     expressionText.append('(');
+    if (literalReplacement) {
+      expressionText.append("java.util.regex.Matcher.quoteReplacement(");
+    }
     if (expressionsLength > 1) {
       expressionText.append(expressions[1].getText());
       for (int i=2; i < expressionsLength; i++) {
         expressionText.append(',').append(expressions[i].getText());
       }
     }
+    if (literalReplacement) {
+      expressionText.append(')');
+    }
     expressionText.append(')');
   }
+  final PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
+  final PsiField newField=factory.createFieldFromText(fieldText.toString(),element);
+  final PsiElement field=aClass.add(newField);
   final PsiExpression newExpression=factory.createExpressionFromText(expressionText.toString(),element);
   PsiMethodCallExpression newMethodCallExpression=(PsiMethodCallExpression)methodCallExpression.replace(newExpression);
   newMethodCallExpression=CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(newMethodCallExpression);
