@@ -1,0 +1,31 @@
+{
+  List<PsiExpression> initializers=DfaPsiUtil.findAllConstructorInitializers(field);
+  if (initializers.isEmpty())   return;
+  List<PsiParameter> notNullParams=ContainerUtil.newArrayList();
+  boolean isFinal=field.hasModifierProperty(PsiModifier.FINAL);
+  for (  PsiExpression rhs : initializers) {
+    if (rhs instanceof PsiReferenceExpression) {
+      PsiElement target=((PsiReferenceExpression)rhs).resolve();
+      if (target instanceof PsiParameter && target.isPhysical()) {
+        PsiParameter parameter=(PsiParameter)target;
+        if (REPORT_NOT_ANNOTATED_GETTER && !manager.hasNullability(parameter) && !TypeConversionUtil.isPrimitiveAndNotNull(parameter.getType())) {
+          final PsiIdentifier nameIdentifier=parameter.getNameIdentifier();
+          if (nameIdentifier != null && nameIdentifier.isPhysical()) {
+            holder.registerProblem(nameIdentifier,InspectionsBundle.message("inspection.nullable.problems.annotated.field.constructor.parameter.not.annotated",getPresentableAnnoName(field)),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,createAddAnnotationFix(anno,annoToRemove,parameter));
+            continue;
+          }
+        }
+        if (isFinal && annotated.isDeclaredNullable && isNotNullNotInferred(parameter,false,false)) {
+          notNullParams.add(parameter);
+        }
+      }
+    }
+  }
+  if (notNullParams.size() != initializers.size()) {
+    return;
+  }
+  PsiIdentifier nameIdentifier=field.getNameIdentifier();
+  if (nameIdentifier.isPhysical()) {
+    holder.registerProblem(nameIdentifier,"@" + getPresentableAnnoName(field) + " field is always initialized not-null",ProblemHighlightType.GENERIC_ERROR_OR_WARNING,new AddNotNullAnnotationFix(field));
+  }
+}

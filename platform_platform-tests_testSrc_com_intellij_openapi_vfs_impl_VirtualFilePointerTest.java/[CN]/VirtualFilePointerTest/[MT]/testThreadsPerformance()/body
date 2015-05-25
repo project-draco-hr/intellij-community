@@ -14,12 +14,13 @@
   final VirtualFile virtualFile=pointer.getFile();
   assertNotNull(virtualFile);
   assertTrue(virtualFile.isValid());
+  final Collection<Job<Void>> reads=ContainerUtil.newConcurrentSet();
   VirtualFileAdapter listener=new VirtualFileAdapter(){
     @Override public void fileCreated(    @NotNull VirtualFileEvent event){
-      stressRead(pointer);
+      stressRead(pointer,reads);
     }
     @Override public void fileDeleted(    @NotNull VirtualFileEvent event){
-      stressRead(pointer);
+      stressRead(pointer,reads);
     }
   }
 ;
@@ -42,11 +43,16 @@
 .execute().throwException();
       assertTrue(ioPtrBase.mkdirs());
       assertTrue(ioPtr.createNewFile());
-      stressRead(pointer);
+      stressRead(pointer,reads);
       doVfsRefresh();
     }
   }
   finally {
     Disposer.dispose(disposable);
+    for (    Job<Void> read : reads) {
+      while (!read.isDone()) {
+        read.waitForCompletion(1000);
+      }
+    }
   }
 }

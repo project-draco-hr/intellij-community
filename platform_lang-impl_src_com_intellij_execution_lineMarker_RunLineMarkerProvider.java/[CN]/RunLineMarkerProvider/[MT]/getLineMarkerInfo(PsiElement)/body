@@ -1,0 +1,65 @@
+{
+  if (!(element instanceof PsiNameIdentifierOwner)) {
+    return null;
+  }
+  ConfigurationContext context=new ConfigurationContext(element);
+  List<ConfigurationFromContext> configurations=context.getConfigurationsFromContext();
+  if (configurations != null && !configurations.isEmpty()) {
+    configurations=ContainerUtil.filter(configurations,new Condition<ConfigurationFromContext>(){
+      @Override public boolean value(      ConfigurationFromContext context){
+        RunConfiguration configuration=context.getConfiguration();
+        if (!(configuration instanceof RunConfigurationBase))         return false;
+        return ((RunConfigurationBase)configuration).isLineMarkerPlace(element,context.getSourceElement());
+      }
+    }
+);
+    if (configurations.isEmpty())     return null;
+    Icon icon=null;
+    for (    ConfigurationFromContext configuration : configurations) {
+      icon=configuration.getConfiguration().getType().getIcon();
+    }
+    return new LineMarkerInfo<PsiElement>(element,element.getTextOffset(),icon,Pass.UPDATE_ALL,null,null,GutterIconRenderer.Alignment.CENTER){
+      @Nullable @Override public GutterIconRenderer createGutterRenderer(){
+        return new LineMarkerGutterIconRenderer<PsiElement>(this){
+          @Override public boolean isNavigateAction(){
+            return true;
+          }
+          @Override public AnAction getClickAction(){
+            return new AnAction(){
+              @Override public void actionPerformed(              AnActionEvent e){
+                List<AnAction> actions=new ArrayList<AnAction>();
+                Executor[] executors=ExecutorRegistry.getInstance().getRegisteredExecutors();
+                actions.addAll(ContainerUtil.mapNotNull(executors,new Function<Executor,AnAction>(){
+                  @Override public AnAction fun(                  Executor executor){
+                    return ActionManager.getInstance().getAction(executor.getContextActionId());
+                  }
+                }
+));
+                actions.add(Separator.getInstance());
+                actions.addAll(RunLineMarkerContributor.getActions(element));
+                ActionPopupMenuImpl popupMenu=(ActionPopupMenuImpl)ActionManager.getInstance().createActionPopupMenu(ActionPlaces.EDITOR_POPUP,new DefaultActionGroup(actions));
+                final MouseEvent me=(MouseEvent)e.getInputEvent();
+                final Component c=me.getComponent();
+                if (c != null && c.isShowing()) {
+                  final DataContext delegate=DataManager.getInstance().getDataContext(c,me.getX(),me.getY());
+                  final DataContext dataContext=new MyDataContext(element,delegate);
+                  popupMenu.setDataContextProvider(new Getter<DataContext>(){
+                    @Override public DataContext get(){
+                      return dataContext;
+                    }
+                  }
+);
+                  popupMenu.getComponent().show(c,me.getX(),me.getY());
+                }
+              }
+            }
+;
+          }
+        }
+;
+      }
+    }
+;
+  }
+  return null;
+}
