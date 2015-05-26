@@ -9,38 +9,31 @@
   final PyClass superClass=superClasses[0];
   final PyFunction superInit=superClass.findMethodByName(PyNames.INIT,true);
   if (superInit == null)   return;
-  final boolean addComma;
+  final ParametersInfo origInfo=new ParametersInfo(problemFunction.getParameterList());
+  final ParametersInfo superInfo=new ParametersInfo(superInit.getParameterList());
+  final boolean addSelfToCall;
   if (klass.isNewStyleClass()) {
-    addComma=false;
+    addSelfToCall=false;
     if (LanguageLevel.forElement(klass).isPy3K()) {
       superCall.append("super().__init__(");
     }
  else {
-      superCall.append("super(").append(klass.getName()).append(", self).__init__(");
+      superCall.append("super(").append(klass.getName()).append(", ").append(getSelfParameterName(origInfo)).append(").__init__(");
     }
   }
  else {
-    addComma=true;
-    superCall.append(superClass.getName());
-    superCall.append(".__init__(self");
+    addSelfToCall=true;
+    superCall.append(superClass.getName()).append(".__init__(");
   }
-  final StringBuilder newFunction=new StringBuilder("def __init__(self");
-  final Couple<List<String>> couple=buildNewFunctionParamsAndSuperInitCallArgs(problemFunction,superInit);
-  final List<String> newParameters=couple.getFirst();
-  if (!newParameters.isEmpty()) {
-    newFunction.append(", ");
-  }
-  StringUtil.join(newParameters,", ",newFunction);
+  final StringBuilder newFunction=new StringBuilder("def __init__(");
+  final Couple<List<String>> couple=buildNewFunctionParamsAndSuperInitCallArgs(origInfo,superInfo,addSelfToCall);
+  StringUtil.join(couple.getFirst(),", ",newFunction);
   newFunction.append(")");
   if (problemFunction.getAnnotation() != null) {
     newFunction.append(problemFunction.getAnnotation().getText());
   }
   newFunction.append(":\n\t");
-  final List<String> superCallArguments=couple.getSecond();
-  if (addComma && !superCallArguments.isEmpty()) {
-    superCall.append(", ");
-  }
-  StringUtil.join(superCallArguments,", ",superCall);
+  StringUtil.join(couple.getSecond(),", ",superCall);
   superCall.append(")");
   final PyStatementList statementList=problemFunction.getStatementList();
   PyExpression docstring=null;
