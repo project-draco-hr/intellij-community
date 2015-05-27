@@ -1,0 +1,38 @@
+{
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("enter: lock(path='" + configPath + "')");
+  }
+  ActivateStatus status=ActivateStatus.NO_INSTANCE;
+  acquireSocket();
+  if (mySocket == null) {
+    if (!myIsDialogShown) {
+      final String productName=ApplicationNamesInfo.getInstance().getProductName();
+      if (Main.isHeadless()) {
+        throw new RuntimeException("Only one instance of " + productName + " can be run at a time.");
+      }
+      @NonNls final String pathToLogFile=PathManager.getLogPath() + "/idea.log file".replace('/',File.separatorChar);
+      JOptionPane.showMessageDialog(JOptionPane.getRootFrame(),CommonBundle.message("cannot.start.other.instance.is.running.error.message",productName,pathToLogFile),CommonBundle.message("title.warning"),JOptionPane.WARNING_MESSAGE);
+      myIsDialogShown=true;
+    }
+    return status;
+  }
+  File portMarker=new File(configPath,"port");
+  try {
+    FileUtil.writeToFile(portMarker,Integer.toString(acquiredPort).getBytes());
+  }
+ catch (  IOException ignored) {
+    FileUtil.asyncDelete(portMarker);
+  }
+  for (int i=SOCKET_NUMBER_START; i < SOCKET_NUMBER_END; i++) {
+    if (isPortForbidden(i) || i == mySocket.getLocalPort()) {
+      continue;
+    }
+    status=tryActivate(i,configPath,systemPath,args);
+    if (status != ActivateStatus.NO_INSTANCE) {
+      return status;
+    }
+  }
+  myLockedPaths.add(configPath);
+  myLockedPaths.add(systemPath);
+  return status;
+}
