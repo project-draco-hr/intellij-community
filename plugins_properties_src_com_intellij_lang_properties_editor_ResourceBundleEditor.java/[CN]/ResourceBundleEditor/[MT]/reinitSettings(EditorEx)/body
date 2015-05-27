@@ -17,7 +17,42 @@
   editor.addEditorMouseListener(new EditorPopupHandler(){
     @Override public void invokePopup(    EditorMouseEvent event){
       if (!event.isConsumed() && event.getArea() == EditorMouseEventArea.EDITING_AREA) {
-        ActionGroup group=(ActionGroup)CustomActionsSchema.getInstance().getCorrectedAction(IdeActions.GROUP_CUT_COPY_PASTE);
+        DefaultActionGroup group=new DefaultActionGroup();
+        group.copyFromGroup((DefaultActionGroup)CustomActionsSchema.getInstance().getCorrectedAction(IdeActions.GROUP_CUT_COPY_PASTE));
+        group.addSeparator();
+        group.add(new AnAction("Propagate Value Across of Resource Bundle"){
+          @Override public void actionPerformed(          AnActionEvent e){
+            final String valueToPropagate=editor.getDocument().getText();
+            final String currentSelectedProperty=getSelectedPropertyName();
+            if (currentSelectedProperty == null) {
+              return;
+            }
+            ApplicationManager.getApplication().runWriteAction(new Runnable(){
+              @Override public void run(){
+                WriteCommandAction.runWriteCommandAction(myProject,new Runnable(){
+                  @Override public void run(){
+                    try {
+                      for (                      Map.Entry<PropertiesFile,Editor> entry : myEditors.entrySet()) {
+                        final Editor translationEditor=entry.getValue();
+                        if (translationEditor != editor) {
+                          final PropertiesFile propertiesFile=entry.getKey();
+                          myPropertiesInsertDeleteManager.insertOrUpdateTranslation(currentSelectedProperty,valueToPropagate,propertiesFile);
+                          translationEditor.getDocument().setText(valueToPropagate);
+                        }
+                      }
+                    }
+ catch (                    final IncorrectOperationException e) {
+                      LOG.error(e);
+                    }
+                  }
+                }
+);
+              }
+            }
+);
+          }
+        }
+);
         EditorPopupHandler handler=EditorActionUtil.createEditorPopupHandler(group);
         handler.invokePopup(event);
         event.consume();
