@@ -1,0 +1,36 @@
+{
+  if (XDebuggerManager.getInstance(myProject).getCurrentSession() == null) {
+    FILE_PROCESSED_KEY.set(file,null);
+    return null;
+  }
+  if (file.getFileType() == JavaClassFileType.INSTANCE)   return null;
+  final PsiFile psiFile=PsiManager.getInstance(myProject).findFile(file);
+  if (psiFile == null)   return null;
+  if (!(psiFile instanceof PsiJavaFile))   return null;
+  PsiClass[] classes=((PsiJavaFile)psiFile).getClasses();
+  if (classes.length == 0)   return null;
+  PsiClass baseClass=classes[0];
+  String name=baseClass.getQualifiedName();
+  if (name == null)   return null;
+  if (DumbService.getInstance(myProject).isDumb())   return null;
+  PsiClass[] alternatives=JavaPsiFacade.getInstance(myProject).findClasses(name,GlobalSearchScope.allScope(myProject));
+  FILE_PROCESSED_KEY.set(file,true);
+  if (alternatives.length > 1) {
+    ArrayList<PsiClass> alts=ContainerUtil.newArrayList(alternatives);
+    for (    PsiClass cls : alts) {
+      if (cls.equals(baseClass) || cls.getNavigationElement().equals(baseClass)) {
+        alts.remove(cls);
+        break;
+      }
+    }
+    alts.add(0,baseClass);
+    ComboBoxClassElement[] elems=ContainerUtil.map2Array(alts,ComboBoxClassElement.class,new Function<PsiClass,ComboBoxClassElement>(){
+      @Override public ComboBoxClassElement fun(      PsiClass psiClass){
+        return new ComboBoxClassElement(psiClass);
+      }
+    }
+);
+    return new AlternativeSourceNotificationPanel(elems,baseClass,myProject,file);
+  }
+  return null;
+}
