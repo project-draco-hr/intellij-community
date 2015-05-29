@@ -1,38 +1,46 @@
 {
   if (LOG.isDebugEnabled()) {
-    LOG.debug("enter: lock(path='" + configPath + "')");
+    LOG.debug("enter: lock(configPath='" + configPath + "', systemPath='"+ systemPath+ "')");
   }
-  ActivateStatus status=ActivateStatus.NO_INSTANCE;
-  acquireSocket();
-  if (mySocket == null) {
-    if (!myIsDialogShown) {
-      final String productName=ApplicationNamesInfo.getInstance().getProductName();
-      if (Main.isHeadless()) {
-        throw new RuntimeException("Only one instance of " + productName + " can be run at a time.");
-      }
-      @NonNls final String pathToLogFile=PathManager.getLogPath() + "/idea.log file".replace('/',File.separatorChar);
-      JOptionPane.showMessageDialog(JOptionPane.getRootFrame(),CommonBundle.message("cannot.start.other.instance.is.running.error.message",productName,pathToLogFile),CommonBundle.message("title.warning"),JOptionPane.WARNING_MESSAGE);
-      myIsDialogShown=true;
-    }
-    return status;
-  }
-  File portMarker=new File(configPath,"port");
+  File config=new File(configPath);
+  File system=new File(systemPath);
+  File portMarkerC=new File(config,"port");
+  File portMarkerS=new File(system,"port");
+  List<Closeable> closeables=new ArrayList<Closeable>();
   try {
-    FileUtil.writeToFile(portMarker,Integer.toString(acquiredPort).getBytes());
-  }
- catch (  IOException ignored) {
-    FileUtil.asyncDelete(portMarker);
-  }
-  for (int i=SOCKET_NUMBER_START; i < SOCKET_NUMBER_END; i++) {
-    if (isPortForbidden(i) || i == mySocket.getLocalPort()) {
-      continue;
+    lockPortMarker(config,closeables);
+    lockPortMarker(system,closeables);
+    MultiMap<Integer,String> portToPath=MultiMap.createSmart();
+    addExistingPort(portMarkerC,configPath,portToPath);
+    addExistingPort(portMarkerS,systemPath,portToPath);
+    if (!portToPath.isEmpty()) {
+      for (      Map.Entry<Integer,Collection<String>> entry : portToPath.entrySet()) {
+        ActivateStatus status=tryActivate(entry.getKey(),entry.getValue(),args);
+        if (status != ActivateStatus.NO_INSTANCE) {
+          return status;
+        }
+      }
     }
-    status=tryActivate(i,configPath,systemPath,args);
-    if (status != ActivateStatus.NO_INSTANCE) {
-      return status;
+    byte[] portBytes=Integer.toString(acquiredPort).getBytes(CharsetToolkit.UTF8_CHARSET);
+    FileUtil.writeToFile(portMarkerC,portBytes);
+    FileUtil.writeToFile(portMarkerS,portBytes);
+    myLockedPaths[0]=configPath;
+    myLockedPaths[1]=systemPath;
+  }
+ catch (  IOException e) {
+    LOG.error(e);
+  }
+ finally {
+    for (    Closeable closeable : closeables) {
+      try {
+        closeable.close();
+      }
+ catch (      Throwable e) {
+        LOG.error(e);
+      }
     }
   }
-  myLockedPaths.add(configPath);
-  myLockedPaths.add(systemPath);
-  return status;
+  portMarkerC.deleteOnExit();
+  portMarkerS.deleteOnExit();
+  return ActivateStatus.NO_INSTANCE;
 }

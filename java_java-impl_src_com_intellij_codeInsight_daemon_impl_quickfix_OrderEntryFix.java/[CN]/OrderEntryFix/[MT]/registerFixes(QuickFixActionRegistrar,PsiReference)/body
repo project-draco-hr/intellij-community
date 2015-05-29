@@ -51,7 +51,7 @@
     }
 ;
     registrar.register(fix);
-    return Arrays.asList((LocalQuickFix)fix);
+    return Collections.singletonList((LocalQuickFix)fix);
   }
   if (isAnnotation(psiElement) && AnnotationUtil.isJetbrainsAnnotation(referenceName)) {
     @NonNls final String className="org.jetbrains.annotations." + referenceName;
@@ -70,11 +70,11 @@
       @Override public void invoke(      @NotNull final Project project,      final Editor editor,      PsiFile file){
         ApplicationManager.getApplication().invokeLater(new Runnable(){
           @Override public void run(){
-            final LocateLibraryDialog dialog=new LocateLibraryDialog(currentModule,PathManager.getLibPath(),"annotations.jar",QuickFixBundle.message("add.library.annotations.description"));
-            if (dialog.showAndGet()) {
+            final String libraryPath=locateAnnotationsJar(currentModule);
+            if (libraryPath != null) {
               new WriteCommandAction(project){
                 @Override protected void run(                final Result result) throws Throwable {
-                  addBundledJarToRoots(project,editor,currentModule,reference,"org.jetbrains.annotations." + referenceName,dialog.getResultingLibraryPath());
+                  addBundledJarToRoots(project,editor,currentModule,reference,"org.jetbrains.annotations." + referenceName,libraryPath);
                 }
               }
 .execute();
@@ -86,7 +86,7 @@
     }
 ;
     registrar.register(fix);
-    return Arrays.asList((LocalQuickFix)fix);
+    return Collections.singletonList((LocalQuickFix)fix);
   }
   List<LocalQuickFix> result=new ArrayList<LocalQuickFix>();
   Set<Object> librariesToAdd=new THashSet<Object>();
@@ -117,12 +117,8 @@
         final VirtualFile jar=files[0];
         if (jar == null || libraryEntry.isModuleLevel() && !librariesToAdd.add(jar) || !librariesToAdd.add(library))         continue;
         OrderEntry entryForFile=moduleFileIndex.getOrderEntryForFile(virtualFile);
-        if (entryForFile != null) {
-          if (entryForFile instanceof ExportableOrderEntry && ((ExportableOrderEntry)entryForFile).getScope() == DependencyScope.TEST && !ModuleRootManager.getInstance(currentModule).getFileIndex().isInTestSourceContent(classVFile)) {
-          }
- else {
-            continue;
-          }
+        if (entryForFile != null && !(entryForFile instanceof ExportableOrderEntry && ((ExportableOrderEntry)entryForFile).getScope() == DependencyScope.TEST && !ModuleRootManager.getInstance(currentModule).getFileIndex().isInTestSourceContent(classVFile))) {
+          continue;
         }
         final OrderEntryFix fix=new OrderEntryFix(){
           @Override @NotNull public String getText(){
