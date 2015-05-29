@@ -1,0 +1,37 @@
+{
+  InetAddress loopbackAddress=NetUtils.getLoopbackAddress();
+  for (int i=0; i < portsCount; i++) {
+    int port=firstPort + i;
+    if (!SystemInfo.isLinux && (!SystemInfo.isWindows || SystemInfo.isWinVistaOrNewer)) {
+      try {
+        ServerSocket serverSocket=new ServerSocket();
+        try {
+          serverSocket.bind(new InetSocketAddress(port),1);
+        }
+  finally {
+          serverSocket.close();
+        }
+      }
+ catch (      IOException ignored) {
+        continue;
+      }
+    }
+    ChannelFuture future=bootstrap.bind(loopbackAddress,port).awaitUninterruptibly();
+    if (future.isSuccess()) {
+      channelRegistrar.add(future.channel());
+      return port;
+    }
+ else     if (!tryAnyPort && i == (portsCount - 1)) {
+      throw future.cause();
+    }
+  }
+  LOG.info("We cannot bind to our default range, so, try to bind to any free port");
+  ChannelFuture future=bootstrap.bind(loopbackAddress,0).awaitUninterruptibly();
+  if (future.isSuccess()) {
+    channelRegistrar.add(future.channel());
+    return ((InetSocketAddress)future.channel().localAddress()).getPort();
+  }
+ else {
+    throw future.cause();
+  }
+}

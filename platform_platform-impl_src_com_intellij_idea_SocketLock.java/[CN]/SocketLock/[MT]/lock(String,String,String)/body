@@ -1,0 +1,46 @@
+{
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("enter: lock(configPath='" + configPath + "', systemPath='"+ systemPath+ "')");
+  }
+  File config=new File(configPath);
+  File system=new File(systemPath);
+  File portMarkerC=new File(config,"port");
+  File portMarkerS=new File(system,"port");
+  List<Closeable> closeables=new ArrayList<Closeable>();
+  try {
+    lockPortMarker(config,closeables);
+    lockPortMarker(system,closeables);
+    MultiMap<Integer,String> portToPath=MultiMap.createSmart();
+    addExistingPort(portMarkerC,configPath,portToPath);
+    addExistingPort(portMarkerS,systemPath,portToPath);
+    if (!portToPath.isEmpty()) {
+      for (      Map.Entry<Integer,Collection<String>> entry : portToPath.entrySet()) {
+        ActivateStatus status=tryActivate(entry.getKey(),entry.getValue(),args);
+        if (status != ActivateStatus.NO_INSTANCE) {
+          return status;
+        }
+      }
+    }
+    byte[] portBytes=Integer.toString(acquiredPort).getBytes(CharsetToolkit.UTF8_CHARSET);
+    FileUtil.writeToFile(portMarkerC,portBytes);
+    FileUtil.writeToFile(portMarkerS,portBytes);
+    myLockedPaths[0]=configPath;
+    myLockedPaths[1]=systemPath;
+  }
+ catch (  IOException e) {
+    LOG.error(e);
+  }
+ finally {
+    for (    Closeable closeable : closeables) {
+      try {
+        closeable.close();
+      }
+ catch (      Throwable e) {
+        LOG.error(e);
+      }
+    }
+  }
+  portMarkerC.deleteOnExit();
+  portMarkerS.deleteOnExit();
+  return ActivateStatus.NO_INSTANCE;
+}

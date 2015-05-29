@@ -1,0 +1,31 @@
+{
+  final String dataProviderFqn=DataProvider.class.getCanonicalName();
+  final MultiMap<String,PsiMethod> dataProvidersByName=new MultiMap<String,PsiMethod>();
+  for (  PsiMethod method : aClass.getAllMethods()) {
+    final PsiAnnotation annotation=AnnotationUtil.findAnnotation(method,dataProviderFqn);
+    if (annotation != null) {
+      final PsiAnnotationMemberValue value=annotation.findAttributeValue(NAME_ATTRIBUTE);
+      LOG.assertTrue(value != null);
+      final String dataProviderName=PsiTreeUtil.isAncestor(annotation,value,false) ? AnnotationUtil.getStringAttributeValue(annotation,NAME_ATTRIBUTE) : method.getName();
+      if (dataProviderName != null) {
+        dataProvidersByName.putValue(dataProviderName,method);
+      }
+    }
+  }
+  final List<ProblemDescriptor> descriptors=new SmartList<ProblemDescriptor>();
+  for (  Map.Entry<String,Collection<PsiMethod>> entry : dataProvidersByName.entrySet()) {
+    if (entry.getValue().size() > 1) {
+      for (      PsiMethod method : entry.getValue()) {
+        final String description=String.format("Data provider with name '%s' already exists in context",entry.getKey());
+        final PsiAnnotation annotation=AnnotationUtil.findAnnotation(method,dataProviderFqn);
+        LOG.assertTrue(annotation != null);
+        final PsiAnnotationMemberValue nameElement=annotation.findAttributeValue(NAME_ATTRIBUTE);
+        LOG.assertTrue(nameElement != null);
+        PsiElement problemElement=PsiTreeUtil.isAncestor(aClass,nameElement,false) ? nameElement : method.getNameIdentifier();
+        LOG.assertTrue(problemElement != null);
+        descriptors.add(manager.createProblemDescriptor(problemElement,description,true,LocalQuickFix.EMPTY_ARRAY,ProblemHighlightType.ERROR));
+      }
+    }
+  }
+  return descriptors.isEmpty() ? null : descriptors.toArray(new ProblemDescriptor[descriptors.size()]);
+}

@@ -1,0 +1,39 @@
+{
+  final ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
+  try {
+    final Process process=myCommandLine.createProcess();
+    HgCommandProcessHandler processHandler=new HgCommandProcessHandler(process,myCommandLine.toString(),myCommandLine.getCharset(),isBinary);
+    CapturingProcessAdapter outputAdapter=new CapturingProcessAdapter(){
+      @Override public void onTextAvailable(      ProcessEvent event,      Key outputType){
+        Iterator<String> lines=LineHandlerHelper.splitText(event.getText()).iterator();
+        if (ProcessOutputTypes.STDOUT == outputType) {
+          while (lines.hasNext()) {
+            String line=lines.next();
+            if (indicator != null && showTextOnIndicator) {
+              indicator.setText2(line);
+            }
+            addToOutput(line,ProcessOutputTypes.STDOUT);
+          }
+        }
+ else {
+          super.onTextAvailable(event,outputType);
+        }
+      }
+    }
+;
+    processHandler.addProcessListener(outputAdapter);
+    processHandler.startNotify();
+    while (!processHandler.waitFor(300)) {
+      if (indicator != null && indicator.isCanceled()) {
+        processHandler.destroyProcess();
+        outputAdapter.getOutput().setExitCode(255);
+        break;
+      }
+    }
+    ProcessOutput output=outputAdapter.getOutput();
+    return new HgCommandResult(output,processHandler.getBinaryOutput());
+  }
+ catch (  ExecutionException e) {
+    throw new ShellCommandException(e);
+  }
+}
