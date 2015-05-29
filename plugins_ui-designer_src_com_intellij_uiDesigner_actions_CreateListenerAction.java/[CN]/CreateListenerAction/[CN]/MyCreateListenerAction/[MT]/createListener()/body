@@ -55,7 +55,7 @@
     }
     PsiStatement stmt=factory.createStatementFromText(builder.toString(),constructor);
     stmt=(PsiStatement)body.addAfter(stmt,body.getLastBodyElement());
-    JavaCodeStyleManager.getInstance(body.getProject()).shortenClassReferences(stmt);
+    stmt=(PsiStatement)JavaCodeStyleManager.getInstance(body.getProject()).shortenClassReferences(stmt);
     if (boundFields.length > 1) {
       PsiElement anchor=stmt;
       for (      PsiField field : boundFields) {
@@ -64,22 +64,29 @@
         anchor=addStmt;
       }
     }
-    final Ref<PsiClass> newClassRef=new Ref<PsiClass>();
-    stmt.accept(new JavaRecursiveElementWalkingVisitor(){
-      @Override public void visitClass(      PsiClass aClass){
-        newClassRef.set(aClass);
-      }
-    }
-);
-    final PsiClass newClass=newClassRef.get();
-    final SmartPsiElementPointer ptr=SmartPointerManager.getInstance(myClass.getProject()).createSmartPsiElementPointer(newClass);
-    final VirtualFile virtualFile=PsiUtilCore.getVirtualFile(newClass);
-    final FileEditor[] fileEditors=virtualFile != null ? FileEditorManager.getInstance(newClass.getProject()).openFile(virtualFile,true,true) : null;
+    final SmartPsiElementPointer ptr=SmartPointerManager.getInstance(myClass.getProject()).createSmartPsiElementPointer(stmt);
+    final VirtualFile virtualFile=PsiUtilCore.getVirtualFile(myClass);
+    final FileEditor[] fileEditors=virtualFile != null ? FileEditorManager.getInstance(myClass.getProject()).openFile(virtualFile,true,true) : null;
     IdeFocusManager.findInstance().doWhenFocusSettlesDown(new Runnable(){
       public void run(){
-        final PsiClass newClass=(PsiClass)ptr.getElement();
+        final PsiElement anonymousClassStatement=ptr.getElement();
+        if (anonymousClassStatement == null) {
+          return;
+        }
+        final Ref<PsiClass> newClassRef=new Ref<PsiClass>();
+        anonymousClassStatement.accept(new JavaRecursiveElementWalkingVisitor(){
+          @Override public void visitClass(          PsiClass aClass){
+            newClassRef.set(aClass);
+          }
+        }
+);
+        final PsiClass newClass=newClassRef.get();
         final Editor editor=getEditor();
         if (editor != null && newClass != null) {
+          PsiElement brace=newClass.getLBrace();
+          if (brace != null) {
+            editor.getCaretModel().moveToOffset(brace.getTextOffset());
+          }
           CommandProcessor.getInstance().executeCommand(myClass.getProject(),new Runnable(){
             public void run(){
               if (!OverrideImplementExploreUtil.getMethodSignaturesToImplement(newClass).isEmpty()) {
