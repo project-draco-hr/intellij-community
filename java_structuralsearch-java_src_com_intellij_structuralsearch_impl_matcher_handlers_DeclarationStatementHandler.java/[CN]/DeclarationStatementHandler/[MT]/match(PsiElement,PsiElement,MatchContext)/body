@@ -3,27 +3,39 @@
     return myCommentHandler.match(patternNode,matchedNode,context);
   }
   if (!super.match(patternNode,matchedNode,context))   return false;
-  boolean result;
-  PsiDeclarationStatement dcl=(PsiDeclarationStatement)patternNode;
+  final PsiDeclarationStatement dcl=(PsiDeclarationStatement)patternNode;
   if (matchedNode instanceof PsiDeclarationStatement) {
-    result=GlobalMatchingVisitor.continueMatchingSequentially(new SsrFilteringNodeIterator(patternNode.getFirstChild()),new SsrFilteringNodeIterator(matchedNode.getFirstChild()),context);
+    return GlobalMatchingVisitor.continueMatchingSequentially(new SsrFilteringNodeIterator(patternNode.getFirstChild()),new SsrFilteringNodeIterator(matchedNode.getFirstChild()),context);
   }
- else {
-    final PsiElement[] declared=dcl.getDeclaredElements();
-    if (declared.length > 0 && ((declared[0] instanceof PsiVariable && matchedNode instanceof PsiVariable) || (declared[0] instanceof PsiClass && matchedNode instanceof PsiClass)) && !(matchedNode.getParent() instanceof PsiDeclarationStatement)) {
-      result=GlobalMatchingVisitor.continueMatchingSequentially(new ArrayBackedNodeIterator(declared),new CountingNodeIterator(declared.length,new SsrFilteringNodeIterator(matchedNode)),context);
-      if (result && declared[0] instanceof PsiVariable && matchedNode instanceof PsiField) {
-        final PsiElement[] children=dcl.getChildren();
-        final PsiElement lastChild=children[children.length - 1];
-        if (lastChild instanceof PsiComment) {
-          final PsiElement[] fieldChildren=matchedNode.getChildren();
-          result=context.getPattern().getHandler(lastChild).match(lastChild,fieldChildren[fieldChildren.length - 1],context);
-        }
+  final PsiElement[] declared=dcl.getDeclaredElements();
+  if (declared.length > 0 && !(matchedNode.getParent() instanceof PsiDeclarationStatement)) {
+    if (!(matchedNode instanceof PsiField)) {
+      return GlobalMatchingVisitor.continueMatchingSequentially(new ArrayBackedNodeIterator(declared),new CountingNodeIterator(declared.length,new SsrFilteringNodeIterator(matchedNode)),context);
+    }
+    final PsiElement sibling=PsiTreeUtil.skipSiblingsBackward(matchedNode,PsiWhiteSpace.class);
+    if (PsiUtil.isJavaToken(sibling,JavaTokenType.COMMA)) {
+      return false;
+    }
+    final List<PsiElement> matchNodes=new ArrayList<PsiElement>();
+    matchNodes.add(matchedNode);
+    PsiElement node=matchedNode;
+    node=PsiTreeUtil.skipSiblingsForward(node,PsiWhiteSpace.class);
+    while (PsiUtil.isJavaToken(node,JavaTokenType.COMMA)) {
+      node=PsiTreeUtil.skipSiblingsForward(node,PsiWhiteSpace.class);
+      if (node != null) {
+        matchNodes.add(node);
+      }
+      node=PsiTreeUtil.skipSiblingsForward(node,PsiWhiteSpace.class);
+    }
+    boolean result=GlobalMatchingVisitor.continueMatchingSequentially(new ArrayBackedNodeIterator(declared),new ArrayBackedNodeIterator(matchNodes.toArray(new PsiElement[matchNodes.size()])),context);
+    if (result && declared[0] instanceof PsiVariable) {
+      final PsiElement lastChild=dcl.getLastChild();
+      if (lastChild instanceof PsiComment) {
+        final PsiElement[] fieldChildren=matchedNode.getChildren();
+        result=context.getPattern().getHandler(lastChild).match(lastChild,fieldChildren[fieldChildren.length - 1],context);
       }
     }
- else {
-      result=false;
-    }
+    return result;
   }
-  return result;
+  return false;
 }
