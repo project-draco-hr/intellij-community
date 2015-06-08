@@ -1,99 +1,14 @@
 {
-  final DefaultActionGroup group=new DefaultActionGroup();
-  final ShowPrevChangeMarkerAction localShowPrevAction=new ShowPrevChangeMarkerAction(tracker.getPrevRange(range),tracker,editor);
-  final ShowNextChangeMarkerAction localShowNextAction=new ShowNextChangeMarkerAction(tracker.getNextRange(range),tracker,editor);
-  final RollbackLineStatusRangeAction rollback=new RollbackLineStatusRangeAction(tracker,range,editor);
-  final ShowLineStatusRangeDiffAction showDiff=new ShowLineStatusRangeDiffAction(tracker,range,editor);
-  final CopyLineStatusRangeAction copyRange=new CopyLineStatusRangeAction(tracker,range);
-  group.add(localShowPrevAction);
-  group.add(localShowNextAction);
-  group.add(rollback);
-  group.add(showDiff);
-  group.add(copyRange);
-  final JComponent editorComponent=editor.getComponent();
-  EmptyAction.setupAction(localShowPrevAction,"VcsShowPrevChangeMarker",editorComponent);
-  EmptyAction.setupAction(localShowNextAction,"VcsShowNextChangeMarker",editorComponent);
-  EmptyAction.setupAction(rollback,IdeActions.SELECTED_CHANGES_ROLLBACK,editorComponent);
-  EmptyAction.setupAction(showDiff,"ChangesView.Diff",editorComponent);
-  EmptyAction.setupAction(copyRange,IdeActions.ACTION_COPY,editorComponent);
-  int offsetX=0;
-  final JComponent toolbar=ActionManager.getInstance().createActionToolbar(ActionPlaces.FILEHISTORY_VIEW_TOOLBAR,group,true).getComponent();
-  final Color background=((EditorEx)editor).getBackgroundColor();
-  final Color foreground=editor.getColorsScheme().getColor(EditorColors.CARET_COLOR);
-  toolbar.setBackground(background);
-  toolbar.setBorder(new ColoredSideBorder(foreground,foreground,range.getType() != Range.INSERTED ? null : foreground,foreground,1));
-  final JPanel component=new JPanel(new BorderLayout());
-  component.setOpaque(false);
-  final JPanel toolbarPanel=new JPanel(new BorderLayout());
-  toolbarPanel.setOpaque(false);
-  toolbarPanel.add(toolbar,BorderLayout.WEST);
-  JPanel emptyPanel=new JPanel();
-  emptyPanel.setOpaque(false);
-  toolbarPanel.add(emptyPanel,BorderLayout.CENTER);
-  MouseAdapter listener=new MouseAdapter(){
-    @Override public void mousePressed(    MouseEvent e){
-      editor.getContentComponent().dispatchEvent(SwingUtilities.convertMouseEvent(e.getComponent(),e,editor.getContentComponent()));
-    }
-    @Override public void mouseClicked(    MouseEvent e){
-      editor.getContentComponent().dispatchEvent(SwingUtilities.convertMouseEvent(e.getComponent(),e,editor.getContentComponent()));
-    }
-    public void mouseReleased(    final MouseEvent e){
-      editor.getContentComponent().dispatchEvent(SwingUtilities.convertMouseEvent(e.getComponent(),e,editor.getContentComponent()));
-    }
-  }
-;
-  emptyPanel.addMouseListener(listener);
-  component.add(toolbarPanel,BorderLayout.NORTH);
-  final List<RangeHighlighter> highlighters=new ArrayList<RangeHighlighter>();
-  if (range.getType() != Range.INSERTED) {
-    final DocumentEx doc=(DocumentEx)tracker.getVcsDocument();
-    final EditorEx uEditor=(EditorEx)EditorFactory.getInstance().createViewer(doc,tracker.getProject());
-    uEditor.setColorsScheme(editor.getColorsScheme());
-    final EditorHighlighter highlighter=EditorHighlighterFactory.getInstance().createEditorHighlighter(tracker.getProject(),getFileName(tracker.getDocument()));
-    uEditor.setHighlighter(highlighter);
-    try {
-      if (range.getType() == Range.MODIFIED) {
-        final CharSequence vcsContent=tracker.getVcsContent(range);
-        final CharSequence currentContent=tracker.getCurrentContent(range);
-        List<DiffFragment> diff=BackgroundTaskUtil.tryComputeFast(new Function<ProgressIndicator,List<DiffFragment>>(){
-          @Override public List<DiffFragment> fun(          ProgressIndicator indicator){
-            return ByWord.compare(vcsContent,currentContent,ComparisonPolicy.DEFAULT,indicator);
-          }
-        }
-,Registry.intValue("diff.status.tracker.byword.delay"));
-        if (diff == null)         throw new DiffTooBigException();
-        int vcsStartShift=tracker.getVcsTextRange(range).getStartOffset();
-        int currentStartShift=tracker.getCurrentTextRange(range).getStartOffset();
-        for (        DiffFragment fragment : diff) {
-          int vcsStart=vcsStartShift + fragment.getStartOffset1();
-          int vcsEnd=vcsStartShift + fragment.getEndOffset1();
-          int currentStart=currentStartShift + fragment.getStartOffset2();
-          int currentEnd=currentStartShift + fragment.getEndOffset2();
-          TextDiffType type=DiffUtil.getDiffType(fragment);
-          DiffDrawUtil.createInlineHighlighter(uEditor,vcsStart,vcsEnd,type);
-          highlighters.add(DiffDrawUtil.createInlineHighlighter(editor,currentStart,currentEnd,type));
-        }
-      }
-    }
- catch (    DiffTooBigException ignore) {
-    }
-    final EditorFragmentComponent editorFragmentComponent=EditorFragmentComponent.createEditorFragmentComponent(uEditor,range.getVcsLine1(),range.getVcsLine2(),false,false);
-    component.add(editorFragmentComponent,BorderLayout.CENTER);
-    offsetX-=editorFragmentComponent.getBorder().getBorderInsets(editorFragmentComponent).left;
-    EditorFactory.getInstance().releaseEditor(uEditor);
-  }
-  final List<AnAction> actionList=ActionUtil.getActions(editorComponent);
-  final LightweightHint hint=new LightweightHint(component);
+  final Disposable disposable=Disposer.newDisposable();
+  List<DiffFragment> wordDiff=computeWordDiff(range,tracker);
+  installEditorHighlighters(range,editor,tracker,wordDiff,disposable);
+  Pair<JComponent,Integer> editorComponent=createEditorComponent(range,editor,tracker,wordDiff);
+  ActionToolbar toolbar=buildToolbar(range,editor,tracker,disposable);
+  PopupPanel popupPanel=new PopupPanel(editor,toolbar,editorComponent.first,editorComponent.second);
+  LightweightHint hint=new LightweightHint(popupPanel);
   HintListener closeListener=new HintListener(){
     public void hintHidden(    final EventObject event){
-      actionList.remove(rollback);
-      actionList.remove(showDiff);
-      actionList.remove(copyRange);
-      actionList.remove(localShowPrevAction);
-      actionList.remove(localShowNextAction);
-      for (      RangeHighlighter highlighter : highlighters) {
-        highlighter.dispose();
-      }
+      Disposer.dispose(disposable);
     }
   }
 ;
@@ -106,7 +21,7 @@
     if (delta < 0)     delta+=lineHeight;
     point.y=mousePosition.y + delta;
   }
-  point.x+=offsetX;
+  point.x-=popupPanel.getEditorTextOffset();
   int flags=HintManager.HIDE_BY_ANY_KEY | HintManager.HIDE_BY_TEXT_CHANGE | HintManager.HIDE_BY_SCROLLING;
   HintManagerImpl.getInstanceImpl().showEditorHint(hint,editor,point,flags,-1,false,new HintHint(editor,point));
   if (!hint.isVisible()) {

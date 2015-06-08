@@ -21,12 +21,13 @@
       return position;
     }
   }
+  final Method method=location.method();
   if (psiFile instanceof PsiCompiledElement || lineNumber < 0) {
-    final String methodSignature=location.method().signature();
+    final String methodSignature=method.signature();
     if (methodSignature == null) {
       return SourcePosition.createFromLine(psiFile,-1);
     }
-    final String methodName=location.method().name();
+    final String methodName=method.name();
     if (methodName == null) {
       return SourcePosition.createFromLine(psiFile,-1);
     }
@@ -45,5 +46,29 @@
     }
     return sourcePosition;
   }
-  return new JavaSourcePosition(SourcePosition.createFromLine(psiFile,lineNumber),location.declaringType(),location.method());
+  SourcePosition sourcePosition=SourcePosition.createFromLine(psiFile,lineNumber);
+  int lambdaOrdinal=-1;
+  if (LambdaMethodFilter.isLambdaName(method.name())) {
+    List<Location> lambdas=ContainerUtil.filter(locationsOfLine(location.declaringType(),sourcePosition),new Condition<Location>(){
+      @Override public boolean value(      Location location){
+        return LambdaMethodFilter.isLambdaName(location.method().name());
+      }
+    }
+);
+    if (lambdas.size() > 1) {
+      Collections.sort(lambdas,new Comparator<Location>(){
+        @Override public int compare(        Location o1,        Location o2){
+          return LambdaMethodFilter.getLambdaOrdinal(o1.method().name()) - LambdaMethodFilter.getLambdaOrdinal(o2.method().name());
+        }
+      }
+);
+      lambdaOrdinal=ContainerUtil.indexOf(lambdas,new Condition<Location>(){
+        @Override public boolean value(        Location location){
+          return location.method().equals(method);
+        }
+      }
+);
+    }
+  }
+  return new JavaSourcePosition(sourcePosition,location.declaringType(),method,lambdaOrdinal);
 }

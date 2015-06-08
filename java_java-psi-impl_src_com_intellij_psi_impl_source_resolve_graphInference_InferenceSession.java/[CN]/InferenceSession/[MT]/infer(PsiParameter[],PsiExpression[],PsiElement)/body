@@ -11,7 +11,7 @@
     if (parameters != null && args != null) {
       final Set<ConstraintFormula> additionalConstraints=new LinkedHashSet<ConstraintFormula>();
       if (parameters.length > 0) {
-        collectAdditionalConstraints(parameters,args,properties.getMethod(),PsiSubstitutor.EMPTY,additionalConstraints,properties.isVarargs());
+        collectAdditionalConstraints(parameters,args,properties.getMethod(),mySiteSubstitutor,additionalConstraints,properties.isVarargs());
       }
       if (!additionalConstraints.isEmpty() && !proceedWithAdditionalConstraints(additionalConstraints)) {
         return prepareSubstitution().putAll(retrieveNonPrimitiveEqualsBounds(myInferenceVariables));
@@ -23,9 +23,21 @@
     if (myContext != null) {
       myContext.putUserData(ERASED,myErased);
     }
-    mySiteSubstitutor=mySiteSubstitutor.putAll(substitutor);
-    for (    InferenceVariable variable : myInferenceVariables) {
-      variable.setInstantiation(substitutor.substitute(variable.getParameter()));
+    final Map<PsiTypeParameter,PsiType> map=substitutor.getSubstitutionMap();
+    for (    PsiTypeParameter parameter : map.keySet()) {
+      final PsiType mapping=map.get(parameter);
+      PsiTypeParameter param;
+      if (parameter instanceof InferenceVariable) {
+        ((InferenceVariable)parameter).setInstantiation(mapping);
+        if (((InferenceVariable)parameter).getCallContext() != myContext) {
+          continue;
+        }
+        param=((InferenceVariable)parameter).getParameter();
+      }
+ else {
+        param=parameter;
+      }
+      mySiteSubstitutor=mySiteSubstitutor.put(param,mapping);
     }
   }
  else {
