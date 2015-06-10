@@ -1,0 +1,37 @@
+{
+  return new JavaElementVisitor(){
+    @Override public void visitAnnotation(    PsiAnnotation annotation){
+      if (TestNGUtil.TEST_ANNOTATION_FQN.equals(annotation.getQualifiedName())) {
+        final PsiAnnotationMemberValue provider=annotation.findDeclaredAttributeValue("dataProvider");
+        if (provider != null && !TestNGUtil.isDisabled(annotation)) {
+          for (          PsiReference reference : provider.getReferences()) {
+            if (reference instanceof DataProviderReference) {
+              final PsiElement dataProviderMethod=reference.resolve();
+              final PsiElement element=reference.getElement();
+              final PsiClass topLevelClass=PsiUtil.getTopLevelClass(element);
+              final PsiClass providerClass=TestNGUtil.getProviderClass(element,topLevelClass);
+              if (!(dataProviderMethod instanceof PsiMethod)) {
+                final LocalQuickFix[] fixes;
+                if (isOnTheFly) {
+                  fixes=new LocalQuickFix[]{createMethodFix(provider,providerClass,topLevelClass)};
+                }
+ else {
+                  fixes=LocalQuickFix.EMPTY_ARRAY;
+                }
+                holder.registerProblem(provider,"Data provider does not exist",fixes);
+              }
+ else {
+                final PsiMethod providerMethod=(PsiMethod)dataProviderMethod;
+                if (providerClass != topLevelClass && !providerMethod.hasModifierProperty(PsiModifier.STATIC)) {
+                  holder.registerProblem(provider,"Data provider from foreign class need to be static");
+                }
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+;
+}
