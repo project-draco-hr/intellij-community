@@ -3,5 +3,23 @@
   if (DebuggerUtils.isSynthetic(method)) {
     return false;
   }
-  return !(method.isConstructor() && loc.codeIndex() == 0 && isAnonymousClass(classType));
+  boolean res=!(method.isConstructor() && loc.codeIndex() == 0 && isAnonymousClass(classType));
+  if (!res)   return false;
+  return ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
+    @Override public Boolean compute(){
+      if (getProperties() instanceof JavaLineBreakpointProperties) {
+        Integer offset=((JavaLineBreakpointProperties)getProperties()).getOffset();
+        if (offset == null)         return true;
+        PsiFile file=getPsiFile();
+        if (file != null) {
+          SourcePosition exactPosition=SourcePosition.createFromOffset(file,offset);
+          SourcePosition position=debugProcess.getPositionManager().getSourcePosition(loc);
+          if (position == null)           return false;
+          return DebuggerUtilsEx.inTheSameMethod(exactPosition,position);
+        }
+      }
+      return true;
+    }
+  }
+);
 }

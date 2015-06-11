@@ -1,4 +1,6 @@
 {
+  int lineStart=position.getLine();
+  VirtualFile file=position.getFile();
   int linesEnd=lineStart;
   if (editor != null) {
     FoldRegion region=FoldingUtil.findFoldRegionStartingAtLine(editor,lineStart);
@@ -8,7 +10,7 @@
   }
   final XBreakpointManager breakpointManager=XDebuggerManager.getInstance(project).getBreakpointManager();
   XLineBreakpointType<?>[] lineTypes=XDebuggerUtil.getInstance().getLineBreakpointTypes();
-  XLineBreakpointType<?> typeWinner=null;
+  XLineBreakpointType typeWinner=null;
   int lineWinner=-1;
   for (int line=lineStart; line <= linesEnd; line++) {
     int maxPriority=0;
@@ -30,15 +32,18 @@
     }
   }
   if (typeWinner != null) {
-    XLineBreakpoint res=XDebuggerUtilImpl.toggleAndReturnLineBreakpoint(project,typeWinner,file,lineWinner,temporary);
-    if (editor != null && lineStart != lineWinner) {
-      int offset=editor.getDocument().getLineStartOffset(lineWinner);
-      ExpandRegionAction.expandRegionAtOffset(project,editor,offset);
-      if (moveCarret) {
-        editor.getCaretModel().moveToOffset(offset);
+    XSourcePosition winPosition=(lineStart == lineWinner) ? position : XSourcePositionImpl.create(file,lineWinner);
+    if (winPosition != null) {
+      AsyncResult<XLineBreakpoint> res=XDebuggerUtilImpl.toggleAndReturnLineBreakpoint(project,typeWinner,winPosition,temporary,DebuggerUIUtil.calcPopupLocation(editor,lineWinner));
+      if (editor != null && lineStart != lineWinner) {
+        int offset=editor.getDocument().getLineStartOffset(lineWinner);
+        ExpandRegionAction.expandRegionAtOffset(project,editor,offset);
+        if (moveCarret) {
+          editor.getCaretModel().moveToOffset(offset);
+        }
       }
+      return res;
     }
-    return res;
   }
-  return null;
+  return AsyncResult.rejected();
 }
