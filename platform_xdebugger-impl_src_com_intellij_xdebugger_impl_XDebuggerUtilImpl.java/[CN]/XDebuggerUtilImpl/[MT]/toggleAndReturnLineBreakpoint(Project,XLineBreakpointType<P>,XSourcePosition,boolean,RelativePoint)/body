@@ -1,0 +1,52 @@
+{
+  return ApplicationManager.getApplication().runWriteAction(new Computable<AsyncResult<XLineBreakpoint>>(){
+    @Override public AsyncResult<XLineBreakpoint> compute(){
+      final VirtualFile file=position.getFile();
+      final int line=position.getLine();
+      final XBreakpointManager breakpointManager=XDebuggerManager.getInstance(project).getBreakpointManager();
+      XLineBreakpoint<P> breakpoint=breakpointManager.findBreakpointAtLine(type,file,line);
+      if (breakpoint != null) {
+        breakpointManager.removeBreakpoint(breakpoint);
+      }
+ else {
+        if (type instanceof XLineBreakpointVariantsProvider) {
+          final XLineBreakpointVariantsProvider<XLineBreakpointVariant> provider=(XLineBreakpointVariantsProvider<XLineBreakpointVariant>)type;
+          List<XLineBreakpointVariant> variants=provider.computeLineBreakpointVariants(project,position);
+          if (!variants.isEmpty()) {
+            if (variants.size() > 1 && relativePoint != null) {
+              final AsyncResult<XLineBreakpoint> res=new AsyncResult<XLineBreakpoint>();
+              JBPopupFactory.getInstance().createListPopup(new BaseListPopupStep<XLineBreakpointVariant>("Create breakpoint for",variants){
+                @NotNull @Override public String getTextFor(                XLineBreakpointVariant value){
+                  return value.getText();
+                }
+                @Override public Icon getIconFor(                XLineBreakpointVariant value){
+                  return value.getIcon();
+                }
+                @Override public PopupStep onChosen(                final XLineBreakpointVariant selectedValue,                boolean finalChoice){
+                  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+                    @Override public void run(){
+                      P properties=(P)selectedValue.createProperties();
+                      res.setDone(breakpointManager.addLineBreakpoint(type,file.getUrl(),line,properties,temporary));
+                    }
+                  }
+);
+                  return FINAL_CHOICE;
+                }
+              }
+).show(relativePoint);
+              return res;
+            }
+ else {
+              P properties=(P)variants.get(0).createProperties();
+              return AsyncResult.done((XLineBreakpoint)breakpointManager.addLineBreakpoint(type,file.getUrl(),line,properties,temporary));
+            }
+          }
+        }
+        P properties=type.createBreakpointProperties(file,line);
+        return AsyncResult.done((XLineBreakpoint)breakpointManager.addLineBreakpoint(type,file.getUrl(),line,properties,temporary));
+      }
+      return AsyncResult.rejected();
+    }
+  }
+);
+}
