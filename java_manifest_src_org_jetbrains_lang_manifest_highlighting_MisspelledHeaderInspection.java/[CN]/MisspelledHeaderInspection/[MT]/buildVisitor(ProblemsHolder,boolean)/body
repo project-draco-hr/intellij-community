@@ -3,16 +3,30 @@
     @Override public void visitElement(    PsiElement element){
       if (element instanceof Header) {
         Header header=(Header)element;
-        Collection<HeaderNameMatch> matches=myRepository.getMatches(header.getName());
-        if (!matches.isEmpty()) {
-          List<HeaderNameSpellingQuickFix> fixes=ContainerUtil.newArrayListWithCapacity(MAX_SUGGESTIONS);
-          for (          HeaderNameMatch match : matches) {
-            fixes.add(new HeaderNameSpellingQuickFix(header,match));
-            if (fixes.size() == MAX_SUGGESTIONS) {
-              break;
-            }
-          }
-          holder.registerProblem(header.getNameElement(),ManifestBundle.message("inspection.header.message"),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,fixes.toArray(new HeaderNameSpellingQuickFix[fixes.size()]));
+        String headerName=header.getName();
+        SortedSet<Suggestion> matches=new TreeSet<Suggestion>();
+        addMatches(headerName,CUSTOM_HEADERS,matches);
+        addMatches(headerName,myRepository.getAllHeaderNames(),matches);
+        Suggestion bestMatch=ContainerUtil.getFirstItem(matches);
+        if (bestMatch != null && headerName.equals(bestMatch.getWord())) {
+          return;
+        }
+        List<LocalQuickFix> fixes=new ArrayList<LocalQuickFix>();
+        for (        Suggestion match : matches) {
+          fixes.add(new HeaderRenameQuickFix(header,match.getWord()));
+          if (fixes.size() == MAX_SUGGESTIONS)           break;
+        }
+        if (bestMatch == null || bestMatch.getMetrics() > TYPO_DISTANCE) {
+          fixes.add(new CustomHeaderQuickFix(header,CUSTOM_HEADERS));
+        }
+        holder.registerProblem(header.getNameElement(),ManifestBundle.message("inspection.header.message"),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,fixes.toArray(new LocalQuickFix[fixes.size()]));
+      }
+    }
+    private void addMatches(    String headerName,    Collection<String> headers,    SortedSet<Suggestion> matches){
+      for (      String candidate : headers) {
+        int distance=EditDistance.optimalAlignment(headerName,candidate,false);
+        if (distance <= MAX_DISTANCE) {
+          matches.add(new Suggestion(candidate,distance));
         }
       }
     }
