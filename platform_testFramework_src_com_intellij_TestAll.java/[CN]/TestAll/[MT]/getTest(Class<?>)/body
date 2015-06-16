@@ -1,0 +1,66 @@
+{
+  try {
+    if ((testCaseClass.getModifiers() & Modifier.PUBLIC) == 0) {
+      return null;
+    }
+    Bombed classBomb=testCaseClass.getAnnotation(Bombed.class);
+    if (classBomb != null && PlatformTestUtil.bombExplodes(classBomb)) {
+      return new ExplodedBomb(testCaseClass.getName(),classBomb);
+    }
+    Method suiteMethod=safeFindMethod(testCaseClass,"suite");
+    if (suiteMethod != null && !isPerformanceTestsRun()) {
+      return (Test)suiteMethod.invoke(null,ArrayUtil.EMPTY_CLASS_ARRAY);
+    }
+    if (TestRunnerUtil.isJUnit4TestClass(testCaseClass)) {
+      JUnit4TestAdapter adapter=new JUnit4TestAdapter(testCaseClass);
+      if (!isPerformanceTest(testCaseClass) || !isPerformanceTestsRun()) {
+        try {
+          adapter.filter(isPerformanceTestsRun() ? PERFORMANCE_ONLY : NO_PERFORMANCE);
+        }
+ catch (        NoTestsRemainException ignored) {
+        }
+      }
+      return adapter;
+    }
+    final int[] testsCount={0};
+    TestSuite suite=new TestSuite(testCaseClass){
+      @Override public void addTest(      Test test){
+        if (!(test instanceof TestCase)) {
+          doAddTest(test);
+        }
+ else {
+          String name=((TestCase)test).getName();
+          if ("warning".equals(name))           return;
+          if (isPerformanceTestsRun() ^ (hasPerformance(name) || isPerformanceTest(testCaseClass)))           return;
+          Method method=findTestMethod((TestCase)test);
+          if (method == null) {
+            doAddTest(test);
+          }
+ else {
+            Bombed methodBomb=method.getAnnotation(Bombed.class);
+            if (methodBomb == null) {
+              doAddTest(test);
+            }
+ else             if (PlatformTestUtil.bombExplodes(methodBomb)) {
+              doAddTest(new ExplodedBomb(method.getDeclaringClass().getName() + "." + method.getName(),methodBomb));
+            }
+          }
+        }
+      }
+      private void doAddTest(      Test test){
+        testsCount[0]++;
+        super.addTest(test);
+      }
+      @Nullable private Method findTestMethod(      final TestCase testCase){
+        return safeFindMethod(testCase.getClass(),testCase.getName());
+      }
+    }
+;
+    return testsCount[0] > 0 ? suite : null;
+  }
+ catch (  Throwable t) {
+    System.err.println("Failed to load test: " + testCaseClass.getName());
+    t.printStackTrace(System.err);
+    return null;
+  }
+}
