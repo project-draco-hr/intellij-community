@@ -1,0 +1,45 @@
+{
+  final Set<T> result=ContainerUtil.newHashSet();
+  final MultiMap<VirtualFile,Integer> toLoad=MultiMap.create();
+  long taskNumber=myCurrentTaskIndex++;
+  for (  VirtualFile root : commits.keySet()) {
+    Collection<Integer> hashesForRoot=commits.get(root);
+    for (    final Integer commitId : hashesForRoot) {
+      T details=getFromCache(commitId);
+      if (details == null || details instanceof LoadingDetails) {
+        toLoad.putValue(root,commitId);
+        cacheCommit(commitId,root,taskNumber);
+      }
+ else {
+        result.add(details);
+      }
+    }
+  }
+  if (toLoad.isEmpty()) {
+    consumer.consume(result);
+  }
+ else {
+    Task.Backgroundable task=new Task.Backgroundable(null,"Loading Selected Details",true,PerformInBackgroundOption.ALWAYS_BACKGROUND){
+      @Override public void run(      @NotNull final ProgressIndicator indicator){
+        indicator.checkCanceled();
+        try {
+          result.addAll(preLoadCommitData(toLoad));
+          notifyLoaded();
+        }
+ catch (        VcsException e) {
+          LOG.error(e);
+        }
+      }
+      @Override public void onSuccess(){
+        consumer.consume(result);
+      }
+    }
+;
+    if (indicator != null) {
+      ProgressManager.getInstance().runProcessWithProgressAsynchronously(task,indicator);
+    }
+ else {
+      ProgressManager.getInstance().run(task);
+    }
+  }
+}
