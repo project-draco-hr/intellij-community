@@ -1,0 +1,49 @@
+{
+  final ExternalJavacMessageHandler rh=new ExternalJavacMessageHandler(diagnosticSink,outputSink,getEncodingName(options));
+  final JavacRemoteProto.Message.Request request=JavacProtoUtil.createCompilationRequest(options,files,classpath,platformCp,sourcePath,outs);
+  final UUID uuid=UUID.randomUUID();
+  final JavacProcessDescriptor processDescriptor=new JavacProcessDescriptor(uuid,rh,request);
+synchronized (myMessageHandlers) {
+    myMessageHandlers.put(uuid,processDescriptor);
+  }
+  try {
+    final ExternalJavacProcessHandler processHandler=launchExternalJavacProcess(uuid,javaHome,heapSize,myListenPort,mySystemRoot,vmOptions,compilingTool);
+    processHandler.addProcessListener(new ProcessAdapter(){
+      public void onTextAvailable(      ProcessEvent event,      Key outputType){
+        final String text=event.getText();
+        if (!StringUtil.isEmptyOrSpaces(text)) {
+          String prefix=null;
+          if (outputType == ProcessOutputTypes.STDOUT) {
+            prefix=STDOUT_LINE_PREFIX;
+          }
+ else           if (outputType == ProcessOutputTypes.STDERR) {
+            prefix=STDERR_LINE_PREFIX;
+          }
+          if (prefix != null) {
+            diagnosticSink.outputLineAvailable(prefix + ": " + text);
+          }
+        }
+      }
+    }
+);
+    processHandler.startNotify();
+    while (!processDescriptor.waitFor(300L)) {
+      if (processHandler.isProcessTerminated() && processDescriptor.channel == null && processHandler.getExitCode() != 0) {
+        processDescriptor.setDone();
+        break;
+      }
+      if (cancelStatus.isCanceled()) {
+        processDescriptor.cancelBuild();
+      }
+    }
+    return rh.isTerminatedSuccessfully();
+  }
+ catch (  Throwable e) {
+    LOG.info(e);
+    diagnosticSink.report(new PlainMessageDiagnostic(Diagnostic.Kind.ERROR,e.getMessage()));
+  }
+ finally {
+    unregisterMessageHandler(uuid);
+  }
+  return false;
+}

@@ -1,0 +1,27 @@
+{
+  branchWithCommit(myRepositories,"feature");
+  touch("feature.txt","feature_content");
+  git("add feature.txt");
+  git("commit -m feature_changes");
+  git("checkout master");
+  unmergedFiles(myCommunity);
+  final Ref<Boolean> rollbackProposed=Ref.create(false);
+  GitBranchWorker brancher=new GitBranchWorker(myProject,myPlatformFacade,myGit,new TestUiHandler(){
+    @Override public boolean showUnmergedFilesMessageWithRollback(    @NotNull String operationName,    @NotNull String rollbackProposal){
+      rollbackProposed.set(true);
+      return true;
+    }
+  }
+);
+  brancher.checkoutNewBranchStartingFrom("newBranch","feature",myRepositories);
+  assertTrue("Rollback was not proposed if unmerged files prevented checkout in the second repository",rollbackProposed.get());
+  assertCurrentBranch("master");
+  for (  GitRepository repository : myRepositories) {
+    assertFalse("Branch 'newBranch' should have been deleted on rollback",ContainerUtil.exists(git(repository,"branch").split("\n"),new Condition<String>(){
+      @Override public boolean value(      String s){
+        return s.contains("newBranch");
+      }
+    }
+));
+  }
+}

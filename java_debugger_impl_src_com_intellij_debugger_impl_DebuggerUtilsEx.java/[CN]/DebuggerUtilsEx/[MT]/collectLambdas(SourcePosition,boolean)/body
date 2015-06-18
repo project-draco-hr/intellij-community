@@ -1,13 +1,13 @@
 {
   ApplicationManager.getApplication().assertReadAccessAllowed();
   PsiFile file=position.getFile();
-  int line=position.getLine();
-  Document document=PsiDocumentManager.getInstance(file.getProject()).getDocument(file);
+  final int line=position.getLine();
+  final Document document=PsiDocumentManager.getInstance(file.getProject()).getDocument(file);
   if (document == null || line >= document.getLineCount()) {
     return Collections.emptyList();
   }
   PsiElement element=position.getElementAt();
-  final TextRange lineRange=new TextRange(document.getLineStartOffset(line),document.getLineEndOffset(line));
+  final TextRange lineRange=DocumentUtil.getLineTextRange(document,line);
   do {
     PsiElement parent=element.getParent();
     if (parent == null || (parent.getTextOffset() < lineRange.getStartOffset())) {
@@ -20,7 +20,7 @@
   final PsiElementVisitor lambdaCollector=new JavaRecursiveElementVisitor(){
     @Override public void visitLambdaExpression(    PsiLambdaExpression expression){
       super.visitLambdaExpression(expression);
-      if (!onlyOnTheLine || lineRange.intersects(expression.getTextRange())) {
+      if (!onlyOnTheLine || getFirstElementOnTheLine(expression,document,line) != null) {
         lambdas.add(expression);
       }
     }
@@ -32,7 +32,7 @@
     lambdas.add((PsiLambdaExpression)method);
   }
   for (PsiElement sibling=getNextElement(element); sibling != null; sibling=getNextElement(sibling)) {
-    if (!lineRange.intersects(sibling.getTextRange())) {
+    if (!intersects(lineRange,sibling)) {
       break;
     }
     sibling.accept(lambdaCollector);

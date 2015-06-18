@@ -1,0 +1,30 @@
+{
+  PsiFile file=PsiManager.getInstance(project).findFile(position.getFile());
+  if (file == null) {
+    return Collections.emptyList();
+  }
+  SourcePosition pos=SourcePosition.createFromLine(file,position.getLine());
+  List<PsiLambdaExpression> lambdas=DebuggerUtilsEx.collectLambdas(pos,true);
+  if (lambdas.isEmpty()) {
+    return Collections.emptyList();
+  }
+  NavigatablePsiElement startMethod=PsiTreeUtil.getParentOfType(pos.getElementAt(),PsiMethod.class,PsiLambdaExpression.class);
+  if (lambdas.contains(startMethod) && lambdas.size() == 1) {
+    return Collections.emptyList();
+  }
+  Document document=PsiDocumentManager.getInstance(file.getProject()).getDocument(file);
+  if (document == null) {
+    return Collections.emptyList();
+  }
+  List<JavaBreakpointVariant> res=new SmartList<JavaBreakpointVariant>();
+  res.add(new JavaBreakpointVariant(position));
+  if (startMethod instanceof PsiMethod) {
+    res.add(new ExactJavaBreakpointVariant(position,startMethod,-1));
+  }
+  int ordinal=0;
+  for (  PsiLambdaExpression lambda : lambdas) {
+    PsiElement firstElem=DebuggerUtilsEx.getFirstElementOnTheLine(lambda,document,position.getLine());
+    res.add(new ExactJavaBreakpointVariant(XSourcePositionImpl.createByElement(firstElem),lambda,ordinal++));
+  }
+  return res;
+}

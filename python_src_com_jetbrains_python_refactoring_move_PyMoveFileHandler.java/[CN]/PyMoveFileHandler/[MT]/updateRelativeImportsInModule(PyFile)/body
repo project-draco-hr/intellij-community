@@ -3,16 +3,46 @@
   if (originalLocation == null) {
     return;
   }
-  module.putUserData(ORIGINAL_FILE_LOCATION,null);
   for (  PyFromImportStatement statement : module.getFromImports()) {
-    if (statement.getRelativeLevel() == 0) {
+    if (!canBeRelative(statement)) {
       continue;
     }
-    final PsiFileSystemItem sourceElement=resolveRelativeImportSourceFromModuleLocation(originalLocation,statement);
+    final int relativeLevel=Math.max(statement.getRelativeLevel(),1);
+    final PsiFileSystemItem sourceElement=resolveRelativeImportFromModuleLocation(statement.getManager(),originalLocation,statement.getImportSource(),relativeLevel);
     if (sourceElement == null) {
       continue;
     }
     final QualifiedName newName=QualifiedNameFinder.findShortestImportableQName(sourceElement);
     replaceRelativeImportSourceWithQualifiedExpression(statement,newName);
+  }
+  for (  PyImportElement importElement : module.getImportTargets()) {
+    final PyReferenceExpression referenceExpr=importElement.getImportReferenceExpression();
+    if (!canBeRelative(importElement) || referenceExpr == null) {
+      continue;
+    }
+    final PsiFileSystemItem resolved=resolveRelativeImportFromModuleLocation(importElement.getManager(),originalLocation,referenceExpr,1);
+    if (resolved == null) {
+      continue;
+    }
+    final QualifiedName newName=QualifiedNameFinder.findShortestImportableQName(resolved);
+    replaceWithQualifiedExpression(referenceExpr,newName);
+    final QualifiedName oldQualifiedName=referenceExpr.asQualifiedName();
+    if (!Comparing.equal(oldQualifiedName,newName)) {
+      final ScopeOwner scopeOwner=ScopeUtil.getScopeOwner(importElement);
+      if (scopeOwner == null) {
+        continue;
+      }
+      scopeOwner.accept(new PyRecursiveElementVisitor(){
+        @Override public void visitPyReferenceExpression(        PyReferenceExpression node){
+          if (Comparing.equal(node.asQualifiedName(),oldQualifiedName)) {
+            replaceWithQualifiedExpression(node,newName);
+          }
+ else {
+            super.visitPyReferenceExpression(node);
+          }
+        }
+      }
+);
+    }
   }
 }

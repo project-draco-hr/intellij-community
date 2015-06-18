@@ -1,37 +1,47 @@
 {
   final Set<PsiFile> updatedFiles=new HashSet<PsiFile>();
   for (  UsageInfo usage : usages) {
-    final PsiElement element=usage.getElement();
-    if (element != null) {
-      final PsiNamedElement newElement=element.getCopyableUserData(REFERENCED_ELEMENT);
-      element.putCopyableUserData(REFERENCED_ELEMENT,null);
-      if (newElement != null) {
-        final PsiFile file=element.getContainingFile();
-        final PyImportStatementBase importStmt=PsiTreeUtil.getParentOfType(element,PyImportStatementBase.class);
+    final PsiElement usageElement=usage.getElement();
+    if (usageElement != null) {
+      final PsiNamedElement movedElement=usageElement.getCopyableUserData(REFERENCED_ELEMENT);
+      usageElement.putCopyableUserData(REFERENCED_ELEMENT,null);
+      if (movedElement != null) {
+        final PsiFile usageFile=usageElement.getContainingFile();
+        final PyImportStatementBase importStmt=PsiTreeUtil.getParentOfType(usageElement,PyImportStatementBase.class);
         if (importStmt != null) {
-          updatedFiles.add(file);
-          PyClassRefactoringUtil.updateImportOfElement(importStmt,newElement);
-          if (importStmt instanceof PyFromImportStatement && PsiTreeUtil.getParentOfType(element,PyImportElement.class) != null) {
-            continue;
+          if (usageFile.getUserData(ORIGINAL_FILE_LOCATION) != null) {
+            final TypeEvalContext typeEvalContext=TypeEvalContext.userInitiated(usageFile.getProject(),usageFile);
+            final PyResolveContext resolveContext=PyResolveContext.defaultContext().withTypeEvalContext(typeEvalContext);
+            if (ContainerUtil.getFirstItem(PyUtil.multiResolveTopPriority(usageElement,resolveContext)) == movedElement) {
+              continue;
+            }
           }
-          final QualifiedName newElementName=QualifiedNameFinder.findCanonicalImportPath(newElement,element);
+          updatedFiles.add(usageFile);
+          final boolean usageInsideImportElement=PsiTreeUtil.getParentOfType(usageElement,PyImportElement.class) != null;
+          if (usageInsideImportElement) {
+            if (PyClassRefactoringUtil.updateUnqualifiedImportOfElement(importStmt,movedElement)) {
+              continue;
+            }
+          }
+          final QualifiedName newElementName=QualifiedNameFinder.findCanonicalImportPath(movedElement,usageElement);
           if (importStmt instanceof PyFromImportStatement) {
-            replaceRelativeImportSourceWithQualifiedExpression((PyFromImportStatement)importStmt,newElementName);
+            if (!usageInsideImportElement) {
+              replaceRelativeImportSourceWithQualifiedExpression((PyFromImportStatement)importStmt,newElementName);
+            }
           }
  else {
-            replaceWithQualifiedExpression(element,newElementName);
+            replaceWithQualifiedExpression(usageElement,newElementName);
           }
         }
- else         if (element instanceof PyReferenceExpression) {
-          updatedFiles.add(file);
-          if (((PyReferenceExpression)element).isQualified()) {
-            final QualifiedName newQualifiedName=QualifiedNameFinder.findCanonicalImportPath(newElement,element);
-            replaceWithQualifiedExpression(element,newQualifiedName);
+ else         if (usageElement instanceof PyReferenceExpression) {
+          updatedFiles.add(usageFile);
+          if (((PyReferenceExpression)usageElement).isQualified()) {
+            final QualifiedName newQualifiedName=QualifiedNameFinder.findCanonicalImportPath(movedElement,usageElement);
+            replaceWithQualifiedExpression(usageElement,newQualifiedName);
           }
  else {
-            final QualifiedName newName=QualifiedName.fromComponents(PyClassRefactoringUtil.getOriginalName(newElement));
-            final PsiElement replaced=replaceWithQualifiedExpression(element,newName);
-            PyClassRefactoringUtil.insertImport(replaced,newElement,null);
+            final QualifiedName newName=QualifiedName.fromComponents(PyClassRefactoringUtil.getOriginalName(movedElement));
+            replaceWithQualifiedExpression(usageElement,newName);
           }
         }
       }
