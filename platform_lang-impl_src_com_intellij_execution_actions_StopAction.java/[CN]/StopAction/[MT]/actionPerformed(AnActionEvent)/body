@@ -1,2 +1,51 @@
 {
+  final DataContext dataContext=e.getDataContext();
+  ProcessHandler activeProcessHandler=getHandler(dataContext);
+  Project project=e.getProject();
+  List<Pair<TaskInfo,ProgressIndicator>> backgroundTasks=getCancellableProcesses(project);
+  if (ActionPlaces.isMainMenuOrActionSearch(e.getPlace())) {
+    if (canBeStopped(activeProcessHandler) && backgroundTasks.isEmpty()) {
+      stopProcess(activeProcessHandler);
+      return;
+    }
+    Pair<List<HandlerItem>,HandlerItem> handlerItems=getItemsList(backgroundTasks,getActiveDescriptors(dataContext),activeProcessHandler);
+    if (handlerItems == null || handlerItems.first.isEmpty()) {
+      return;
+    }
+    final JBList list=new JBList(handlerItems.first);
+    if (handlerItems.second != null)     list.setSelectedValue(handlerItems.second,true);
+    list.setCellRenderer(new GroupedItemsListRenderer(new ListItemDescriptorAdapter(){
+      @Nullable @Override public String getTextFor(      Object value){
+        return value instanceof HandlerItem ? ((HandlerItem)value).displayName : null;
+      }
+      @Nullable @Override public Icon getIconFor(      Object value){
+        return value instanceof HandlerItem ? ((HandlerItem)value).icon : null;
+      }
+      @Override public boolean hasSeparatorAboveOf(      Object value){
+        return value instanceof HandlerItem && ((HandlerItem)value).hasSeparator;
+      }
+    }
+));
+    JBPopup popup=JBPopupFactory.getInstance().createListPopupBuilder(list).setMovable(true).setTitle(handlerItems.first.size() == 1 ? "Confirm process stop" : "Stop process").setFilteringEnabled(new Function<Object,String>(){
+      @Override public String fun(      Object o){
+        return ((HandlerItem)o).displayName;
+      }
+    }
+).setItemChoosenCallback(new Runnable(){
+      @Override public void run(){
+        HandlerItem item=(HandlerItem)list.getSelectedValue();
+        if (item != null)         item.stop();
+      }
+    }
+).setRequestFocus(true).createPopup();
+    if (project == null) {
+      popup.showInBestPositionFor(dataContext);
+    }
+ else {
+      popup.showCenteredInCurrentWindow(project);
+    }
+  }
+ else   if (activeProcessHandler != null) {
+    stopProcess(activeProcessHandler);
+  }
 }
