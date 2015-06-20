@@ -1,0 +1,49 @@
+{
+  Change change=request.getUserData(ChangeDiffRequestProducer.CHANGE_KEY);
+  if (change != null) {
+    final ContentRevision revision=side.select(change.getBeforeRevision(),change.getAfterRevision());
+    if (revision == null)     return null;
+    AbstractVcs vcs=ChangesUtil.getVcsForChange(change,project);
+    if (vcs == null)     return null;
+    final AnnotationProvider annotationProvider=vcs.getAnnotationProvider();
+    if (annotationProvider == null)     return null;
+    if (revision instanceof CurrentContentRevision) {
+      return new FileAnnotationLoader(vcs){
+        @Override public FileAnnotation compute() throws VcsException {
+          final VirtualFile file=((CurrentContentRevision)revision).getVirtualFile();
+          if (file == null)           throw new VcsException("Failed to annotate: file not found");
+          return annotationProvider.annotate(file);
+        }
+      }
+;
+    }
+ else {
+      if (!(annotationProvider instanceof AnnotationProviderEx))       return null;
+      return new FileAnnotationLoader(vcs){
+        @Override public FileAnnotation compute() throws VcsException {
+          return ((AnnotationProviderEx)annotationProvider).annotate(revision.getFile(),revision.getRevisionNumber());
+        }
+      }
+;
+    }
+  }
+  if (request instanceof ContentDiffRequest) {
+    ContentDiffRequest requestEx=(ContentDiffRequest)request;
+    if (requestEx.getContents().size() != 2)     return null;
+    DiffContent content=side.select(requestEx.getContents());
+    if (content instanceof FileContent) {
+      final VirtualFile file=((FileContent)content).getFile();
+      AbstractVcs vcs=VcsUtil.getVcsFor(project,file);
+      if (vcs == null)       return null;
+      final AnnotationProvider annotationProvider=vcs.getAnnotationProvider();
+      if (annotationProvider == null)       return null;
+      return new FileAnnotationLoader(vcs){
+        @Override public FileAnnotation compute() throws VcsException {
+          return annotationProvider.annotate(file);
+        }
+      }
+;
+    }
+  }
+  return null;
+}
