@@ -1,0 +1,41 @@
+{
+  final RunProfile configuration=myConsoleProperties.getConfiguration();
+  if (configuration instanceof RunConfiguration && !(myConsoleProperties instanceof ImportedTestConsoleProperties)) {
+    final Task.Backgroundable backgroundable=new Task.Backgroundable(myProject,"Save Test Results",true){
+      private String myOutput;
+      @Override public void run(      @NotNull ProgressIndicator indicator){
+        try {
+          SAXTransformerFactory transformerFactory=(SAXTransformerFactory)TransformerFactory.newInstance();
+          TransformerHandler handler=transformerFactory.newTransformerHandler();
+          handler.getTransformer().setOutputProperty(OutputKeys.INDENT,"yes");
+          handler.getTransformer().setOutputProperty("{http://xml.apache.org/xslt}indent-amount","4");
+          StringWriter w=new StringWriter();
+          handler.setResult(new StreamResult(w));
+          TestResultsXmlFormatter.execute(root,(RunConfiguration)configuration,handler);
+          myOutput=w.toString();
+        }
+ catch (        ProcessCanceledException ignore) {
+        }
+catch (        Exception e) {
+          LOG.info("Export to history failed",e);
+        }
+      }
+      @Override public void onSuccess(){
+        if (myOutput != null) {
+          try {
+            ImportTestsAction.adjustHistory();
+            final String configurationNameIncludedDate=PathUtil.suggestFileName(configuration.getName()) + " " + FileUtil.sanitizeFileName(new SimpleDateFormat().format(new Date()));
+            final String presentableFileName=ExecutionBundle.message("export.test.results.filename",configurationNameIncludedDate);
+            FileUtil.writeToFile(new File(ImportTestsAction.TEST_HISTORY_PATH,presentableFileName + ".xml"),myOutput);
+          }
+ catch (          IOException e) {
+            LOG.info("Fail to write test history",e);
+          }
+        }
+      }
+    }
+;
+    mySaveToHistoryIndicator=new BackgroundableProcessIndicator(backgroundable);
+    ProgressManager.getInstance().runProcessWithProgressAsynchronously(backgroundable,mySaveToHistoryIndicator);
+  }
+}
