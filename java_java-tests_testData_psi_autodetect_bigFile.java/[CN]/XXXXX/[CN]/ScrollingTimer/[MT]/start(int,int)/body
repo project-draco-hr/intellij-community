@@ -1,0 +1,105 @@
+{
+  myDx=0;
+  myDy=0;
+  if (dx > 0) {
+    myXCycles=CYCLE_SIZE / dx + 1;
+    myDx=1 + dx / CYCLE_SIZE;
+  }
+ else {
+    if (dx < 0) {
+      myXCycles=-CYCLE_SIZE / dx + 1;
+      myDx=-1 + dx / CYCLE_SIZE;
+    }
+  }
+  if (dy > 0) {
+    myYCycles=CYCLE_SIZE / dy + 1;
+    myDy=1 + dy / CYCLE_SIZE;
+  }
+ else {
+    if (dy < 0) {
+      myYCycles=-CYCLE_SIZE / dy + 1;
+      myDy=-1 + dy / CYCLE_SIZE;
+    }
+  }
+  if (myTimer != null) {
+    return;
+  }
+  myTimer=UIUtil.createNamedTimer("Editor scroll timer",TIMER_PERIOD,new ActionListener(){
+    @Override public void actionPerformed(    @NotNull ActionEvent e){
+      myCommandProcessor.executeCommand(myProject,new DocumentRunnable(myDocument,myProject){
+        @Override public void run(){
+          if (isDisposed()) {
+            myTimer.stop();
+            return;
+          }
+          int oldSelectionStart=mySelectionModel.getLeadSelectionOffset();
+          VisualPosition caretPosition=myMultiSelectionInProgress ? myTargetMultiSelectionPosition : getCaretModel().getVisualPosition();
+          int column=caretPosition.column;
+          xPassedCycles++;
+          if (xPassedCycles >= myXCycles) {
+            xPassedCycles=0;
+            column+=myDx;
+          }
+          int line=caretPosition.line;
+          yPassedCycles++;
+          if (yPassedCycles >= myYCycles) {
+            yPassedCycles=0;
+            line+=myDy;
+          }
+          line=Math.max(0,line);
+          column=Math.max(0,column);
+          VisualPosition pos=new VisualPosition(line,column);
+          if (!myMultiSelectionInProgress) {
+            getCaretModel().moveToVisualPosition(pos);
+            getScrollingModel().scrollToCaret(ScrollType.RELATIVE);
+          }
+          int newCaretOffset=getCaretModel().getOffset();
+          int caretShift=newCaretOffset - mySavedSelectionStart;
+          if (getMouseSelectionState() != MOUSE_SELECTION_STATE_NONE) {
+            if (caretShift < 0) {
+              int newSelection=newCaretOffset;
+              if (getMouseSelectionState() == MOUSE_SELECTION_STATE_WORD_SELECTED) {
+                newSelection=myCaretModel.getWordAtCaretStart();
+              }
+ else {
+                if (getMouseSelectionState() == MOUSE_SELECTION_STATE_LINE_SELECTED) {
+                  newSelection=logicalPositionToOffset(visualToLogicalPosition(new VisualPosition(getCaretModel().getVisualPosition().line,0)));
+                }
+              }
+              if (newSelection < 0)               newSelection=newCaretOffset;
+              mySelectionModel.setSelection(validateOffset(mySavedSelectionEnd),newSelection);
+              getCaretModel().moveToOffset(newSelection);
+            }
+ else {
+              int newSelection=newCaretOffset;
+              if (getMouseSelectionState() == MOUSE_SELECTION_STATE_WORD_SELECTED) {
+                newSelection=myCaretModel.getWordAtCaretEnd();
+              }
+ else {
+                if (getMouseSelectionState() == MOUSE_SELECTION_STATE_LINE_SELECTED) {
+                  newSelection=logicalPositionToOffset(visualToLogicalPosition(new VisualPosition(getCaretModel().getVisualPosition().line + 1,0)));
+                }
+              }
+              if (newSelection < 0)               newSelection=newCaretOffset;
+              mySelectionModel.setSelection(validateOffset(mySavedSelectionStart),newSelection);
+              getCaretModel().moveToOffset(newSelection);
+            }
+            return;
+          }
+          if (myMultiSelectionInProgress && myLastMousePressedLocation != null) {
+            myTargetMultiSelectionPosition=pos;
+            LogicalPosition newLogicalPosition=visualToLogicalPosition(pos);
+            getScrollingModel().scrollTo(newLogicalPosition,ScrollType.RELATIVE);
+            createSelectionTill(newLogicalPosition);
+          }
+ else {
+            mySelectionModel.setSelection(oldSelectionStart,getCaretModel().getOffset());
+          }
+        }
+      }
+,EditorBundle.message("move.cursor.command.name"),DocCommandGroupId.noneGroupId(getDocument()),UndoConfirmationPolicy.DEFAULT,getDocument());
+    }
+  }
+);
+  myTimer.start();
+}
