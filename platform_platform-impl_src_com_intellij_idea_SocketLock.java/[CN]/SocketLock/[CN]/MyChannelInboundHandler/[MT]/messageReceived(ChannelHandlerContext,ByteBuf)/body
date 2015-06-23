@@ -1,0 +1,37 @@
+{
+  while (true) {
+switch (state) {
+case HEADER:
+{
+        ByteBuf buffer=getBufferIfSufficient(input,2,context);
+        if (buffer == null) {
+          return;
+        }
+        contentLength=buffer.readUnsignedShort();
+        state=State.CONTENT;
+      }
+    break;
+case CONTENT:
+{
+    CharSequence command=readChars(input);
+    if (command == null) {
+      return;
+    }
+    if (StringUtil.startsWith(command,ACTIVATE_COMMAND)) {
+      List<String> args=StringUtil.split(command.subSequence(ACTIVATE_COMMAND.length(),command.length()).toString(),"\0");
+      Consumer<List<String>> listener=activateListener.get();
+      if (listener != null) {
+        listener.consume(args);
+      }
+      ByteBuf buffer=context.alloc().ioBuffer(4);
+      ByteBufOutputStream out=new ByteBufOutputStream(buffer);
+      out.writeUTF("ok");
+      out.close();
+      context.writeAndFlush(buffer);
+    }
+    context.close();
+  }
+break;
+}
+}
+}

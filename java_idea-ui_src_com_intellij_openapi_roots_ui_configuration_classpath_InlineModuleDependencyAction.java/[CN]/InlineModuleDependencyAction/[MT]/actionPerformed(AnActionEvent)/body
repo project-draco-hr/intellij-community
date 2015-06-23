@@ -1,0 +1,41 @@
+{
+  OrderEntry selectedEntry=myClasspathPanel.getSelectedEntry();
+  if (!(selectedEntry instanceof ModuleOrderEntry))   return;
+  ModuleOrderEntry entryToInline=(ModuleOrderEntry)selectedEntry;
+  Module module=entryToInline.getModule();
+  if (module == null)   return;
+  ModifiableRootModel model=myClasspathPanel.getRootModel();
+  int toInlineIndex=findModuleEntryIndex(model,module);
+  if (toInlineIndex == -1)   return;
+  model.removeOrderEntry(entryToInline);
+  RootModelImpl modelImpl;
+  if (Proxy.isProxyClass(model.getClass())) {
+    modelImpl=(RootModelImpl)((ModuleEditor.ProxyDelegateAccessor)Proxy.getInvocationHandler(model)).getDelegate();
+  }
+ else {
+    modelImpl=(RootModelImpl)model;
+  }
+  int addedCount=0;
+  ModuleRootModel otherModel=myClasspathPanel.getModuleConfigurationState().getModulesProvider().getRootModel(module);
+  ProjectRootManagerImpl rootManager=ProjectRootManagerImpl.getInstanceImpl(myClasspathPanel.getProject());
+  VirtualFilePointerManager virtualFilePointerManager=VirtualFilePointerManager.getInstance();
+  for (  OrderEntry entry : otherModel.getOrderEntries()) {
+    if (entry instanceof LibraryOrderEntry || entry instanceof ModuleOrderEntry) {
+      LOG.assertTrue(entry instanceof ClonableOrderEntry,entry);
+      ExportableOrderEntry entryToCopy=(ExportableOrderEntry)entry;
+      ExportableOrderEntry cloned=(ExportableOrderEntry)((ClonableOrderEntry)entry).cloneEntry(modelImpl,rootManager,virtualFilePointerManager);
+      cloned.setExported(entryToInline.isExported() && entryToCopy.isExported());
+      cloned.setScope(OrderEntryUtil.intersectScopes(entryToInline.getScope(),entryToCopy.getScope()));
+      model.addOrderEntry(cloned);
+      addedCount++;
+    }
+  }
+  OrderEntry[] oldEntries=model.getOrderEntries();
+  OrderEntry[] newEntries=new OrderEntry[oldEntries.length];
+  System.arraycopy(oldEntries,0,newEntries,0,toInlineIndex);
+  System.arraycopy(oldEntries,oldEntries.length - addedCount,newEntries,toInlineIndex,addedCount);
+  System.arraycopy(oldEntries,toInlineIndex,newEntries,toInlineIndex + addedCount,oldEntries.length - toInlineIndex - addedCount);
+  model.rearrangeOrderEntries(newEntries);
+  StructureConfigurableContext context=ProjectStructureConfigurable.getInstance(myClasspathPanel.getProject()).getContext();
+  context.getDaemonAnalyzer().queueUpdate(new ModuleProjectStructureElement(context,module));
+}

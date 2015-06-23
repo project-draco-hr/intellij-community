@@ -1,15 +1,27 @@
 {
   if (isLight(project)) {
-    throw new AssertionError("must not close light project");
+    if (!((ProjectImpl)project).isTemporarilyDisposed()) {
+      ((ProjectImpl)project).setTemporarilyDisposed(true);
+      removeFromOpened(project);
+      return true;
+    }
+    ((ProjectImpl)project).setTemporarilyDisposed(false);
   }
-  if (!isProjectOpened(project))   return true;
+ else {
+    if (!isProjectOpened(project))     return true;
+  }
   if (checkCanClose && !canClose(project))   return false;
   final ShutDownTracker shutDownTracker=ShutDownTracker.getInstance();
   shutDownTracker.registerStopperThread(Thread.currentThread());
   try {
     if (save) {
-      FileDocumentManager.getInstance().saveAllDocuments();
-      project.save();
+      ApplicationManager.getApplication().runWriteAction(new Runnable(){
+        @Override public void run(){
+          FileDocumentManager.getInstance().saveAllDocuments();
+          project.save();
+        }
+      }
+);
     }
     if (checkCanClose && !ensureCouldCloseIfUnableToSave(project)) {
       return false;
@@ -17,11 +29,7 @@
     fireProjectClosing(project);
     ApplicationManager.getApplication().runWriteAction(new Runnable(){
       @Override public void run(){
-synchronized (myOpenProjects) {
-          myOpenProjects.remove(project);
-          cacheOpenProjects();
-          myTestProjects.remove(project);
-        }
+        removeFromOpened(project);
 synchronized (myChangedProjectFiles) {
           myChangedProjectFiles.remove(project);
         }

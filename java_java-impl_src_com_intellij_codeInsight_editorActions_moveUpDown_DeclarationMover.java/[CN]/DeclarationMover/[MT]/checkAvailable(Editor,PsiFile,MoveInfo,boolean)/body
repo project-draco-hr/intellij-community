@@ -8,10 +8,21 @@
   final Pair<PsiElement,PsiElement> psiRange=getElementRange(editor,file,oldRange);
   if (psiRange == null)   return false;
   final PsiMember firstMember=PsiTreeUtil.getParentOfType(psiRange.getFirst(),PsiMember.class,false);
-  final PsiMember lastMember=PsiTreeUtil.getParentOfType(psiRange.getSecond(),PsiMember.class,false);
+  PsiElement endElement=psiRange.getSecond();
+  if (firstMember instanceof PsiEnumConstant && endElement instanceof PsiJavaToken) {
+    final IElementType tokenType=((PsiJavaToken)endElement).getTokenType();
+    if (down && tokenType == JavaTokenType.SEMICOLON) {
+      return info.prohibitMove();
+    }
+    if (tokenType == JavaTokenType.COMMA || tokenType == JavaTokenType.SEMICOLON) {
+      endElement=PsiTreeUtil.skipSiblingsBackward(endElement,PsiWhiteSpace.class);
+    }
+  }
+  final PsiMember lastMember=PsiTreeUtil.getParentOfType(endElement,PsiMember.class,false);
   if (firstMember == null || lastMember == null)   return false;
   LineRange range;
   if (firstMember == lastMember) {
+    moveEnumConstant=firstMember instanceof PsiEnumConstant;
     range=memberRange(firstMember,editor,oldRange);
     if (range == null)     return false;
     range.firstElement=range.lastElement=firstMember;
@@ -32,8 +43,15 @@
   Document document=editor.getDocument();
   PsiElement sibling=down ? range.lastElement.getNextSibling() : range.firstElement.getPrevSibling();
   sibling=firstNonWhiteElement(sibling,down);
-  if (down && range.lastElement instanceof PsiEnumConstant && sibling instanceof PsiJavaToken) {
-    sibling=((PsiJavaToken)sibling).getTokenType() == JavaTokenType.COMMA ? firstNonWhiteElement(sibling.getNextSibling(),true) : null;
+  if (range.lastElement instanceof PsiEnumConstant && sibling instanceof PsiJavaToken) {
+    final PsiJavaToken token=(PsiJavaToken)sibling;
+    final IElementType tokenType=token.getTokenType();
+    if (down && tokenType == JavaTokenType.SEMICOLON) {
+      return info.prohibitMove();
+    }
+    if (tokenType == JavaTokenType.COMMA) {
+      sibling=down ? PsiTreeUtil.skipSiblingsForward(sibling,PsiWhiteSpace.class) : PsiTreeUtil.skipSiblingsBackward(sibling,PsiWhiteSpace.class);
+    }
   }
   final boolean areWeMovingClass=range.firstElement instanceof PsiClass;
   info.toMove=range;
