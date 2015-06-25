@@ -1,2 +1,134 @@
 {
+  if (myBalloon != null && myBalloon.isVisible()) {
+    showAll.set(!showAll.get());
+    myNonProjectCheckBox.setSelected(showAll.get());
+    rebuildList(myPopupField.getText());
+    return;
+  }
+  myCurrentWorker=ActionCallback.DONE;
+  if (e != null) {
+    myEditor=e.getData(CommonDataKeys.EDITOR);
+    myFileEditor=e.getData(PlatformDataKeys.FILE_EDITOR);
+    myFile=e.getData(CommonDataKeys.PSI_FILE);
+  }
+  if (e == null && myFocusOwner != null) {
+    e=new AnActionEvent(me,DataManager.getInstance().getDataContext(myFocusOwner),ActionPlaces.UNKNOWN,getTemplatePresentation(),ActionManager.getInstance(),0);
+  }
+  if (e == null)   return;
+  final Project project=e.getProject();
+  if (project == null)   return;
+  SwingUtilities.invokeLater(new Runnable(){
+    @Override public void run(){
+      LookupManager.getInstance(project).hideActiveLookup();
+    }
+  }
+);
+  updateComponents();
+  myContextComponent=PlatformDataKeys.CONTEXT_COMPONENT.getData(e.getDataContext());
+  Window wnd=myContextComponent != null ? SwingUtilities.windowForComponent(myContextComponent) : KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusedWindow();
+  if (wnd == null && myContextComponent instanceof Window) {
+    wnd=(Window)myContextComponent;
+  }
+  if (wnd == null || wnd.getParent() != null)   return;
+  myActionEvent=e;
+  if (myPopupField != null) {
+    Disposer.dispose(myPopupField);
+  }
+  myPopupField=new MySearchTextField();
+  myPopupField.getTextEditor().addKeyListener(new KeyAdapter(){
+    @Override public void keyTyped(    KeyEvent e){
+      myHistoryIndex=0;
+      myHistoryItem=null;
+    }
+    @Override public void keyPressed(    KeyEvent e){
+      if (e.getKeyCode() == KeyEvent.VK_SHIFT) {
+        myList.repaint();
+      }
+    }
+    @Override public void keyReleased(    KeyEvent e){
+      if (e.getKeyCode() == KeyEvent.VK_SHIFT) {
+        myList.repaint();
+      }
+    }
+  }
+);
+  initSearchField(myPopupField);
+  myPopupField.setOpaque(false);
+  final JTextField editor=myPopupField.getTextEditor();
+  editor.setColumns(SEARCH_FIELD_COLUMNS);
+  final JPanel panel=new JPanel(new BorderLayout()){
+    @Override protected void paintComponent(    Graphics g){
+      final Gradient gradient=getGradientColors();
+      ((Graphics2D)g).setPaint(new GradientPaint(0,0,gradient.getStartColor(),0,getHeight(),gradient.getEndColor()));
+      g.fillRect(0,0,getWidth(),getHeight());
+    }
+  }
+;
+  final JLabel title=new JLabel(" Search Everywhere:       ");
+  final JPanel topPanel=new NonOpaquePanel(new BorderLayout());
+  title.setForeground(new JBColor(Gray._240,Gray._200));
+  if (SystemInfo.isMac) {
+    title.setFont(title.getFont().deriveFont(Font.BOLD,title.getFont().getSize() - 1f));
+  }
+ else {
+    title.setFont(title.getFont().deriveFont(Font.BOLD));
+  }
+  topPanel.add(title,BorderLayout.WEST);
+  final JPanel controls=new JPanel(new BorderLayout());
+  controls.setOpaque(false);
+  final JLabel settings=new JLabel(AllIcons.General.SearchEverywhereGear);
+  new ClickListener(){
+    @Override public boolean onClick(    @NotNull MouseEvent event,    int clickCount){
+      showSettings();
+      return true;
+    }
+  }
+.installOn(settings);
+  controls.add(settings,BorderLayout.EAST);
+  myNonProjectCheckBox.setForeground(new JBColor(Gray._240,Gray._200));
+  myNonProjectCheckBox.setText("Include non-project items (" + getShortcut() + ")  ");
+  if (!NonProjectScopeDisablerEP.isSearchInNonProjectDisabled()) {
+    controls.add(myNonProjectCheckBox,BorderLayout.WEST);
+  }
+  topPanel.add(controls,BorderLayout.EAST);
+  panel.add(myPopupField,BorderLayout.CENTER);
+  panel.add(topPanel,BorderLayout.NORTH);
+  panel.setBorder(IdeBorderFactory.createEmptyBorder(3,5,4,5));
+  DataManager.registerDataProvider(panel,this);
+  final ComponentPopupBuilder builder=JBPopupFactory.getInstance().createComponentPopupBuilder(panel,editor);
+  myBalloon=builder.setCancelOnClickOutside(true).setModalContext(false).setRequestFocus(true).setCancelCallback(new Computable<Boolean>(){
+    @Override public Boolean compute(){
+      return !mySkipFocusGain;
+    }
+  }
+).createPopup();
+  myBalloon.getContent().setBorder(JBUI.Borders.empty());
+  final Window window=WindowManager.getInstance().suggestParentWindow(project);
+  project.getMessageBus().connect(myBalloon).subscribe(DumbService.DUMB_MODE,new DumbService.DumbModeListener(){
+    @Override public void enteredDumbMode(){
+    }
+    @Override public void exitDumbMode(){
+      rebuildList(myPopupField.getText());
+    }
+  }
+);
+  Component parent=UIUtil.findUltimateParent(window);
+  registerDataProvider(panel,project);
+  final RelativePoint showPoint;
+  if (parent != null) {
+    int height=UISettings.getInstance().SHOW_MAIN_TOOLBAR ? 135 : 115;
+    if (parent instanceof IdeFrameImpl && ((IdeFrameImpl)parent).isInFullScreen()) {
+      height-=20;
+    }
+    showPoint=new RelativePoint(parent,new Point((parent.getSize().width - panel.getPreferredSize().width) / 2,height));
+  }
+ else {
+    showPoint=JBPopupFactory.getInstance().guessBestPopupLocation(e.getDataContext());
+  }
+  myList.setFont(UIUtil.getListFont());
+  myBalloon.show(showPoint);
+  initSearchActions(myBalloon,myPopupField);
+  IdeFocusManager focusManager=IdeFocusManager.getInstance(project);
+  focusManager.requestFocus(editor,true);
+  FeatureUsageTracker.getInstance().triggerFeatureUsed(IdeActions.ACTION_SEARCH_EVERYWHERE);
 }
