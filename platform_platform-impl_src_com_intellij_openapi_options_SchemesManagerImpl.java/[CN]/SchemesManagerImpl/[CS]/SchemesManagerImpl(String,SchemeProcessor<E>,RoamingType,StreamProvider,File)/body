@@ -2,13 +2,18 @@
   myFileSpec=fileSpec;
   myProcessor=processor;
   myRoamingType=roamingType;
-  myProvider=provider;
+  this.provider=provider;
   myIoDir=baseDir;
   if (processor instanceof SchemeExtensionProvider) {
     mySchemeExtension=((SchemeExtensionProvider)processor).getSchemeExtension();
     myUpdateExtension=((SchemeExtensionProvider)processor).isUpgradeNeeded();
   }
-  VirtualFileTracker virtualFileTracker=ServiceManager.getService(VirtualFileTracker.class);
+ else {
+    mySchemeExtension=DirectoryStorageData.DEFAULT_EXT;
+    myUpdateExtension=false;
+  }
+  Application application=ApplicationManager.getApplication();
+  VirtualFileTracker virtualFileTracker=application == null ? null : ServiceManager.getService(VirtualFileTracker.class);
   if (virtualFileTracker != null) {
     final String baseDirPath=myIoDir.getAbsolutePath().replace(File.separatorChar,'/');
     virtualFileTracker.addTracker(LocalFileSystem.PROTOCOL_PREFIX + baseDirPath,new VirtualFileAdapter(){
@@ -16,14 +21,14 @@
         if (event.getRequestor() != null || !isMy(event)) {
           return;
         }
-        E scheme=findSchemeFor(event.getFile().getName());
+        E scheme=findExternalizableSchemeByFileName(event.getFile().getName());
         T oldCurrentScheme=null;
         if (scheme != null) {
           oldCurrentScheme=getCurrentScheme();
           removeScheme((T)scheme);
           myProcessor.onSchemeDeleted(scheme);
         }
-        E readScheme=readSchemeFromFile(event.getFile(),false,null);
+        E readScheme=readSchemeFromFile(event.getFile(),null);
         if (readScheme != null) {
           myProcessor.initScheme(readScheme);
           myProcessor.onSchemeAdded(readScheme);
@@ -55,7 +60,7 @@
         }
       }
       private void schemeCreatedExternally(      @NotNull VirtualFile file){
-        E readScheme=readSchemeFromFile(file,false,null);
+        E readScheme=readSchemeFromFile(file,null);
         if (readScheme != null) {
           myProcessor.initScheme(readScheme);
           myProcessor.onSchemeAdded(readScheme);
@@ -80,7 +85,7 @@
         }
       }
       private void schemeDeletedExternally(      @NotNull VirtualFile file){
-        E scheme=findSchemeFor(file.getName());
+        E scheme=findExternalizableSchemeByFileName(file.getName());
         T oldCurrentScheme=null;
         if (scheme != null) {
           oldCurrentScheme=getCurrentScheme();
@@ -99,6 +104,6 @@
         }
       }
     }
-,false,ApplicationManager.getApplication());
+,false,application);
   }
 }

@@ -1,20 +1,28 @@
 {
-  if (myFilesToDelete.isEmpty()) {
+  if (filesToDelete.isEmpty()) {
     return errors;
   }
-  if (myProvider != null && myProvider.isEnabled()) {
-    for (    String nameWithoutExtension : myFilesToDelete) {
-      deleteServerFile(nameWithoutExtension + mySchemeExtension);
-      if (!DirectoryStorageData.DEFAULT_EXT.equals(mySchemeExtension)) {
-        deleteServerFile(nameWithoutExtension + DirectoryStorageData.DEFAULT_EXT);
+  if (provider != null && provider.isEnabled()) {
+    for (    String name : filesToDelete) {
+      try {
+        StorageUtil.delete(provider,myFileSpec + '/' + name,myRoamingType);
+      }
+ catch (      Throwable e) {
+        if (errors == null) {
+          errors=new SmartList<Throwable>();
+        }
+        errors.add(e);
       }
     }
   }
-  if (dir != null) {
-    AccessToken token=ApplicationManager.getApplication().acquireWriteActionLock(DocumentRunnable.IgnoreDocumentRunnable.class);
+ else   if (dir != null) {
+    AccessToken token=null;
     try {
       for (      VirtualFile file : dir.getChildren()) {
-        if (myFilesToDelete.contains(file.getNameWithoutExtension())) {
+        if (filesToDelete.contains(file.getName())) {
+          if (token == null) {
+            token=ApplicationManager.getApplication().acquireWriteActionLock(DocumentRunnable.IgnoreDocumentRunnable.class);
+          }
           try {
             file.delete(this);
           }
@@ -26,11 +34,13 @@
           }
         }
       }
-      myFilesToDelete.clear();
     }
   finally {
-      token.finish();
+      if (token != null) {
+        token.finish();
+      }
     }
   }
+  filesToDelete.clear();
   return errors;
 }
