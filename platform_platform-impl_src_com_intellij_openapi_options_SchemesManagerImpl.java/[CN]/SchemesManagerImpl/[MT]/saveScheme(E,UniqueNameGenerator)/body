@@ -1,38 +1,45 @@
 {
-  ExternalInfo externalInfo=getExternalInfo(scheme);
-  String currentFileNameWithoutExtension=externalInfo.getCurrentFileName();
+  @Nullable ExternalInfo externalInfo=schemeToInfo.get(scheme);
+  String currentFileNameWithoutExtension=externalInfo == null ? null : externalInfo.fileNameWithoutExtension;
   Parent parent=myProcessor.writeScheme(scheme);
   Element element=parent == null || parent instanceof Element ? (Element)parent : ((Document)parent).detachRootElement();
   if (JDOMUtil.isEmpty(element)) {
-    ContainerUtilRt.addIfNotNull(myFilesToDelete,currentFileNameWithoutExtension);
+    if (externalInfo != null) {
+      scheduleDelete(externalInfo);
+    }
     return;
   }
   String fileNameWithoutExtension=currentFileNameWithoutExtension;
   if (fileNameWithoutExtension == null || isRenamed(scheme)) {
     fileNameWithoutExtension=nameGenerator.generateUniqueName(FileUtil.sanitizeName(scheme.getName()));
   }
-  String fileName=fileNameWithoutExtension + mySchemeExtension;
   int newHash=JDOMUtil.getTreeHash(element,true);
-  if (currentFileNameWithoutExtension == fileNameWithoutExtension && newHash == externalInfo.getHash()) {
+  if (externalInfo != null && currentFileNameWithoutExtension == fileNameWithoutExtension && newHash == externalInfo.hash) {
     return;
   }
-  myFilesToDelete.remove(fileNameWithoutExtension);
-  final BufferExposingByteArrayOutputStream byteOut=StorageUtil.writeToBytes(element,"\n");
+  String fileName=fileNameWithoutExtension + mySchemeExtension;
+  filesToDelete.remove(fileName);
+  BufferExposingByteArrayOutputStream byteOut=StorageUtil.writeToBytes(element,"\n");
   String providerPath;
-  if (myProvider != null && myProvider.isEnabled()) {
-    providerPath=getFileFullPath(fileName);
-    if (!myProvider.isApplicable(providerPath,myRoamingType)) {
+  if (provider != null && provider.isEnabled()) {
+    providerPath=myFileSpec + '/' + fileName;
+    if (!provider.isApplicable(providerPath,myRoamingType)) {
       providerPath=null;
     }
   }
  else {
     providerPath=null;
   }
-  boolean renamed=currentFileNameWithoutExtension != null && fileNameWithoutExtension != currentFileNameWithoutExtension && nameGenerator.value(currentFileNameWithoutExtension);
+  boolean renamed=externalInfo != null && fileNameWithoutExtension != currentFileNameWithoutExtension && nameGenerator.value(currentFileNameWithoutExtension);
   if (providerPath == null) {
     VirtualFile file=null;
+    VirtualFile dir=getVirtualDir();
+    if (dir == null || !dir.isValid()) {
+      dir=DirectoryBasedStorage.createDir(myIoDir,this);
+      myDir=dir;
+    }
     if (renamed) {
-      file=myDir.findChild(currentFileNameWithoutExtension + mySchemeExtension);
+      file=dir.findChild(externalInfo.fileNameWithoutExtension + externalInfo.fileExtension);
       if (file != null) {
         AccessToken token=ApplicationManager.getApplication().acquireWriteActionLock(DocumentRunnable.IgnoreDocumentRunnable.class);
         try {
@@ -44,10 +51,7 @@
       }
     }
     if (file == null) {
-      if (myDir == null || !myDir.isValid()) {
-        myDir=DirectoryBasedStorage.createDir(myIoDir,this);
-      }
-      file=DirectoryBasedStorage.getFile(fileName,myDir,this);
+      file=DirectoryBasedStorage.getFile(fileName,dir,this);
     }
     AccessToken token=ApplicationManager.getApplication().acquireWriteActionLock(DocumentRunnable.IgnoreDocumentRunnable.class);
     try {
@@ -63,13 +67,19 @@
       token.finish();
     }
   }
- else   if (renamed) {
-    myFilesToDelete.add(currentFileNameWithoutExtension);
+ else {
+    if (renamed) {
+      scheduleDelete(externalInfo);
+    }
+    provider.saveContent(providerPath,byteOut.getInternalBuffer(),byteOut.size(),myRoamingType);
   }
-  externalInfo.setHash(newHash);
-  externalInfo.setPreviouslySavedName(scheme.getName());
-  externalInfo.setCurrentFileName(createFileName(fileName));
-  if (providerPath != null) {
-    myProvider.saveContent(providerPath,byteOut.getInternalBuffer(),byteOut.size(),myRoamingType);
+  if (externalInfo == null) {
+    externalInfo=new ExternalInfo(fileNameWithoutExtension,mySchemeExtension);
+    schemeToInfo.put(scheme,externalInfo);
   }
+ else {
+    externalInfo.setFileNameWithoutExtension(fileNameWithoutExtension,mySchemeExtension);
+  }
+  externalInfo.hash=newHash;
+  externalInfo.schemeName=scheme.getName();
 }
