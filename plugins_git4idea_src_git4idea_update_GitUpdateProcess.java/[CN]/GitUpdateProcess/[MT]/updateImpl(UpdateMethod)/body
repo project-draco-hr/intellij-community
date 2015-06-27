@@ -29,7 +29,7 @@
       }
     }
   }
-  Collection<VirtualFile> myRootsToSave=ContainerUtil.newArrayList();
+  final Collection<VirtualFile> myRootsToSave=ContainerUtil.newArrayList();
   LOG.info("updateImpl: identifying if save is needed...");
   for (  Map.Entry<VirtualFile,GitUpdater> entry : updaters.entrySet()) {
     VirtualFile root=entry.getKey();
@@ -40,43 +40,41 @@
     }
   }
   LOG.info("updateImpl: saving local changes...");
-  try {
-    mySaver.saveLocalChanges(myRootsToSave);
-  }
- catch (  VcsException e) {
-    LOG.info("Couldn't save local changes",e);
-    notifyError(myProject,"Git update failed","Tried to save uncommitted changes in " + mySaver.getSaverName() + " before update, but failed with an error.<br/>"+ "Update was cancelled.",true,e);
-    return GitUpdateResult.ERROR;
-  }
-  LOG.info("updateImpl: updating...");
-  boolean incomplete=false;
-  GitUpdateResult compoundResult=null;
-  VirtualFile currentlyUpdatedRoot=null;
-  try {
-    for (    Map.Entry<VirtualFile,GitUpdater> entry : updaters.entrySet()) {
-      currentlyUpdatedRoot=entry.getKey();
-      GitUpdater updater=entry.getValue();
-      GitUpdateResult res=updater.update();
-      LOG.info("updating root " + currentlyUpdatedRoot + " finished: "+ res);
-      if (res == GitUpdateResult.INCOMPLETE) {
-        incomplete=true;
+  final Ref<Boolean> incomplete=Ref.create(false);
+  final Ref<GitUpdateResult> compoundResult=Ref.create();
+  final Map<VirtualFile,GitUpdater> finalUpdaters=updaters;
+  new GitPreservingProcess(myProject,myPlatformFacade,myGit,myRootsToSave,"Update","Remote",GitVcsSettings.getInstance(myProject).updateChangesPolicy(),myProgressIndicator,new Runnable(){
+    @Override public void run(){
+      LOG.info("updateImpl: updating...");
+      VirtualFile currentlyUpdatedRoot=null;
+      try {
+        for (        Map.Entry<VirtualFile,GitUpdater> entry : finalUpdaters.entrySet()) {
+          currentlyUpdatedRoot=entry.getKey();
+          GitUpdater updater=entry.getValue();
+          GitUpdateResult res=updater.update();
+          LOG.info("updating root " + currentlyUpdatedRoot + " finished: "+ res);
+          if (res == GitUpdateResult.INCOMPLETE) {
+            incomplete.set(true);
+          }
+          compoundResult.set(joinResults(compoundResult.get(),res));
+        }
       }
-      compoundResult=joinResults(compoundResult,res);
+ catch (      VcsException e) {
+        String rootName=(currentlyUpdatedRoot == null) ? "" : currentlyUpdatedRoot.getName();
+        LOG.info("Error updating changes for root " + currentlyUpdatedRoot,e);
+        notifyImportantError(myProject,"Error updating " + rootName,"Updating " + rootName + " failed with an error: "+ e.getLocalizedMessage());
+      }
     }
   }
- catch (  VcsException e) {
-    String rootName=(currentlyUpdatedRoot == null) ? "" : currentlyUpdatedRoot.getName();
-    LOG.info("Error updating changes for root " + currentlyUpdatedRoot,e);
-    notifyImportantError(myProject,"Error updating " + rootName,"Updating " + rootName + " failed with an error: "+ e.getLocalizedMessage());
-  }
- finally {
-    if (incomplete || compoundResult == null || !compoundResult.isSuccess()) {
-      mySaver.notifyLocalChangesAreNotRestored();
-    }
- else {
-      LOG.info("updateImpl: restoring local changes...");
-      restoreLocalChanges();
+).execute(new Computable<Boolean>(){
+    @Override public Boolean compute(){
+      if (incomplete.get() || compoundResult.isNull() || !compoundResult.get().isSuccess()) {
+        mySaver.notifyLocalChangesAreNotRestored();
+        return false;
+      }
+      return true;
     }
   }
-  return compoundResult;
+);
+  return compoundResult.get();
 }
