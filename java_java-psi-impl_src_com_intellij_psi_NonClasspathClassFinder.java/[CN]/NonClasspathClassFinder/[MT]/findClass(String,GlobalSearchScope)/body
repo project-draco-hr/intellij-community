@@ -1,26 +1,19 @@
 {
-  final List<VirtualFile> classRoots=getClassRoots(scope);
-  if (classRoots.isEmpty()) {
-    return null;
-  }
-  final String relPath=qualifiedName.replace('.','/');
-  for (  final VirtualFile classRoot : classRoots) {
-    if (scope.contains(classRoot)) {
-      VirtualFile virtualFile=findFileByRelativePath(classRoot,relPath,myFileExtensions);
-      if (virtualFile != null) {
-        if (!virtualFile.isValid()) {
-          LOG.error("Invalid child of valid parent: " + virtualFile.getPath() + "; "+ classRoot.isValid()+ " path="+ classRoot.getPath());
-          return null;
-        }
-        final PsiFile file=myManager.findFile(virtualFile);
-        if (file instanceof PsiClassOwner) {
-          final PsiClass[] classes=((PsiClassOwner)file).getClasses();
-          if (classes.length == 1) {
-            return classes[0];
-          }
+  final Ref<PsiClass> result=Ref.create();
+  processDirectories(StringUtil.getPackageName(qualifiedName),scope,new Processor<VirtualFile>(){
+    @Override public boolean process(    VirtualFile dir){
+      VirtualFile virtualFile=findChild(dir,StringUtil.getShortName(qualifiedName),myFileExtensions);
+      final PsiFile file=virtualFile == null ? null : myManager.findFile(virtualFile);
+      if (file instanceof PsiClassOwner) {
+        final PsiClass[] classes=((PsiClassOwner)file).getClasses();
+        if (classes.length == 1) {
+          result.set(classes[0]);
+          return false;
         }
       }
+      return true;
     }
   }
-  return null;
+);
+  return result.get();
 }
