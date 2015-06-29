@@ -1,10 +1,20 @@
 {
   FeatureUsageTracker.getInstance().triggerFeatureUsed("scratch");
-  storeLRULanguages(project,language);
-  VirtualFile file=ScratchRootType.getInstance().createScratchFile(project,"scratch",language,text);
+  Language initialLanguage=language == Language.ANY ? StdLanguages.TEXT : language;
+  final VirtualFile file=ScratchRootType.getInstance().createScratchFile(project,"scratch",initialLanguage,text);
   if (file != null) {
-    FileEditorManager.getInstance(project).openFile(file,true);
-    file.putUserData(IS_NEW_SCRATCH,Boolean.TRUE);
+    FileEditor[] editors=FileEditorManager.getInstance(project).openFile(file,true);
+    if (language == Language.ANY && editors.length != 0 && editors[0] instanceof TextEditor) {
+      final TextEditor textEditor=(TextEditor)editors[0];
+      ApplicationManager.getApplication().invokeLater(new Runnable(){
+        @Override public void run(){
+          if (!textEditor.isValid())           return;
+          PerFileMappings<Language> mappings=ScratchFileService.getInstance().getScratchesMapping();
+          LRUPopupBuilder.forFileLanguages(project,file,mappings).showInBestPositionFor(textEditor.getEditor());
+        }
+      }
+);
+    }
   }
   return file;
 }

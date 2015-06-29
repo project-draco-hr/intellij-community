@@ -1,0 +1,58 @@
+{
+  final List<String> ids=ContainerUtil.newArrayList(restoreLRUItems());
+  if (mySelection != null) {
+    ids.add(getStorageId(mySelection));
+  }
+  List<T> lru=ContainerUtil.newArrayListWithCapacity(LRU_ITEMS);
+  List<T> items=ContainerUtil.newArrayListWithCapacity(MAX_VISIBLE_SIZE);
+  final List<T> extra=myExtraItems.toList();
+  for (  T t : myItemsIterable) {
+    (ContainerUtil.indexOf(ids,getStorageId(t)) != -1 ? lru : items).add(t);
+  }
+  if (myComparator != null) {
+    Collections.sort(items,myComparator);
+  }
+  if (!lru.isEmpty()) {
+    Collections.sort(lru,new Comparator<T>(){
+      @Override public int compare(      T o1,      T o2){
+        return ContainerUtil.indexOf(ids,getStorageId(o1)) - ContainerUtil.indexOf(ids,getStorageId(o2));
+      }
+    }
+);
+  }
+  final T separator1=!lru.isEmpty() && !items.isEmpty() ? items.get(0) : null;
+  final T separator2=!lru.isEmpty() || !items.isEmpty() ? ContainerUtil.getFirstItem(extra) : null;
+  final List<T> combinedItems=ContainerUtil.concat(lru,items,extra);
+  BaseListPopupStep<T> step=new BaseListPopupStep<T>(myTitle,combinedItems){
+    @NotNull @Override public String getTextFor(    @NotNull T t){
+      return getPresentation(t).first;
+    }
+    @Override public Icon getIconFor(    @NotNull T t){
+      return getPresentation(t).second;
+    }
+    @Override public boolean isSpeedSearchEnabled(){
+      return true;
+    }
+    @Override public PopupStep onChosen(    final T t,    boolean finalChoice){
+      if (!extra.contains(t)) {
+        storeLRUItems(t);
+      }
+      if (myOnChosen != null) {
+        EdtInvocationManager.getInstance().invokeLater(new Runnable(){
+          @Override public void run(){
+            myOnChosen.consume(t);
+          }
+        }
+);
+      }
+      return null;
+    }
+    @Nullable @Override public ListSeparator getSeparatorAbove(    T value){
+      return value == separator1 || value == separator2 ? new ListSeparator() : null;
+    }
+  }
+;
+  int selection=Math.max(0,mySelection != null ? combinedItems.indexOf(mySelection) : 0);
+  step.setDefaultOptionIndex(selection);
+  return tweakSizeToPreferred(JBPopupFactory.getInstance().createListPopup(step));
+}
