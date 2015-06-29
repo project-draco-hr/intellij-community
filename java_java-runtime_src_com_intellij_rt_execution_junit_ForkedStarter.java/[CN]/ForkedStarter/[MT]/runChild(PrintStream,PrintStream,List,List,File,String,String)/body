@@ -1,0 +1,49 @@
+{
+  vmParameters=new ArrayList(vmParameters);
+  setupDebugger(vmParameters);
+  final File tempFile=File.createTempFile("fork","test");
+  tempFile.deleteOnExit();
+  final String testOutputPath=tempFile.getAbsolutePath();
+  final ProcessBuilder builder=new ProcessBuilder();
+  builder.add(vmParameters);
+  builder.add("-classpath");
+  if (dynamicClasspath.length() > 0) {
+    try {
+      final File classpathFile=File.createTempFile("classpath",null);
+      classpathFile.deleteOnExit();
+      final PrintWriter writer=new PrintWriter(new OutputStreamWriter(new FileOutputStream(classpathFile),"UTF-8"));
+      try {
+        int idx=0;
+        while (idx < classpath.length()) {
+          final int endIdx=classpath.indexOf(File.pathSeparator,idx);
+          if (endIdx < 0) {
+            writer.println(classpath.substring(idx));
+            break;
+          }
+          writer.println(classpath.substring(idx,endIdx));
+          idx=endIdx + File.pathSeparator.length();
+        }
+      }
+  finally {
+        writer.close();
+      }
+      builder.add(dynamicClasspath);
+      builder.add(CommandLineWrapper.class.getName());
+      builder.add(classpathFile.getAbsolutePath());
+    }
+ catch (    Throwable e) {
+      builder.add(classpath);
+    }
+  }
+ else {
+    builder.add(classpath);
+  }
+  builder.add(getStarterName());
+  builder.add(testOutputPath);
+  builder.add(args);
+  builder.setWorkingDir(workingDir);
+  final Process exec=builder.createProcess();
+  final int result=exec.waitFor();
+  ForkedVMWrapper.readWrapped(testOutputPath,(PrintStream)out,(PrintStream)err);
+  return result;
+}
