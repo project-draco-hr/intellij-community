@@ -1,0 +1,85 @@
+{
+  @Nullable ExternalInfo externalInfo=schemeToInfo.get(scheme);
+  String currentFileNameWithoutExtension=externalInfo == null ? null : externalInfo.fileNameWithoutExtension;
+  Parent parent=myProcessor.writeScheme(scheme);
+  Element element=parent == null || parent instanceof Element ? (Element)parent : ((Document)parent).detachRootElement();
+  if (JDOMUtil.isEmpty(element)) {
+    if (externalInfo != null) {
+      scheduleDelete(externalInfo);
+    }
+    return;
+  }
+  String fileNameWithoutExtension=currentFileNameWithoutExtension;
+  if (fileNameWithoutExtension == null || isRenamed(scheme)) {
+    fileNameWithoutExtension=nameGenerator.generateUniqueName(FileUtil.sanitizeName(scheme.getName()));
+  }
+  int newHash=JDOMUtil.getTreeHash(element,true);
+  if (externalInfo != null && currentFileNameWithoutExtension == fileNameWithoutExtension && newHash == externalInfo.hash) {
+    return;
+  }
+  String fileName=fileNameWithoutExtension + mySchemeExtension;
+  filesToDelete.remove(fileName);
+  BufferExposingByteArrayOutputStream byteOut=StorageUtil.writeToBytes(element,"\n");
+  String providerPath;
+  if (provider != null && provider.isEnabled()) {
+    providerPath=myFileSpec + '/' + fileName;
+    if (!provider.isApplicable(providerPath,myRoamingType)) {
+      providerPath=null;
+    }
+  }
+ else {
+    providerPath=null;
+  }
+  boolean renamed=externalInfo != null && fileNameWithoutExtension != currentFileNameWithoutExtension && nameGenerator.value(currentFileNameWithoutExtension);
+  if (providerPath == null) {
+    VirtualFile file=null;
+    VirtualFile dir=getDirectory();
+    if (dir == null || !dir.isValid()) {
+      dir=DirectoryBasedStorage.createDir(myIoDir,this);
+      myDir=dir;
+    }
+    if (renamed) {
+      file=dir.findChild(externalInfo.fileNameWithoutExtension + externalInfo.fileExtension);
+      if (file != null) {
+        AccessToken token=WriteAction.start();
+        try {
+          file.rename(this,fileName);
+        }
+  finally {
+          token.finish();
+        }
+      }
+    }
+    if (file == null) {
+      file=DirectoryBasedStorage.getFile(fileName,dir,this);
+    }
+    AccessToken token=WriteAction.start();
+    try {
+      OutputStream out=file.getOutputStream(this);
+      try {
+        byteOut.writeTo(out);
+      }
+  finally {
+        out.close();
+      }
+    }
+  finally {
+      token.finish();
+    }
+  }
+ else {
+    if (renamed) {
+      scheduleDelete(externalInfo);
+    }
+    provider.saveContent(providerPath,byteOut.getInternalBuffer(),byteOut.size(),myRoamingType);
+  }
+  if (externalInfo == null) {
+    externalInfo=new ExternalInfo(fileNameWithoutExtension,mySchemeExtension);
+    schemeToInfo.put(scheme,externalInfo);
+  }
+ else {
+    externalInfo.setFileNameWithoutExtension(fileNameWithoutExtension,mySchemeExtension);
+  }
+  externalInfo.hash=newHash;
+  externalInfo.schemeName=scheme.getName();
+}
