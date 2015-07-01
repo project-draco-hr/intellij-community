@@ -1,0 +1,38 @@
+{
+  LOG.assertTrue(expression != null);
+  if (method == null) {
+    method=expression.resolveMethod();
+    if (method == null) {
+      return expression;
+    }
+  }
+  final ValidationInfo validationInfo=force ? validate(method) : validate(expression);
+  if (validationInfo == null) {
+    return expression;
+  }
+  final Project project=expression.getProject();
+  int lambdaIndex=validationInfo.getLambdaPosition();
+  final PsiExpression[] expressions=expression.getArgumentList().getExpressions();
+  PsiExpression lambdaExpression=expressions[lambdaIndex];
+  if (!force) {
+    lambdaExpression=convertClassTypeExpression(lambdaExpression);
+    lambdaExpression=convertToJavaLambda(lambdaExpression,myStreamApiMethodName);
+  }
+  LOG.assertTrue(lambdaExpression != null);
+  final PsiExpression iterableExpression=expressions[validationInfo.getIterablePosition()];
+  final String pipelineHead=createPipelineHeadText(iterableExpression,lambdaExpression,force);
+  final String lambdaExpressionText;
+  final String elementText;
+  if (!StreamApiConstants.FAKE_FIND_MATCHED.equals(myStreamApiMethodName)) {
+    elementText=myStreamApiMethodName;
+    lambdaExpressionText=lambdaExpression.getText();
+  }
+ else {
+    elementText=validationInfo.getDefaultValuePosition() != -1 ? String.format(StreamApiConstants.FAKE_FIND_MATCHED_WITH_DEFAULT_PATTERN,lambdaExpression.getText(),expressions[validationInfo.getDefaultValuePosition()].getText()) : String.format(StreamApiConstants.FAKE_FIND_MATCHED_PATTERN,lambdaExpression.getText());
+    lambdaExpressionText=null;
+  }
+  final String pipelineTail=StreamApiConstants.STREAM_STREAM_API_METHODS.getValue().contains(myStreamApiMethodName) ? findSuitableTailMethodForCollection(method) : null;
+  final PsiElement replaced=expression.replace(createPipelineExpression(pipelineHead,elementText,lambdaExpressionText,pipelineTail,project));
+  JavaCodeStyleManager.getInstance(project).shortenClassReferences(replaced.getParent());
+  return (PsiExpression)replaced;
+}
