@@ -8,6 +8,41 @@
   }
   final PsiClassType rawType=classType.rawType();
   final InstanceofChecker checker=new InstanceofChecker(operand,rawType,false);
+  PsiStatement sibling=PsiTreeUtil.getParentOfType(context,PsiStatement.class);
+  sibling=PsiTreeUtil.getPrevSiblingOfType(sibling,PsiStatement.class);
+  while (sibling != null) {
+    if (sibling instanceof PsiIfStatement) {
+      final PsiIfStatement ifStatement=(PsiIfStatement)sibling;
+      final PsiExpression condition=ifStatement.getCondition();
+      if (condition != null) {
+        if (!ControlFlowUtils.statementMayCompleteNormally(ifStatement.getThenBranch())) {
+          checker.negate=true;
+          checker.checkExpression(condition);
+          if (checker.hasAgreeingInstanceof()) {
+            return null;
+          }
+        }
+ else         if (!ControlFlowUtils.statementMayCompleteNormally(ifStatement.getElseBranch())) {
+          checker.negate=false;
+          checker.checkExpression(condition);
+          if (checker.hasAgreeingInstanceof()) {
+            return null;
+          }
+        }
+      }
+    }
+ else     if (sibling instanceof PsiAssertStatement) {
+      final PsiAssertStatement assertStatement=(PsiAssertStatement)sibling;
+      final PsiExpression condition=assertStatement.getAssertCondition();
+      checker.negate=false;
+      checker.checkExpression(condition);
+      if (checker.hasAgreeingInstanceof()) {
+        return null;
+      }
+    }
+    sibling=PsiTreeUtil.getPrevSiblingOfType(sibling,PsiStatement.class);
+  }
+  checker.negate=false;
   PsiElement parent=PsiTreeUtil.getParentOfType(context,PsiIfStatement.class,PsiConditionalExpression.class,PsiPolyadicExpression.class);
   while (parent != null) {
     parent.accept(checker);
