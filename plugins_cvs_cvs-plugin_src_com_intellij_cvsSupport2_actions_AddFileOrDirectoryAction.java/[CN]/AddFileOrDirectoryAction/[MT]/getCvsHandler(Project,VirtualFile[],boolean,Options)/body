@@ -6,11 +6,23 @@
   if (roots.isEmpty()) {
     LOG.error(filesToAdd);
   }
-  if (showDialog) {
-    final AbstractAddOptionsDialog dialog=AbstractAddOptionsDialog.createDialog(project,roots,dialogOptions);
-    if (!dialog.showAndGet()) {
-      return CvsHandler.NULL;
+  if (!showDialog) {
+    return CommandCvsHandler.createAddFilesHandler(project,roots);
+  }
+  final CvsHandler[] handler=new CvsHandler[1];
+  final Runnable runnable=new Runnable(){
+    @Override public void run(){
+      final AbstractAddOptionsDialog dialog=AbstractAddOptionsDialog.createDialog(project,roots,dialogOptions);
+      handler[0]=!dialog.showAndGet() ? CvsHandler.NULL : CommandCvsHandler.createAddFilesHandler(project,roots);
     }
   }
-  return CommandCvsHandler.createAddFilesHandler(project,roots);
+;
+  final Application application=ApplicationManager.getApplication();
+  if (application.isDispatchThread()) {
+    runnable.run();
+  }
+ else {
+    application.invokeAndWait(runnable,ModalityState.any());
+  }
+  return handler[0];
 }
