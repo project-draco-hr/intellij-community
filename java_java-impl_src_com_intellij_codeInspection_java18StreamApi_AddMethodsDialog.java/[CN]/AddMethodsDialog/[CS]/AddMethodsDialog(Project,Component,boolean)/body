@@ -1,28 +1,79 @@
 {
   super(parent,canBeParent);
   myProject=project;
-  final DefaultComboBoxModel model=new DefaultComboBoxModel();
-  myPatternsCombo.setModel(model);
-  for (  String methodName : StreamApiConstants.STREAM_STREAM_API_METHODS.getValue()) {
-    model.addElement(methodName);
-  }
-  model.addElement(StreamApiConstants.FAKE_FIND_MATCHED);
-  myPatternsCombo.setRenderer(new ColoredListCellRenderer<String>(){
-    @Override protected void customizeCellRenderer(    JList list,    String methodName,    int index,    boolean selected,    boolean hasFocus){
+  myTemplatesCombo.setEnabled(false);
+  myTemplatesCombo.setRenderer(new ColoredListCellRenderer<PseudoLambdaReplaceTemplate>(){
+    @Override protected void customizeCellRenderer(    JList list,    PseudoLambdaReplaceTemplate template,    int index,    boolean selected,    boolean hasFocus){
+      if (template == null) {
+        return;
+      }
       append("stream.");
-      if (StreamApiConstants.STREAM_STREAM_API_METHODS.getValue().contains(methodName)) {
-        append(methodName + "()",SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
+      final String streamApiMethodName=template.getStreamApiMethodName();
+      if (StreamApiConstants.STREAM_STREAM_API_METHODS.getValue().contains(streamApiMethodName)) {
+        append(streamApiMethodName + "()",SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
       }
  else {
-        LOG.assertTrue(StreamApiConstants.FAKE_FIND_MATCHED.equals(methodName));
+        LOG.assertTrue(StreamApiConstants.FAKE_FIND_MATCHED.equals(streamApiMethodName));
         append(String.format(StreamApiConstants.FAKE_FIND_MATCHED_PATTERN,"condition"),SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
         append(" or ");
-        append(String.format(StreamApiConstants.FAKE_FIND_MATCHED_WITH_DEFAULT_PATTERN,"condition","defaultValue"),SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
+        append(".orElseGet(() -> defaultValue)",SimpleTextAttributes.REGULAR_BOLD_ATTRIBUTES);
+      }
+    }
+  }
+);
+  myTemplatesCombo.addItemListener(new ItemListener(){
+    @Override public void itemStateChanged(    ItemEvent e){
+      final PseudoLambdaReplaceTemplate template=(PseudoLambdaReplaceTemplate)e.getItem();
+      final Collection<PsiMethod> methods=(Collection<PsiMethod>)myMethodNameCombo.getSelectedItem();
+      if (methods == null) {
+        return;
+      }
+      for (      PsiMethod method : methods) {
+        if (template.validate(method) != null) {
+          showTemplateExample(template,method);
+          break;
+        }
       }
     }
   }
 );
   myMethodNameCombo.setModel(new DefaultComboBoxModel());
+  myMethodNameCombo.addItemListener(new ItemListener(){
+    @Override public void itemStateChanged(    ItemEvent e){
+      if (!myExamplePanel.isEnabled()) {
+        myExamplePanel.setEnabled(true);
+      }
+      final Collection<PseudoLambdaReplaceTemplate> suitableTemplates=new LinkedHashSet<PseudoLambdaReplaceTemplate>();
+      final Collection<PsiMethod> methods=(Collection<PsiMethod>)e.getItem();
+      for (      PseudoLambdaReplaceTemplate template : PseudoLambdaReplaceTemplate.getAllTemplates()) {
+        for (        PsiMethod method : methods) {
+          if (template.validate(method) != null) {
+            if (suitableTemplates.isEmpty()) {
+              showTemplateExample(template,method);
+            }
+            suitableTemplates.add(template);
+          }
+        }
+      }
+      if (!myTemplatesCombo.isEnabled()) {
+        myTemplatesCombo.setEnabled(true);
+      }
+      LOG.assertTrue(!suitableTemplates.isEmpty());
+      final List<PseudoLambdaReplaceTemplate> templatesAsList=new ArrayList<PseudoLambdaReplaceTemplate>(suitableTemplates);
+      myTemplatesCombo.setModel(new CollectionComboBoxModel(templatesAsList));
+      myTemplatesCombo.setSelectedItem(templatesAsList.get(0));
+    }
+  }
+);
+  myMethodNameCombo.setRenderer(new ListCellRendererWrapper<Collection<PsiMethod>>(){
+    @Override public void customize(    JList list,    Collection<PsiMethod> methods,    int index,    boolean selected,    boolean hasFocus){
+      if (methods != null) {
+        LOG.assertTrue(!methods.isEmpty());
+        setText(ContainerUtil.getFirstItem(methods).getName());
+      }
+    }
+  }
+);
   myClassNameEditor.addDocumentListener(new DocumentAdapter(){
     @Override public void documentChanged(    DocumentEvent e){
       final String classFqn=e.getDocument().getText();
@@ -30,24 +81,40 @@
       final DefaultComboBoxModel comboBoxModel=(DefaultComboBoxModel)myMethodNameCombo.getModel();
       comboBoxModel.removeAllElements();
       if (aClass == null) {
-        myMethodNameCombo.setEnabled(false);
+        enable(false);
       }
  else {
-        for (        String name : ContainerUtil.newTreeSet(ContainerUtil.mapNotNull(aClass.getMethods(),new Function<PsiMethod,String>(){
-          @Override public String fun(          PsiMethod method){
+        final List<PseudoLambdaReplaceTemplate> possibleTemplates=PseudoLambdaReplaceTemplate.getAllTemplates();
+        final LinkedMultiMap<String,PsiMethod> nameToMethod=new LinkedMultiMap<String,PsiMethod>();
+        for (        PsiMethod m : ContainerUtil.filter(aClass.getMethods(),new Condition<PsiMethod>(){
+          @Override public boolean value(          PsiMethod method){
             if (method.isConstructor() || !method.hasModifierProperty(PsiModifier.STATIC) || method.hasModifierProperty(PsiModifier.PRIVATE)) {
-              return null;
+              return false;
             }
-            return method.getName();
+            boolean templateFound=false;
+            for (            PseudoLambdaReplaceTemplate template : possibleTemplates) {
+              if (template.validate(method) != null) {
+                templateFound=true;
+              }
+            }
+            if (!templateFound) {
+              return false;
+            }
+            return true;
           }
         }
-))) {
-          comboBoxModel.addElement(name);
+)) {
+          nameToMethod.putValue(m.getName(),m);
         }
-        myMethodNameCombo.setEnabled(true);
+        for (        Map.Entry<String,Collection<PsiMethod>> entry : nameToMethod.entrySet()) {
+          comboBoxModel.addElement(entry.getValue());
+        }
+        final boolean isSuitableMethodsFound=comboBoxModel.getSize() != 0;
+        enable(isSuitableMethodsFound);
       }
     }
   }
 );
+  setOKActionEnabled(false);
   init();
 }

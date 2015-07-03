@@ -1,0 +1,34 @@
+{
+  if (expression instanceof PsiMethodReferenceExpression) {
+    return expression;
+  }
+  if (expression instanceof PsiLambdaExpression) {
+    return expression;
+  }
+  if (expression instanceof PsiMethodCallExpression) {
+    final PsiMethod method=((PsiMethodCallExpression)expression).resolveMethod();
+    if (method == null) {
+      return null;
+    }
+    final PsiType type=method.getReturnType();
+    if (!(type instanceof PsiClassType)) {
+      return null;
+    }
+    final PsiClassType.ClassResolveResult result=((PsiClassType)type).resolveGenerics();
+    final PsiClass lambdaClass=result.getElement();
+    if (lambdaClass == null) {
+      return null;
+    }
+    final PsiMethod functionalInterfaceMethod=LambdaUtil.getFunctionalInterfaceMethod(lambdaClass);
+    LOG.assertTrue(functionalInterfaceMethod != null);
+    final String methodName=functionalInterfaceMethod.getName();
+    return JavaPsiFacade.getElementFactory(expression.getProject()).createExpressionFromText(expression.getText() + "::" + methodName,null);
+  }
+  if (expression instanceof PsiReferenceExpression) {
+    final PsiType expressionType=expression.getType();
+    final PsiMethod method=LambdaUtil.getFunctionalInterfaceMethod(expressionType);
+    LOG.assertTrue(method != null);
+    return JavaPsiFacade.getElementFactory(expression.getProject()).createExpressionFromText(expression.getText() + "::" + method.getName(),null);
+  }
+  return AnonymousCanBeLambdaInspection.replacePsiElementWithLambda(expression,true);
+}
