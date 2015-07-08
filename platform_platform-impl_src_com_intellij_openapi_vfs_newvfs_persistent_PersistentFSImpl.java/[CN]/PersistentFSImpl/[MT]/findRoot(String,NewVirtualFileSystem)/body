@@ -4,14 +4,8 @@
     return null;
   }
   String rootUrl=normalizeRootUrl(basePath,fs);
-  myRootsLock.readLock().lock();
-  try {
-    VirtualFileSystemEntry root=myRoots.get(rootUrl);
-    if (root != null)     return root;
-  }
-  finally {
-    myRootsLock.readLock().unlock();
-  }
+  VirtualFileSystemEntry root=myRoots.get(rootUrl);
+  if (root != null)   return root;
   final VirtualFileSystemEntry newRoot;
   int rootId=FSRecords.findRootRecord(rootUrl);
   VfsData.Segment segment=VfsData.getSegment(rootId,true);
@@ -39,10 +33,9 @@
   if (attributes == null || !attributes.isDirectory()) {
     return null;
   }
-  myRootsLock.writeLock().lock();
-  boolean mark=false;
-  try {
-    VirtualFileSystemEntry root=myRoots.get(rootUrl);
+  boolean mark;
+synchronized (myRoots) {
+    root=myRoots.get(rootUrl);
     if (root != null)     return root;
     try {
       VfsData.initFile(rootId,segment,-1,directoryData);
@@ -61,9 +54,6 @@
     myRoots.put(rootUrl,newRoot);
     myRootsById.put(rootId,newRoot);
     myIdToDirCache.put(rootId,newRoot);
-  }
-  finally {
-    myRootsLock.writeLock().unlock();
   }
   if (!mark && attributes.lastModified != FSRecords.getTimestamp(rootId)) {
     newRoot.markDirtyRecursively();
