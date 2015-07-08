@@ -3,6 +3,7 @@
   if (progressIndicator != null) {
     progressIndicator.setText(VcsBundle.message("shelve.changes.progress.title"));
   }
+  File schemePatchDir=generateUniqueSchemePatchDir(commitMessage);
   final List<Change> textChanges=new ArrayList<Change>();
   final List<ShelvedBinaryFile> binaryFiles=new ArrayList<ShelvedBinaryFile>();
   for (  Change change : changes) {
@@ -10,7 +11,7 @@
       continue;
     }
     if (change.getBeforeRevision() instanceof BinaryContentRevision || change.getAfterRevision() instanceof BinaryContentRevision) {
-      binaryFiles.add(shelveBinaryFile(change));
+      binaryFiles.add(shelveBinaryFile(schemePatchDir,change));
     }
  else {
       textChanges.add(change);
@@ -18,7 +19,7 @@
   }
   final ShelvedChangeList changeList;
   try {
-    File patchPath=getPatchPath(commitMessage);
+    File patchPath=getPatchFileInConfigDir(commitMessage,schemePatchDir);
     ProgressManager.checkCanceled();
     final List<FilePatch> patches=IdeaTextPatchBuilder.buildPatch(myProject,textChanges,myProject.getBaseDir().getPresentableUrl(),false);
     ProgressManager.checkCanceled();
@@ -31,8 +32,9 @@
     }
 ,patchPath,commitContext);
     changeList=new ShelvedChangeList(patchPath.toString(),commitMessage.replace('\n',' '),binaryFiles);
+    changeList.setName(schemePatchDir.getName());
     ProgressManager.checkCanceled();
-    myShelvedChangeLists.add(changeList);
+    mySchemesManager.addNewScheme(changeList,false);
     if (rollback) {
       final String operationName=UIUtil.removeMnemonic(RollbackChangesDialog.operationNameByChanges(myProject,changes));
       boolean modalContext=ApplicationManager.getApplication().isDispatchThread() && LaterInvocator.isInModalContext();

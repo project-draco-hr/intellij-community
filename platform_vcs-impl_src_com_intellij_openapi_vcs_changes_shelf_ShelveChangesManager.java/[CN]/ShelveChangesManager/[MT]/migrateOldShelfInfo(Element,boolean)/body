@@ -1,0 +1,33 @@
+{
+  for (  Element changeSetElement : element.getChildren(recycled ? ELEMENT_RECYCLED_CHANGELIST : ELEMENT_CHANGELIST)) {
+    ShelvedChangeList list=readOneShelvedChangeList(changeSetElement);
+    final File oldPatchFile=new File(list.PATH);
+    if (oldPatchFile.exists()) {
+      list.setRecycled(recycled);
+      File newPatchDir=generateUniqueSchemePatchDir(list.DESCRIPTION);
+      File newPatchFile=getPatchFileInConfigDir(list.DESCRIPTION,newPatchDir);
+      try {
+        myFileProcessor.saveFile(oldPatchFile,newPatchFile);
+        list.PATH=newPatchFile.getPath();
+        for (        ShelvedBinaryFile file : list.getBinaryFiles()) {
+          if (file.SHELVED_PATH != null) {
+            File shelvedFile=new File(file.SHELVED_PATH);
+            if (!StringUtil.isEmptyOrSpaces(file.AFTER_PATH) && shelvedFile.exists()) {
+              File newShelvedFile=new File(newPatchDir,PathUtil.getFileName(file.AFTER_PATH));
+              myFileProcessor.saveFile(shelvedFile,newShelvedFile);
+              file.SHELVED_PATH=newShelvedFile.getPath();
+              shelvedFile.delete();
+            }
+          }
+        }
+        oldPatchFile.delete();
+        list.setName(newPatchDir.getName());
+      }
+ catch (      IOException e) {
+        LOG.warn("Couldn't migrate shelf resources information from " + list.PATH);
+        continue;
+      }
+      mySchemesManager.addNewScheme(list,false);
+    }
+  }
+}
