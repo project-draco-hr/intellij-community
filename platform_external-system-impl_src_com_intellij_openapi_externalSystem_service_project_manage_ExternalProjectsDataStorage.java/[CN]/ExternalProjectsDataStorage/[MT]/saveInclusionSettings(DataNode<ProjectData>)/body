@@ -1,0 +1,41 @@
+{
+  if (projectDataNode == null)   return;
+  final MultiMap<String,String> inclusionMap=MultiMap.create();
+  final MultiMap<String,String> exclusionMap=MultiMap.create();
+  ExternalSystemApiUtil.visit(projectDataNode,new Consumer<DataNode<?>>(){
+    @Override public void consume(    DataNode dataNode){
+      try {
+        dataNode.getDataBytes();
+        DataNode<ExternalConfigPathAware> projectNode=resolveProjectNode(dataNode);
+        if (projectNode != null) {
+          final String projectPath=projectNode.getData().getLinkedExternalProjectPath();
+          if (projectNode.isIgnored() || dataNode.isIgnored()) {
+            exclusionMap.putValue(projectPath,dataNode.getKey().getDataType());
+          }
+ else {
+            inclusionMap.putValue(projectPath,dataNode.getKey().getDataType());
+          }
+        }
+      }
+ catch (      IOException e) {
+        dataNode.clear(true);
+      }
+    }
+  }
+);
+  final MultiMap<String,String> map;
+  ProjectState projectState=new ProjectState();
+  if (inclusionMap.size() < exclusionMap.size()) {
+    projectState.isInclusion=true;
+    map=inclusionMap;
+  }
+ else {
+    projectState.isInclusion=false;
+    map=exclusionMap;
+  }
+  for (  String path : map.keySet()) {
+    projectState.map.put(path,new ModuleState(map.get(path)));
+  }
+  myState.map.put(projectDataNode.getData().getLinkedExternalProjectPath(),projectState);
+  changed.set(true);
+}

@@ -1,0 +1,52 @@
+{
+  super.setChecked(checked);
+  if (checked) {
+    DataNodeCheckedTreeNode parent=this;
+    DataNodeCheckedTreeNode moduleNode=null;
+    while (parent.parent instanceof DataNodeCheckedTreeNode) {
+      if (moduleNode == null && ProjectKeys.MODULE.equals(parent.myDataNode.getKey())) {
+        moduleNode=parent;
+      }
+      parent=(DataNodeCheckedTreeNode)parent.parent;
+    }
+    parent.isChecked=true;
+    final DataNode modifiedParentDataNode=getModifiableDataNode(parent.myDataNode);
+    modifiedParentDataNode.setIgnored(false);
+    if (moduleNode != null) {
+      moduleNode.isChecked=true;
+    }
+    ExternalSystemApiUtil.visit(moduleNode == null ? myDataNode : moduleNode.myDataNode,new Consumer<DataNode<?>>(){
+      @Override public void consume(      DataNode node){
+        final DataNode modifiedDataNode=getModifiableDataNode(node);
+        modifiedDataNode.setIgnored(false);
+      }
+    }
+);
+  }
+ else {
+    ExternalSystemApiUtil.visit(myDataNode,new Consumer<DataNode<?>>(){
+      @Override public void consume(      DataNode node){
+        final DataNode modifiedDataNode=getModifiableDataNode(node);
+        modifiedDataNode.setIgnored(true);
+      }
+    }
+);
+    if (myShowSelectedRowsOnly) {
+      final DefaultTreeModel treeModel=(DefaultTreeModel)myTree.getModel();
+      treeModel.removeNodeFromParent(this);
+    }
+  }
+  if (!checked && parent instanceof DataNodeCheckedTreeNode) {
+    if (myDataNode.getKey().equals(ProjectKeys.MODULE) && ((DataNodeCheckedTreeNode)parent).myDataNode.getKey().equals(ProjectKeys.PROJECT)) {
+      final DataNode projectDataNode=((DataNodeCheckedTreeNode)parent).myDataNode;
+      final ProjectData projectData=(ProjectData)projectDataNode.getData();
+      final ModuleData moduleData=(ModuleData)myDataNode.getData();
+      if (moduleData.getLinkedExternalProjectPath().equals(projectData.getLinkedExternalProjectPath())) {
+        if (ExternalSystemApiUtil.findAll(projectDataNode,ProjectKeys.MODULE).size() == 1) {
+          ((DataNodeCheckedTreeNode)parent).setChecked(false);
+        }
+      }
+    }
+  }
+  updateSelectionState();
+}

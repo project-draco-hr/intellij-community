@@ -1,2 +1,45 @@
 {
+  ExternalSystemApiUtil.executeProjectChangeAction(synchronous,new DisposeAwareProjectChange(module){
+    @Override public void execute(){
+      ModuleRootManager moduleRootManager=ModuleRootManager.getInstance(module);
+      Map<Pair<String,DependencyScope>,ModuleOrderEntry> toRemove=ContainerUtilRt.newHashMap();
+      for (      OrderEntry entry : moduleRootManager.getOrderEntries()) {
+        if (entry instanceof ModuleOrderEntry) {
+          ModuleOrderEntry e=(ModuleOrderEntry)entry;
+          toRemove.put(Pair.create(e.getModuleName(),e.getScope()),e);
+        }
+      }
+      final ModifiableRootModel moduleRootModel=platformFacade.getModuleModifiableModel(module);
+      try {
+        for (        DataNode<ModuleDependencyData> dependencyNode : toImport) {
+          final ModuleDependencyData dependencyData=dependencyNode.getData();
+          toRemove.remove(Pair.create(dependencyData.getInternalName(),dependencyData.getScope()));
+          final String moduleName=dependencyData.getInternalName();
+          Module ideDependencyModule=platformFacade.findIdeModule(moduleName,module.getProject());
+          ModuleOrderEntry orderEntry;
+          if (module.equals(ideDependencyModule)) {
+            continue;
+          }
+ else {
+            if (ideDependencyModule == null) {
+              LOG.warn(String.format("Can't import module dependency for '%s' module. Reason: target module (%s) is not found at the ide",module.getName(),dependencyData));
+            }
+            orderEntry=platformFacade.findIdeModuleDependency(dependencyData,moduleRootModel);
+            if (orderEntry == null) {
+              orderEntry=ideDependencyModule == null ? moduleRootModel.addInvalidModuleEntry(moduleName) : moduleRootModel.addModuleOrderEntry(ideDependencyModule);
+            }
+          }
+          orderEntry.setScope(dependencyData.getScope());
+          orderEntry.setExported(dependencyData.isExported());
+        }
+      }
+  finally {
+        moduleRootModel.commit();
+      }
+      if (!toRemove.isEmpty()) {
+        removeData(toRemove.values(),module,platformFacade,synchronous);
+      }
+    }
+  }
+);
 }

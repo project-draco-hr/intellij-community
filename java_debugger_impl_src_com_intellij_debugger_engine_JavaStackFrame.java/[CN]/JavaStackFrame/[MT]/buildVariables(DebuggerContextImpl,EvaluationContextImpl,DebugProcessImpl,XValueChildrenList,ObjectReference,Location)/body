@@ -1,0 +1,82 @@
+{
+  final Set<String> visibleLocals=new HashSet<String>();
+  if (NodeRendererSettings.getInstance().getClassRenderer().SHOW_VAL_FIELDS_AS_LOCAL_VARIABLES) {
+    if (thisObjectReference != null && debugProcess.getVirtualMachineProxy().canGetSyntheticAttribute()) {
+      final ReferenceType thisRefType=thisObjectReference.referenceType();
+      if (thisRefType instanceof ClassType && location != null && thisRefType.equals(location.declaringType()) && thisRefType.name().contains("$")) {
+        for (        Field field : thisRefType.fields()) {
+          if (DebuggerUtils.isSynthetic(field) && StringUtil.startsWith(field.name(),FieldDescriptorImpl.OUTER_LOCAL_VAR_FIELD_PREFIX)) {
+            final FieldDescriptorImpl fieldDescriptor=myNodeManager.getFieldDescriptor(myDescriptor,thisObjectReference,field);
+            children.add(JavaValue.create(fieldDescriptor,evaluationContext,myNodeManager));
+            visibleLocals.add(fieldDescriptor.getName());
+          }
+        }
+      }
+    }
+  }
+  boolean myAutoWatchMode=DebuggerSettings.getInstance().AUTO_VARIABLES_MODE;
+  if (evaluationContext == null) {
+    return;
+  }
+  final SourcePosition sourcePosition=debuggerContext.getSourcePosition();
+  if (sourcePosition == null) {
+    return;
+  }
+  try {
+    if (!XDebuggerSettingsManager.getInstance().getDataViewSettings().isAutoExpressions() && !myAutoWatchMode) {
+      superBuildVariables(evaluationContext,children);
+    }
+ else {
+      final Map<String,LocalVariableProxyImpl> visibleVariables=FrameVariablesTree.getVisibleVariables(getStackFrameProxy());
+      final EvaluationContextImpl evalContext=evaluationContext;
+      final Pair<Set<String>,Set<TextWithImports>> usedVars=ApplicationManager.getApplication().runReadAction(new Computable<Pair<Set<String>,Set<TextWithImports>>>(){
+        @Override public Pair<Set<String>,Set<TextWithImports>> compute(){
+          return FrameVariablesTree.findReferencedVars(ContainerUtil.union(visibleVariables.keySet(),visibleLocals),sourcePosition,evalContext);
+        }
+      }
+);
+      if (myAutoWatchMode) {
+        for (        String var : usedVars.first) {
+          LocalVariableProxyImpl local=visibleVariables.get(var);
+          if (local != null) {
+            children.add(JavaValue.create(myNodeManager.getLocalVariableDescriptor(null,local),evaluationContext,myNodeManager));
+          }
+        }
+      }
+ else {
+        superBuildVariables(evaluationContext,children);
+      }
+      final EvaluationContextImpl evalContextCopy=evaluationContext.createEvaluationContext(evaluationContext.getThisObject());
+      evalContextCopy.setAutoLoadClasses(false);
+      final Set<TextWithImports> extraVars=computeExtraVars(usedVars,sourcePosition,evalContext);
+      addToChildrenFrom(extraVars,children,evaluationContext);
+      addToChildrenFrom(usedVars.second,children,evalContextCopy);
+    }
+  }
+ catch (  EvaluateException e) {
+    if (e.getCause() instanceof AbsentInformationException) {
+      final StackFrameProxyImpl frame=getStackFrameProxy();
+      final Collection<Value> argValues=frame.getArgumentValues();
+      int index=0;
+      for (      Value argValue : argValues) {
+        children.add(createArgumentValue(index++,argValue,null,evaluationContext));
+      }
+      children.add(new DummyMessageValueNode(MessageDescriptor.LOCAL_VARIABLES_INFO_UNAVAILABLE.getLabel(),XDebuggerUIConstants.INFORMATION_MESSAGE_ICON));
+      final List<DecompiledLocalVariable> decompiled=FrameVariablesTree.collectVariablesFromBytecode(frame,argValues.size());
+      if (!decompiled.isEmpty()) {
+        try {
+          final Map<DecompiledLocalVariable,Value> values=LocalVariablesUtil.fetchValues(frame.getStackFrame(),decompiled);
+          for (          DecompiledLocalVariable var : decompiled) {
+            children.add(createArgumentValue(var.getSlot(),values.get(var),var.getName(),evaluationContext));
+          }
+        }
+ catch (        Exception ex) {
+          LOG.info(ex);
+        }
+      }
+    }
+ else {
+      throw e;
+    }
+  }
+}

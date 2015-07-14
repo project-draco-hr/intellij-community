@@ -1,0 +1,73 @@
+{
+  final Map<DataNode,DataNodeCheckedTreeNode> treeNodeMap=ContainerUtil.newIdentityTroveMap();
+  final DataNodeCheckedTreeNode[] preselectedNode={null};
+  final DataNodeCheckedTreeNode[] rootModuleNode={null};
+  final MultiMap<String,String> moduleDependenciesMap=MultiMap.create();
+  final Map<String,DataNode<ModuleData>> modulesNodeMap=ContainerUtil.newHashMap();
+  for (  DataNode<ModuleDependencyData> moduleDependencyDataNode : ExternalSystemApiUtil.findAllRecursively(myProjectInfo.getExternalProjectStructure(),ProjectKeys.MODULE_DEPENDENCY)) {
+    final ModuleDependencyData moduleDependencyData=moduleDependencyDataNode.getData();
+    moduleDependenciesMap.putValue(moduleDependencyData.getOwnerModule().getLinkedExternalProjectPath(),moduleDependencyData.getTarget().getLinkedExternalProjectPath());
+  }
+  final int[] modulesCount={0};
+  ExternalSystemApiUtil.visit(myProjectInfo.getExternalProjectStructure(),new Consumer<DataNode<?>>(){
+    @Override public void consume(    DataNode<?> node){
+      final Key key=node.getKey();
+      if (!myPublicKeys.contains(key))       return;
+      DataNode modifiableDataNode=getModifiableDataNode(node);
+      if (node.getKey().equals(ProjectKeys.MODULE)) {
+        modulesCount[0]++;
+      }
+      if (modifiableDataNode.isIgnored() && myShowSelectedRowsOnly)       return;
+      DataNodeCheckedTreeNode treeNode=treeNodeMap.get(node);
+      if (treeNode == null) {
+        treeNode=new DataNodeCheckedTreeNode(node);
+        if (node.getKey().equals(ProjectKeys.MODULE)) {
+          final ModuleData moduleData=(ModuleData)node.getData();
+          modulesNodeMap.put(moduleData.getLinkedExternalProjectPath(),(DataNode<ModuleData>)node);
+        }
+        if (myPreselectedNodeObject != null && myPreselectedNodeObject.equals(node.getData())) {
+          preselectedNode[0]=treeNode;
+        }
+        if (node.getData() instanceof ModuleData) {
+          if (myProjectInfo.getExternalProjectPath().equals(((ModuleData)node.getData()).getLinkedExternalProjectPath())) {
+            rootModuleNode[0]=treeNode;
+          }
+        }
+        treeNode.setEnabled(myIgnorableKeys.contains(key));
+        treeNodeMap.put(node,treeNode);
+        final DataNode parent=node.getParent();
+        if (parent != null) {
+          final CheckedTreeNode parentTreeNode=treeNodeMap.get(parent);
+          if (parentTreeNode != null) {
+            parentTreeNode.add(treeNode);
+          }
+        }
+      }
+    }
+  }
+);
+  myModulesCount=modulesCount[0];
+  dependentNodeMap.clear();
+  for (  String modulePath : moduleDependenciesMap.keySet()) {
+    final Collection<String> moduleDependencies=moduleDependenciesMap.get(modulePath);
+    final DataNode<ModuleData> moduleNode=modulesNodeMap.get(modulePath);
+    if (moduleNode != null) {
+      dependentNodeMap.putValues(moduleNode,ContainerUtil.mapNotNull(moduleDependencies,new Function<String,DataNode<ModuleData>>(){
+        @Override public DataNode<ModuleData> fun(        String s){
+          return modulesNodeMap.get(s);
+        }
+      }
+));
+    }
+  }
+  final CheckedTreeNode root=new CheckedTreeNode(null);
+  final DataNodeCheckedTreeNode projectNode=treeNodeMap.get(myProjectInfo.getExternalProjectStructure());
+  if (rootModuleNode[0] != null) {
+    rootModuleNode[0].comment="root module";
+    projectNode.remove(rootModuleNode[0]);
+    projectNode.insert(rootModuleNode[0],0);
+  }
+  List<TreeNode> nodes=TreeUtil.childrenToArray(projectNode);
+  TreeUtil.addChildrenTo(root,nodes);
+  return Couple.of(root,preselectedNode[0]);
+}
