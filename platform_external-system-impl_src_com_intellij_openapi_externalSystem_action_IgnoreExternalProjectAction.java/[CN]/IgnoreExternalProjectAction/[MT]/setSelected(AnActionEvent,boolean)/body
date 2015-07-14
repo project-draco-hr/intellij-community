@@ -1,0 +1,28 @@
+{
+  final ProjectSystemId projectSystemId=getSystemId(e);
+  setText(e,ExternalSystemBundle.message("action.ignore.external.project.text",projectSystemId.getReadableName()));
+  final ExternalSystemNode<ExternalConfigPathAware> projectNode=getProjectNode(e);
+  if (projectNode == null || projectNode.getData() == null)   return;
+  projectNode.setIgnored(state);
+  final Project project=getProject(e);
+  final String externalProjectPath=projectNode.getData().getLinkedExternalProjectPath();
+  final ExternalProjectInfo externalProjectInfo=ExternalSystemUtil.getExternalProjectInfo(project,projectSystemId,externalProjectPath);
+  if (externalProjectInfo == null || externalProjectInfo.getExternalProjectStructure() == null) {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(String.format("external project data not found, path: %s, data: %s",externalProjectPath,externalProjectInfo));
+    }
+    return;
+  }
+  ExternalSystemApiUtil.executeProjectChangeAction(true,new DisposeAwareProjectChange(project){
+    @Override public void execute(){
+      ProjectRootManagerEx.getInstanceEx(project).mergeRootsChangesDuring(new Runnable(){
+        @Override public void run(){
+          final DataNode<ProjectData> projectDataNode=externalProjectInfo.getExternalProjectStructure();
+          ServiceManager.getService(ProjectDataManager.class).importData(projectDataNode,project,true);
+        }
+      }
+);
+    }
+  }
+);
+}
