@@ -1,0 +1,41 @@
+{
+  final PsiExpressionList argList=methodCallExpression.getArgumentList();
+  final PsiMethod method=methodCallExpression.resolveMethod();
+  if (method == null) {
+    return true;
+  }
+  final PsiParameterList paramList=method.getParameterList();
+  if (paramList.getParametersCount() != argList.getExpressions().length && !(paramList.getParameters()[paramList.getParametersCount() - 1].getType() instanceof PsiEllipsisType)) {
+    return false;
+  }
+  int index=-1;
+  PsiExpression[] expressions=argList.getExpressions();
+  for (int i=0, length=expressions.length; i < length; i++) {
+    if (expressions[i] == baseExpression) {
+      index=i;
+      break;
+    }
+  }
+  LOG.assertTrue(index >= 0);
+  PsiType parameterType;
+  if (index > paramList.getParametersCount() - 1) {
+    parameterType=paramList.getParameters()[paramList.getParametersCount() - 1].getType();
+  }
+ else {
+    parameterType=paramList.getParameters()[index].getType();
+  }
+  if (parameterType instanceof PsiEllipsisType) {
+    parameterType=((PsiEllipsisType)parameterType).getComponentType();
+  }
+  if (parameterType instanceof PsiClassType) {
+    final PsiClass resolvedParameterClass=((PsiClassType)parameterType).resolve();
+    final JavaPsiFacade javaPsiFacade=JavaPsiFacade.getInstance(methodCallExpression.getProject());
+    final GlobalSearchScope scope=GlobalSearchScope.allScope(methodCallExpression.getProject());
+    final PsiClass optional=javaPsiFacade.findClass(GUAVA_OPTIONAL,scope);
+    final PsiClass immutableMap=javaPsiFacade.findClass(GUAVA_IMMUTABLE_MAP,scope);
+    if (resolvedParameterClass != null && (InheritanceUtil.isInheritorOrSelf(resolvedParameterClass,fluentIterable,true) || InheritanceUtil.isInheritorOrSelf(resolvedParameterClass,optional,true) || InheritanceUtil.isInheritorOrSelf(resolvedParameterClass,immutableMap,true))) {
+      return false;
+    }
+  }
+  return true;
+}

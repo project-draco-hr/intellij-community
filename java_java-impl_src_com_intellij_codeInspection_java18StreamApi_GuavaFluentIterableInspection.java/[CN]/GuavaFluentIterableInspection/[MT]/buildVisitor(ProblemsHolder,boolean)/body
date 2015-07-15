@@ -1,0 +1,273 @@
+{
+  final PsiClass fluentIterable=JavaPsiFacade.getInstance(holder.getProject()).findClass(GUAVA_FLUENT_ITERABLE,GlobalSearchScope.allScope(holder.getProject()));
+  if (fluentIterable == null) {
+    return PsiElementVisitor.EMPTY_VISITOR;
+  }
+  return new JavaRecursiveElementVisitor(){
+    private final SmartPointerManager mySmartPointerManager=SmartPointerManager.getInstance(holder.getProject());
+    private final Set<PsiMethodCallExpression> myMethodCallsToIgnore=new THashSet<PsiMethodCallExpression>(new TObjectIdentityHashingStrategy<PsiMethodCallExpression>());
+    private final MultiMap<PsiLocalVariable,PsiExpression> myLocalVariablesUsages=new MultiMap<PsiLocalVariable,PsiExpression>();
+    private final Set<PsiLocalVariable> myUnconvertibleVariables=new THashSet<PsiLocalVariable>();
+    @Override public void visitLocalVariable(    final PsiLocalVariable localVariable){
+      final PsiType type=localVariable.getType();
+      if (!(type instanceof PsiClassType) || myUnconvertibleVariables.contains(localVariable)) {
+        return;
+      }
+      final PsiClass variableClass=((PsiClassType)type).resolve();
+      if (variableClass == null) {
+        return;
+      }
+      final String qualifiedName=variableClass.getQualifiedName();
+      if (!GUAVA_FLUENT_ITERABLE.equals(qualifiedName)) {
+        return;
+      }
+      final PsiCodeBlock context=PsiTreeUtil.getParentOfType(localVariable,PsiCodeBlock.class);
+      if (context == null || !checkDeclaration(localVariable.getInitializer())) {
+        myUnconvertibleVariables.add(localVariable);
+      }
+    }
+    private boolean checkDeclaration(    PsiExpression declaration){
+      if (declaration == null) {
+        return true;
+      }
+      if (!(declaration instanceof PsiMethodCallExpression)) {
+        return false;
+      }
+      PsiMethodCallExpression currentCallExpression=(PsiMethodCallExpression)declaration;
+      while (true) {
+        final PsiExpression qualifier=currentCallExpression.getMethodExpression().getQualifierExpression();
+        if (qualifier instanceof PsiMethodCallExpression) {
+          final PsiMethod method=currentCallExpression.resolveMethod();
+          if (method == null || GuavaFluentIterableMethodConverters.isStopMethod(method.getName())) {
+            return false;
+          }
+          final PsiClass aClass=method.getContainingClass();
+          if (aClass == null || !aClass.isEquivalentTo(fluentIterable)) {
+            return false;
+          }
+          currentCallExpression=(PsiMethodCallExpression)qualifier;
+        }
+ else {
+          if (qualifier instanceof PsiReferenceExpression) {
+            final PsiMethod method=currentCallExpression.resolveMethod();
+            if (method == null || !FLUENT_ITERABLE_FROM.equals(method.getName())) {
+              return false;
+            }
+            final PsiClass aClass=method.getContainingClass();
+            if (aClass == null || !GUAVA_FLUENT_ITERABLE.equals(aClass.getQualifiedName())) {
+              return false;
+            }
+            break;
+          }
+ else {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+    @Override public void visitReferenceExpression(    PsiReferenceExpression expression){
+      super.visitReferenceExpression(expression);
+      final PsiElement resolvedElement=expression.resolve();
+      if (resolvedElement instanceof PsiLocalVariable) {
+        PsiLocalVariable fluentIterableVariable=(PsiLocalVariable)resolvedElement;
+        if (!fluentIterable.isEquivalentTo(PsiTypesUtil.getPsiClass(fluentIterableVariable.getType())) || myUnconvertibleVariables.contains(fluentIterableVariable)) {
+          return;
+        }
+        analyzeExpression(expression,fluentIterableVariable);
+      }
+    }
+    private void addToUnconvertible(    PsiLocalVariable variable){
+      myUnconvertibleVariables.add(variable);
+      myLocalVariablesUsages.remove(variable);
+    }
+    @Override public void visitJavaFile(    PsiJavaFile file){
+      super.visitJavaFile(file);
+      for (      Map.Entry<PsiLocalVariable,Collection<PsiExpression>> e : myLocalVariablesUsages.entrySet()) {
+        final PsiLocalVariable localVariable=e.getKey();
+        final Collection<PsiExpression> foundUsages=e.getValue();
+        final SmartPsiElementPointer<PsiLocalVariable> variablePointer=mySmartPointerManager.createSmartPsiElementPointer(localVariable);
+        final ConvertGuavaFluentIterableQuickFix quickFix=new ConvertGuavaFluentIterableQuickFix(variablePointer,ContainerUtil.map(new THashSet<PsiExpression>(foundUsages),new Function<PsiExpression,SmartPsiElementPointer<PsiExpression>>(){
+          @Override public SmartPsiElementPointer<PsiExpression> fun(          PsiExpression expression){
+            return mySmartPointerManager.createSmartPsiElementPointer(expression);
+          }
+        }
+));
+        holder.registerProblem(localVariable,PROBLEM_DESCRIPTION,quickFix);
+        for (        PsiExpression usage : foundUsages) {
+          holder.registerProblem(usage,PROBLEM_DESCRIPTION,quickFix);
+        }
+      }
+      myLocalVariablesUsages.clear();
+      myUnconvertibleVariables.clear();
+    }
+    @Override public void visitMethodCallExpression(    PsiMethodCallExpression expression){
+      super.visitMethodCallExpression(expression);
+      if (!myMethodCallsToIgnore.add(expression)) {
+        return;
+      }
+      final PsiReferenceExpression methodExpression=expression.getMethodExpression();
+      final String methodName=methodExpression.getReferenceName();
+      if (FLUENT_ITERABLE_FROM.equals(methodName)) {
+        final PsiMethod method=expression.resolveMethod();
+        if (method == null || !method.hasModifierProperty(PsiModifier.STATIC) || !fluentIterable.isEquivalentTo(method.getContainingClass())) {
+          return;
+        }
+        PsiMethodCallExpression currentExpression=expression;
+        while (true) {
+          myMethodCallsToIgnore.add(currentExpression);
+          PsiMethodCallExpression parentMethodCall=PsiTreeUtil.getParentOfType(currentExpression,PsiMethodCallExpression.class);
+          if (parentMethodCall != null) {
+            if (parentMethodCall.getMethodExpression().getQualifierExpression() == currentExpression) {
+              final PsiMethod parentCallMethod=parentMethodCall.resolveMethod();
+              if (parentCallMethod != null && fluentIterable.isEquivalentTo(parentCallMethod.getContainingClass())) {
+                if (GuavaFluentIterableMethodConverters.isStopMethod(parentCallMethod.getName())) {
+                  return;
+                }
+                currentExpression=parentMethodCall;
+                continue;
+              }
+            }
+          }
+          final PsiElement expressionParent=currentExpression.getParent();
+          if (expressionParent instanceof PsiReturnStatement) {
+            final PsiType containingMethodReturnType=findContainingMethodReturnType(currentExpression);
+            if (containingMethodReturnType instanceof PsiClassType) {
+              final PsiClass resolvedClass=((PsiClassType)containingMethodReturnType).resolve();
+              if (resolvedClass == null || !(resolvedClass.getResolveScope() instanceof JdkScope)) {
+                return;
+              }
+            }
+          }
+ else           if (expressionParent instanceof PsiLocalVariable) {
+            final PsiType type=((PsiLocalVariable)expressionParent).getType();
+            if (type instanceof PsiClassType) {
+              final PsiClass resolvedClass=((PsiClassType)type).resolve();
+              if (resolvedClass == null || !(resolvedClass.getResolveScope() instanceof JdkScope)) {
+                return;
+              }
+            }
+          }
+ else           if (expressionParent instanceof PsiExpressionList) {
+            if (expressionParent.getParent() instanceof PsiMethodCallExpression && !isMethodWithParamAcceptsConversion((PsiMethodCallExpression)expressionParent.getParent(),currentExpression,fluentIterable)) {
+              return;
+            }
+          }
+          final List<SmartPsiElementPointer<PsiExpression>> exprAsList=ContainerUtil.list(mySmartPointerManager.createSmartPsiElementPointer((PsiExpression)currentExpression));
+          holder.registerProblem(currentExpression,PROBLEM_DESCRIPTION,new ConvertGuavaFluentIterableQuickFix(null,exprAsList));
+          return;
+        }
+      }
+ else {
+        final PsiExpression qualifierExpression=methodExpression.getQualifierExpression();
+        if (GuavaFluentIterableMethodConverters.isFluentIterableMethod(methodName) && qualifierExpression instanceof PsiReferenceExpression) {
+          final PsiElement resolvedElement=((PsiReferenceExpression)qualifierExpression).resolve();
+          if (resolvedElement instanceof PsiLocalVariable) {
+            PsiLocalVariable fluentIterableLocalVariable=(PsiLocalVariable)resolvedElement;
+            if (!fluentIterable.isEquivalentTo(PsiTypesUtil.getPsiClass(fluentIterableLocalVariable.getType())) || myUnconvertibleVariables.contains(fluentIterableLocalVariable)) {
+              return;
+            }
+            analyzeExpression(expression,fluentIterableLocalVariable);
+          }
+        }
+      }
+    }
+    private void analyzeExpression(    PsiExpression expression,    PsiLocalVariable fluentIterableLocalVariable){
+      PsiExpression baseExpression=expression;
+      while (true) {
+        final PsiMethodCallExpression methodCallExpression=PsiTreeUtil.getParentOfType(baseExpression,PsiMethodCallExpression.class);
+        if (methodCallExpression != null && methodCallExpression.getMethodExpression().getQualifierExpression() == baseExpression) {
+          final String currentMethodName=methodCallExpression.getMethodExpression().getReferenceName();
+          if (GuavaFluentIterableMethodConverters.isFluentIterableMethod(currentMethodName)) {
+            if (GuavaFluentIterableMethodConverters.isStopMethod((currentMethodName))) {
+              addToUnconvertible(fluentIterableLocalVariable);
+              return;
+            }
+ else {
+              final PsiMethod method=methodCallExpression.resolveMethod();
+              if (method != null && method.getContainingClass() != null && method.getContainingClass().isEquivalentTo(fluentIterable)) {
+                baseExpression=methodCallExpression;
+                myMethodCallsToIgnore.add(methodCallExpression);
+                continue;
+              }
+            }
+          }
+        }
+        break;
+      }
+      final PsiElement parent=baseExpression.getParent();
+      if (parent instanceof PsiExpressionList) {
+        myLocalVariablesUsages.putValue(fluentIterableLocalVariable,baseExpression);
+        final boolean suitable=parent.getParent() instanceof PsiMethodCallExpression && isMethodWithParamAcceptsConversion((PsiMethodCallExpression)parent.getParent(),baseExpression,fluentIterable);
+        if (!suitable) {
+          addToUnconvertible(fluentIterableLocalVariable);
+        }
+      }
+ else       if (parent instanceof PsiReferenceExpression) {
+        final PsiMethodCallExpression parentMethodCall=PsiTreeUtil.getParentOfType(baseExpression,PsiMethodCallExpression.class);
+        if (parentMethodCall != null && parentMethodCall.getMethodExpression().getQualifier() == baseExpression) {
+          if (GuavaOptionalConverter.isConvertibleIfOption(parentMethodCall)) {
+            myLocalVariablesUsages.putValue(fluentIterableLocalVariable,baseExpression);
+          }
+ else {
+            addToUnconvertible(fluentIterableLocalVariable);
+          }
+        }
+      }
+ else       if (parent instanceof PsiLocalVariable) {
+        myLocalVariablesUsages.putValue(fluentIterableLocalVariable,baseExpression);
+      }
+ else       if (parent instanceof PsiAssignmentExpression) {
+        final PsiAssignmentExpression assignment=(PsiAssignmentExpression)parent;
+        final PsiExpression lExpression=assignment.getLExpression();
+        if (lExpression instanceof PsiReferenceExpression) {
+          if (((PsiReferenceExpression)lExpression).isReferenceTo(fluentIterableLocalVariable)) {
+            if (isSelfAssignment(assignment,fluentIterableLocalVariable)) {
+              myLocalVariablesUsages.putValue(fluentIterableLocalVariable,baseExpression);
+              return;
+            }
+            if (checkDeclaration(assignment.getRExpression())) {
+              myLocalVariablesUsages.putValue(fluentIterableLocalVariable,assignment.getRExpression());
+              return;
+            }
+            addToUnconvertible(fluentIterableLocalVariable);
+          }
+ else {
+            myLocalVariablesUsages.putValue(fluentIterableLocalVariable,baseExpression);
+          }
+        }
+ else {
+          myLocalVariablesUsages.putValue(fluentIterableLocalVariable,baseExpression);
+        }
+      }
+ else       if (parent instanceof PsiReturnStatement) {
+        final PsiType containingMethodReturnType=findContainingMethodReturnType(baseExpression);
+        if (baseExpression == expression) {
+          if (!(containingMethodReturnType instanceof PsiClassType)) {
+            addToUnconvertible(fluentIterableLocalVariable);
+            return;
+          }
+          final PsiClass resolvedClass=((PsiClassType)containingMethodReturnType).resolve();
+          if (resolvedClass == null || (!CommonClassNames.JAVA_LANG_ITERABLE.equals(resolvedClass.getQualifiedName()) && !CommonClassNames.JAVA_LANG_OBJECT.equals(resolvedClass.getQualifiedName()))) {
+            addToUnconvertible(fluentIterableLocalVariable);
+          }
+ else {
+            myLocalVariablesUsages.putValue(fluentIterableLocalVariable,baseExpression);
+          }
+        }
+ else {
+          if (containingMethodReturnType instanceof PsiClassType) {
+            final PsiClass resolvedClass=((PsiClassType)containingMethodReturnType).resolve();
+            if (resolvedClass == null || !(resolvedClass.getResolveScope() instanceof JdkScope)) {
+              addToUnconvertible(fluentIterableLocalVariable);
+            }
+          }
+        }
+      }
+ else       if (parent instanceof PsiExpressionStatement) {
+        myLocalVariablesUsages.putValue(fluentIterableLocalVariable,baseExpression);
+      }
+    }
+  }
+;
+}
