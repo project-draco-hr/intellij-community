@@ -9,50 +9,6 @@
   final ProjectFileIndex fileIndex=ProjectRootManager.getInstance(project).getFileIndex();
   final Module currentModule=fileIndex.getModuleForFile(classVFile);
   if (currentModule == null)   return null;
-  if ("TestCase".equals(referenceName) || isAnnotation(psiElement) && isJunitAnnotationName(referenceName,psiElement)) {
-    final boolean isJunit4=!referenceName.equals("TestCase");
-    @NonNls final String className=isJunit4 ? "org.junit." + referenceName : "junit.framework.TestCase";
-    PsiClass found=JavaPsiFacade.getInstance(project).findClass(className,currentModule.getModuleWithDependenciesAndLibrariesScope(true));
-    if (found != null)     return null;
-    final OrderEntryFix fix=new OrderEntryFix(){
-      @Override @NotNull public String getText(){
-        return QuickFixBundle.message("orderEntry.fix.add.junit.jar.to.classpath");
-      }
-      @Override @NotNull public String getFamilyName(){
-        return getText();
-      }
-      @Override public boolean isAvailable(      @NotNull Project project,      Editor editor,      PsiFile file){
-        return !project.isDisposed() && !currentModule.isDisposed();
-      }
-      @Override public void invoke(      @NotNull Project project,      @Nullable Editor editor,      PsiFile file){
-        if (isJunit4) {
-          final VirtualFile location=PsiUtilCore.getVirtualFile(reference.getElement());
-          boolean inTests=location != null && ModuleRootManager.getInstance(currentModule).getFileIndex().isInTestSourceContent(location);
-          DumbService.getInstance(project).setAlternativeResolveEnabled(true);
-          try {
-            addJUnit4Library(inTests,currentModule);
-            final GlobalSearchScope scope=GlobalSearchScope.moduleWithLibrariesScope(currentModule);
-            final PsiClass aClass=JavaPsiFacade.getInstance(project).findClass(className,scope);
-            if (aClass != null && editor != null) {
-              new AddImportAction(project,reference,editor,aClass).execute();
-            }
-          }
- catch (          ClassNotFoundException e) {
-            throw new RuntimeException(e);
-          }
- finally {
-            DumbService.getInstance(project).setAlternativeResolveEnabled(false);
-          }
-        }
- else {
-          addBundledJarToRoots(project,editor,currentModule,reference,className,JavaSdkUtil.getJunit3JarPath());
-        }
-      }
-    }
-;
-    registrar.register(fix);
-    return Collections.singletonList((LocalQuickFix)fix);
-  }
   if (isAnnotation(psiElement) && AnnotationUtil.isJetbrainsAnnotation(referenceName)) {
     @NonNls final String className="org.jetbrains.annotations." + referenceName;
     PsiClass found=JavaPsiFacade.getInstance(project).findClass(className,currentModule.getModuleWithDependenciesAndLibrariesScope(true));
@@ -74,7 +30,7 @@
             if (libraryPath != null) {
               new WriteCommandAction(project){
                 @Override protected void run(                final Result result) throws Throwable {
-                  addBundledJarToRoots(project,editor,currentModule,reference,"org.jetbrains.annotations." + referenceName,libraryPath);
+                  addJarsToRootsAndImportClass(Collections.singletonList(libraryPath),null,currentModule,editor,reference,"org.jetbrains.annotations." + referenceName);
                 }
               }
 .execute();
