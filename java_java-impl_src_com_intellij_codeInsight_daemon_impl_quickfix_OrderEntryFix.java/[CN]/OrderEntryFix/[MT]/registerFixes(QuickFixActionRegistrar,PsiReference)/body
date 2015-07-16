@@ -13,7 +13,7 @@
     @NonNls final String className="org.jetbrains.annotations." + referenceName;
     PsiClass found=JavaPsiFacade.getInstance(project).findClass(className,currentModule.getModuleWithDependenciesAndLibrariesScope(true));
     if (found != null)     return null;
-    final OrderEntryFix fix=new OrderEntryFix(){
+    final OrderEntryFix platformFix=new OrderEntryFix(){
       @Override @NotNull public String getText(){
         return QuickFixBundle.message("orderEntry.fix.add.annotations.jar.to.classpath");
       }
@@ -41,6 +41,13 @@
       }
     }
 ;
+    final OrderEntryFix providedFix=OrderEntryFixProvider.find(new Function<OrderEntryFixProvider,OrderEntryFix>(){
+      @Override public OrderEntryFix fun(      OrderEntryFixProvider provider){
+        return provider.getJetbrainsAnnotationFix(reference,platformFix,currentModule);
+      }
+    }
+);
+    final OrderEntryFix fix=ObjectUtils.notNull(providedFix,platformFix);
     registrar.register(fix);
     return Collections.singletonList((LocalQuickFix)fix);
   }
@@ -53,7 +60,16 @@
     return result;
   }
   classes=allowedDependencies.toArray(new PsiClass[allowedDependencies.size()]);
-  final OrderEntryFix moduleDependencyFix=new AddModuleDependencyFix(currentModule,classVFile,classes,reference);
+  OrderEntryFix moduleDependencyFix=new AddModuleDependencyFix(currentModule,classVFile,classes,reference);
+  final PsiClass[] finalClasses=classes;
+  final OrderEntryFix finalModuleDependencyFix=moduleDependencyFix;
+  final OrderEntryFix providedModuleDependencyFix=OrderEntryFixProvider.find(new Function<OrderEntryFixProvider,OrderEntryFix>(){
+    @Override public OrderEntryFix fun(    OrderEntryFixProvider provider){
+      return provider.getAddModuleDependencyFix(reference,finalModuleDependencyFix,currentModule,classVFile,finalClasses);
+    }
+  }
+);
+  moduleDependencyFix=ObjectUtils.notNull(providedModuleDependencyFix,moduleDependencyFix);
   registrar.register(moduleDependencyFix);
   result.add(moduleDependencyFix);
   for (  final PsiClass aClass : classes) {
@@ -76,7 +92,7 @@
         if (entryForFile != null && !(entryForFile instanceof ExportableOrderEntry && ((ExportableOrderEntry)entryForFile).getScope() == DependencyScope.TEST && !ModuleRootManager.getInstance(currentModule).getFileIndex().isInTestSourceContent(classVFile))) {
           continue;
         }
-        final OrderEntryFix fix=new OrderEntryFix(){
+        final OrderEntryFix platformFix=new OrderEntryFix(){
           @Override @NotNull public String getText(){
             return QuickFixBundle.message("orderEntry.fix.add.library.to.classpath",libraryEntry.getPresentableName());
           }
@@ -99,6 +115,13 @@
           }
         }
 ;
+        final OrderEntryFix providedFix=OrderEntryFixProvider.find(new Function<OrderEntryFixProvider,OrderEntryFix>(){
+          @Override public OrderEntryFix fun(          OrderEntryFixProvider provider){
+            return provider.getAddLibraryToClasspathFix(reference,platformFix,currentModule,libraryEntry,aClass);
+          }
+        }
+);
+        final OrderEntryFix fix=ObjectUtils.notNull(providedFix,platformFix);
         registrar.register(fix);
         result.add(fix);
       }
