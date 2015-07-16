@@ -1,0 +1,46 @@
+{
+  myApplication=application;
+  myStateStorageManager=new StateStorageManagerImpl(pathMacroManager.createTrackingSubstitutor(),ROOT_ELEMENT_NAME,application,application.getPicoContainer()){
+    private boolean myConfigDirectoryRefreshed;
+    @Nullable protected StateStorage.Listener createStorageTopicListener(){
+      return myApplication.getMessageBus().syncPublisher(StateStorage.STORAGE_TOPIC);
+    }
+    @NotNull @Override protected StorageData createStorageData(    @NotNull String fileSpec,    @NotNull String filePath){
+      return new StorageData(ROOT_ELEMENT_NAME);
+    }
+    @Nullable @Override protected String getOldStorageSpec(    @NotNull Object component,    @NotNull String componentName,    @NotNull StateStorageOperation operation){
+      if (component instanceof NamedJDOMExternalizable) {
+        return StoragePathMacros.APP_CONFIG + '/' + ((NamedJDOMExternalizable)component).getExternalFileName()+ DirectoryStorageData.DEFAULT_EXT;
+      }
+ else {
+        return DEFAULT_STORAGE_SPEC;
+      }
+    }
+    @Override protected TrackingPathMacroSubstitutor getMacroSubstitutor(    @NotNull String fileSpec){
+      return fileSpec.equals(StoragePathMacros.APP_CONFIG + '/' + PathMacrosImpl.EXT_FILE_NAME+ DirectoryStorageData.DEFAULT_EXT) ? null : super.getMacroSubstitutor(fileSpec);
+    }
+    @Override protected boolean isUseXmlProlog(){
+      return false;
+    }
+    @Override protected void beforeFileBasedStorageCreate(){
+      if (myConfigDirectoryRefreshed || (!myApplication.isUnitTestMode() && !myApplication.isDispatchThread())) {
+        return;
+      }
+      try {
+        String configPath=getMacrosValue(StoragePathMacros.ROOT_CONFIG);
+        if (configPath == null) {
+          LOG.warn("Macros ROOT_CONFIG is not defined");
+          return;
+        }
+        VirtualFile configDir=LocalFileSystem.getInstance().refreshAndFindFileByPath(configPath);
+        if (configDir != null) {
+          VfsUtil.markDirtyAndRefresh(false,true,true,configDir);
+        }
+      }
+  finally {
+        myConfigDirectoryRefreshed=true;
+      }
+    }
+  }
+;
+}

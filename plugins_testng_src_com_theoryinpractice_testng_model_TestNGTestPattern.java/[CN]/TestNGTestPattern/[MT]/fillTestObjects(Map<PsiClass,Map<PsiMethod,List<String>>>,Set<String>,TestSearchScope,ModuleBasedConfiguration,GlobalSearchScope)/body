@@ -1,0 +1,70 @@
+{
+  for (  final String pattern : patterns) {
+    final String className;
+    final String methodName;
+    if (pattern.contains(",")) {
+      methodName=StringUtil.getShortName(pattern,',');
+      className=StringUtil.getPackageName(pattern,',');
+    }
+ else {
+      className=pattern;
+      methodName=null;
+    }
+    final PsiClass psiClass=ApplicationManager.getApplication().runReadAction(new Computable<PsiClass>(){
+      @Nullable @Override public PsiClass compute(){
+        return ClassUtil.findPsiClass(PsiManager.getInstance(config.getProject()),className.replace('/','.'),null,true,searchScope);
+      }
+    }
+);
+    if (psiClass != null) {
+      final Boolean hasTest=ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
+        @Override public Boolean compute(){
+          return TestNGUtil.hasTest(psiClass);
+        }
+      }
+);
+      if (hasTest) {
+        if (StringUtil.isEmpty(methodName)) {
+          calculateDependencies(null,classes,searchScope,psiClass);
+        }
+ else {
+          collectTestMethods(classes,psiClass,methodName,searchScope);
+        }
+      }
+ else {
+        throw new CantRunException("No tests found in class " + className);
+      }
+    }
+  }
+  if (classes.size() != patterns.size()) {
+    final List<Pattern> compilePatterns=new ArrayList<Pattern>();
+    for (    String p : patterns) {
+      final Pattern compilePattern;
+      try {
+        compilePattern=Pattern.compile(p);
+      }
+ catch (      PatternSyntaxException e) {
+        continue;
+      }
+      compilePatterns.add(compilePattern);
+    }
+    final SourceScope sourceScope=testSearchScope.getSourceScope(config);
+    TestClassFilter projectFilter=new TestClassFilter(sourceScope != null ? sourceScope.getGlobalSearchScope() : GlobalSearchScope.allScope(config.getProject()),config.getProject(),true,true){
+      @Override public boolean isAccepted(      PsiClass psiClass){
+        if (super.isAccepted(psiClass)) {
+          final String qualifiedName=psiClass.getQualifiedName();
+          LOG.assertTrue(qualifiedName != null);
+          for (          Pattern pattern : compilePatterns) {
+            if (pattern.matcher(qualifiedName).matches())             return true;
+          }
+        }
+        return false;
+      }
+    }
+;
+    calculateDependencies(null,classes,searchScope,TestNGUtil.getAllTestClasses(projectFilter,false));
+    if (classes.size() == 0) {
+      throw new CantRunException("No tests found in for patterns \"" + StringUtil.join(patterns," || ") + '\"');
+    }
+  }
+}

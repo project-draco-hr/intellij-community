@@ -1,0 +1,51 @@
+{
+  final Set<String> patterns=new LinkedHashSet<String>();
+  if (position != null) {
+    try {
+      final Collection<String> testsByMethodName=TestDiscoveryIndex.getInstance(project).getTestsByMethodName(position.first,position.second);
+      if (testsByMethodName != null) {
+        for (        String pattern : testsByMethodName) {
+          patterns.add(pattern.replace('-',','));
+        }
+      }
+    }
+ catch (    IOException ignore) {
+    }
+  }
+ else {
+    final List<VirtualFile> files=getAffectedFiles(changeList,project);
+    final PsiManager psiManager=PsiManager.getInstance(project);
+    for (    final VirtualFile file : files) {
+      ApplicationManager.getApplication().runReadAction(new Runnable(){
+        @Override public void run(){
+          final PsiFile psiFile=psiManager.findFile(file);
+          if (psiFile != null) {
+            try {
+              final List<TextRange> changedTextRanges=FormatChangedTextUtil.getChangedTextRanges(project,psiFile);
+              for (              TextRange textRange : changedTextRanges) {
+                final PsiElement start=psiFile.findElementAt(textRange.getStartOffset());
+                final PsiElement end=psiFile.findElementAt(textRange.getEndOffset());
+                final PsiElement parent=PsiTreeUtil.findCommonParent(new PsiElement[]{start,end});
+                final Collection<PsiMethod> methods=new ArrayList<PsiMethod>(PsiTreeUtil.findChildrenOfType(parent,PsiMethod.class));
+                final PsiMethod containingMethod=PsiTreeUtil.getParentOfType(parent,PsiMethod.class);
+                if (containingMethod != null) {
+                  methods.add(containingMethod);
+                }
+                for (                PsiMethod changedMethod : methods) {
+                  final LinkedHashSet<String> detectedPatterns=collectPatterns(changedMethod);
+                  if (detectedPatterns != null) {
+                    patterns.addAll(detectedPatterns);
+                  }
+                }
+              }
+            }
+ catch (            FilesTooBigForDiffException ignore) {
+            }
+          }
+        }
+      }
+);
+    }
+  }
+  return patterns;
+}
