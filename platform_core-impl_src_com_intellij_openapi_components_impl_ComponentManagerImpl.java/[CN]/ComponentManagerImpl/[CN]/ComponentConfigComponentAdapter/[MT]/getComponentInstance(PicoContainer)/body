@@ -4,38 +4,44 @@
     return instance;
   }
   try {
-    long startTime=System.nanoTime();
-    instance=super.getComponentInstance(picoContainer);
-    if (myInitializing) {
-      String errorMessage="Cyclic component initialization: " + getComponentKey();
-      if (myConfig.pluginDescriptor != null) {
-        LOG.error(new PluginException(errorMessage,myConfig.pluginDescriptor.getPluginId()));
+synchronized (this) {
+      instance=myInitializedComponentInstance;
+      if (instance != null) {
+        return instance;
       }
+      long startTime=System.nanoTime();
+      instance=super.getComponentInstance(picoContainer);
+      if (myInitializing) {
+        String errorMessage="Cyclic component initialization: " + getComponentKey();
+        if (myPluginId != null) {
+          LOG.error(new PluginException(errorMessage,myPluginId));
+        }
  else {
-        LOG.error(new Throwable(errorMessage));
+          LOG.error(new Throwable(errorMessage));
+        }
       }
-    }
-    try {
-      myInitializing=true;
-      myComponentsRegistry.registerComponentInstance(instance);
-      ProgressIndicator indicator=getProgressIndicator();
-      if (indicator != null) {
-        indicator.checkCanceled();
-        setProgressDuringInit(indicator);
+      try {
+        myInitializing=true;
+        myComponentsRegistry.registerComponentInstance(instance);
+        ProgressIndicator indicator=getProgressIndicator();
+        if (indicator != null) {
+          indicator.checkCanceled();
+          setProgressDuringInit(indicator);
+        }
+        initializeComponent(instance,false);
+        if (instance instanceof BaseComponent) {
+          ((BaseComponent)instance).initComponent();
+        }
+        long ms=(System.nanoTime() - startTime) / 1000000;
+        if (ms > 10 && logSlowComponents()) {
+          LOG.info(instance.getClass().getName() + " initialized in " + ms+ " ms");
+        }
       }
-      initializeComponent(instance,false);
-      if (instance instanceof BaseComponent) {
-        ((BaseComponent)instance).initComponent();
-      }
-      long ms=(System.nanoTime() - startTime) / 1000000;
-      if (ms > 10 && logSlowComponents()) {
-        LOG.info(instance.getClass().getName() + " initialized in " + ms+ " ms");
-      }
-    }
   finally {
-      myInitializing=false;
+        myInitializing=false;
+      }
+      myInitializedComponentInstance=instance;
     }
-    myInitializedComponentInstance=instance;
   }
  catch (  ProcessCanceledException e) {
     throw e;
@@ -44,7 +50,7 @@ catch (  StateStorageException e) {
     throw e;
   }
 catch (  Throwable t) {
-    handleInitComponentError(t,((String)getComponentKey()),myConfig);
+    handleInitComponentError(t,((Class)getComponentKey()).getName(),myPluginId);
   }
   return instance;
 }
