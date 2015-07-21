@@ -1,13 +1,20 @@
 {
-  Object componentInstance=null;
+  Object instance=myInitializedComponentInstance;
+  if (instance != null) {
+    return instance;
+  }
   try {
-    long startTime=System.nanoTime();
-    componentInstance=super.getComponentInstance(picoContainer);
-    if (!myInitialized) {
+synchronized (this) {
+      instance=myInitializedComponentInstance;
+      if (instance != null) {
+        return instance;
+      }
+      long startTime=System.nanoTime();
+      instance=super.getComponentInstance(picoContainer);
       if (myInitializing) {
         String errorMessage="Cyclic component initialization: " + getComponentKey();
-        if (myConfig.pluginDescriptor != null) {
-          LOG.error(new PluginException(errorMessage,myConfig.pluginDescriptor.getPluginId()));
+        if (myPluginId != null) {
+          LOG.error(new PluginException(errorMessage,myPluginId));
         }
  else {
           LOG.error(new Throwable(errorMessage));
@@ -15,25 +22,25 @@
       }
       try {
         myInitializing=true;
-        myComponentsRegistry.registerComponentInstance(componentInstance);
+        myComponentsRegistry.registerComponentInstance(instance);
         ProgressIndicator indicator=getProgressIndicator();
         if (indicator != null) {
           indicator.checkCanceled();
           setProgressDuringInit(indicator);
         }
-        initializeComponent(componentInstance,false);
-        if (componentInstance instanceof BaseComponent) {
-          ((BaseComponent)componentInstance).initComponent();
+        initializeComponent(instance,false);
+        if (instance instanceof BaseComponent) {
+          ((BaseComponent)instance).initComponent();
         }
         long ms=(System.nanoTime() - startTime) / 1000000;
         if (ms > 10 && logSlowComponents()) {
-          LOG.info(componentInstance.getClass().getName() + " initialized in " + ms+ " ms");
+          LOG.info(instance.getClass().getName() + " initialized in " + ms+ " ms");
         }
       }
   finally {
         myInitializing=false;
       }
-      myInitialized=true;
+      myInitializedComponentInstance=instance;
     }
   }
  catch (  ProcessCanceledException e) {
@@ -43,7 +50,7 @@ catch (  StateStorageException e) {
     throw e;
   }
 catch (  Throwable t) {
-    handleInitComponentError(t,((String)getComponentKey()),myConfig);
+    handleInitComponentError(t,((Class)getComponentKey()).getName(),myPluginId);
   }
-  return componentInstance;
+  return instance;
 }
