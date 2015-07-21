@@ -1,27 +1,40 @@
 {
   if (runnerSettings == null && isApplicableFor(configuration)) {
-    handler.addProcessListener(new ProcessAdapter(){
-      @Override public void processTerminated(      ProcessEvent event){
-        final String tracesDirectory=getTracesDirectory(configuration);
-        final TestDiscoveryIndex coverageIndex=TestDiscoveryIndex.getInstance(configuration.getProject());
-        final File[] testMethodTraces=new File(tracesDirectory).listFiles(new FilenameFilter(){
-          @Override public boolean accept(          File dir,          String name){
-            return name.endsWith(".tr");
+    final Alarm processTracesAlarm=new Alarm(Alarm.ThreadToUse.POOLED_THREAD,null);
+    final MessageBusConnection connection=configuration.getProject().getMessageBus().connect();
+    connection.subscribe(SMTRunnerEventsListener.TEST_STATUS,new SMTRunnerEventsAdapter(){
+      private List<String> myCompletedMethodNames=new ArrayList<String>();
+      @Override public void onTestFinished(      @NotNull SMTestProxy test){
+        final SMTestProxy.SMRootTestProxy root=test.getRoot();
+        if ((root == null || root.getHandler() == handler)) {
+          final String fullTestName=test.getLocationUrl();
+          if (fullTestName != null && fullTestName.startsWith(JavaTestLocator.TEST_PROTOCOL)) {
+            myCompletedMethodNames.add(fullTestName.substring(JavaTestLocator.TEST_PROTOCOL.length() + 3));
+            if (myCompletedMethodNames.size() > 50) {
+              final String[] fullTestNames=ArrayUtil.toStringArray(myCompletedMethodNames);
+              myCompletedMethodNames.clear();
+              processTracesAlarm.addRequest(new Runnable(){
+                @Override public void run(){
+                  processAvailableTraces(configuration,fullTestNames);
+                }
+              }
+,100);
+            }
           }
         }
-);
-        if (testMethodTraces != null) {
-          for (          File testMethodTrace : testMethodTraces) {
-            try {
-              coverageIndex.updateFromTestTrace(testMethodTrace);
-              FileUtil.delete(testMethodTrace);
-            }
- catch (            IOException e) {
-              LOG.error("Can not load " + testMethodTrace,e);
+      }
+      @Override public void onTestingFinished(      @NotNull SMTestProxy.SMRootTestProxy testsRoot){
+        if (testsRoot.getHandler() == handler) {
+          processTracesAlarm.cancelAllRequests();
+          processTracesAlarm.addRequest(new Runnable(){
+            @Override public void run(){
+              processAvailableTraces(configuration);
+              Disposer.dispose(processTracesAlarm);
             }
           }
+,0);
+          connection.disconnect();
         }
-        handler.removeProcessListener(this);
       }
     }
 );
