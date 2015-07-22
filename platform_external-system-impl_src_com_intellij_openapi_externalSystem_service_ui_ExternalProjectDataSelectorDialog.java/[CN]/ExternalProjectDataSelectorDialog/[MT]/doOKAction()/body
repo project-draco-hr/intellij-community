@@ -1,0 +1,48 @@
+{
+  loadingPanel.setLoadingText("Please wait...");
+  loadingPanel.startLoading();
+  final DataNode<ProjectData> projectStructure=myProjectInfo.getExternalProjectStructure();
+  if (projectStructure != null) {
+    final boolean[] isModified={false};
+    ExternalSystemApiUtil.visit(projectStructure,new Consumer<DataNode<?>>(){
+      @Override public void consume(      DataNode<?> node){
+        final DataNode modifiedDataNode=node.getUserData(MODIFIED_NODE_KEY);
+        if (modifiedDataNode != null) {
+          if (node.isIgnored() != modifiedDataNode.isIgnored()) {
+            node.setIgnored(modifiedDataNode.isIgnored());
+            isModified[0]=true;
+          }
+          node.removeUserData(MODIFIED_NODE_KEY);
+          node.removeUserData(CONNECTED_UI_NODE_KEY);
+        }
+      }
+    }
+);
+    if (isModified[0]) {
+      DataNode<?> notIgnoredNode=ContainerUtil.find(projectStructure.getChildren(),new Condition<DataNode<?>>(){
+        @Override public boolean value(        DataNode<?> node){
+          return !node.isIgnored();
+        }
+      }
+);
+      projectStructure.setIgnored(notIgnoredNode == null);
+      ExternalSystemApiUtil.executeProjectChangeAction(true,new DisposeAwareProjectChange(myProject){
+        @Override public void execute(){
+          DumbService.getInstance(myProject).allowStartingDumbModeInside(DumbService.DumbModePermission.MAY_START_BACKGROUND,new Runnable(){
+            public void run(){
+              ProjectRootManagerEx.getInstanceEx(myProject).mergeRootsChangesDuring(new Runnable(){
+                @Override public void run(){
+                  ServiceManager.getService(ProjectDataManager.class).importData(projectStructure,myProject,true);
+                }
+              }
+);
+            }
+          }
+);
+        }
+      }
+);
+    }
+  }
+  super.doOKAction();
+}

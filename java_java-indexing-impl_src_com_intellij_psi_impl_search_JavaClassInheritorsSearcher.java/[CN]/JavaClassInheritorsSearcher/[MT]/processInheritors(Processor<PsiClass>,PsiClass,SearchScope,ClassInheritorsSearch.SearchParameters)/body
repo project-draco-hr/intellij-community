@@ -1,0 +1,62 @@
+{
+  if (baseClass instanceof PsiAnonymousClass || isFinal(baseClass))   return;
+  Project project=PsiUtilCore.getProjectInReadAction(baseClass);
+  if (isJavaLangObject(baseClass)) {
+    AllClassesSearch.search(searchScope,project,parameters.getNameCondition()).forEach(new Processor<PsiClass>(){
+      @Override public boolean process(      final PsiClass aClass){
+        ProgressIndicatorProvider.checkCanceled();
+        return isJavaLangObject(aClass) || consumer.process(aClass);
+      }
+    }
+);
+    return;
+  }
+  final Ref<PsiClass> currentBase=Ref.create(null);
+  final Stack<PsiAnchor> stack=new Stack<PsiAnchor>();
+  final Set<PsiAnchor> processed=ContainerUtil.newTroveSet();
+  final Processor<PsiClass> processor=new ReadActionProcessor<PsiClass>(){
+    @Override public boolean processInReadAction(    PsiClass candidate){
+      ProgressIndicatorProvider.checkCanceled();
+      if (parameters.isCheckInheritance() || parameters.isCheckDeep() && !(candidate instanceof PsiAnonymousClass)) {
+        if (!candidate.isInheritor(currentBase.get(),false)) {
+          return true;
+        }
+      }
+      if (PsiSearchScopeUtil.isInScope(searchScope,candidate)) {
+        if (candidate instanceof PsiAnonymousClass) {
+          return consumer.process(candidate);
+        }
+        final String name=candidate.getName();
+        if (name != null && parameters.getNameCondition().value(name) && !consumer.process(candidate)) {
+          return false;
+        }
+      }
+      if (parameters.isCheckDeep() && !(candidate instanceof PsiAnonymousClass) && !isFinal(candidate)) {
+        stack.push(PsiAnchor.create(candidate));
+      }
+      return true;
+    }
+  }
+;
+  ApplicationManager.getApplication().runReadAction(new Runnable(){
+    @Override public void run(){
+      stack.push(PsiAnchor.create(baseClass));
+    }
+  }
+);
+  final GlobalSearchScope projectScope=GlobalSearchScope.allScope(project);
+  while (!stack.isEmpty()) {
+    ProgressIndicatorProvider.checkCanceled();
+    final PsiAnchor anchor=stack.pop();
+    if (!processed.add(anchor))     continue;
+    PsiClass psiClass=ApplicationManager.getApplication().runReadAction(new Computable<PsiClass>(){
+      @Override public PsiClass compute(){
+        return (PsiClass)anchor.retrieve();
+      }
+    }
+);
+    if (psiClass == null)     continue;
+    currentBase.set(psiClass);
+    if (!DirectClassInheritorsSearch.search(psiClass,projectScope,parameters.isIncludeAnonymous(),false).forEach(processor))     return;
+  }
+}

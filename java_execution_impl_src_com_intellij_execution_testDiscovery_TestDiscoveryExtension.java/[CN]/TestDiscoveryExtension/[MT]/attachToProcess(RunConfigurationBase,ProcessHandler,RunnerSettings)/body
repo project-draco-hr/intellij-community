@@ -3,9 +3,24 @@
     final Alarm processTracesAlarm=new Alarm(Alarm.ThreadToUse.POOLED_THREAD,null);
     final MessageBusConnection connection=configuration.getProject().getMessageBus().connect();
     connection.subscribe(SMTRunnerEventsListener.TEST_STATUS,new SMTRunnerEventsAdapter(){
+      private List<String> myCompletedMethodNames=new ArrayList<String>();
       @Override public void onTestFinished(      @NotNull SMTestProxy test){
         final SMTestProxy.SMRootTestProxy root=test.getRoot();
-        if ((root == null || root.getHandler() == handler) && processTracesAlarm.getActiveRequestCount() == 0) {
+        if ((root == null || root.getHandler() == handler)) {
+          final String fullTestName=test.getLocationUrl();
+          if (fullTestName != null && fullTestName.startsWith(JavaTestLocator.TEST_PROTOCOL)) {
+            myCompletedMethodNames.add(fullTestName.substring(JavaTestLocator.TEST_PROTOCOL.length() + 3));
+            if (myCompletedMethodNames.size() > 50) {
+              final String[] fullTestNames=ArrayUtil.toStringArray(myCompletedMethodNames);
+              myCompletedMethodNames.clear();
+              processTracesAlarm.addRequest(new Runnable(){
+                @Override public void run(){
+                  processAvailableTraces(configuration,fullTestNames);
+                }
+              }
+,100);
+            }
+          }
         }
       }
       @Override public void onTestingFinished(      @NotNull SMTestProxy.SMRootTestProxy testsRoot){
