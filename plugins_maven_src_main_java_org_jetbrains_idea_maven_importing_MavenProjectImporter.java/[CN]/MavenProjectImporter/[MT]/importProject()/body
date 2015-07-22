@@ -18,15 +18,24 @@
     configModuleGroups();
   }
   if (myProject.isDisposed())   return null;
-  boolean modulesDeleted=deleteObsoleteModules();
-  hasChanges|=modulesDeleted;
-  if (hasChanges) {
-    removeUnusedProjectLibraries();
+  try {
+    boolean modulesDeleted=deleteObsoleteModules();
+    hasChanges|=modulesDeleted;
+    if (hasChanges) {
+      removeUnusedProjectLibraries();
+    }
   }
-  final boolean finalHasChanges=hasChanges;
-  MavenUtil.invokeAndWaitWriteAction(myProject,new Runnable(){
-    public void run(){
-      if (finalHasChanges) {
+ catch (  ProcessCanceledException e) {
+    throw e;
+  }
+catch (  Exception e) {
+    disposeModifiableModels();
+    LOG.error(e);
+    return null;
+  }
+  if (hasChanges) {
+    MavenUtil.invokeAndWaitWriteAction(myProject,new Runnable(){
+      public void run(){
         myModelsProvider.commit();
         if (projectsHaveChanges) {
           removeOutdatedCompilerConfigSettings();
@@ -41,11 +50,11 @@
           }
         }
       }
- else {
-        myModelsProvider.dispose();
-      }
     }
-  }
 );
+  }
+ else {
+    disposeModifiableModels();
+  }
   return postTasks;
 }
