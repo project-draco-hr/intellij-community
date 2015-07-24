@@ -5,11 +5,10 @@
   presentation.setTabName(codeUsagesString);
   presentation.setTabText(codeUsagesString);
   presentation.setShowCancelButton(true);
-  final Usage[] usages=new Usage[myElementConflictDescription.size()];
-  int i=0;
+  final ArrayList<Usage> usages=new ArrayList<Usage>(myElementConflictDescription.values().size());
   for (  final PsiElement element : myElementConflictDescription.keySet()) {
     if (element == null) {
-      usages[i++]=new DescriptionOnlyUsage();
+      usages.add(new DescriptionOnlyUsage());
       continue;
     }
     boolean isRead=false;
@@ -22,21 +21,23 @@
         break;
       }
     }
-    usages[i++]=isRead || isWrite ? new ReadWriteAccessUsageInfo2UsageAdapter(new UsageInfo(element),isRead,isWrite){
-      @NotNull @Override public UsagePresentation getPresentation(){
-        final UsagePresentation usagePresentation=super.getPresentation();
-        return MyShowConflictsInUsageViewAction.this.getPresentation(usagePresentation,element);
+    for (    final String conflictDescription : myElementConflictDescription.get(element)) {
+      final UsagePresentation usagePresentation=new DescriptionOnlyUsage(conflictDescription).getPresentation();
+      Usage usage=isRead || isWrite ? new ReadWriteAccessUsageInfo2UsageAdapter(new UsageInfo(element),isRead,isWrite){
+        @NotNull @Override public UsagePresentation getPresentation(){
+          return usagePresentation;
+        }
       }
-    }
  : new UsageInfo2UsageAdapter(new UsageInfo(element)){
-      @NotNull @Override public UsagePresentation getPresentation(){
-        final UsagePresentation usagePresentation=super.getPresentation();
-        return MyShowConflictsInUsageViewAction.this.getPresentation(usagePresentation,element);
+        @NotNull @Override public UsagePresentation getPresentation(){
+          return usagePresentation;
+        }
       }
-    }
 ;
+      usages.add(usage);
+    }
   }
-  final UsageView usageView=UsageViewManager.getInstance(myProject).showUsages(UsageTarget.EMPTY_ARRAY,usages,presentation);
+  final UsageView usageView=UsageViewManager.getInstance(myProject).showUsages(UsageTarget.EMPTY_ARRAY,usages.toArray(new Usage[usages.size()]),presentation);
   Runnable doRefactoringRunnable=getDoRefactoringRunnable(usageView);
   if (doRefactoringRunnable != null) {
     usageView.addPerformOperationAction(doRefactoringRunnable,myCommandName != null ? myCommandName : RefactoringBundle.message("retry.command"),"Unable to perform refactoring. There were changes in code after the usages have been found.",RefactoringBundle.message("usageView.doAction"));
