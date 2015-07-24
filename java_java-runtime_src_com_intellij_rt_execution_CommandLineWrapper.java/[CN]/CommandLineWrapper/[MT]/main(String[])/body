@@ -1,79 +1,31 @@
 {
-  final boolean notEscapeClasspathUrl=Boolean.valueOf(System.getProperty(PROPERTY_DO_NOT_ESCAPE_CLASSPATH_URL)).booleanValue();
-  final List urls=new ArrayList();
-  final File file=new File(args[0]);
-  final StringBuffer buf=new StringBuffer();
-  final BufferedReader reader=new BufferedReader(new FileReader(file));
+  final File jarFile=new File(args[0]);
+  JarInputStream inputStream=null;
   try {
-    while (reader.ready()) {
-      final String fileName=reader.readLine();
-      if (buf.length() > 0) {
-        buf.append(File.pathSeparator);
-      }
-      buf.append(fileName);
-      File classpathElement=new File(fileName);
-      try {
-        urls.add(notEscapeClasspathUrl ? classpathElement.toURL() : classpathElement.toURI().toURL());
-      }
- catch (      NoSuchMethodError e) {
-        urls.add(classpathElement.toURL());
+    inputStream=new JarInputStream(new FileInputStream(jarFile));
+    final Manifest manifest=inputStream.getManifest();
+    final String vmParams=manifest.getMainAttributes().getValue("VM-Options");
+    if (vmParams != null) {
+      final HashMap vmOptions=new HashMap();
+      parseVmOptions(vmParams,vmOptions);
+      for (Iterator iterator=vmOptions.keySet().iterator(); iterator.hasNext(); ) {
+        String optionName=(String)iterator.next();
+        System.setProperty(optionName,(String)vmOptions.get(optionName));
       }
     }
   }
-  finally {
-    reader.close();
+ catch (  IOException ignore) {
   }
-  if (!file.delete())   file.deleteOnExit();
-  System.setProperty("java.class.path",buf.toString());
-  int startArgsIdx=2;
-  if (args[1].equals("@vm_params")) {
-    startArgsIdx=4;
-    final File vmParamsFile=new File(args[2]);
-    final BufferedReader vmParamsReader=new BufferedReader(new FileReader(vmParamsFile));
-    try {
-      while (vmParamsReader.ready()) {
-        final String vmParam=vmParamsReader.readLine().trim();
-        final int eqIdx=vmParam.indexOf('=');
-        String vmParamName;
-        String vmParamValue;
-        if (eqIdx > -1 && eqIdx < vmParam.length() - 1) {
-          vmParamName=vmParam.substring(0,eqIdx);
-          vmParamValue=vmParam.substring(eqIdx + 1);
-        }
- else {
-          vmParamName=vmParam;
-          vmParamValue="";
-        }
-        vmParamName=vmParamName.trim();
-        if (vmParamName.startsWith(PREFIX)) {
-          vmParamName=vmParamName.substring(PREFIX.length());
-          System.setProperty(vmParamName,vmParamValue);
-        }
-      }
+ finally {
+    if (inputStream != null) {
+      inputStream.close();
     }
-  finally {
-      vmParamsReader.close();
-    }
-    if (!vmParamsFile.delete())     vmParamsFile.deleteOnExit();
+    jarFile.deleteOnExit();
   }
-  String mainClassName=args[startArgsIdx - 1];
-  String[] mainArgs=new String[args.length - startArgsIdx];
-  System.arraycopy(args,startArgsIdx,mainArgs,0,mainArgs.length);
-  for (int i=0; i < urls.size(); i++) {
-    URL url=(URL)urls.get(i);
-    urls.set(i,internFileProtocol(url));
-  }
-  ClassLoader loader=new URLClassLoader((URL[])urls.toArray(new URL[urls.size()]),null);
-  final String classLoader=System.getProperty("java.system.class.loader");
-  if (classLoader != null) {
-    try {
-      loader=(ClassLoader)Class.forName(classLoader).getConstructor(new Class[]{ClassLoader.class}).newInstance(new Object[]{loader});
-    }
- catch (    Exception e) {
-    }
-  }
-  Class mainClass=loader.loadClass(mainClassName);
-  Thread.currentThread().setContextClassLoader(loader);
+  String mainClassName=args[1];
+  String[] mainArgs=new String[args.length - 2];
+  System.arraycopy(args,2,mainArgs,0,mainArgs.length);
+  Class mainClass=Class.forName(mainClassName);
   Class mainArgType=(new String[0]).getClass();
   Method main=mainClass.getMethod("main",new Class[]{mainArgType});
   ensureAccess(main);

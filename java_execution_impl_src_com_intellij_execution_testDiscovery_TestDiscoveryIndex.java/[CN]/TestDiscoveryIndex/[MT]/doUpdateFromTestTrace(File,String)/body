@@ -2,36 +2,14 @@
 synchronized (ourLock) {
     Holder holder=getHolder();
     if (holder.myDisposed)     return;
-    Map<String,List<String>> classData=loadClassAndMethodsMap(file);
-    Map<String,List<String>> previousClassData=holder.myTestNameToUsedClassesAndMethodMap.get(testName);
-    ValueDiff valueDiff=new ValueDiff(classData,previousClassData);
-    if (valueDiff.hasRemovedDelta()) {
-      for (      String classQName : valueDiff.myRemovedClassData.keySet()) {
-        for (        String methodName : valueDiff.myRemovedClassData.get(classQName)) {
-          holder.myMethodQNameToTestNames.appendData(createKey(classQName,methodName),new PersistentHashMap.ValueDataAppender(){
-            @Override public void append(            DataOutput dataOutput) throws IOException {
-              IOUtil.writeUTF(dataOutput,REMOVED_MARKER);
-              IOUtil.writeUTF(dataOutput,testName);
-            }
-          }
-);
-        }
-      }
+    try {
+      final int testNameId=holder.myTestNameEnumerator.enumerate(testName);
+      TIntObjectHashMap<TIntArrayList> classData=loadClassAndMethodsMap(file,holder);
+      TIntObjectHashMap<TIntArrayList> previousClassData=holder.myTestNameToUsedClassesAndMethodMap.get(testNameId);
+      doUpdateFromDiff(holder,testNameId,classData,previousClassData);
     }
-    if (valueDiff.hasAddedDelta()) {
-      for (      String classQName : valueDiff.myAddedOrChangedClassData.keySet()) {
-        for (        String methodName : valueDiff.myAddedOrChangedClassData.get(classQName)) {
-          holder.myMethodQNameToTestNames.appendData(createKey(classQName,methodName),new PersistentHashMap.ValueDataAppender(){
-            @Override public void append(            DataOutput dataOutput) throws IOException {
-              IOUtil.writeUTF(dataOutput,testName);
-            }
-          }
-);
-        }
-      }
-    }
-    if (valueDiff.hasAddedDelta() || valueDiff.hasRemovedDelta()) {
-      holder.myTestNameToUsedClassesAndMethodMap.put(testName,classData);
+ catch (    Throwable throwable) {
+      thingsWentWrongLetsReinitialize(holder,throwable);
     }
   }
 }
