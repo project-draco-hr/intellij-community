@@ -17,9 +17,28 @@
   int line1=e.getDocument().getLineNumber(e.getOffset());
   int line2=e.getDocument().getLineNumber(e.getOffset() + e.getOldLength()) + 1;
   int shift=DiffUtil.countLinesShift(e);
+  final List<Pair<TextMergeChange,TextMergeChange.State>> corruptedStates=ContainerUtil.newArrayList();
   for (  TextMergeChange change : myAllMergeChanges) {
-    if (change.processBaseChange(line1,line2,shift)) {
+    TextMergeChange.State oldState=change.processBaseChange(line1,line2,shift);
+    if (oldState != null) {
+      if (myCurrentMergeCommand == null) {
+        corruptedStates.add(Pair.create(change,oldState));
+      }
       reinstallHighlighter(change);
     }
+  }
+  if (!corruptedStates.isEmpty()) {
+    UndoManager.getInstance(getProject()).undoableActionPerformed(new BasicUndoableAction(getEditor(ThreeSide.BASE).getDocument()){
+      @Override public void undo() throws UnexpectedUndoException {
+        enterBulkChangeUpdateBlock();
+        for (        Pair<TextMergeChange,TextMergeChange.State> pair : corruptedStates) {
+          restoreChangeState(pair.first,pair.second);
+        }
+        exitBulkChangeUpdateBlock();
+      }
+      @Override public void redo() throws UnexpectedUndoException {
+      }
+    }
+);
   }
 }
