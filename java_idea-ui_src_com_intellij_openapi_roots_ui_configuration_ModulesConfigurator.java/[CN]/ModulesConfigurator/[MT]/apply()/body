@@ -52,26 +52,33 @@
   for (  Map.Entry<Sdk,Sdk> entry : projectJdksModel.getProjectSdks().entrySet()) {
     modifiedToOriginalMap.put(entry.getValue(),entry.getKey());
   }
-  for (  final ModuleEditor moduleEditor : myModuleEditors.values()) {
-    final ModifiableRootModel model=moduleEditor.apply();
-    if (model != null) {
-      if (!model.isSdkInherited()) {
-        final Sdk modelSdk=model.getSdk();
-        if (modelSdk != null) {
-          final Sdk original=modifiedToOriginalMap.get(modelSdk);
-          if (original != null) {
-            model.setSdk(original);
-          }
-        }
-      }
-      models.add(model);
-    }
-  }
-  myFacetsConfigurator.applyEditors();
-  DumbService.getInstance(myProject).allowStartingDumbModeInside(DumbService.DumbModePermission.MAY_START_BACKGROUND,new Runnable(){
+  final Ref<ConfigurationException> exceptionRef=Ref.create();
+  DumbService.getInstance(myProject).allowStartingDumbModeInside(DumbModePermission.MAY_START_BACKGROUND,new Runnable(){
     public void run(){
       ApplicationManager.getApplication().runWriteAction(new Runnable(){
         @Override public void run(){
+          try {
+            for (            final ModuleEditor moduleEditor : myModuleEditors.values()) {
+              final ModifiableRootModel model=moduleEditor.apply();
+              if (model != null) {
+                if (!model.isSdkInherited()) {
+                  final Sdk modelSdk=model.getSdk();
+                  if (modelSdk != null) {
+                    final Sdk original=modifiedToOriginalMap.get(modelSdk);
+                    if (original != null) {
+                      model.setSdk(original);
+                    }
+                  }
+                }
+                models.add(model);
+              }
+            }
+            myFacetsConfigurator.applyEditors();
+          }
+ catch (          ConfigurationException e) {
+            exceptionRef.set(e);
+            return;
+          }
           try {
             final ModifiableRootModel[] rootModels=models.toArray(new ModifiableRootModel[models.size()]);
             ModifiableModelCommitter.multiCommit(rootModels,myModuleModel);
@@ -90,5 +97,8 @@
     }
   }
 );
+  if (!exceptionRef.isNull()) {
+    throw exceptionRef.get();
+  }
   myModified=false;
 }
