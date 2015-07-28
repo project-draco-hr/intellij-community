@@ -1,3 +1,39 @@
 {
-  load(PathManager.getConfigPath(),optionsPath == null ? PathManager.getOptionsPath() : optionsPath);
+  AccessToken token=HeavyProcessLatch.INSTANCE.processStarted("Loading application components");
+  try {
+    long t=System.currentTimeMillis();
+    init(mySplash == null ? null : new EmptyProgressIndicator(){
+      @Override public void setFraction(      double fraction){
+        mySplash.showProgress("",(float)(0.65 + getPercentageOfComponentsLoaded() * 0.35));
+      }
+    }
+,new Runnable(){
+      @Override public void run(){
+        getPicoContainer().getComponentInstance(ServiceManagerImpl.class);
+        StateStorageManager storageManager=ComponentsPackage.getStateStore(ApplicationImpl.this).getStateStorageManager();
+        String effectiveConfigPath=configPath == null ? PathManager.getConfigPath() : configPath;
+        storageManager.addMacro(StoragePathMacros.ROOT_CONFIG,effectiveConfigPath);
+        storageManager.addMacro(StoragePathMacros.APP_CONFIG,effectiveConfigPath + "/options");
+        for (        ApplicationLoadListener listener : ApplicationLoadListener.EP_NAME.getExtensions()) {
+          try {
+            listener.beforeApplicationLoaded(ApplicationImpl.this);
+          }
+ catch (          Throwable e) {
+            LOG.error(e);
+          }
+        }
+      }
+    }
+);
+    t=System.currentTimeMillis() - t;
+    LOG.info(getComponentConfigCount() + " application components initialized in " + t+ " ms");
+  }
+ catch (  StateStorageException e) {
+    throw new IOException(e);
+  }
+ finally {
+    token.finish();
+  }
+  myLoaded=true;
+  createLocatorFile();
 }
