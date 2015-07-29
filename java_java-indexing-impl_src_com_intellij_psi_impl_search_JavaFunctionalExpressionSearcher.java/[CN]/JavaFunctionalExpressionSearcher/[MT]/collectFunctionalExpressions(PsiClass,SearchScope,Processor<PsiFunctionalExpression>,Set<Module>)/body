@@ -7,9 +7,6 @@
     }
   }
 );
-  final GlobalSearchScope filesScope=getFilesWithFunctionalExpressionsScope(project,useScope);
-  final Collection<PsiMethod> methodCandidates=getCandidateMethodsWithSuitableParams(aClass,project,useScope);
-  final LinkedHashSet<VirtualFile> filesToProcess=new LinkedHashSet<VirtualFile>();
   final MethodSignature functionalInterfaceMethod=ApplicationManager.getApplication().runReadAction(new Computable<MethodSignature>(){
     @Override public MethodSignature compute(){
       return LambdaUtil.getFunction(aClass);
@@ -18,6 +15,13 @@
 );
   LOG.assertTrue(functionalInterfaceMethod != null);
   final int expectedFunExprParamsCount=functionalInterfaceMethod.getParameterTypes().length;
+  Set<VirtualFile> candidateFiles=getFilesWithFunctionalExpressionsScope(project,useScope);
+  if (candidateFiles.size() < 5) {
+    return searchInFiles(aClass,consumer,candidateFiles,expectedFunExprParamsCount);
+  }
+  final GlobalSearchScope filesScope=GlobalSearchScope.filesScope(project,candidateFiles);
+  final Collection<PsiMethod> methodCandidates=getCandidateMethodsWithSuitableParams(aClass,project,useScope);
+  final LinkedHashSet<VirtualFile> filesToProcess=new LinkedHashSet<VirtualFile>();
   final FileBasedIndex fileBasedIndex=FileBasedIndex.getInstance();
   for (  final PsiMethod psiMethod : methodCandidates) {
     ApplicationManager.getApplication().runReadAction(new Runnable(){
@@ -33,11 +37,5 @@
 );
   }
   collectFilesWithTypeOccurrencesAndFieldAssignments(aClass,filesScope,filesToProcess);
-  LOG.info("#usage files: " + filesToProcess.size());
-  return ContainerUtil.process(filesToProcess,new ReadActionProcessor<VirtualFile>(){
-    @Override public boolean processInReadAction(    VirtualFile file){
-      return processFileWithFunctionalInterfaces(aClass,expectedFunExprParamsCount,consumer,file);
-    }
-  }
-);
+  return searchInFiles(aClass,consumer,filesToProcess,expectedFunExprParamsCount);
 }
