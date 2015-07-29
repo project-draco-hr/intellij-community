@@ -1,0 +1,68 @@
+{
+  JTextComponent oldComponent=search ? mySearchTextComponent : myReplaceTextComponent;
+  Color oldBackground=oldComponent != null ? oldComponent.getBackground() : null;
+  Wrapper wrapper=search ? mySearchFieldWrapper : myReplaceFieldWrapper;
+  boolean multiline=myFindModel.isMultiline();
+  if (multiline && oldComponent instanceof JTextArea)   return false;
+  if (!multiline && oldComponent instanceof JTextField)   return false;
+  final JTextComponent textComponent;
+  if (multiline) {
+    textComponent=new JTextArea();
+    ((JTextArea)textComponent).setColumns(25);
+    ((JTextArea)textComponent).setRows(2);
+    wrapper.setContent(new SearchWrapper(textComponent,new ShowHistoryAction(textComponent,this)));
+  }
+ else {
+    SearchTextField searchTextField=new SearchTextField(true);
+    searchTextField.setOpaque(false);
+    textComponent=searchTextField.getTextEditor();
+    searchTextField.getTextEditor().setColumns(25);
+    if (UIUtil.isUnderGTKLookAndFeel()) {
+      textComponent.setOpaque(false);
+    }
+    searchTextField.setHistorySize(20);
+    searchTextField.setHistory(ContainerUtil.reverse(Arrays.asList(search ? FindSettings.getInstance().getRecentFindStrings() : FindSettings.getInstance().getRecentReplaceStrings())));
+    textComponent.registerKeyboardAction(new ActionListener(){
+      @Override public void actionPerformed(      final ActionEvent e){
+        final String text=textComponent.getText();
+        myFindModel.setMultiline(true);
+        ApplicationManager.getApplication().invokeLater(new Runnable(){
+          @Override public void run(){
+            if (search) {
+              mySearchTextComponent.setText(text + "\n");
+            }
+ else {
+              myReplaceTextComponent.setText(text + "\n");
+            }
+          }
+        }
+);
+      }
+    }
+,KeyStroke.getKeyStroke(KeyEvent.VK_ENTER,InputEvent.ALT_DOWN_MASK),JComponent.WHEN_FOCUSED);
+    wrapper.setContent(searchTextField);
+  }
+  if (search) {
+    mySearchTextComponent=textComponent;
+  }
+ else {
+    myReplaceTextComponent=textComponent;
+  }
+  UIUtil.addUndoRedoActions(textComponent);
+  Utils.setSmallerFont(textComponent);
+  textComponent.putClientProperty("AuxEditorComponent",Boolean.TRUE);
+  if (oldBackground != null) {
+    textComponent.setBackground(oldBackground);
+  }
+  textComponent.addFocusListener(new FocusListener(){
+    @Override public void focusGained(    final FocusEvent e){
+      textComponent.repaint();
+    }
+    @Override public void focusLost(    final FocusEvent e){
+      textComponent.repaint();
+    }
+  }
+);
+  new CloseOnESCAction(this,textComponent);
+  return true;
+}

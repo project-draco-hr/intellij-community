@@ -1,0 +1,35 @@
+{
+  assertFalse(ApplicationManager.getApplication().isDispatchThread());
+  File tempDir=createTempDirectory();
+  assertTrue(new File(tempDir,"child").createNewFile());
+  VirtualFile parent=refreshAndFindFile(tempDir);
+  assertNotNull(parent);
+  if (full) {
+    assertEquals(1,parent.getChildren().length);
+  }
+  final VirtualFile child=parent.findChild("child");
+  assertNotNull(child);
+  List<VirtualFile> files=Collections.singletonList(parent);
+  final Semaphore semaphore=new Semaphore();
+  for (int i=0; i < 1000; i++) {
+    semaphore.down();
+    VfsUtil.markDirty(true,false,parent);
+    LocalFileSystem.getInstance().refreshFiles(files,true,true,new Runnable(){
+      @Override public void run(){
+        semaphore.up();
+      }
+    }
+);
+    assertTrue(child.isValid());
+    final String newName="name" + i;
+    new WriteAction(){
+      @Override protected void run(      @NotNull Result result) throws Throwable {
+        child.rename(this,newName);
+      }
+    }
+.execute();
+    assertTrue(child.isValid());
+    TimeoutUtil.sleep(1);
+  }
+  assertTrue(semaphore.waitFor(60000));
+}

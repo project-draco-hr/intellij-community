@@ -1,38 +1,43 @@
 {
-  final SearchScope classScope=ApplicationManager.getApplication().runReadAction(new Computable<SearchScope>(){
-    @Override public SearchScope compute(){
-      return aClass.getUseScope();
-    }
-  }
-);
-  final SearchScope useScope=ApplicationManager.getApplication().runReadAction(new Computable<SearchScope>(){
-    @Override public SearchScope compute(){
-      return searchScope.intersectWith(classScope);
-    }
-  }
-);
   final Project project=PsiUtilCore.getProjectInReadAction(aClass);
-  final GlobalSearchScope scope=new ModulesScope(highLevelModules,project).intersectWith(useScope instanceof GlobalSearchScope ? (GlobalSearchScope)useScope : new EverythingGlobalScope(project));
-  final ProjectFileIndex index=ProjectRootManager.getInstance(project).getFileIndex();
-  final HashSet<VirtualFile> files=new HashSet<VirtualFile>();
-  CommonProcessors.CollectProcessor<VirtualFile> processor=new CommonProcessors.CollectProcessor<VirtualFile>(files){
-    @Override protected boolean accept(    VirtualFile virtualFile){
-      return scope.contains(virtualFile) && virtualFile.getFileType() == JavaFileType.INSTANCE && index.isInSource(virtualFile);
+  final ModulesScope modulesScope=new ModulesScope(highLevelModules,project);
+  final GlobalSearchScope useScope=ApplicationManager.getApplication().runReadAction(new Computable<GlobalSearchScope>(){
+    @Override public GlobalSearchScope compute(){
+      return modulesScope.intersectWith(convertToGlobalScope(project,searchScope.intersectWith(aClass.getUseScope())));
     }
   }
-;
-  final PsiSearchHelperImpl helper=(PsiSearchHelperImpl)PsiSearchHelper.SERVICE.getInstance(project);
-  helper.processFilesWithText(scope,UsageSearchContext.IN_CODE,true,"::",processor);
-  helper.processFilesWithText(scope,UsageSearchContext.IN_CODE,true,"->",processor);
-  LOG.info("#files: " + files.size());
-  final PsiManager psiManager=PsiManager.getInstance(project);
-  for (  final VirtualFile file : files) {
-    if (!ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
-      @Override public Boolean compute(){
-        return processFileWithFunctionalInterfaces(aClass,consumer,psiManager,file);
+);
+  final GlobalSearchScope filesScope=getFilesWithFunctionalExpressionsScope(project,useScope);
+  final Collection<PsiMethod> methodCandidates=getCandidateMethodsWithSuitableParams(aClass,project,useScope);
+  final LinkedHashSet<VirtualFile> filesToProcess=new LinkedHashSet<VirtualFile>();
+  final MethodSignature functionalInterfaceMethod=ApplicationManager.getApplication().runReadAction(new Computable<MethodSignature>(){
+    @Override public MethodSignature compute(){
+      return LambdaUtil.getFunction(aClass);
+    }
+  }
+);
+  LOG.assertTrue(functionalInterfaceMethod != null);
+  final int expectedFunExprParamsCount=functionalInterfaceMethod.getParameterTypes().length;
+  final FileBasedIndex fileBasedIndex=FileBasedIndex.getInstance();
+  for (  final PsiMethod psiMethod : methodCandidates) {
+    ApplicationManager.getApplication().runReadAction(new Runnable(){
+      public void run(){
+        if (!psiMethod.isValid())         return;
+        final int parametersCount=psiMethod.getParameterList().getParametersCount();
+        final boolean varArgs=psiMethod.isVarArgs();
+        final PsiParameter[] parameters=psiMethod.getParameterList().getParameters();
+        final GlobalSearchScope methodUseScope=modulesScope.intersectWith(convertToGlobalScope(project,psiMethod.getUseScope()));
+        fileBasedIndex.processValues(JavaFunctionalExpressionIndex.JAVA_FUNCTIONAL_EXPRESSION_INDEX_ID,psiMethod.getName(),null,new SuitableFilesProcessor(filesToProcess,expectedFunExprParamsCount,parametersCount,varArgs,parameters),useScope.intersectWith(methodUseScope));
       }
     }
-))     return false;
+);
   }
-  return true;
+  collectFilesWithTypeOccurrencesAndFieldAssignments(aClass,filesScope,filesToProcess);
+  LOG.info("#usage files: " + filesToProcess.size());
+  return ContainerUtil.process(filesToProcess,new ReadActionProcessor<VirtualFile>(){
+    @Override public boolean processInReadAction(    VirtualFile file){
+      return processFileWithFunctionalInterfaces(aClass,expectedFunExprParamsCount,consumer,file);
+    }
+  }
+);
 }

@@ -15,6 +15,9 @@
     if (PsiKeyword.INTERFACE.equals(keyword) && psiElement().afterLeaf("@").accepts(myPosition)) {
       return MyResult.improbableKeyword;
     }
+    if (PsiKeyword.NULL.equals(keyword) && psiElement().afterLeaf(psiElement().withElementType(elementType().oneOf(JavaTokenType.EQEQ,JavaTokenType.NE))).accepts(myPosition)) {
+      return MyResult.probableKeyword;
+    }
   }
   if (item.as(CastingLookupElementDecorator.CLASS_CONDITION_KEY) != null) {
     return MyResult.castVariable;
@@ -25,30 +28,30 @@
   if (object instanceof String && item.getUserData(JavaCompletionUtil.SUPER_METHOD_PARAMETERS) == Boolean.TRUE) {
     return MyResult.superMethodParameters;
   }
+  if (object instanceof PsiMethod) {
+    PsiClass containingClass=((PsiMethod)object).getContainingClass();
+    if (containingClass != null && CommonClassNames.JAVA_UTIL_COLLECTIONS.equals(containingClass.getQualifiedName())) {
+      return MyResult.collectionFactory;
+    }
+  }
+  Boolean expectedTypeMember=item.getUserData(MembersGetter.EXPECTED_TYPE_MEMBER);
+  if (expectedTypeMember != null) {
+    return expectedTypeMember ? (object instanceof PsiField ? MyResult.expectedTypeConstant : MyResult.expectedTypeMethod) : MyResult.classNameOrGlobalStatic;
+  }
+  final JavaChainLookupElement chain=item.as(JavaChainLookupElement.CLASS_CONDITION_KEY);
+  if (chain != null) {
+    Object qualifier=chain.getQualifier().getObject();
+    if (qualifier instanceof PsiLocalVariable || qualifier instanceof PsiParameter) {
+      return MyResult.localOrParameter;
+    }
+    if (qualifier instanceof PsiField) {
+      return MyResult.qualifiedWithField;
+    }
+    if (isGetter(qualifier)) {
+      return MyResult.qualifiedWithGetter;
+    }
+  }
   if (myCompletionType == CompletionType.SMART) {
-    if (object instanceof PsiMethod) {
-      PsiClass containingClass=((PsiMethod)object).getContainingClass();
-      if (containingClass != null && CommonClassNames.JAVA_UTIL_COLLECTIONS.equals(containingClass.getQualifiedName())) {
-        return MyResult.collectionFactory;
-      }
-    }
-    Boolean expectedTypeMember=item.getUserData(MembersGetter.EXPECTED_TYPE_MEMBER);
-    if (expectedTypeMember != null) {
-      return expectedTypeMember ? (object instanceof PsiField ? MyResult.expectedTypeConstant : MyResult.expectedTypeMethod) : MyResult.classNameOrGlobalStatic;
-    }
-    final JavaChainLookupElement chain=item.as(JavaChainLookupElement.CLASS_CONDITION_KEY);
-    if (chain != null) {
-      Object qualifier=chain.getQualifier().getObject();
-      if (qualifier instanceof PsiLocalVariable || qualifier instanceof PsiParameter) {
-        return MyResult.localOrParameter;
-      }
-      if (qualifier instanceof PsiField) {
-        return MyResult.qualifiedWithField;
-      }
-      if (isGetter(qualifier)) {
-        return MyResult.qualifiedWithGetter;
-      }
-    }
     if (object instanceof PsiField)     return MyResult.field;
     if (isGetter(object))     return MyResult.getter;
     return MyResult.normal;

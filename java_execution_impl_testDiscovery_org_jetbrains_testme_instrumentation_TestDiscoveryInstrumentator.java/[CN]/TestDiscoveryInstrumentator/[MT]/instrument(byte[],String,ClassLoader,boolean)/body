@@ -1,0 +1,55 @@
+{
+  long started=System.nanoTime();
+  final ClassReader cr=new ClassReader(classfileBuffer);
+  final ClassWriter cw;
+  if (computeFrames && false) {
+    final int version=getClassFileVersion(cr);
+    cw=getClassWriter(version >= Opcodes.V1_6 && version != Opcodes.V1_1 ? ClassWriter.COMPUTE_FRAMES : ClassWriter.COMPUTE_MAXS,loader);
+  }
+ else {
+    cw=getClassWriter(ClassWriter.COMPUTE_MAXS,loader);
+  }
+  final List<String> instrumentedMethods=new ArrayList<String>();
+  final ClassVisitor instrumentedMethodCounter=new ClassVisitor(Opcodes.ASM5){
+    final InstrumentedMethodsFilter methodsFilter=new InstrumentedMethodsFilter(className);
+    @Override public void visit(    int version,    int access,    String name,    String signature,    String superName,    String[] interfaces){
+      methodsFilter.visit(version,access,name,signature,superName,interfaces);
+      super.visit(version,access,name,signature,superName,interfaces);
+    }
+    @Override public MethodVisitor visitMethod(    int access,    String name,    String desc,    String signature,    String[] exceptions){
+      if (methodsFilter.shouldVisitMethod(access,name,desc,signature,exceptions)) {
+        if ("<init>".equals(name)) {
+          final int slashPos=className.lastIndexOf('.');
+          final int $Pos=className.lastIndexOf('$');
+          name=className.substring(Math.max(slashPos,$Pos) + 1);
+        }
+        instrumentedMethods.add(name);
+      }
+      return super.visitMethod(access,name,desc,signature,exceptions);
+    }
+  }
+;
+  cr.accept(instrumentedMethodCounter,0);
+  final ClassVisitor cv=new Instrumenter(cw,className,instrumentedMethods.toArray(new String[instrumentedMethods.size()]));
+  cr.accept(cv,0);
+  byte[] bytes=cw.toByteArray();
+  long time=myInstrumentedClassesTime.addAndGet(System.nanoTime() - started);
+  int classes=myInstrumentedClasses.incrementAndGet();
+  int methods=myInstrumentedMethods.addAndGet(instrumentedMethods.size());
+  if (false) {
+    try {
+      FileOutputStream fileOutputStream=new FileOutputStream("transformed-" + className);
+      try {
+        fileOutputStream.write(bytes);
+        fileOutputStream.close();
+      }
+  finally {
+        fileOutputStream.close();
+      }
+    }
+ catch (    IOException ex) {
+      ex.printStackTrace();
+    }
+  }
+  return bytes;
+}
