@@ -1,6 +1,6 @@
 {
   final PsiElement psiElement=reference.getElement();
-  @NonNls final String referenceName=reference.getRangeInElement().substring(psiElement.getText());
+  @NonNls final String shortReferenceName=reference.getRangeInElement().substring(psiElement.getText());
   Project project=psiElement.getProject();
   PsiFile containingFile=psiElement.getContainingFile();
   if (containingFile == null)   return null;
@@ -18,52 +18,32 @@
   if (providedFixes != null) {
     return providedFixes;
   }
-  if (isAnnotation(psiElement) && AnnotationUtil.isJetbrainsAnnotation(referenceName)) {
-    @NonNls final String className="org.jetbrains.annotations." + referenceName;
-    PsiClass found=JavaPsiFacade.getInstance(project).findClass(className,currentModule.getModuleWithDependenciesAndLibrariesScope(true));
-    if (found != null)     return null;
-    final OrderEntryFix platformFix=new OrderEntryFix(){
-      @Override @NotNull public String getText(){
-        return QuickFixBundle.message("orderEntry.fix.add.annotations.jar.to.classpath");
-      }
-      @Override @NotNull public String getFamilyName(){
-        return getText();
-      }
-      @Override public boolean isAvailable(      @NotNull Project project,      Editor editor,      PsiFile file){
-        return !project.isDisposed() && !currentModule.isDisposed();
-      }
-      @Override public void invoke(      @NotNull final Project project,      final Editor editor,      PsiFile file){
-        ApplicationManager.getApplication().invokeLater(new Runnable(){
-          @Override public void run(){
-            final String libraryPath=locateAnnotationsJar(currentModule);
-            if (libraryPath != null) {
-              new WriteCommandAction(project){
-                @Override protected void run(                @NotNull final Result result) throws Throwable {
-                  addJarsToRootsAndImportClass(Collections.singletonList(libraryPath),null,currentModule,editor,reference,"org.jetbrains.annotations." + referenceName);
-                }
-              }
-.execute();
-            }
-          }
-        }
-);
-      }
-    }
-;
-    final OrderEntryFix providedFix=provideFix(new Function<MissingDependencyFixProvider,OrderEntryFix>(){
-      @Override public OrderEntryFix fun(      MissingDependencyFixProvider provider){
-        return provider.getJetbrainsAnnotationFix(reference,platformFix,currentModule);
-      }
-    }
-);
-    final OrderEntryFix fix=ObjectUtils.notNull(providedFix,platformFix);
-    registrar.register(fix);
-    return Collections.singletonList((LocalQuickFix)fix);
-  }
   List<LocalQuickFix> result=new ArrayList<LocalQuickFix>();
+  JavaPsiFacade psiFacade=JavaPsiFacade.getInstance(project);
+  String fullReferenceText=reference.getCanonicalText();
+  for (  ExternalLibraryResolver resolver : ExternalLibraryResolver.EP_NAME.getExtensions()) {
+    final ExternalClassResolveResult resolveResult=resolver.resolveClass(shortReferenceName,isReferenceToAnnotation(psiElement));
+    OrderEntryFix fix=null;
+    if (resolveResult != null && psiFacade.findClass(resolveResult.getQualifiedClassName(),currentModule.getModuleWithDependenciesAndLibrariesScope(true)) == null) {
+      fix=new AddExternalLibraryToDependenciesQuickFix(currentModule,resolveResult.getLibrary(),reference,resolveResult.getQualifiedClassName());
+    }
+ else     if (!fullReferenceText.equals(shortReferenceName)) {
+      ExternalLibraryDescriptor descriptor=resolver.resolvePackage(fullReferenceText);
+      if (descriptor != null) {
+        fix=new AddExternalLibraryToDependenciesQuickFix(currentModule,descriptor,reference,null);
+      }
+    }
+    if (fix != null) {
+      registrar.register(fix);
+      result.add(fix);
+    }
+  }
+  if (!result.isEmpty()) {
+    return result;
+  }
   Set<Object> librariesToAdd=new THashSet<Object>();
   final JavaPsiFacade facade=JavaPsiFacade.getInstance(psiElement.getProject());
-  PsiClass[] classes=PsiShortNamesCache.getInstance(project).getClassesByName(referenceName,GlobalSearchScope.allScope(project));
+  PsiClass[] classes=PsiShortNamesCache.getInstance(project).getClassesByName(shortReferenceName,GlobalSearchScope.allScope(project));
   List<PsiClass> allowedDependencies=filterAllowedDependencies(psiElement,classes);
   if (allowedDependencies.isEmpty()) {
     return result;
