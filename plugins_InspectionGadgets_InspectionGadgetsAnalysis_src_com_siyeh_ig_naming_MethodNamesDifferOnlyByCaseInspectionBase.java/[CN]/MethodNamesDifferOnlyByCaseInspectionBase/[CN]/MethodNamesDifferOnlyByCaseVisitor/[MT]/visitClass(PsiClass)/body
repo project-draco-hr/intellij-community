@@ -1,0 +1,42 @@
+{
+  super.visitClass(aClass);
+  PsiMethod[] methods=aClass.getAllMethods();
+  Map<String,PsiMethod> methodNames=new THashMap<String,PsiMethod>(CaseInsensitiveStringHashingStrategy.INSTANCE);
+  Map<PsiIdentifier,String> errorNames=new THashMap<PsiIdentifier,String>();
+  for (  PsiMethod method : methods) {
+    ProgressManager.checkCanceled();
+    if (method.isConstructor())     continue;
+    if (ignoreIfMethodIsOverride && MethodUtils.hasSuper(method)) {
+      continue;
+    }
+    String name=method.getName();
+    PsiMethod existing=methodNames.get(name);
+    if (existing == null) {
+      methodNames.put(name,method);
+    }
+ else {
+      PsiClass methodClass=method.getContainingClass();
+      PsiClass existingMethodClass=existing.getContainingClass();
+      String existingName=existing.getName();
+      if (!name.equals(existingName)) {
+        if (existingMethodClass == aClass) {
+          PsiIdentifier identifier=existing.getNameIdentifier();
+          if (identifier != null) {
+            errorNames.put(identifier,name);
+          }
+        }
+        if (methodClass == aClass) {
+          PsiIdentifier identifier=method.getNameIdentifier();
+          if (identifier != null) {
+            errorNames.put(identifier,existingName);
+          }
+        }
+      }
+    }
+  }
+  for (  Map.Entry<PsiIdentifier,String> entry : errorNames.entrySet()) {
+    PsiIdentifier identifier=entry.getKey();
+    String otherName=entry.getValue();
+    registerError(identifier,otherName);
+  }
+}
