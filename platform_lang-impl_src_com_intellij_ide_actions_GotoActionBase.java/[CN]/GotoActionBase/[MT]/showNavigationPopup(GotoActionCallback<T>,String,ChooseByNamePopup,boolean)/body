@@ -1,17 +1,19 @@
 {
-  final Class startedAction=getClass();
+  final Class startedAction=myInAction;
+  LOG.assertTrue(startedAction != null);
   popup.setCheckBoxShortcut(getShortcutSet());
   popup.setFindUsagesTitle(findUsagesTitle);
   final ChooseByNameFilter<T> filter=callback.createFilter(popup);
-  if (historyEnabled(startedAction) && popup.getAdText() == null) {
+  if (historyEnabled() && popup.getAdText() == null) {
     popup.setAdText("Press " + KeymapUtil.getKeystrokeText(KeyStroke.getKeyStroke(KeyEvent.VK_UP,InputEvent.CTRL_MASK)) + " or "+ KeymapUtil.getKeystrokeText(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN,InputEvent.CTRL_MASK))+ " to navigate through the history");
   }
   popup.invoke(new ChooseByNamePopupComponent.Callback(){
     @Override public void onClose(){
-      if (startedAction != null && startedAction.equals(ourLastAction)) {
+      if (startedAction != null && startedAction.equals(myInAction)) {
         String text=popup.getEnteredText();
-        ourLastStrings.put(startedAction,Pair.create(text,popup.getSelectedIndex()));
+        ourLastStrings.put(myInAction,Pair.create(text,popup.getSelectedIndex()));
         updateHistory(text);
+        myInAction=null;
       }
       if (filter != null) {
         filter.close();
@@ -19,12 +21,12 @@
     }
     private void updateHistory(    @Nullable String text){
       if (!StringUtil.isEmptyOrSpaces(text)) {
-        List<String> history=ourHistory.get(startedAction);
+        List<String> history=ourHistory.get(myInAction);
         if (history == null)         history=ContainerUtil.newArrayList();
         if (!text.equals(ContainerUtil.getFirstItem(history))) {
           history.add(0,text);
         }
-        ourHistory.put(startedAction,history);
+        ourHistory.put(myInAction,history);
       }
     }
     @Override public void elementChosen(    Object element){
@@ -41,7 +43,7 @@
 ;
 abstract class HistoryAction extends DumbAwareAction {
     @Override public void update(    @NotNull AnActionEvent e){
-      e.getPresentation().setEnabled(historyEnabled(startedAction));
+      e.getPresentation().setEnabled(historyEnabled());
     }
     void setText(    @NotNull List<String> strings){
       javax.swing.text.Document document=editor.getDocument();
@@ -54,7 +56,7 @@ abstract class HistoryAction extends DumbAwareAction {
   editor.getDocument().addDocumentListener(historyResetListener);
   new HistoryAction(){
     @Override public void actionPerformed(    @NotNull AnActionEvent e){
-      List<String> strings=ourHistory.get(startedAction);
+      List<String> strings=ourHistory.get(myInAction);
       setText(strings);
       myHistoryIndex=myHistoryIndex >= strings.size() - 1 ? 0 : myHistoryIndex + 1;
     }
@@ -62,7 +64,7 @@ abstract class HistoryAction extends DumbAwareAction {
 .registerCustomShortcutSet(CustomShortcutSet.fromString("ctrl UP"),editor);
   new HistoryAction(){
     @Override public void actionPerformed(    @NotNull AnActionEvent e){
-      List<String> strings=ourHistory.get(startedAction);
+      List<String> strings=ourHistory.get(myInAction);
       setText(strings);
       myHistoryIndex=myHistoryIndex <= 0 ? strings.size() - 1 : myHistoryIndex - 1;
     }
