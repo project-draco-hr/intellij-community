@@ -1,23 +1,27 @@
 {
-  final Project project=PsiUtilCore.getProjectInReadAction(aClass);
-  final ModulesScope modulesScope=new ModulesScope(highLevelModules,project);
-  final GlobalSearchScope useScope=ApplicationManager.getApplication().runReadAction(new Computable<GlobalSearchScope>(){
-    @Override public GlobalSearchScope compute(){
-      return modulesScope.intersectWith(convertToGlobalScope(project,searchScope.intersectWith(aClass.getUseScope())));
-    }
+  final GlobalSearchScope useScope;
+  final PsiClass aClass;
+  final Project project;
+  final int expectedFunExprParamsCount;
+  AccessToken token=ReadAction.start();
+  try {
+    aClass=queryParameters.getElementToSearch();
+    if (!aClass.isValid() || !LambdaUtil.isFunctionalClass(aClass))     return;
+    project=aClass.getProject();
+    final Set<Module> highLevelModules=getJava8Modules(project);
+    if (highLevelModules.isEmpty())     return;
+    useScope=new ModulesScope(highLevelModules,project).intersectWith(convertToGlobalScope(project,queryParameters.getEffectiveSearchScope()));
+    final MethodSignature functionalInterfaceMethod=LambdaUtil.getFunction(aClass);
+    LOG.assertTrue(functionalInterfaceMethod != null);
+    expectedFunExprParamsCount=functionalInterfaceMethod.getParameterTypes().length;
   }
-);
-  final MethodSignature functionalInterfaceMethod=ApplicationManager.getApplication().runReadAction(new Computable<MethodSignature>(){
-    @Override public MethodSignature compute(){
-      return LambdaUtil.getFunction(aClass);
-    }
+  finally {
+    token.finish();
   }
-);
-  LOG.assertTrue(functionalInterfaceMethod != null);
-  final int expectedFunExprParamsCount=functionalInterfaceMethod.getParameterTypes().length;
   Set<VirtualFile> candidateFiles=getFilesWithFunctionalExpressionsScope(project,useScope);
   if (candidateFiles.size() < 5) {
-    return searchInFiles(aClass,consumer,candidateFiles,expectedFunExprParamsCount);
+    searchInFiles(aClass,consumer,candidateFiles,expectedFunExprParamsCount);
+    return;
   }
   final GlobalSearchScope filesScope=GlobalSearchScope.filesScope(project,candidateFiles);
   final Collection<PsiMethod> methodCandidates=getCandidateMethodsWithSuitableParams(aClass,project,useScope);
@@ -30,12 +34,12 @@
         final int parametersCount=psiMethod.getParameterList().getParametersCount();
         final boolean varArgs=psiMethod.isVarArgs();
         final PsiParameter[] parameters=psiMethod.getParameterList().getParameters();
-        final GlobalSearchScope methodUseScope=modulesScope.intersectWith(convertToGlobalScope(project,psiMethod.getUseScope()));
+        final GlobalSearchScope methodUseScope=convertToGlobalScope(project,psiMethod.getUseScope());
         fileBasedIndex.processValues(JavaFunctionalExpressionIndex.JAVA_FUNCTIONAL_EXPRESSION_INDEX_ID,psiMethod.getName(),null,new SuitableFilesProcessor(filesToProcess,expectedFunExprParamsCount,parametersCount,varArgs,parameters),useScope.intersectWith(methodUseScope));
       }
     }
 );
   }
   collectFilesWithTypeOccurrencesAndFieldAssignments(aClass,filesScope,filesToProcess);
-  return searchInFiles(aClass,consumer,filesToProcess,expectedFunExprParamsCount);
+  searchInFiles(aClass,consumer,filesToProcess,expectedFunExprParamsCount);
 }
