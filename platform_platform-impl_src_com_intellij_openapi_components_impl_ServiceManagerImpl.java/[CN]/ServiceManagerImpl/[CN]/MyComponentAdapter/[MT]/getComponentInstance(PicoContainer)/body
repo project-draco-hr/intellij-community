@@ -1,21 +1,34 @@
 {
   Object instance=myInitializedComponentInstance;
-  if (instance != null)   return instance;
-  return ApplicationManager.getApplication().runReadAction(new Computable<Object>(){
-    @Override public Object compute(){
+  if (instance != null) {
+    return instance;
+  }
+  AccessToken readToken=Registry.is("use.read.action.to.init.service",true) ? ReadAction.start() : null;
+  try {
+synchronized (this) {
+      instance=myInitializedComponentInstance;
+      if (instance != null) {
+        return instance;
+      }
+      ComponentAdapter delegate=getDelegate();
       AccessToken token=HeavyProcessLatch.INSTANCE.processStarted("Creating component '" + myDescriptor.getImplementation() + "'");
       try {
-synchronized (MyComponentAdapter.this) {
-          Object instance=myInitializedComponentInstance;
-          if (instance != null)           return instance;
-          myInitializedComponentInstance=instance=initializeInstance(container);
-          return instance;
+        instance=delegate.getComponentInstance(container);
+        if (instance instanceof Disposable) {
+          Disposer.register(myComponentManager,(Disposable)instance);
         }
+        myComponentManager.initializeComponent(instance,true);
+        myInitializedComponentInstance=instance;
+        return instance;
       }
   finally {
         token.finish();
       }
     }
   }
-);
+  finally {
+    if (readToken != null) {
+      readToken.finish();
+    }
+  }
 }

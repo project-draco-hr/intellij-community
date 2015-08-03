@@ -1,0 +1,62 @@
+{
+  super(project,false);
+  mySelector=selector;
+  setTitle(title);
+  myTree=new SimpleTree();
+  myTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+  final ExternalProjectsView projectsView=ExternalProjectsManager.getInstance(project).getExternalProjectsView(systemId);
+  if (projectsView != null) {
+    final ExternalProjectsStructure treeStructure=new ExternalProjectsStructure(project,myTree){
+      @SuppressWarnings("unchecked") @Override protected Class<? extends ExternalSystemNode>[] getVisibleNodesClasses(){
+        return nodeClasses;
+      }
+      @Override public Object getRootElement(){
+        Object rootElement=super.getRootElement();
+        return customizeProjectsTreeRoot(rootElement);
+      }
+    }
+;
+    treeStructure.init(new ExternalProjectsViewAdapter(projectsView){
+      @Nullable @Override public ExternalProjectsStructure getStructure(){
+        return treeStructure;
+      }
+      @Override public void updateUpTo(      ExternalSystemNode node){
+        treeStructure.updateUpTo(node);
+      }
+      @Override public boolean getGroupTasks(){
+        return groupTasks != null ? groupTasks : super.getGroupTasks();
+      }
+      @Override public boolean useTasksNode(){
+        return useTasksNode != null ? useTasksNode : super.useTasksNode();
+      }
+      @Override public void handleDoubleClickOrEnter(      @NotNull ExternalSystemNode node,      @Nullable String actionId,      InputEvent inputEvent){
+        SelectExternalSystemNodeDialog.this.handleDoubleClickOrEnter(node,actionId,inputEvent);
+      }
+    }
+);
+    final Collection<ExternalProjectInfo> projectsData=ProjectDataManager.getInstance().getExternalProjectsData(project,systemId);
+    final List<DataNode<ProjectData>> dataNodes=ContainerUtil.mapNotNull(projectsData,new Function<ExternalProjectInfo,DataNode<ProjectData>>(){
+      @Override public DataNode<ProjectData> fun(      ExternalProjectInfo info){
+        return info.getExternalProjectStructure();
+      }
+    }
+);
+    treeStructure.updateProjects(dataNodes);
+    TreeUtil.expandAll(myTree);
+    if (mySelector != null) {
+      final SimpleNode[] selection=new SimpleNode[]{null};
+      treeStructure.accept(new SimpleNodeVisitor(){
+        public boolean accept(        SimpleNode each){
+          if (!mySelector.shouldSelect(each))           return false;
+          selection[0]=each;
+          return true;
+        }
+      }
+);
+      if (selection[0] != null) {
+        treeStructure.select(selection[0]);
+      }
+    }
+  }
+  init();
+}

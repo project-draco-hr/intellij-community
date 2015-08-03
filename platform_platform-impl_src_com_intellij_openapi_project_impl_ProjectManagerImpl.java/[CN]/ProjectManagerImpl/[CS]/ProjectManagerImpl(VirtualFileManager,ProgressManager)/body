@@ -2,21 +2,28 @@
   myProgressManager=progressManager;
   Application app=ApplicationManager.getApplication();
   MessageBus messageBus=app.getMessageBus();
-  messageBus.connect(app).subscribe(StateStorage.STORAGE_TOPIC,new StateStorage.Listener(){
-    @Override public void storageFileChanged(    @NotNull VirtualFileEvent event,    @NotNull StateStorage storage){
-      projectStorageFileChanged(event,storage,null);
+  messageBus.connect().subscribe(StateStorageManager.STORAGE_TOPIC,new StorageManagerListener(){
+    @Override public void storageFileChanged(    @NotNull VFileEvent event,    @NotNull StateStorage storage,    @NotNull ComponentManager componentManager){
+      if (event instanceof VFilePropertyChangeEvent) {
+        return;
+      }
+      if (event.getRequestor() instanceof StateStorage.SaveSession || event.getRequestor() instanceof StateStorage || event.getRequestor() instanceof ProjectManagerImpl) {
+        return;
+      }
+      Project project;
+      if (componentManager instanceof Project) {
+        project=(Project)componentManager;
+      }
+ else {
+        project=componentManager instanceof Module ? ((Module)componentManager).getProject() : null;
+      }
+      registerProjectToReload(project,storage);
     }
   }
 );
   final ProjectManagerListener busPublisher=messageBus.syncPublisher(TOPIC);
   addProjectManagerListener(new ProjectManagerListener(){
     @Override public void projectOpened(    final Project project){
-      project.getMessageBus().connect(project).subscribe(StateStorage.PROJECT_STORAGE_TOPIC,new StateStorage.Listener(){
-        @Override public void storageFileChanged(        @NotNull VirtualFileEvent event,        @NotNull StateStorage storage){
-          projectStorageFileChanged(event,storage,project);
-        }
-      }
-);
       busPublisher.projectOpened(project);
       for (      ProjectManagerListener listener : getListeners(project)) {
         listener.projectOpened(project);

@@ -6,9 +6,48 @@
   myProjectExistLocalesPanel=ToolbarDecorator.createDecorator(projectExistLocalesList).disableRemoveAction().disableUpDownActions().createPanel();
   myProjectExistLocalesPanel.setBorder(IdeBorderFactory.createTitledBorder("Project locales",false));
   final JBList localesToAddList=new JBList();
-  myLocalesModel=new MyLocalesToAddModel();
+  final List<Locale> locales;
+  final List<Locale> restrictedLocales;
+  if (myResourceBundle == null) {
+    locales=Collections.singletonList(PropertiesUtil.DEFAULT_LOCALE);
+    restrictedLocales=Collections.emptyList();
+  }
+ else {
+    locales=Collections.emptyList();
+    restrictedLocales=ContainerUtil.map(myResourceBundle.getPropertiesFiles(),new Function<PropertiesFile,Locale>(){
+      @Override public Locale fun(      PropertiesFile propertiesFile){
+        return propertiesFile.getLocale();
+      }
+    }
+);
+  }
+  myLocalesModel=new CollectionListModel<Locale>(locales){
+    @Override public void add(    @NotNull List<? extends Locale> elements){
+      final List<Locale> currentItems=getItems();
+      elements=ContainerUtil.filter(elements,new Condition<Locale>(){
+        @Override public boolean value(        Locale locale){
+          return !restrictedLocales.contains(locale) && !currentItems.contains(locale);
+        }
+      }
+);
+      super.add(elements);
+    }
+  }
+;
   localesToAddList.setModel(myLocalesModel);
   localesToAddList.setCellRenderer(getLocaleRenderer());
+  localesToAddList.addFocusListener(new FocusAdapter(){
+    @Override public void focusGained(    FocusEvent e){
+      projectExistLocalesList.clearSelection();
+    }
+  }
+);
+  projectExistLocalesList.addFocusListener(new FocusAdapter(){
+    @Override public void focusGained(    FocusEvent e){
+      localesToAddList.clearSelection();
+    }
+  }
+);
   myNewBundleLocalesPanel=ToolbarDecorator.createDecorator(localesToAddList).setAddAction(new AnActionButtonRunnable(){
     @Override public void run(    AnActionButton button){
       final String rawAddedLocales=Messages.showInputDialog(myProject,PropertiesBundle.message("create.resource.bundle.dialog.add.locales.validator.message"),PropertiesBundle.message("create.resource.bundle.dialog.add.locales.validator.title"),null,null,new InputValidatorEx(){
@@ -26,22 +65,17 @@
       if (rawAddedLocales != null) {
         final List<Locale> locales=extractLocalesFromString(rawAddedLocales);
         LOG.assertTrue(locales != null);
-        myLocalesModel.addRows(locales);
+        myLocalesModel.add(locales);
       }
     }
   }
-).setRemoveAction(new AnActionButtonRunnable(){
-    @Override public void run(    AnActionButton button){
-      myLocalesModel.removeRow(localesToAddList.getSelectedIndices());
-    }
-  }
-).disableUpDownActions().createPanel();
+).setAddActionName("Add locales by suffix").disableUpDownActions().createPanel();
   myNewBundleLocalesPanel.setBorder(IdeBorderFactory.createTitledBorder("Locales to add",false));
   myAddLocaleFromExistButton=new JButton(AllIcons.Actions.Forward);
   new ClickListener(){
     @Override public boolean onClick(    @NotNull MouseEvent event,    int clickCount){
       if (clickCount == 1) {
-        myLocalesModel.addRows(ContainerUtil.map(projectExistLocalesList.getSelectedValues(),new Function<Object,Locale>(){
+        myLocalesModel.add(ContainerUtil.map(projectExistLocalesList.getSelectedValues(),new Function<Object,Locale>(){
           @Override public Locale fun(          Object o){
             return (Locale)o;
           }
@@ -53,11 +87,26 @@
     }
   }
 .installOn(myAddLocaleFromExistButton);
+  projectExistLocalesList.addListSelectionListener(new ListSelectionListener(){
+    @Override public void valueChanged(    ListSelectionEvent e){
+      final List<Locale> currentItems=myLocalesModel.getItems();
+      for (      Object o : projectExistLocalesList.getSelectedValues()) {
+        Locale l=(Locale)o;
+        if (!restrictedLocales.contains(l) && !currentItems.contains(l)) {
+          myAddLocaleFromExistButton.setEnabled(true);
+          return;
+        }
+      }
+      myAddLocaleFromExistButton.setEnabled(false);
+    }
+  }
+);
+  myAddLocaleFromExistButton.setEnabled(false);
   myAddAllButton=new JButton("Add All");
   new ClickListener(){
     @Override public boolean onClick(    @NotNull MouseEvent event,    int clickCount){
       if (clickCount == 1) {
-        myLocalesModel.addRows(existLocalesListModel.getLocales());
+        myLocalesModel.add(existLocalesListModel.getLocales());
       }
       return false;
     }

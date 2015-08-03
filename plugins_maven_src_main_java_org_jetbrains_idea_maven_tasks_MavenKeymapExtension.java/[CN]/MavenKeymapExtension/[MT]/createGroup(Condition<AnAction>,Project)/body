@@ -1,5 +1,5 @@
 {
-  KeymapGroup result=KeymapGroupFactory.getInstance().createGroup(TasksBundle.message("maven.tasks.action.group.name"),MavenIcons.PhasesClosed);
+  KeymapGroup result=KeymapGroupFactory.getInstance().createGroup(TasksBundle.message("maven.tasks.action.group.name"),MavenIcons.MavenLogo);
   if (project == null)   return result;
   Comparator<MavenProject> projectComparator=new Comparator<MavenProject>(){
     public int compare(    MavenProject o1,    MavenProject o2){
@@ -34,14 +34,30 @@
     actions.add(Pair.create(mavenAction.getGoal(),eachId));
   }
   for (  Map.Entry<MavenProject,Set<Pair<String,String>>> each : projectToActionsMapping.entrySet()) {
-    MavenProject mavenProject=each.getKey();
     Set<Pair<String,String>> goalsToActionIds=each.getValue();
-    if (goalsToActionIds.isEmpty())     continue;
-    KeymapGroup group=KeymapGroupFactory.getInstance().createGroup(mavenProject.getDisplayName(),MavenIcons.PhasesClosed);
-    result.addGroup(group);
     for (    Pair<String,String> eachGoalToActionId : goalsToActionIds) {
-      group.addActionId(eachGoalToActionId.getSecond());
+      result.addActionId(eachGoalToActionId.getSecond());
     }
   }
+  Icon icon=SystemInfoRt.isMac ? AllIcons.ToolbarDecorator.Mac.Add : AllIcons.ToolbarDecorator.Add;
+  ((Group)result).addHyperlink(new Hyperlink(icon,"Choose a phase/goal to assign a shortcut"){
+    @Override public void onClick(    MouseEvent e){
+      SelectMavenGoalDialog dialog=new SelectMavenGoalDialog(project);
+      if (dialog.showAndGet() && dialog.getResult() != null) {
+        MavenProjectsStructure.GoalNode goalNode=dialog.getResult();
+        String goal=goalNode.getGoal();
+        String actionId=MavenShortcutsManager.getInstance(project).getActionId(goalNode.getProjectPath(),goal);
+        getOrRegisterAction(goalNode.getMavenProject(),actionId,goal);
+        ApplicationManager.getApplication().getMessageBus().syncPublisher(KeymapListener.CHANGE_TOPIC).processCurrentKeymapChanged();
+        Settings allSettings=Settings.KEY.getData(DataManager.getInstance().getDataContext(e.getComponent()));
+        KeymapPanel keymapPanel=allSettings != null ? allSettings.find(KeymapPanel.class) : null;
+        if (keymapPanel != null) {
+          keymapPanel.showOption("");
+          keymapPanel.selectAction(actionId);
+        }
+      }
+    }
+  }
+);
   return result;
 }

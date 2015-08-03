@@ -1,13 +1,29 @@
 {
-  super.apply();
-  boolean modifiedJdks=false;
-  for (int i=0; i < myRoot.getChildCount(); i++) {
-    final NamedConfigurable configurable=((MyNode)myRoot.getChildAt(i)).getConfigurable();
-    if (configurable.isModified()) {
-      configurable.apply();
-      modifiedJdks=true;
+  final Ref<ConfigurationException> exceptionRef=Ref.create();
+  DumbService.allowStartingDumbModeInside(DumbModePermission.MAY_START_BACKGROUND,new Runnable(){
+    public void run(){
+      try {
+        ProjectJdksConfigurable.super.apply();
+        boolean modifiedJdks=false;
+        for (int i=0; i < myRoot.getChildCount(); i++) {
+          final NamedConfigurable configurable=((MyNode)myRoot.getChildAt(i)).getConfigurable();
+          if (configurable.isModified()) {
+            configurable.apply();
+            modifiedJdks=true;
+          }
+        }
+        if (myProjectJdksModel.isModified() || modifiedJdks) {
+          myProjectJdksModel.apply(ProjectJdksConfigurable.this);
+        }
+        myProjectJdksModel.setProjectSdk(getSelectedJdk());
+      }
+ catch (      ConfigurationException e) {
+        exceptionRef.set(e);
+      }
     }
   }
-  if (myProjectJdksModel.isModified() || modifiedJdks)   myProjectJdksModel.apply(this);
-  myProjectJdksModel.setProjectSdk(getSelectedJdk());
+);
+  if (!exceptionRef.isNull()) {
+    throw exceptionRef.get();
+  }
 }
