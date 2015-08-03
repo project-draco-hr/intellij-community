@@ -6,6 +6,7 @@
     return;
   }
   ThreeSide sourceSide=side.select(ThreeSide.LEFT,ThreeSide.RIGHT);
+  ThreeSide oppositeSide=side.select(ThreeSide.RIGHT,ThreeSide.LEFT);
   ThreeSide outputSide=ThreeSide.BASE;
   int outputStartLine=change.getStartLine(outputSide);
   int outputEndLine=change.getEndLine(outputSide);
@@ -13,12 +14,29 @@
   int sourceEndLine=change.getEndLine(sourceSide);
   enterBulkChangeUpdateBlock();
   try {
-    DiffUtil.applyModification(getContent(outputSide).getDocument(),outputStartLine,outputEndLine,getContent(sourceSide).getDocument(),sourceStartLine,sourceEndLine);
-    if (outputStartLine == outputEndLine) {
-      int newOutputEndLine=outputStartLine + (sourceEndLine - sourceStartLine);
-      moveChangesAfterInsertion(change,outputStartLine,newOutputEndLine);
+    if (Registry.is("diff.merge.conflict.two.step.resolve") && change.isConflict()) {
+      boolean append=change.isResolved(side.other());
+      int actualOutputStartLine=append ? outputEndLine : outputStartLine;
+      DiffUtil.applyModification(getContent(outputSide).getDocument(),actualOutputStartLine,outputEndLine,getContent(sourceSide).getDocument(),sourceStartLine,sourceEndLine);
+      if (outputStartLine == outputEndLine || append) {
+        int newOutputEndLine=actualOutputStartLine + (sourceEndLine - sourceStartLine);
+        moveChangesAfterInsertion(change,outputStartLine,newOutputEndLine);
+      }
+      if (change.getStartLine(oppositeSide) == change.getEndLine(oppositeSide)) {
+        markResolved(change);
+      }
+ else {
+        markResolved(change,side);
+      }
     }
-    markResolved(change);
+ else {
+      DiffUtil.applyModification(getContent(outputSide).getDocument(),outputStartLine,outputEndLine,getContent(sourceSide).getDocument(),sourceStartLine,sourceEndLine);
+      if (outputStartLine == outputEndLine) {
+        int newOutputEndLine=outputStartLine + (sourceEndLine - sourceStartLine);
+        moveChangesAfterInsertion(change,outputStartLine,newOutputEndLine);
+      }
+      markResolved(change);
+    }
   }
   finally {
     exitBulkChangeUpdateBlock();
