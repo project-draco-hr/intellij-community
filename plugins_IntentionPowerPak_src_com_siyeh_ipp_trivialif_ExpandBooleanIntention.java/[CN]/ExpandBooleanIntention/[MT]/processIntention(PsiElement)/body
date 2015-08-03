@@ -1,10 +1,10 @@
 {
-  final PsiStatement containingStatement=PsiTreeUtil.getParentOfType(element,PsiStatement.class);
-  if (containingStatement == null) {
+  if (!(element instanceof PsiStatement)) {
     return;
   }
-  if (ExpandBooleanPredicate.isBooleanAssignment(containingStatement)) {
-    final PsiExpressionStatement assignmentStatement=(PsiExpressionStatement)containingStatement;
+  final PsiStatement statement=(PsiStatement)element;
+  if (ExpandBooleanPredicate.isBooleanAssignment(statement)) {
+    final PsiExpressionStatement assignmentStatement=(PsiExpressionStatement)statement;
     final PsiAssignmentExpression assignmentExpression=(PsiAssignmentExpression)assignmentStatement.getExpression();
     final PsiExpression rhs=assignmentExpression.getRExpression();
     if (rhs == null) {
@@ -25,11 +25,11 @@
  else {
       conditionText=rhsText;
     }
-    @NonNls final String statement="if(" + conditionText + ") "+ lhsText+ " = true; else "+ lhsText+ " = false;";
-    PsiReplacementUtil.replaceStatement(containingStatement,statement);
+    @NonNls final String newStatementText="if(" + conditionText + ") "+ lhsText+ " = true; else "+ lhsText+ " = false;";
+    PsiReplacementUtil.replaceStatement(statement,newStatementText);
   }
- else   if (ExpandBooleanPredicate.isBooleanReturn(containingStatement)) {
-    final PsiReturnStatement returnStatement=(PsiReturnStatement)containingStatement;
+ else   if (ExpandBooleanPredicate.isBooleanReturn(statement)) {
+    final PsiReturnStatement returnStatement=(PsiReturnStatement)statement;
     final PsiExpression returnValue=returnStatement.getReturnValue();
     if (returnValue == null) {
       return;
@@ -38,11 +38,11 @@
       return;
     }
     final String valueText=returnValue.getText();
-    @NonNls final String statement="if(" + valueText + ") return true; else return false;";
-    PsiReplacementUtil.replaceStatement(containingStatement,statement);
+    @NonNls final String newStatementText="if(" + valueText + ") return true; else return false;";
+    PsiReplacementUtil.replaceStatement(statement,newStatementText);
   }
- else   if (ExpandBooleanPredicate.isBooleanDeclaration(containingStatement)) {
-    final PsiDeclarationStatement declarationStatement=(PsiDeclarationStatement)containingStatement;
+ else   if (ExpandBooleanPredicate.isBooleanDeclaration(statement)) {
+    final PsiDeclarationStatement declarationStatement=(PsiDeclarationStatement)statement;
     final PsiElement declaredElement=declarationStatement.getDeclaredElements()[0];
     if (!(declaredElement instanceof PsiLocalVariable)) {
       return;
@@ -54,9 +54,10 @@
     }
     final String name=variable.getName();
     @NonNls final String newStatementText="if(" + initializer.getText() + ") "+ name+ "=true; else "+ name+ "=false;";
-    final PsiElementFactory factory=JavaPsiFacade.getElementFactory(containingStatement.getProject());
-    final PsiStatement newStatement=factory.createStatementFromText(newStatementText,containingStatement);
-    declarationStatement.getParent().addAfter(newStatement,declarationStatement);
+    final Project project=statement.getProject();
+    final PsiStatement newStatement=JavaPsiFacade.getElementFactory(project).createStatementFromText(newStatementText,statement);
+    final PsiElement newElement=declarationStatement.getParent().addAfter(newStatement,declarationStatement);
+    CodeStyleManager.getInstance(project).reformat(newElement);
     initializer.delete();
   }
 }
