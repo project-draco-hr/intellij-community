@@ -1,2 +1,96 @@
 {
+  StubTree stubTree=null;
+  PsiFile candidatePsiFile=PsiManager.getInstance(project).findFile(file);
+  PsiFileWithStubSupport psiFile=null;
+  boolean customStubs=false;
+  if (candidatePsiFile != null && !(candidatePsiFile instanceof PsiPlainTextFile)) {
+    final FileViewProvider viewProvider=candidatePsiFile.getViewProvider();
+    final PsiFile stubBindingRoot=viewProvider.getStubBindingRoot();
+    if (stubBindingRoot instanceof PsiFileWithStubSupport) {
+      psiFile=(PsiFileWithStubSupport)stubBindingRoot;
+      stubTree=psiFile.getStubTree();
+      if (stubTree == null && psiFile instanceof PsiFileImpl) {
+        IStubFileElementType elementType=((PsiFileImpl)psiFile).getElementTypeForStubBuilder();
+        if (elementType != null) {
+          stubTree=((PsiFileImpl)psiFile).calcStubTree();
+        }
+ else {
+          customStubs=true;
+          LOG.assertTrue(BinaryFileStubBuilders.INSTANCE.forFileType(psiFile.getFileType()) != null,"unable to get stub builder for " + psiFile.getFileType());
+        }
+      }
+    }
+  }
+  if (stubTree == null && psiFile == null) {
+    return true;
+  }
+  if (stubTree == null) {
+    ObjectStubTree objectStubTree=StubTreeLoader.getInstance().readFromVFile(project,file);
+    if (objectStubTree == null) {
+      return true;
+    }
+    if (customStubs && !(objectStubTree instanceof StubTree)) {
+      if (!skipOnErrors && !requiredClass.isInstance(psiFile)) {
+        inconsistencyDetected(objectStubTree,psiFile);
+        return true;
+      }
+      return processor.process((Psi)psiFile);
+    }
+    stubTree=(StubTree)objectStubTree;
+    final List<StubElement<?>> plained=stubTree.getPlainListFromAllRoots();
+    for (int i=0, size=value.size(); i < size; i++) {
+      final int stubTreeIndex=value.get(i);
+      if (stubTreeIndex >= plained.size()) {
+        if (!skipOnErrors)         onInternalError(file);
+        break;
+      }
+      final StubElement<?> stub=plained.get(stubTreeIndex);
+      PsiUtilCore.ensureValid(psiFile);
+      final ASTNode tree=psiFile.findTreeForStub(stubTree,stub);
+      if (tree != null) {
+        if (tree.getElementType() == stubType(stub)) {
+          Psi psi=(Psi)tree.getPsi();
+          PsiUtilCore.ensureValid(psi);
+          if (!skipOnErrors && !requiredClass.isInstance(psi)) {
+            inconsistencyDetected(stubTree,psiFile);
+            break;
+          }
+          if (!processor.process(psi))           return false;
+        }
+ else         if (!skipOnErrors) {
+          String persistedStubTree=((PsiFileStubImpl)stubTree.getRoot()).printTree();
+          String stubTreeJustBuilt=((PsiFileStubImpl)((PsiFileImpl)psiFile).getElementTypeForStubBuilder().getBuilder().buildStubTree(psiFile)).printTree();
+          StringBuilder builder=new StringBuilder();
+          builder.append("Oops\n");
+          builder.append("Recorded stub:-----------------------------------\n");
+          builder.append(persistedStubTree);
+          builder.append("\nAST built stub: ------------------------------------\n");
+          builder.append(stubTreeJustBuilt);
+          builder.append("\n");
+          LOG.info(builder.toString());
+          onInternalError(file);
+        }
+      }
+    }
+  }
+ else {
+    final List<StubElement<?>> plained=stubTree.getPlainListFromAllRoots();
+    for (int i=0, size=value.size(); i < size; i++) {
+      final int stubTreeIndex=value.get(i);
+      if (stubTreeIndex >= plained.size()) {
+        if (!skipOnErrors) {
+          inconsistencyDetected(stubTree,psiFile);
+        }
+        break;
+      }
+      Psi psi=(Psi)plained.get(stubTreeIndex).getPsi();
+      PsiUtilCore.ensureValid(psi);
+      if (!skipOnErrors && !requiredClass.isInstance(psi)) {
+        inconsistencyDetected(stubTree,psiFile);
+        break;
+      }
+      if (!processor.process(psi))       return false;
+    }
+  }
+  return true;
 }
