@@ -1,0 +1,42 @@
+{
+  final boolean unitTestMode=ApplicationManager.getApplication().isUnitTestMode();
+  if (!unitTestMode) {
+    LOG.assertTrue(anchorPanel != null);
+  }
+  InspectionProfileImpl profile=new InspectionProfileImpl("TempProfile",InspectionToolRegistrar.getInstance(),profileManager);
+  if (Comparing.strEqual(rootElement.getName(),"component")) {
+    rootElement=rootElement.getChildren().get(0);
+  }
+  final Set<String> levels=new HashSet<String>();
+  for (  Object o : rootElement.getChildren("inspection_tool")) {
+    final Element inspectElement=(Element)o;
+    addLevelIfNotNull(levels,inspectElement);
+    for (    Object s : inspectElement.getChildren("scope")) {
+      addLevelIfNotNull(levels,((Element)s));
+    }
+  }
+  for (Iterator<String> iterator=levels.iterator(); iterator.hasNext(); ) {
+    String level=iterator.next();
+    if (profileManager.getOwnSeverityRegistrar().getSeverity(level) != null) {
+      iterator.remove();
+    }
+  }
+  if (!levels.isEmpty()) {
+    if (!unitTestMode) {
+      if (Messages.showYesNoDialog(anchorPanel,"Undefined severities detected: " + StringUtil.join(levels,", ") + ". Do you want to create them?","Warning",Messages.getWarningIcon()) == Messages.YES) {
+        for (        String level : levels) {
+          final TextAttributes textAttributes=CodeInsightColors.WARNINGS_ATTRIBUTES.getDefaultAttributes();
+          HighlightInfoType.HighlightInfoTypeImpl info=new HighlightInfoType.HighlightInfoTypeImpl(new HighlightSeverity(level,50),TextAttributesKey.createTextAttributesKey(level));
+          profileManager.getOwnSeverityRegistrar().registerSeverity(new SeverityRegistrar.SeverityBasedTextAttributes(textAttributes.clone(),info),textAttributes.getErrorStripeColor());
+        }
+      }
+    }
+ else {
+      throw new AssertionError("All of levels must exist in unit-test mode, but actual not exist levels = " + levels);
+    }
+  }
+  profile.readExternal(rootElement);
+  profile.setProjectLevel(false);
+  profile.initInspectionTools(project);
+  return profile;
+}
