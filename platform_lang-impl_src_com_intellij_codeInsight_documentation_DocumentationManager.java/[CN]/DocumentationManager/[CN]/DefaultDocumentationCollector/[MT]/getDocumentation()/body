@@ -27,11 +27,34 @@
       }
     }
   }
-  return ApplicationManager.getApplication().runReadAction(new Computable<String>(){
-    @Override @Nullable public String compute(){
-      final SmartPsiElementPointer originalElement=myElement.getUserData(ORIGINAL_ELEMENT_KEY);
-      return provider.generateDoc(myElement,originalElement != null ? originalElement.getElement() : null);
+  long deadline=System.currentTimeMillis() + DOC_GENERATION_TIMEOUT_MILLISECONDS;
+  do {
+    final Disposable disposable=Disposer.newDisposable();
+    try {
+      ProgressIndicator progressIndicator=new StandardProgressIndicatorBase();
+      ProgressIndicatorUtils.forceWriteActionPriority(progressIndicator,disposable);
+      final Ref<String> result=new Ref<String>();
+      ProgressManager.getInstance().runProcess(new Runnable(){
+        @Override public void run(){
+          ApplicationManager.getApplication().runReadAction(new Runnable(){
+            @Override public void run(){
+              final SmartPsiElementPointer originalElement=myElement.getUserData(ORIGINAL_ELEMENT_KEY);
+              String doc=provider.generateDoc(myElement,originalElement != null ? originalElement.getElement() : null);
+              result.set(doc);
+            }
+          }
+);
+        }
+      }
+,progressIndicator);
+      return result.get();
+    }
+ catch (    ProcessCanceledException ignored) {
+    }
+ finally {
+      Disposer.dispose(disposable);
     }
   }
-);
+ while (System.currentTimeMillis() < deadline);
+  return null;
 }
