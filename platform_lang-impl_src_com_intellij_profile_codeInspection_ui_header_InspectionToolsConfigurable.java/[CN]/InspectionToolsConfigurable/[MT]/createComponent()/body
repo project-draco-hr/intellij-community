@@ -163,63 +163,30 @@ catch (          IOException e1) {
       descriptor.setDescription("Choose profile file");
       FileChooser.chooseFile(descriptor,getProject(),wholePanel,null,new Consumer<VirtualFile>(){
         @Override public void consume(        VirtualFile file){
-          if (file == null)           return;
-          InspectionProfileImpl profile=new InspectionProfileImpl("TempProfile",InspectionToolRegistrar.getInstance(),myProfileManager);
-          try {
-            Element rootElement=JDOMUtil.loadDocument(VfsUtilCore.virtualToIoFile(file)).getRootElement();
-            if (Comparing.strEqual(rootElement.getName(),"component")) {
-              rootElement=rootElement.getChildren().get(0);
-            }
-            final Set<String> levels=new HashSet<String>();
-            for (            Object o : rootElement.getChildren("inspection_tool")) {
-              final Element inspectElement=(Element)o;
-              addLevelIfNotNull(levels,inspectElement);
-              for (              Object s : inspectElement.getChildren("scope")) {
-                addLevelIfNotNull(levels,((Element)s));
-              }
-            }
-            for (Iterator<String> iterator=levels.iterator(); iterator.hasNext(); ) {
-              String level=iterator.next();
-              if (myProfileManager.getOwnSeverityRegistrar().getSeverity(level) != null) {
-                iterator.remove();
-              }
-            }
-            if (!levels.isEmpty()) {
-              if (Messages.showYesNoDialog(wholePanel,"Undefined severities detected: " + StringUtil.join(levels,", ") + ". Do you want to create them?","Warning",Messages.getWarningIcon()) == Messages.YES) {
-                for (                String level : levels) {
-                  final TextAttributes textAttributes=CodeInsightColors.WARNINGS_ATTRIBUTES.getDefaultAttributes();
-                  HighlightInfoType.HighlightInfoTypeImpl info=new HighlightInfoType.HighlightInfoTypeImpl(new HighlightSeverity(level,50),TextAttributesKey.createTextAttributesKey(level));
-                  myProfileManager.getOwnSeverityRegistrar().registerSeverity(new SeverityRegistrar.SeverityBasedTextAttributes(textAttributes.clone(),info),textAttributes.getErrorStripeColor());
+          if (file != null) {
+            final InspectionProfileImpl profile;
+            try {
+              Element rootElement=JDOMUtil.loadDocument(VfsUtilCore.virtualToIoFile(file)).getRootElement();
+              profile=importInspectionProfile(rootElement,myProfileManager,getProject(),wholePanel);
+              if (getProfilePanel(profile) != null) {
+                if (Messages.showOkCancelDialog(wholePanel,"Profile with name \'" + profile.getName() + "\' already exists. Do you want to overwrite it?","Warning",Messages.getInformationIcon()) != Messages.OK) {
+                  return;
                 }
               }
+              final ModifiableModel model=profile.getModifiableModel();
+              model.setModified(true);
+              addProfile((InspectionProfileImpl)model,profile);
+              myDeletedProfiles.remove(profile);
             }
-            profile.readExternal(rootElement);
-            profile.setProjectLevel(false);
-            profile.initInspectionTools(getProject());
-            if (getProfilePanel(profile) != null) {
-              if (Messages.showOkCancelDialog(wholePanel,"Profile with name \'" + profile.getName() + "\' already exists. Do you want to overwrite it?","Warning",Messages.getInformationIcon()) != Messages.OK) {
-                return;
-              }
+ catch (            JDOMException e) {
+              LOG.error(e);
             }
-            final ModifiableModel model=profile.getModifiableModel();
-            model.setModified(true);
-            addProfile((InspectionProfileImpl)model,profile);
-            myDeletedProfiles.remove(profile);
-          }
- catch (          InvalidDataException e1) {
-            LOG.error(e1);
-          }
-catch (          JDOMException e1) {
-            LOG.error(e1);
-          }
-catch (          IOException e1) {
-            LOG.error(e1);
-          }
-        }
-        private void addLevelIfNotNull(        Set<String> levels,        Element inspectElement){
-          final String level=inspectElement.getAttributeValue("level");
-          if (level != null) {
-            levels.add(level);
+catch (            IOException e) {
+              LOG.error(e);
+            }
+catch (            InvalidDataException e) {
+              LOG.error(e);
+            }
           }
         }
       }
