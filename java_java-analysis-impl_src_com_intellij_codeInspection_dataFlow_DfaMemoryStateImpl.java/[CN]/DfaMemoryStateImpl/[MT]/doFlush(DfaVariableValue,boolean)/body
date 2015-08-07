@@ -2,21 +2,21 @@
   DfaVariableValue varNegated=varPlain.getNegatedValue();
   final int idPlain=varPlain.getID();
   final int idNegated=varNegated == null ? -1 : varNegated.getID();
-  int size=myEqClasses.size();
+  int[] classes=myIdToEqClassesIndices.get(idPlain);
+  int[] negatedClasses=myIdToEqClassesIndices.get(idNegated);
+  int[] result=ArrayUtil.mergeArrays(ObjectUtils.notNull(classes,ArrayUtil.EMPTY_INT_ARRAY),ObjectUtils.notNull(negatedClasses,ArrayUtil.EMPTY_INT_ARRAY));
   int interruptCount=0;
-  for (int varClassIndex=0; varClassIndex < size; varClassIndex++) {
+  for (  int varClassIndex : result) {
     EqClass varClass=myEqClasses.get(varClassIndex);
-    if (varClass == null)     continue;
-    for (int i=0; i < varClass.size(); i++) {
-      if ((++interruptCount & 0xf) == 0) {
-        ProgressManager.checkCanceled();
-      }
-      int cl=varClass.get(i);
-      DfaValue value=myFactory.getValue(cl);
-      if (mine(idPlain,value) || idNegated >= 0 && mine(idNegated,value)) {
-        myEqClasses.set(varClassIndex,varClass=new EqClass(varClass));
-        varClass.remove(i);
-        break;
+    if ((++interruptCount & 0xf) == 0) {
+      ProgressManager.checkCanceled();
+    }
+    varClass=new EqClass(varClass);
+    myEqClasses.set(varClassIndex,varClass);
+    for (    int id : varClass.toNativeArray()) {
+      int idUnwrapped;
+      if (id == idPlain || id == idNegated || (idUnwrapped=unwrap(myFactory.getValue(id)).getID()) == idPlain || idUnwrapped == idNegated) {
+        varClass.removeValue(id);
       }
     }
     if (varClass.isEmpty()) {
@@ -37,6 +37,8 @@
       }
     }
   }
+  removeAllFromMap(idPlain);
+  removeAllFromMap(idNegated);
   myVariableStates.remove(varPlain);
   if (varNegated != null) {
     myVariableStates.remove(varNegated);
