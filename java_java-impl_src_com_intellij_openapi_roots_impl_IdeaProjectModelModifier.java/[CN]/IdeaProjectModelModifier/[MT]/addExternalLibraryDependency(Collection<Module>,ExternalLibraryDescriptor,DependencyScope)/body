@@ -1,0 +1,31 @@
+{
+  List<String> defaultRoots=descriptor.getLibraryClassesRoots();
+  Module firstModule=ContainerUtil.getFirstItem(modules);
+  LOG.assertTrue(firstModule != null);
+  LocateLibraryDialog dialog=new LocateLibraryDialog(firstModule,defaultRoots,descriptor.getPresentableName());
+  List<String> classesRoots=dialog.showAndGetResult();
+  if (!classesRoots.isEmpty()) {
+    String libraryName=classesRoots.size() > 1 ? descriptor.getPresentableName() : null;
+    final List<String> urls=OrderEntryFix.refreshAndConvertToUrls(classesRoots);
+    if (modules.size() == 1) {
+      ModuleRootModificationUtil.addModuleLibrary(firstModule,libraryName,urls,Collections.<String>emptyList(),scope);
+    }
+ else {
+      new WriteAction(){
+        protected void run(        @NotNull Result result){
+          Library library=LibraryUtil.createLibrary(LibraryTablesRegistrar.getInstance().getLibraryTable(myProject),descriptor.getPresentableName());
+          Library.ModifiableModel model=library.getModifiableModel();
+          for (          String url : urls) {
+            model.addRoot(url,OrderRootType.CLASSES);
+          }
+          model.commit();
+          for (          Module module : modules) {
+            ModuleRootModificationUtil.addDependency(module,library,scope,false);
+          }
+        }
+      }
+.execute();
+    }
+  }
+  return true;
+}

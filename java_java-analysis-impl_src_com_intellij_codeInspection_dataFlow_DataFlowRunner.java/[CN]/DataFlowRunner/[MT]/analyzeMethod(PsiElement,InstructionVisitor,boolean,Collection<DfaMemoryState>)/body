@@ -1,7 +1,9 @@
 {
   try {
-    final ControlFlow flow=createControlFlowAnalyzer().buildControlFlow(psiBlock,ignoreAssertions);
+    ControlFlowAnalyzer analyzer=createControlFlowAnalyzer();
+    final ControlFlow flow=analyzer.buildControlFlow(psiBlock,ignoreAssertions);
     if (flow == null)     return RunnerResult.NOT_APPLICABLE;
+    boolean[] inLoop=analyzer.calcInLoop(flow);
     int endOffset=flow.getInstructionCount();
     myInstructions=flow.getInstructions();
     myNestedClosures.clear();
@@ -60,7 +62,9 @@
             LOG.debug("Too complex because too many different possible states");
             return RunnerResult.TOO_COMPLEX;
           }
-          processedStates.putValue(branching,instructionState.getMemoryState().createCopy());
+          if (inLoop[branching.getIndex()]) {
+            processedStates.putValue(branching,instructionState.getMemoryState().createCopy());
+          }
         }
         DfaInstructionState[] after=acceptInstruction(visitor,instructionState);
         for (        DfaInstructionState state : after) {
@@ -73,7 +77,9 @@
             if (processedStates.get(branching).contains(state.getMemoryState()) || incomingStates.get(branching).contains(state.getMemoryState())) {
               continue;
             }
-            incomingStates.putValue(branching,state.getMemoryState().createCopy());
+            if (inLoop[branching.getIndex()]) {
+              incomingStates.putValue(branching,state.getMemoryState().createCopy());
+            }
           }
           queue.offer(state);
         }
