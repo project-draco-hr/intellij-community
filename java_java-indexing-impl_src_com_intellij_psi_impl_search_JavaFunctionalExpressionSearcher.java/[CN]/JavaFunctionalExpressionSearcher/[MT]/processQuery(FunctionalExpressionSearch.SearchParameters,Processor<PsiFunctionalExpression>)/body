@@ -1,0 +1,45 @@
+{
+  final GlobalSearchScope useScope;
+  final PsiClass aClass;
+  final Project project;
+  final int expectedFunExprParamsCount;
+  AccessToken token=ReadAction.start();
+  try {
+    aClass=queryParameters.getElementToSearch();
+    if (!aClass.isValid() || !LambdaUtil.isFunctionalClass(aClass))     return;
+    project=aClass.getProject();
+    final Set<Module> highLevelModules=getJava8Modules(project);
+    if (highLevelModules.isEmpty())     return;
+    useScope=new JavaSourceFilterScope(new ModulesScope(highLevelModules,project).intersectWith(convertToGlobalScope(project,queryParameters.getEffectiveSearchScope())));
+    final MethodSignature functionalInterfaceMethod=LambdaUtil.getFunction(aClass);
+    LOG.assertTrue(functionalInterfaceMethod != null);
+    expectedFunExprParamsCount=functionalInterfaceMethod.getParameterTypes().length;
+  }
+  finally {
+    token.finish();
+  }
+  Set<VirtualFile> candidateFiles=getFilesWithFunctionalExpressionsScope(project,useScope);
+  if (candidateFiles.size() < 5) {
+    searchInFiles(aClass,consumer,candidateFiles,expectedFunExprParamsCount);
+    return;
+  }
+  final GlobalSearchScope candidateScope=GlobalSearchScope.filesScope(project,candidateFiles);
+  final Collection<PsiMethod> methodCandidates=getCandidateMethodsWithSuitableParams(aClass,project,useScope,candidateFiles,candidateScope);
+  final LinkedHashSet<VirtualFile> filesToProcess=new LinkedHashSet<VirtualFile>();
+  final FileBasedIndex fileBasedIndex=FileBasedIndex.getInstance();
+  for (  final PsiMethod psiMethod : methodCandidates) {
+    ApplicationManager.getApplication().runReadAction(new Runnable(){
+      public void run(){
+        if (!psiMethod.isValid())         return;
+        final int parametersCount=psiMethod.getParameterList().getParametersCount();
+        final boolean varArgs=psiMethod.isVarArgs();
+        final PsiParameter[] parameters=psiMethod.getParameterList().getParameters();
+        final GlobalSearchScope methodUseScope=convertToGlobalScope(project,psiMethod.getUseScope());
+        fileBasedIndex.processValues(JavaFunctionalExpressionIndex.JAVA_FUNCTIONAL_EXPRESSION_INDEX_ID,psiMethod.getName(),null,new SuitableFilesProcessor(filesToProcess,expectedFunExprParamsCount,parametersCount,varArgs,parameters),useScope.intersectWith(methodUseScope));
+      }
+    }
+);
+  }
+  collectFilesWithTypeOccurrencesAndFieldAssignments(aClass,candidateScope,filesToProcess);
+  searchInFiles(aClass,consumer,filesToProcess,expectedFunExprParamsCount);
+}

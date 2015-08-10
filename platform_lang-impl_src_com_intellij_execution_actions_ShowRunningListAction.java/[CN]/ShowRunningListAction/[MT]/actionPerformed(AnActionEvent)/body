@@ -1,0 +1,52 @@
+{
+  final Project project=e.getProject();
+  if (project == null || project.isDisposed())   return;
+  final Ref<Pair<? extends JComponent,String>> stateRef=new Ref<Pair<? extends JComponent,String>>();
+  final Ref<Balloon> balloonRef=new Ref<Balloon>();
+  final Timer timer=new Timer(250,null);
+  ActionListener actionListener=new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent actionEvent){
+      Balloon balloon=balloonRef.get();
+      if (project.isDisposed() || (balloon != null && balloon.isDisposed())) {
+        timer.stop();
+        return;
+      }
+      Pair<? extends JComponent,String> state=getCurrentState(project);
+      Pair<? extends JComponent,String> prevState=stateRef.get();
+      if (prevState != null && prevState.getSecond().equals(state.getSecond()))       return;
+      stateRef.set(state);
+      BalloonBuilder builder=JBPopupFactory.getInstance().createBalloonBuilder(state.getFirst());
+      builder.setShowCallout(false).setTitle(ExecutionBundle.message("show.running.list.balloon.title")).setBlockClicksThroughBalloon(true).setDialogMode(true).setHideOnKeyOutside(false);
+      IdeFrame frame=IdeFrame.KEY.getData(e.getDataContext());
+      if (frame == null) {
+        frame=WindowManagerEx.getInstanceEx().getFrame(project);
+      }
+      if (balloon != null) {
+        balloon.hide();
+      }
+      builder.setClickHandler(new ActionListener(){
+        @Override public void actionPerformed(        ActionEvent e){
+          if (e.getSource() instanceof MouseEvent) {
+            MouseEvent mouseEvent=(MouseEvent)e.getSource();
+            Component component=mouseEvent.getComponent();
+            component=SwingUtilities.getDeepestComponentAt(component,mouseEvent.getX(),mouseEvent.getY());
+            Object value=((JComponent)component).getClientProperty(KEY);
+            if (value instanceof Pair) {
+              ExecutionManagerImpl.getInstance(project).getContentManager().toFrontRunContent((Executor)((Pair)value).first,(RunContentDescriptor)((Pair)value).second);
+            }
+          }
+        }
+      }
+,false);
+      balloon=builder.createBalloon();
+      balloonRef.set(balloon);
+      JComponent component=frame.getComponent();
+      RelativePoint point=new RelativePoint(component,new Point(component.getWidth(),0));
+      balloon.show(point,Balloon.Position.below);
+    }
+  }
+;
+  timer.addActionListener(actionListener);
+  timer.setInitialDelay(0);
+  timer.start();
+}

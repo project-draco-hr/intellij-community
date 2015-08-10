@@ -1,0 +1,27 @@
+{
+  return ApplicationManager.getApplication().runReadAction(new Computable<Collection<PsiMethod>>(){
+    @Override public Collection<PsiMethod> compute(){
+      if (!aClass.isValid())       return Collections.emptyList();
+      GlobalSearchScope visibleFromCandidates=combineResolveScopes(project,candidateFiles);
+      final Set<String> usedMethodNames=newHashSet();
+      FileBasedIndex.getInstance().processAllKeys(JavaFunctionalExpressionIndex.JAVA_FUNCTIONAL_EXPRESSION_INDEX_ID,new CommonProcessors.CollectProcessor<String>(usedMethodNames),candidateScope,null);
+      final LinkedHashSet<PsiMethod> methods=newLinkedHashSet();
+      Processor<PsiMethod> methodProcessor=new Processor<PsiMethod>(){
+        @Override public boolean process(        PsiMethod method){
+          if (usedMethodNames.contains(method.getName())) {
+            methods.add(method);
+          }
+          return true;
+        }
+      }
+;
+      StubIndexKey<String,PsiMethod> key=JavaMethodParameterTypesIndex.getInstance().getKey();
+      StubIndex index=StubIndex.getInstance();
+      index.processElements(key,aClass.getName(),project,useScope.intersectWith(visibleFromCandidates),PsiMethod.class,methodProcessor);
+      index.processElements(key,JavaMethodElementType.TYPE_PARAMETER_PSEUDO_NAME,project,visibleFromCandidates,PsiMethod.class,methodProcessor);
+      LOG.info("#methods: " + methods.size());
+      return methods;
+    }
+  }
+);
+}

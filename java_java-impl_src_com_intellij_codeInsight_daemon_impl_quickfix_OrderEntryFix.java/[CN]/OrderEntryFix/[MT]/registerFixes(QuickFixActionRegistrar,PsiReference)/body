@@ -9,20 +9,11 @@
   final ProjectFileIndex fileIndex=ProjectRootManager.getInstance(project).getFileIndex();
   final Module currentModule=fileIndex.getModuleForFile(classVFile);
   if (currentModule == null)   return null;
-  final List<LocalQuickFix> providedFixes=findFixes(new Function<MissingDependencyFixProvider,List<LocalQuickFix>>(){
-    @Override public List<LocalQuickFix> fun(    MissingDependencyFixProvider provider){
-      return provider.registerFixes(registrar,reference);
-    }
-  }
-);
-  if (providedFixes != null) {
-    return providedFixes;
-  }
   List<LocalQuickFix> result=new ArrayList<LocalQuickFix>();
   JavaPsiFacade psiFacade=JavaPsiFacade.getInstance(project);
   String fullReferenceText=reference.getCanonicalText();
   for (  ExternalLibraryResolver resolver : ExternalLibraryResolver.EP_NAME.getExtensions()) {
-    final ExternalClassResolveResult resolveResult=resolver.resolveClass(shortReferenceName,isReferenceToAnnotation(psiElement));
+    final ExternalClassResolveResult resolveResult=resolver.resolveClass(shortReferenceName,isReferenceToAnnotation(psiElement),currentModule);
     OrderEntryFix fix=null;
     if (resolveResult != null && psiFacade.findClass(resolveResult.getQualifiedClassName(),currentModule.getModuleWithDependenciesAndLibrariesScope(true)) == null) {
       fix=new AddExternalLibraryToDependenciesQuickFix(currentModule,resolveResult.getLibrary(),reference,resolveResult.getQualifiedClassName());
@@ -50,15 +41,6 @@
   }
   classes=allowedDependencies.toArray(new PsiClass[allowedDependencies.size()]);
   OrderEntryFix moduleDependencyFix=new AddModuleDependencyFix(currentModule,classVFile,classes,reference);
-  final PsiClass[] finalClasses=classes;
-  final OrderEntryFix finalModuleDependencyFix=moduleDependencyFix;
-  final OrderEntryFix providedModuleDependencyFix=provideFix(new Function<MissingDependencyFixProvider,OrderEntryFix>(){
-    @Override public OrderEntryFix fun(    MissingDependencyFixProvider provider){
-      return provider.getAddModuleDependencyFix(reference,finalModuleDependencyFix,currentModule,classVFile,finalClasses);
-    }
-  }
-);
-  moduleDependencyFix=ObjectUtils.notNull(providedModuleDependencyFix,moduleDependencyFix);
   registrar.register(moduleDependencyFix);
   result.add(moduleDependencyFix);
   for (  final PsiClass aClass : classes) {
@@ -81,38 +63,9 @@
         if (entryForFile != null && !(entryForFile instanceof ExportableOrderEntry && ((ExportableOrderEntry)entryForFile).getScope() == DependencyScope.TEST && !ModuleRootManager.getInstance(currentModule).getFileIndex().isInTestSourceContent(classVFile))) {
           continue;
         }
-        final OrderEntryFix platformFix=new OrderEntryFix(){
-          @Override @NotNull public String getText(){
-            return QuickFixBundle.message("orderEntry.fix.add.library.to.classpath",libraryEntry.getPresentableName());
-          }
-          @Override @NotNull public String getFamilyName(){
-            return QuickFixBundle.message("orderEntry.fix.family.add.library.to.classpath");
-          }
-          @Override public boolean isAvailable(          @NotNull Project project,          Editor editor,          PsiFile file){
-            return !project.isDisposed() && !currentModule.isDisposed() && libraryEntry.isValid();
-          }
-          @Override public void invoke(          @NotNull final Project project,          @Nullable final Editor editor,          PsiFile file){
-            OrderEntryUtil.addLibraryToRoots(libraryEntry,currentModule);
-            if (editor != null) {
-              DumbService.getInstance(project).withAlternativeResolveEnabled(new Runnable(){
-                @Override public void run(){
-                  new AddImportAction(project,reference,editor,aClass).execute();
-                }
-              }
-);
-            }
-          }
-        }
-;
-        final OrderEntryFix providedFix=provideFix(new Function<MissingDependencyFixProvider,OrderEntryFix>(){
-          @Override public OrderEntryFix fun(          MissingDependencyFixProvider provider){
-            return provider.getAddLibraryToClasspathFix(reference,platformFix,currentModule,libraryEntry,aClass);
-          }
-        }
-);
-        final OrderEntryFix fix=ObjectUtils.notNull(providedFix,platformFix);
-        registrar.register(fix);
-        result.add(fix);
+        final OrderEntryFix platformFix=new AddLibraryToDependenciesFix(currentModule,library,reference,aClass.getQualifiedName());
+        registrar.register(platformFix);
+        result.add(platformFix);
       }
     }
   }

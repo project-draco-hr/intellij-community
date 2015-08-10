@@ -1,20 +1,34 @@
 {
-  final String name=getBaseName();
-  final Set<String> fileNames=ContainerUtil.map2Set(myLocalesModel.getLocales(),new Function<Locale,String>(){
-    @Override public String fun(    Locale locale){
-      return locale == PropertiesUtil.DEFAULT_LOCALE ? (name + ".properties") : (name + "_" + locale.toString()+ ".properties");
-    }
-  }
-);
-  return ApplicationManager.getApplication().runWriteAction(new Computable<List<PsiFile>>(){
+  final Set<String> fileNames=getFileNamesToCreate();
+  final List<PsiFile> createdFiles=WriteCommandAction.runWriteCommandAction(myProject,new Computable<List<PsiFile>>(){
     @Override public List<PsiFile> compute(){
-      return ContainerUtil.map(fileNames,new Function<String,PsiFile>(){
-        @Override public PsiFile fun(        String n){
-          return myDirectory.createFile(n);
+      return ApplicationManager.getApplication().runWriteAction(new Computable<List<PsiFile>>(){
+        @Override public List<PsiFile> compute(){
+          return ContainerUtil.map(fileNames,new Function<String,PsiFile>(){
+            @Override public PsiFile fun(            String n){
+              final boolean isXml=myResourceBundle == null ? myUseXMLBasedPropertiesCheckBox.isSelected() : myResourceBundle.getDefaultPropertiesFile() instanceof XmlPropertiesFile;
+              if (isXml) {
+                FileTemplate template=FileTemplateManager.getInstance(myProject).getInternalTemplate("XML Properties File.xml");
+                LOG.assertTrue(template != null);
+                try {
+                  return (PsiFile)FileTemplateUtil.createFromTemplate(template,n,null,myDirectory);
+                }
+ catch (                Exception e) {
+                  throw new RuntimeException(e);
+                }
+              }
+ else {
+                return myDirectory.createFile(n);
+              }
+            }
+          }
+);
         }
       }
 );
     }
   }
 );
+  combineToResourceBundleIfNeed(createdFiles);
+  return createdFiles;
 }
