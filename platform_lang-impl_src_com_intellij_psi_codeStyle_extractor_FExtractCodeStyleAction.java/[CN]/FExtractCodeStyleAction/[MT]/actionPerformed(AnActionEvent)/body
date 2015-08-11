@@ -1,0 +1,31 @@
+{
+  DataContext dataContext=e.getDataContext();
+  final Project project=CommonDataKeys.PROJECT.getData(dataContext);
+  if (project == null)   return;
+  Editor editor=CommonDataKeys.EDITOR.getData(dataContext);
+  if (editor == null)   return;
+  final PsiFile file=PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument());
+  if (file == null)   return;
+  Language language=file.getLanguage();
+  final FLangCodeStyleExtractor extractor=FLangCodeStyleExtractor.EXTENSION.forLanguage(language);
+  if (extractor == null)   return;
+  final CodeStyleSettings settings=CodeStyleSettingsManager.getSettings(project);
+  final FCodeStyleDeriveProcessor genProcessor=new FGenProcessor(extractor);
+  final Task.Backgroundable task=new Task.Backgroundable(project,"Code style extractor",true){
+    @Override public void run(    @NotNull ProgressIndicator indicator){
+      try {
+        CodeStyleSettings cloneSettings=settings.clone();
+        FValuesContainer res=genProcessor.runWithProgress(project,cloneSettings,file,indicator);
+        reportResult(res,project,cloneSettings,file);
+      }
+ catch (      ProcessCanceledException e) {
+        FUtils.logError("Code extraction was canceled");
+      }
+catch (      Throwable t) {
+        t.printStackTrace();
+      }
+    }
+  }
+;
+  ProgressManager.getInstance().run(task);
+}
