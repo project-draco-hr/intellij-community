@@ -2,19 +2,35 @@
   final Graph<PluginId> graph=createPluginIdGraph(idToDescriptorMap);
   final DFSTBuilder<PluginId> builder=new DFSTBuilder<PluginId>(graph);
   if (!builder.isAcyclic()) {
+    final List<String> cycles=new ArrayList<String>();
     builder.getSCCs().forEach(new TIntProcedure(){
       private int myTNumber;
       @Override public boolean execute(      int size){
         if (size > 1) {
+          String cycle="";
           for (int j=0; j < size; j++) {
-            idToDescriptorMap.get(builder.getNodeByTNumber(myTNumber + j)).setEnabled(false);
+            PluginId id=builder.getNodeByTNumber(myTNumber + j);
+            idToDescriptorMap.get(id).setEnabled(false);
+            cycle+=id.getIdString() + " ";
           }
+          cycles.add(cycle);
         }
         myTNumber+=size;
         return true;
       }
     }
 );
+    final String cyclePresentation;
+    if (ApplicationManager.getApplication().isInternal()) {
+      cyclePresentation=StringUtil.join(cycles,";");
+    }
+ else {
+      final Couple<PluginId> circularDependency=builder.getCircularDependency();
+      final PluginId id=circularDependency.getFirst();
+      final PluginId parentId=circularDependency.getSecond();
+      cyclePresentation=id + "->" + parentId+ "->...->"+ id;
+    }
+    errors.add(IdeBundle.message("error.plugins.should.not.have.cyclic.dependencies") + " " + cyclePresentation);
   }
   final Comparator<PluginId> idComparator=builder.comparator();
   return new Comparator<IdeaPluginDescriptor>(){
