@@ -6,6 +6,7 @@
   try {
     ThreadReferenceProxyImpl threadProxy=null;
     int lastFrameIndex=-1;
+    boolean anotherFrame=false;
     while (true) {
       try {
         LocalVariableProxyImpl local=frameProxy.visibleVariableByName(myLocalVariableName);
@@ -19,24 +20,29 @@
         if (!(e.getCause() instanceof AbsentInformationException)) {
           throw e;
         }
-        if (myParameterIndex < 0) {
-          throw e;
+        if (!anotherFrame) {
+          if (myParameterIndex < 0) {
+            throw e;
+          }
+          final List<Value> values=frameProxy.getArgumentValues();
+          if (values.isEmpty() || myParameterIndex >= values.size()) {
+            throw e;
+          }
+          return values.get(myParameterIndex);
         }
-        final List<Value> values=frameProxy.getArgumentValues();
-        if (values.isEmpty() || myParameterIndex >= values.size()) {
-          throw e;
-        }
-        return values.get(myParameterIndex);
       }
-      if (myIsJspSpecial) {
+      if (anotherFrame || needToSwitchFrames(frameProxy)) {
         if (threadProxy == null) {
           threadProxy=frameProxy.threadProxy();
           lastFrameIndex=threadProxy.frameCount() - 1;
         }
-        final int currentFrameIndex=frameProxy.getFrameIndex();
+        int currentFrameIndex=frameProxy.getFrameIndex();
         if (currentFrameIndex < lastFrameIndex) {
           frameProxy=threadProxy.frame(currentFrameIndex + 1);
-          continue;
+          if (frameProxy != null) {
+            anotherFrame=true;
+            continue;
+          }
         }
       }
       break;
