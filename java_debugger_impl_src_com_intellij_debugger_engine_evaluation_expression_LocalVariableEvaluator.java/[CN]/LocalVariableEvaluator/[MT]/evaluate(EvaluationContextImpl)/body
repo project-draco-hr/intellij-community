@@ -6,21 +6,24 @@
   try {
     ThreadReferenceProxyImpl threadProxy=null;
     int lastFrameIndex=-1;
-    boolean anotherFrame=false;
+    PsiVariable variable=null;
+    boolean topFrame=true;
     while (true) {
       try {
         LocalVariableProxyImpl local=frameProxy.visibleVariableByName(myLocalVariableName);
         if (local != null) {
-          myEvaluatedVariable=local;
-          myContext=context;
-          return frameProxy.getValue(local);
+          if (topFrame || variable.equals(resolveVariable(frameProxy,myLocalVariableName,context.getProject(),context.getDebugProcess()))) {
+            myEvaluatedVariable=local;
+            myContext=context;
+            return frameProxy.getValue(local);
+          }
         }
       }
  catch (      EvaluateException e) {
         if (!(e.getCause() instanceof AbsentInformationException)) {
           throw e;
         }
-        if (!anotherFrame) {
+        if (topFrame) {
           if (myParameterIndex < 0) {
             throw e;
           }
@@ -31,7 +34,11 @@
           return values.get(myParameterIndex);
         }
       }
-      if (anotherFrame || needToSwitchFrames(frameProxy)) {
+      if (myCanScanFrames) {
+        if (topFrame) {
+          variable=resolveVariable(frameProxy,myLocalVariableName,context.getProject(),context.getDebugProcess());
+          if (variable == null)           break;
+        }
         if (threadProxy == null) {
           threadProxy=frameProxy.threadProxy();
           lastFrameIndex=threadProxy.frameCount() - 1;
@@ -40,7 +47,7 @@
         if (currentFrameIndex < lastFrameIndex) {
           frameProxy=threadProxy.frame(currentFrameIndex + 1);
           if (frameProxy != null) {
-            anotherFrame=true;
+            topFrame=false;
             continue;
           }
         }
