@@ -1,6 +1,45 @@
 {
-  if (texts.getLocal() == null)   return ApplyPatchStatus.FAILURE;
-  final SimpleDiffRequest simpleRequest=createBadDiffRequest(project,file,texts,readonly);
-  DiffManager.getInstance().getDiffTool().show(simpleRequest);
+  final Document document=FileDocumentManager.getInstance().getDocument(file);
+  if (texts.getLocal() == null || document == null)   return ApplyPatchStatus.FAILURE;
+  final CharSequence oldContent=document.getImmutableCharSequence();
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    @Override public void run(){
+      document.setText(texts.getPatched());
+    }
+  }
+);
+  final String fullPath=file.getParent() == null ? file.getPath() : file.getParent().getPath();
+  final String windowTitle="Result Of Patch Apply To " + file.getName() + " ("+ fullPath+ ")";
+  final List<String> titles=ContainerUtil.list(VcsBundle.message("diff.title.local"),"Patched (with problems)");
+  final DiffContentFactory contentFactory=DiffContentFactory.getInstance();
+  final DocumentContent originalContent=contentFactory.create(texts.getLocal().toString(),file.getFileType());
+  final DiffContent mergedContent=contentFactory.create(project,document);
+  final List<DiffContent> contents=ContainerUtil.list(originalContent,mergedContent);
+  final DiffRequest request=new com.intellij.diff.requests.SimpleDiffRequest(windowTitle,contents,titles);
+  DiffUtil.addNotification(new DiffIsApproximateNotification(),request);
+  final DiffDialogHints dialogHints=new DiffDialogHints(WindowWrapper.Mode.MODAL);
+  if (!readonly) {
+    dialogHints.setCancelAction(new BooleanGetter(){
+      @Override public boolean get(){
+        ApplicationManager.getApplication().runWriteAction(new Runnable(){
+          @Override public void run(){
+            document.setText(oldContent);
+            FileDocumentManager.getInstance().saveDocument(document);
+          }
+        }
+);
+        return true;
+      }
+    }
+);
+    dialogHints.setOkAction(new BooleanGetter(){
+      @Override public boolean get(){
+        FileDocumentManager.getInstance().saveDocument(document);
+        return true;
+      }
+    }
+);
+  }
+  DiffManager.getInstance().showDiff(project,request,dialogHints);
   return ApplyPatchStatus.SUCCESS;
 }
