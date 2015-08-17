@@ -1,0 +1,33 @@
+{
+  final PatchChange change=getChange();
+  final FilePatch patch=getPatch();
+  final String path=patch.getBeforeName() == null ? patch.getAfterName() : patch.getBeforeName();
+  final Getter<CharSequence> baseContents=new Getter<CharSequence>(){
+    @Override public CharSequence get(){
+      return patchReader.getBaseRevision(project,path);
+    }
+  }
+;
+  return new DiffRequestPresentableProxy(){
+    @NotNull @Override public DiffRequestPresentable init() throws VcsException {
+      if (isConflictingChange()) {
+        final Getter<ApplyPatchForBaseRevisionTexts> revisionTextsGetter=new Getter<ApplyPatchForBaseRevisionTexts>(){
+          @Override public ApplyPatchForBaseRevisionTexts get(){
+            final VirtualFile currentBase=getCurrentBase();
+            return ApplyPatchForBaseRevisionTexts.create(project,currentBase,VcsUtil.getFilePath(currentBase),getPatch(),baseContents);
+          }
+        }
+;
+        return new MergedDiffRequestPresentable(project,revisionTextsGetter,getCurrentBase(),getPatch().getAfterVersionId());
+      }
+ else {
+        return new ChangeDiffRequestPresentable(project,change);
+      }
+    }
+    @Override public String getPathPresentation(){
+      final File ioCurrentBase=getIoCurrentBase();
+      return ioCurrentBase == null ? getCurrentPath() : ioCurrentBase.getPath();
+    }
+  }
+;
+}
