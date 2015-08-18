@@ -1,0 +1,54 @@
+{
+  if (targetContainer == null || !(targetContainer instanceof PsiDirectory)) {
+    return;
+  }
+  final Course course=CCProjectService.getInstance(project).getCourse();
+  final PsiDirectory sourceDirectory=(PsiDirectory)elements[0];
+  final Lesson sourceLesson=course.getLesson(sourceDirectory.getName());
+  final Lesson targetLesson=course.getLesson(((PsiDirectory)targetContainer).getName());
+  if (targetLesson == null) {
+    Messages.showInfoMessage("Lessons can be moved only to other lessons","Incorrect Target For Move");
+    return;
+  }
+  final CCMoveStudyItemDialog dialog=new CCMoveStudyItemDialog(project,EduNames.LESSON,targetLesson.getName());
+  dialog.show();
+  if (dialog.getExitCode() != DialogWrapper.OK_EXIT_CODE) {
+    return;
+  }
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    @Override public void run(){
+      try {
+        sourceDirectory.getVirtualFile().rename(this,"tmp");
+      }
+ catch (      IOException e) {
+        LOG.error(e);
+      }
+    }
+  }
+);
+  final VirtualFile[] lessonDirs=project.getBaseDir().getChildren();
+  final Function<VirtualFile,StudyItem> getStudyItem=new Function<VirtualFile,StudyItem>(){
+    @Override public StudyItem fun(    VirtualFile file){
+      return course.getLesson(file.getName());
+    }
+  }
+;
+  int sourceLessonIndex=sourceLesson.getIndex();
+  sourceLesson.setIndex(-1);
+  CCUtils.updateHigherElements(lessonDirs,getStudyItem,sourceLessonIndex,EduNames.LESSON,-1);
+  final int newItemIndex=targetLesson.getIndex() + dialog.getIndexDelta();
+  CCUtils.updateHigherElements(lessonDirs,getStudyItem,newItemIndex - 1,EduNames.LESSON,1);
+  sourceLesson.setIndex(newItemIndex);
+  Collections.sort(course.getLessons(),EduUtils.INDEX_COMPARATOR);
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    @Override public void run(){
+      try {
+        sourceDirectory.getVirtualFile().rename(this,EduNames.LESSON + newItemIndex);
+      }
+ catch (      IOException e) {
+        LOG.error(e);
+      }
+    }
+  }
+);
+}
