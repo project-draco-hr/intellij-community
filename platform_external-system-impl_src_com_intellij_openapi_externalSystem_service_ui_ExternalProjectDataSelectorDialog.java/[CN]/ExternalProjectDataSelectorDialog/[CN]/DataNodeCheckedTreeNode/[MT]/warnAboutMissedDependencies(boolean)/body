@@ -1,0 +1,66 @@
+{
+  List<DataNode<ModuleData>> selectedModules=ContainerUtil.newSmartList();
+  for (  DataNode node : TreeUtil.collectSelectedObjectsOfType(myTree,DataNode.class)) {
+    if (node.getKey().equals(ProjectKeys.MODULE)) {
+      selectedModules.add(node);
+    }
+  }
+  final Set<DataNode<ModuleData>> deps=ContainerUtil.newHashSet();
+  for (  DataNode<ModuleData> selectedModule : selectedModules) {
+    if (checked) {
+      deps.addAll(ContainerUtil.filter(dependentNodeMap.get(selectedModule),new Condition<DataNode<ModuleData>>(){
+        @Override public boolean value(        DataNode<ModuleData> node){
+          final DataNodeCheckedTreeNode uiNode=node.getUserData(CONNECTED_UI_NODE_KEY);
+          return uiNode != null && !uiNode.isChecked();
+        }
+      }
+));
+    }
+ else {
+      for (      DataNode<ModuleData> node : dependentNodeMap.keySet()) {
+        final DataNodeCheckedTreeNode uiNode=node.getUserData(CONNECTED_UI_NODE_KEY);
+        if (uiNode != null && !uiNode.isChecked())         continue;
+        Collection<DataNode<ModuleData>> dependencies=dependentNodeMap.get(node);
+        if (dependencies.contains(selectedModule)) {
+          deps.add(node);
+        }
+      }
+    }
+  }
+  if (!deps.isEmpty() && !selectedModules.isEmpty()) {
+    final String listOfSelectedModules=StringUtil.join(selectedModules,new Function<DataNode<ModuleData>,String>(){
+      @Override public String fun(      DataNode<ModuleData> node){
+        return node.getData().getId();
+      }
+    }
+,", ");
+    final String listOfDependencies=StringUtil.join(deps,new Function<DataNode<ModuleData>,String>(){
+      @Override public String fun(      final DataNode<ModuleData> node){
+        return node.getData().getId();
+      }
+    }
+,"<br>");
+    final String message;
+    if (!checked) {
+      message=String.format("<html>The following module%s <br><b>%s</b><br>%s enabled and depend%s on selected modules. <br>Would you like to disable %s too?</html>",deps.size() == 1 ? "" : "s",listOfDependencies,deps.size() == 1 ? "is" : "are",deps.size() == 1 ? "" : "s",deps.size() == 1 ? "it" : "them");
+    }
+ else {
+      message=String.format("<html>The following module%s on which <b>%s</b> depend%s %s disabled:<br><b>%s</b><br>Would you like to enable %s?</html>",deps.size() == 1 ? "" : "s",listOfSelectedModules,selectedModules.size() == 1 ? "s" : "",deps.size() == 1 ? "is" : "are",listOfDependencies,deps.size() == 1 ? "it" : "them");
+    }
+    if (Messages.showOkCancelDialog(message,checked ? "Enable Dependant Modules" : "Disable Modules with Dependency on this",Messages.getQuestionIcon()) == Messages.OK) {
+      List<DataNodeCheckedTreeNode> nodes=ContainerUtil.mapNotNull(deps,new Function<DataNode<ModuleData>,DataNodeCheckedTreeNode>(){
+        @Override public DataNodeCheckedTreeNode fun(        DataNode<ModuleData> node){
+          return node.getUserData(CONNECTED_UI_NODE_KEY);
+        }
+      }
+);
+      for (      DataNodeCheckedTreeNode node : nodes) {
+        DefaultTreeModel treeModel=(DefaultTreeModel)myTree.getModel();
+        myTree.addSelectionPath(new TreePath(treeModel.getPathToRoot(node)));
+      }
+      for (      DataNodeCheckedTreeNode node : nodes) {
+        node.setChecked(checked);
+      }
+    }
+  }
+}

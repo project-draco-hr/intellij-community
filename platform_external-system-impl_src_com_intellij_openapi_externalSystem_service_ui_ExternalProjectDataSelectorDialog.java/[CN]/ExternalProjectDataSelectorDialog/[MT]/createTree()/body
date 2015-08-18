@@ -1,0 +1,50 @@
+{
+  final Couple<CheckedTreeNode> rootAndPreselectedNode=createRoot();
+  final CheckedTreeNode root=rootAndPreselectedNode.first;
+  final CheckboxTree tree=new CheckboxTree(new CheckboxTree.CheckboxTreeCellRenderer(true,false){
+    @Override public void customizeRenderer(    JTree tree,    Object value,    boolean selected,    boolean expanded,    boolean leaf,    int row,    boolean hasFocus){
+      if (!(value instanceof DataNodeCheckedTreeNode)) {
+        return;
+      }
+      final DataNodeCheckedTreeNode node=(DataNodeCheckedTreeNode)value;
+      String tooltip=null;
+      boolean hasErrors=false;
+      if (node.isChecked() && node.myDataNode.getKey().equals(ProjectKeys.MODULE)) {
+        final String listOfUncheckedDependencies=StringUtil.join(dependentNodeMap.get((DataNode<ModuleData>)node.myDataNode),new Function<DataNode<ModuleData>,String>(){
+          @Override public String fun(          final DataNode<ModuleData> depNode){
+            final DataNodeCheckedTreeNode uiNode=depNode.getUserData(CONNECTED_UI_NODE_KEY);
+            return uiNode != null && !uiNode.isChecked() ? depNode.getData().getId() : null;
+          }
+        }
+,"<br>");
+        if (StringUtil.isNotEmpty(listOfUncheckedDependencies)) {
+          hasErrors=true;
+          tooltip="There are not selected module dependencies of the module: <br><b>" + listOfUncheckedDependencies + "</b>";
+        }
+      }
+      ColoredTreeCellRenderer renderer=getTextRenderer();
+      renderer.setIcon(node.icon);
+      renderer.append(node.text,hasErrors ? SimpleTextAttributes.ERROR_ATTRIBUTES : SimpleTextAttributes.REGULAR_ATTRIBUTES);
+      if (!StringUtil.isEmptyOrSpaces(node.comment)) {
+        String description=node.comment;
+        if (node.comment.length() > MAX_PATH_LENGTH) {
+          description=node.comment.substring(0,MAX_PATH_LENGTH) + "...";
+        }
+        renderer.append(" (" + description + ")",SimpleTextAttributes.GRAY_ATTRIBUTES);
+        setToolTipText(StringUtil.isEmpty(tooltip) ? node.comment : tooltip);
+      }
+ else {
+        setToolTipText(StringUtil.isNotEmpty(tooltip) ? tooltip : null);
+      }
+    }
+  }
+,root,new CheckboxTreeBase.CheckPolicy(true,true,false,false));
+  TreeUtil.expand(tree,1);
+  if (rootAndPreselectedNode.second != null) {
+    TreeUtil.selectNode(tree,rootAndPreselectedNode.second);
+  }
+ else {
+    tree.setSelectionRow(0);
+  }
+  return tree;
+}

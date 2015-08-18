@@ -1,6 +1,6 @@
 {
   final PsiElement psiElement=reference.getElement();
-  @NonNls final String referenceName=reference.getRangeInElement().substring(psiElement.getText());
+  @NonNls final String shortReferenceName=reference.getRangeInElement().substring(psiElement.getText());
   Project project=psiElement.getProject();
   PsiFile containingFile=psiElement.getContainingFile();
   if (containingFile == null)   return null;
@@ -9,95 +9,38 @@
   final ProjectFileIndex fileIndex=ProjectRootManager.getInstance(project).getFileIndex();
   final Module currentModule=fileIndex.getModuleForFile(classVFile);
   if (currentModule == null)   return null;
-  if ("TestCase".equals(referenceName) || isAnnotation(psiElement) && isJunitAnnotationName(referenceName,psiElement)) {
-    final boolean isJunit4=!referenceName.equals("TestCase");
-    @NonNls final String className=isJunit4 ? "org.junit." + referenceName : "junit.framework.TestCase";
-    PsiClass found=JavaPsiFacade.getInstance(project).findClass(className,currentModule.getModuleWithDependenciesAndLibrariesScope(true));
-    if (found != null)     return null;
-    final OrderEntryFix fix=new OrderEntryFix(){
-      @Override @NotNull public String getText(){
-        return QuickFixBundle.message("orderEntry.fix.add.junit.jar.to.classpath");
-      }
-      @Override @NotNull public String getFamilyName(){
-        return getText();
-      }
-      @Override public boolean isAvailable(      @NotNull Project project,      Editor editor,      PsiFile file){
-        return !project.isDisposed() && !currentModule.isDisposed();
-      }
-      @Override public void invoke(      @NotNull Project project,      @Nullable Editor editor,      PsiFile file){
-        if (isJunit4) {
-          final VirtualFile location=PsiUtilCore.getVirtualFile(reference.getElement());
-          boolean inTests=location != null && ModuleRootManager.getInstance(currentModule).getFileIndex().isInTestSourceContent(location);
-          DumbService.getInstance(project).setAlternativeResolveEnabled(true);
-          try {
-            addJUnit4Library(inTests,currentModule);
-            final GlobalSearchScope scope=GlobalSearchScope.moduleWithLibrariesScope(currentModule);
-            final PsiClass aClass=JavaPsiFacade.getInstance(project).findClass(className,scope);
-            if (aClass != null && editor != null) {
-              new AddImportAction(project,reference,editor,aClass).execute();
-            }
-          }
- catch (          ClassNotFoundException e) {
-            throw new RuntimeException(e);
-          }
- finally {
-            DumbService.getInstance(project).setAlternativeResolveEnabled(false);
-          }
-        }
- else {
-          addBundledJarToRoots(project,editor,currentModule,reference,className,JavaSdkUtil.getJunit3JarPath());
-        }
-      }
-    }
-;
-    registrar.register(fix);
-    return Collections.singletonList((LocalQuickFix)fix);
-  }
-  if (isAnnotation(psiElement) && AnnotationUtil.isJetbrainsAnnotation(referenceName)) {
-    @NonNls final String className="org.jetbrains.annotations." + referenceName;
-    PsiClass found=JavaPsiFacade.getInstance(project).findClass(className,currentModule.getModuleWithDependenciesAndLibrariesScope(true));
-    if (found != null)     return null;
-    final OrderEntryFix fix=new OrderEntryFix(){
-      @Override @NotNull public String getText(){
-        return QuickFixBundle.message("orderEntry.fix.add.annotations.jar.to.classpath");
-      }
-      @Override @NotNull public String getFamilyName(){
-        return getText();
-      }
-      @Override public boolean isAvailable(      @NotNull Project project,      Editor editor,      PsiFile file){
-        return !project.isDisposed() && !currentModule.isDisposed();
-      }
-      @Override public void invoke(      @NotNull final Project project,      final Editor editor,      PsiFile file){
-        ApplicationManager.getApplication().invokeLater(new Runnable(){
-          @Override public void run(){
-            final String libraryPath=locateAnnotationsJar(currentModule);
-            if (libraryPath != null) {
-              new WriteCommandAction(project){
-                @Override protected void run(                final Result result) throws Throwable {
-                  addBundledJarToRoots(project,editor,currentModule,reference,"org.jetbrains.annotations." + referenceName,libraryPath);
-                }
-              }
-.execute();
-            }
-          }
-        }
-);
-      }
-    }
-;
-    registrar.register(fix);
-    return Collections.singletonList((LocalQuickFix)fix);
-  }
   List<LocalQuickFix> result=new ArrayList<LocalQuickFix>();
+  JavaPsiFacade psiFacade=JavaPsiFacade.getInstance(project);
+  String fullReferenceText=reference.getCanonicalText();
+  for (  ExternalLibraryResolver resolver : ExternalLibraryResolver.EP_NAME.getExtensions()) {
+    final ExternalClassResolveResult resolveResult=resolver.resolveClass(shortReferenceName,isReferenceToAnnotation(psiElement),currentModule);
+    OrderEntryFix fix=null;
+    if (resolveResult != null && psiFacade.findClass(resolveResult.getQualifiedClassName(),currentModule.getModuleWithDependenciesAndLibrariesScope(true)) == null) {
+      fix=new AddExternalLibraryToDependenciesQuickFix(currentModule,resolveResult.getLibrary(),reference,resolveResult.getQualifiedClassName());
+    }
+ else     if (!fullReferenceText.equals(shortReferenceName)) {
+      ExternalLibraryDescriptor descriptor=resolver.resolvePackage(fullReferenceText);
+      if (descriptor != null) {
+        fix=new AddExternalLibraryToDependenciesQuickFix(currentModule,descriptor,reference,null);
+      }
+    }
+    if (fix != null) {
+      registrar.register(fix);
+      result.add(fix);
+    }
+  }
+  if (!result.isEmpty()) {
+    return result;
+  }
   Set<Object> librariesToAdd=new THashSet<Object>();
   final JavaPsiFacade facade=JavaPsiFacade.getInstance(psiElement.getProject());
-  PsiClass[] classes=PsiShortNamesCache.getInstance(project).getClassesByName(referenceName,GlobalSearchScope.allScope(project));
+  PsiClass[] classes=PsiShortNamesCache.getInstance(project).getClassesByName(shortReferenceName,GlobalSearchScope.allScope(project));
   List<PsiClass> allowedDependencies=filterAllowedDependencies(psiElement,classes);
   if (allowedDependencies.isEmpty()) {
     return result;
   }
   classes=allowedDependencies.toArray(new PsiClass[allowedDependencies.size()]);
-  final OrderEntryFix moduleDependencyFix=new AddModuleDependencyFix(currentModule,classVFile,classes,reference);
+  OrderEntryFix moduleDependencyFix=new AddModuleDependencyFix(currentModule,classVFile,classes,reference);
   registrar.register(moduleDependencyFix);
   result.add(moduleDependencyFix);
   for (  final PsiClass aClass : classes) {
@@ -120,31 +63,9 @@
         if (entryForFile != null && !(entryForFile instanceof ExportableOrderEntry && ((ExportableOrderEntry)entryForFile).getScope() == DependencyScope.TEST && !ModuleRootManager.getInstance(currentModule).getFileIndex().isInTestSourceContent(classVFile))) {
           continue;
         }
-        final OrderEntryFix fix=new OrderEntryFix(){
-          @Override @NotNull public String getText(){
-            return QuickFixBundle.message("orderEntry.fix.add.library.to.classpath",libraryEntry.getPresentableName());
-          }
-          @Override @NotNull public String getFamilyName(){
-            return QuickFixBundle.message("orderEntry.fix.family.add.library.to.classpath");
-          }
-          @Override public boolean isAvailable(          @NotNull Project project,          Editor editor,          PsiFile file){
-            return !project.isDisposed() && !currentModule.isDisposed() && libraryEntry.isValid();
-          }
-          @Override public void invoke(          @NotNull final Project project,          @Nullable final Editor editor,          PsiFile file){
-            OrderEntryUtil.addLibraryToRoots(libraryEntry,currentModule);
-            if (editor != null) {
-              DumbService.getInstance(project).withAlternativeResolveEnabled(new Runnable(){
-                @Override public void run(){
-                  new AddImportAction(project,reference,editor,aClass).execute();
-                }
-              }
-);
-            }
-          }
-        }
-;
-        registrar.register(fix);
-        result.add(fix);
+        final OrderEntryFix platformFix=new AddLibraryToDependenciesFix(currentModule,library,reference,aClass.getQualifiedName());
+        registrar.register(platformFix);
+        result.add(platformFix);
       }
     }
   }

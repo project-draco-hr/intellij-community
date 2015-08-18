@@ -1,0 +1,117 @@
+{
+  myPanel.setLayout(new BorderLayout());
+  myPanel.add(myHeaderPanel,BorderLayout.NORTH);
+  myGutterComponent.setOpaque(true);
+  myScrollPane.setViewportView(myEditorComponent);
+  myScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
+  myScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+  myScrollPane.setRowHeaderView(myGutterComponent);
+  myEditorComponent.setTransferHandler(new MyTransferHandler());
+  myEditorComponent.setAutoscrolls(true);
+  if (mayShowToolbar()) {
+    JLayeredPane layeredPane=new JBLayeredPane(){
+      @Override public void doLayout(){
+        final Component[] components=getComponents();
+        final Rectangle r=getBounds();
+        for (        Component c : components) {
+          if (c instanceof JScrollPane) {
+            c.setBounds(0,0,r.width,r.height);
+          }
+ else {
+            final Dimension d=c.getPreferredSize();
+            final MyScrollBar scrollBar=getVerticalScrollBar();
+            c.setBounds(r.width - d.width - scrollBar.getWidth()- 30,20,d.width,d.height);
+          }
+        }
+      }
+      @Override public Dimension getPreferredSize(){
+        return myScrollPane.getPreferredSize();
+      }
+    }
+;
+    layeredPane.add(myScrollPane,JLayeredPane.DEFAULT_LAYER);
+    myPanel.add(layeredPane);
+    new ContextMenuImpl(layeredPane,myScrollPane,this);
+  }
+ else {
+    myPanel.add(myScrollPane);
+  }
+  myEditorComponent.addKeyListener(new KeyListener(){
+    @Override public void keyPressed(    @NotNull KeyEvent e){
+      if (e.getKeyCode() >= KeyEvent.VK_A && e.getKeyCode() <= KeyEvent.VK_Z) {
+        myCharKeyPressed=true;
+      }
+      KeyboardInternationalizationNotificationManager.showNotification();
+    }
+    @Override public void keyTyped(    @NotNull KeyEvent event){
+      myNeedToSelectPreviousChar=false;
+      if (event.isConsumed()) {
+        return;
+      }
+      if (processKeyTyped(event)) {
+        event.consume();
+      }
+    }
+    @Override public void keyReleased(    KeyEvent e){
+      myCharKeyPressed=false;
+    }
+  }
+);
+  MyMouseAdapter mouseAdapter=new MyMouseAdapter();
+  myEditorComponent.addMouseListener(mouseAdapter);
+  myGutterComponent.addMouseListener(mouseAdapter);
+  MyMouseMotionListener mouseMotionListener=new MyMouseMotionListener();
+  myEditorComponent.addMouseMotionListener(mouseMotionListener);
+  myGutterComponent.addMouseMotionListener(mouseMotionListener);
+  myEditorComponent.addFocusListener(new FocusAdapter(){
+    @Override public void focusGained(    @NotNull FocusEvent e){
+      myCaretCursor.activate();
+      for (      Caret caret : myCaretModel.getAllCarets()) {
+        int caretLine=caret.getLogicalPosition().line;
+        repaintLines(caretLine,caretLine);
+      }
+      fireFocusGained();
+    }
+    @Override public void focusLost(    @NotNull FocusEvent e){
+      clearCaretThread();
+      for (      Caret caret : myCaretModel.getAllCarets()) {
+        int caretLine=caret.getLogicalPosition().line;
+        repaintLines(caretLine,caretLine);
+      }
+      fireFocusLost();
+    }
+  }
+);
+  UiNotifyConnector connector=new UiNotifyConnector(myEditorComponent,new Activatable.Adapter(){
+    @Override public void showNotify(){
+      myGutterComponent.updateSize();
+    }
+  }
+);
+  Disposer.register(getDisposable(),connector);
+  try {
+    final DropTarget dropTarget=myEditorComponent.getDropTarget();
+    if (dropTarget != null) {
+      dropTarget.addDropTargetListener(new DropTargetAdapter(){
+        @Override public void drop(        @NotNull DropTargetDropEvent e){
+        }
+        @Override public void dragOver(        @NotNull DropTargetDragEvent e){
+          Point location=e.getLocation();
+          getCaretModel().moveToLogicalPosition(getLogicalPositionForScreenPos(location.x,location.y,true));
+          getScrollingModel().scrollToCaret(ScrollType.RELATIVE);
+        }
+      }
+);
+    }
+  }
+ catch (  TooManyListenersException e) {
+    LOG.error(e);
+  }
+  myPanel.addComponentListener(new ComponentAdapter(){
+    @Override public void componentResized(    @NotNull ComponentEvent e){
+      myMarkupModel.recalcEditorDimensions();
+      myMarkupModel.repaint(-1,-1);
+    }
+  }
+);
+}

@@ -1,0 +1,34 @@
+{
+  final Set<PsiField> fields=new LinkedHashSet<PsiField>();
+  for (  final PsiReference reference : ReferencesSearch.search(aClass,filesScope)) {
+    ApplicationManager.getApplication().runReadAction(new Runnable(){
+      @Override public void run(){
+        final PsiElement element=reference.getElement();
+        if (element != null) {
+          addIfNotNull(usageFiles,PsiUtilCore.getVirtualFile(element));
+          final PsiElement parent=element.getParent();
+          if (parent instanceof PsiTypeElement) {
+            final PsiElement gParent=parent.getParent();
+            if (gParent instanceof PsiField && !((PsiField)gParent).hasModifierProperty(PsiModifier.PRIVATE) && !((PsiField)gParent).hasModifierProperty(PsiModifier.FINAL)) {
+              fields.add((PsiField)gParent);
+            }
+          }
+        }
+      }
+    }
+);
+  }
+  for (  PsiField field : fields) {
+    ReferencesSearch.search(field,filesScope).forEach(new ReadActionProcessor<PsiReference>(){
+      @Override public boolean processInReadAction(      PsiReference fieldRef){
+        final PsiElement fieldElement=fieldRef.getElement();
+        final PsiAssignmentExpression varElementParent=PsiTreeUtil.getParentOfType(fieldElement,PsiAssignmentExpression.class);
+        if (varElementParent != null && PsiTreeUtil.isAncestor(varElementParent.getLExpression(),fieldElement,false)) {
+          addIfNotNull(usageFiles,PsiUtilCore.getVirtualFile(fieldElement));
+        }
+        return true;
+      }
+    }
+);
+  }
+}

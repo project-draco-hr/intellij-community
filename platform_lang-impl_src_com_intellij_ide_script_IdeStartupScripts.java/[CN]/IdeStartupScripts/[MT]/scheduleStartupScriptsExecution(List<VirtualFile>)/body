@@ -1,0 +1,35 @@
+{
+  final Future<List<Pair<VirtualFile,IdeScriptEngine>>> scriptsAndEnginesFuture=prepareScriptEnginesAsync(scripts);
+  ProjectManager.getInstance().addProjectManagerListener(new ProjectManagerAdapter(){
+    private final AtomicBoolean myScriptsExecutionStarted=new AtomicBoolean();
+    @Override public void projectOpened(    final Project project){
+      StartupManager.getInstance(project).runWhenProjectIsInitialized(new Runnable(){
+        @Override public void run(){
+          if (myScriptsExecutionStarted.compareAndSet(false,true)) {
+            executeScriptsAndDispose(project);
+          }
+        }
+      }
+);
+    }
+    private void executeScriptsAndDispose(    @NotNull Project project){
+      for (      Pair<VirtualFile,IdeScriptEngine> scriptAndEngine : getScriptsAndEngines()) {
+        executeScript(project.isDisposed() ? null : project,scriptAndEngine.first,scriptAndEngine.second);
+      }
+      ProjectManager.getInstance().removeProjectManagerListener(this);
+    }
+    @NotNull private List<Pair<VirtualFile,IdeScriptEngine>> getScriptsAndEngines(){
+      try {
+        return scriptsAndEnginesFuture.get();
+      }
+ catch (      InterruptedException e) {
+        LOG.info("Script engines initialization cancelled");
+      }
+catch (      ExecutionException e) {
+        LOG.error("Failed to initialize script engines",e);
+      }
+      return ContainerUtil.emptyList();
+    }
+  }
+);
+}

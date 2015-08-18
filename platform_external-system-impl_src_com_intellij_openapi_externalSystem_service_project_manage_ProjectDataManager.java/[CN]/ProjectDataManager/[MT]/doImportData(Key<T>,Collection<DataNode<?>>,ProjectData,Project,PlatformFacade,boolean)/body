@@ -1,0 +1,42 @@
+{
+  if (project.isDisposed())   return;
+  if (project instanceof ProjectImpl) {
+    assert((ProjectImpl)project).isComponentsCreated();
+  }
+  final List<DataNode<T>> toImport=ContainerUtil.newSmartList();
+  final List<DataNode<T>> toIgnore=ContainerUtil.newSmartList();
+  for (  DataNode node : nodes) {
+    if (!key.equals(node.getKey()))     continue;
+    if (node.isIgnored()) {
+      toIgnore.add(node);
+    }
+ else {
+      toImport.add(node);
+    }
+  }
+  ensureTheDataIsReadyToUse((Collection)toImport);
+  List<ProjectDataService<?,?>> services=myServices.getValue().get(key);
+  if (services == null) {
+    LOG.warn(String.format("Can't import data nodes '%s'. Reason: no service is registered for key %s. Available services for %s",toImport,key,myServices.getValue().keySet()));
+  }
+ else {
+    for (    ProjectDataService<?,?> service : services) {
+      if (service instanceof ProjectDataServiceEx) {
+        ((ProjectDataServiceEx<T,?>)service).importData(toImport,projectData,project,platformFacade,synchronous);
+      }
+ else {
+        ((ProjectDataService<T,?>)service).importData(toImport,project,synchronous);
+      }
+    }
+  }
+  ensureTheDataIsReadyToUse((Collection)toIgnore);
+  if (services != null && projectData != null) {
+    for (    ProjectDataService<?,?> service : services) {
+      if (service instanceof ProjectDataServiceEx) {
+        final ProjectDataServiceEx dataServiceEx=(ProjectDataServiceEx)service;
+        final Computable<Collection<?>> orphanIdeDataComputable=dataServiceEx.computeOrphanData(toImport,projectData,project,platformFacade);
+        dataServiceEx.removeData(orphanIdeDataComputable,toIgnore,projectData,project,platformFacade,synchronous);
+      }
+    }
+  }
+}

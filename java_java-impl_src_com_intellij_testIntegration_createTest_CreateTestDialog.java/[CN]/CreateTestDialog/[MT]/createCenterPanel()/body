@@ -105,13 +105,14 @@
     }
   }
 );
+  final boolean hasTestRoots=!ModuleRootManager.getInstance(myTargetModule).getSourceRoots(JavaModuleSourceRootTypes.TESTS).isEmpty();
   final List<TestFramework> attachedLibraries=new ArrayList<TestFramework>();
   final String defaultLibrary=getDefaultLibraryName();
   TestFramework defaultDescriptor=null;
   final DefaultComboBoxModel model=(DefaultComboBoxModel)myLibrariesCombo.getModel();
   for (  final TestFramework descriptor : Extensions.getExtensions(TestFramework.EXTENSION_NAME)) {
     model.addElement(descriptor);
-    if (descriptor.isLibraryAttached(myTargetModule)) {
+    if (hasTestRoots && descriptor.isLibraryAttached(myTargetModule)) {
       attachedLibraries.add(descriptor);
     }
     if (Comparing.equal(defaultLibrary,descriptor.getName())) {
@@ -122,7 +123,14 @@
     public void actionPerformed(    ActionEvent e){
       final Object selectedItem=myLibrariesCombo.getSelectedItem();
       if (selectedItem != null) {
-        onLibrarySelected((TestFramework)selectedItem);
+        final DumbService dumbService=DumbService.getInstance(myProject);
+        dumbService.setAlternativeResolveEnabled(true);
+        try {
+          onLibrarySelected((TestFramework)selectedItem);
+        }
+  finally {
+          dumbService.setAlternativeResolveEnabled(false);
+        }
       }
     }
   }
@@ -135,14 +143,19 @@
   }
   myFixLibraryButton.addActionListener(new ActionListener(){
     public void actionPerformed(    ActionEvent e){
-      ApplicationManager.getApplication().runWriteAction(new Runnable(){
-        public void run(){
-          if (mySelectedFramework instanceof JavaTestFramework) {
-            ((JavaTestFramework)mySelectedFramework).setupLibrary(myTargetModule);
-          }
+      DumbService.allowStartingDumbModeInside(DumbModePermission.MAY_START_BACKGROUND,new Runnable(){
+        @Override public void run(){
+          ApplicationManager.getApplication().runWriteAction(new Runnable(){
+            public void run(){
+              if (mySelectedFramework instanceof JavaTestFramework) {
+                ((JavaTestFramework)mySelectedFramework).setupLibrary(myTargetModule);
+              }
  else {
-            OrderEntryFix.addJarToRoots(mySelectedFramework.getLibraryPath(),myTargetModule,null);
+                OrderEntryFix.addJarToRoots(mySelectedFramework.getLibraryPath(),myTargetModule,null);
+              }
+            }
           }
+);
         }
       }
 );

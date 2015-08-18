@@ -6,15 +6,18 @@
  else   if (psiElement instanceof PsiNewExpression) {
     args=((PsiNewExpression)psiElement).getArgumentList();
   }
-  if (args == null)   return;
-  PsiElement parenth=args.getLastChild();
-  if (parenth == null || !")".equals(parenth.getText())) {
+  if (args != null && !hasRParenth(args)) {
+    int caret=editor.getCaretModel().getOffset();
+    PsiCallExpression innermostCall=PsiTreeUtil.findElementOfClassAtOffset(psiElement.getContainingFile(),caret,PsiCallExpression.class,false);
+    if (innermostCall == null)     return;
+    args=innermostCall.getArgumentList();
+    if (args == null)     return;
     int endOffset=-1;
     PsiElement child=args.getFirstChild();
     while (child != null) {
       if (child instanceof PsiErrorElement) {
         final PsiErrorElement errorElement=(PsiErrorElement)child;
-        if (errorElement.getErrorDescription().indexOf("')'") >= 0) {
+        if (errorElement.getErrorDescription().contains("')'")) {
           endOffset=errorElement.getTextRange().getStartOffset();
           break;
         }
@@ -25,8 +28,14 @@
       endOffset=args.getTextRange().getEndOffset();
     }
     final PsiExpression[] params=args.getExpressions();
-    if (params.length > 0 && startLine(editor,args) != startLine(editor,params[0]) && editor.getCaretModel().getOffset() < params[0].getTextRange().getStartOffset()) {
+    if (params.length > 0 && startLine(editor,args) != startLine(editor,params[0]) && caret < params[0].getTextRange().getStartOffset()) {
       endOffset=args.getTextRange().getStartOffset() + 1;
+    }
+    if (!DumbService.isDumb(args.getProject())) {
+      Integer argCount=getUnambiguousParameterCount(innermostCall);
+      if (argCount != null && argCount > 0 && argCount < params.length) {
+        endOffset=Math.min(endOffset,params[argCount - 1].getTextRange().getEndOffset());
+      }
     }
     endOffset=CharArrayUtil.shiftBackward(editor.getDocument().getCharsSequence(),endOffset - 1," \t\n") + 1;
     editor.getDocument().insertString(endOffset,")");

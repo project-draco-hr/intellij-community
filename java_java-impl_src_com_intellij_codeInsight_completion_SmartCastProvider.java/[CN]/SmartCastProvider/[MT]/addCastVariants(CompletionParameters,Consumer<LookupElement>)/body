@@ -1,0 +1,34 @@
+{
+  if (!shouldSuggestCast(parameters))   return;
+  PsiElement position=parameters.getPosition();
+  PsiElement parenthesisOwner=getParenthesisOwner(position);
+  final boolean insideCast=parenthesisOwner instanceof PsiTypeCastExpression;
+  if (insideCast) {
+    PsiElement parent=parenthesisOwner.getParent();
+    if (parent instanceof PsiParenthesizedExpression && parent.getParent() instanceof PsiReferenceExpression) {
+      for (      ExpectedTypeInfo info : ExpectedTypesProvider.getExpectedTypes((PsiParenthesizedExpression)parent,false)) {
+        result.consume(PsiTypeLookupItem.createLookupItem(info.getType(),parent));
+      }
+      return;
+    }
+  }
+  for (  final ExpectedTypeInfo info : JavaSmartCompletionContributor.getExpectedTypes(parameters)) {
+    PsiType type=info.getDefaultType();
+    if (type instanceof PsiWildcardType) {
+      type=((PsiWildcardType)type).getBound();
+    }
+    if (type == null || type == PsiType.VOID) {
+      continue;
+    }
+    if (type instanceof PsiPrimitiveType) {
+      final PsiType castedType=getCastedExpressionType(parenthesisOwner);
+      if (castedType != null && !(castedType instanceof PsiPrimitiveType)) {
+        final PsiClassType boxedType=((PsiPrimitiveType)type).getBoxedType(position);
+        if (boxedType != null) {
+          type=boxedType;
+        }
+      }
+    }
+    result.consume(createSmartCastElement(parameters,insideCast,type));
+  }
+}

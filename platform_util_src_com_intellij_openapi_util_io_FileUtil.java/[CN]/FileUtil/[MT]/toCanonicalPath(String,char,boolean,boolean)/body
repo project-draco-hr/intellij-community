@@ -2,15 +2,35 @@
   if (path == null || path.isEmpty()) {
     return path;
   }
-  if (".".equals(path)) {
-    return "";
+  if (StringUtil.startsWithChar(path,'.')) {
+    if (path.length() == 1) {
+      return "";
+    }
+    char c=path.charAt(1);
+    if (c == '/' || c == separatorChar) {
+      path=path.substring(2);
+    }
   }
   path=path.replace(separatorChar,'/');
-  if (path.indexOf('/') == -1) {
+  int index=-1;
+  do {
+    index=path.indexOf('/',index + 1);
+    char next=index == path.length() - 1 ? 0 : path.charAt(index + 1);
+    if (next == '.' || next == '/') {
+      break;
+    }
+  }
+ while (index != -1);
+  if (index == -1) {
+    if (removeLastSlash) {
+      int start=processRoot(path,NullAppendable.INSTANCE);
+      int slashIndex=path.lastIndexOf('/');
+      return slashIndex != -1 && slashIndex > start ? StringUtil.trimEnd(path,'/') : path;
+    }
     return path;
   }
   final String finalPath=path;
-  NotNullProducer<String> realCanonicalPath=!resolveSymlinksIfNecessary ? null : new NotNullProducer<String>(){
+  NotNullProducer<String> realCanonicalPath=resolveSymlinks ? new NotNullProducer<String>(){
     @NotNull @Override public String produce(){
       try {
         return new File(finalPath).getCanonicalPath().replace(separatorChar,'/');
@@ -20,7 +40,7 @@
       }
     }
   }
-;
+ : null;
   StringBuilder result=new StringBuilder(path.length());
   int start=processRoot(path,result);
   int dots=0;
@@ -29,7 +49,7 @@
     char c=path.charAt(i);
     if (c == '/') {
       if (!separator) {
-        if (!processDots(result,dots,start,resolveSymlinksIfNecessary)) {
+        if (!processDots(result,dots,start,resolveSymlinks)) {
           return realCanonicalPath.produce();
         }
         dots=0;
@@ -55,7 +75,7 @@
     }
   }
   if (dots > 0) {
-    if (!processDots(result,dots,start,resolveSymlinksIfNecessary)) {
+    if (!processDots(result,dots,start,resolveSymlinks)) {
       return realCanonicalPath.produce();
     }
   }

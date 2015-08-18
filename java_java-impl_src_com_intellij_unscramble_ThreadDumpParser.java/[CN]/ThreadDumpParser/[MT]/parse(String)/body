@@ -37,22 +37,17 @@
   }
   for (  ThreadState threadState : result) {
     inferThreadStateDetail(threadState);
-    final String s=findWaitingForLock(threadState.getStackTrace());
-    if (s != null) {
-      for (      ThreadState lockOwner : result) {
-        if (lockOwner == threadState) {
-          continue;
-        }
-        final String marker="- locked <" + s + ">";
-        if (lockOwner.getStackTrace().contains(marker)) {
-          if (threadState.isAwaitedBy(lockOwner)) {
-            threadState.addDeadlockedThread(lockOwner);
-            lockOwner.addDeadlockedThread(threadState);
-          }
-          lockOwner.addWaitingThread(threadState);
-          break;
-        }
+    String lockId=findWaitingForLock(threadState.getStackTrace());
+    ThreadState lockOwner=findLockOwner(result,lockId,true);
+    if (lockOwner == null) {
+      lockOwner=findLockOwner(result,lockId,false);
+    }
+    if (lockOwner != null) {
+      if (threadState.isAwaitedBy(lockOwner)) {
+        threadState.addDeadlockedThread(lockOwner);
+        lockOwner.addDeadlockedThread(threadState);
       }
+      lockOwner.addWaitingThread(threadState);
     }
   }
   sortThreads(result);
