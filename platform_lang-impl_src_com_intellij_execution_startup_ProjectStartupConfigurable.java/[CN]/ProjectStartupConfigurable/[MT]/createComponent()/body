@@ -8,13 +8,45 @@
   }
 ).setEditAction(new AnActionButtonRunnable(){
     @Override public void run(    AnActionButton button){
+      RunnerAndConfigurationSettings selected=getSelectedSettings();
+      if (selected == null)       return;
+      final RunManager runManager=RunManagerImpl.getInstance(myProject);
+      final RunnerAndConfigurationSettings was=runManager.getSelectedConfiguration();
+      try {
+        runManager.setSelectedConfiguration(selected);
+        new EditConfigurationsDialog(myProject).showAndGet();
+      }
+  finally {
+        runManager.setSelectedConfiguration(was);
+      }
+    }
+  }
+).setEditActionUpdater(new AnActionButtonUpdater(){
+    @Override public boolean isEnabled(    AnActionEvent e){
+      return getSelectedSettings() != null;
     }
   }
 ).setRemoveAction(new AnActionButtonRunnable(){
     @Override public void run(    AnActionButton button){
+      RunnerAndConfigurationSettings selected=getSelectedSettings();
+      if (selected == null)       return;
+      final ProjectStartupTasksTreeModel oldModel=(ProjectStartupTasksTreeModel)myTree.getModel();
+      final List<RunnerAndConfigurationSettings> configurations=oldModel.getConfigurations();
+      if (!configurations.contains(selected)) {
+        return;
+      }
+      configurations.remove(selected);
+      Collections.sort(configurations,new Comparator<RunnerAndConfigurationSettings>(){
+        @Override public int compare(        RunnerAndConfigurationSettings o1,        RunnerAndConfigurationSettings o2){
+          return o1.getName().compareToIgnoreCase(o2.getName());
+        }
+      }
+);
+      setModel(new ProjectStartupTasksTreeModel(configurations));
     }
   }
 );
+  myTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
   final JPanel tasksPanel=myDecorator.createPanel();
   return FormBuilder.createFormBuilder().addLabeledComponentFillVertically("Tasks to be executed right after opening the project.",tasksPanel).getPanel();
 }
