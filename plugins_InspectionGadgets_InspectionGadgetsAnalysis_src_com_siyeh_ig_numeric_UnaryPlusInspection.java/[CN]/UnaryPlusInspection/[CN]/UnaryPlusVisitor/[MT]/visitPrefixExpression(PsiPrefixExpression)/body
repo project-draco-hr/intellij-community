@@ -5,5 +5,26 @@
   if (!tokenType.equals(JavaTokenType.PLUS)) {
     return;
   }
-  registerError(token);
+  final PsiExpression operand=prefixExpression.getOperand();
+  if (operand == null) {
+    return;
+  }
+  final PsiType type=operand.getType();
+  if (PsiType.BYTE.equals(type) || PsiType.SHORT.equals(type)) {
+    PsiExpression expression=prefixExpression;
+    PsiElement parent=expression.getParent();
+    while (parent instanceof PsiParenthesizedExpression) {
+      expression=(PsiExpression)parent;
+      parent=parent.getParent();
+    }
+    final PsiElement grandParent=parent.getParent();
+    if (parent instanceof PsiExpressionList && grandParent instanceof PsiCall) {
+      final PsiCall call=(PsiCall)grandParent;
+      final PsiMethod method=call.resolveMethod();
+      if (MethodCallUtils.findMethodWithReplacedArgument(call,expression,operand) != method) {
+        return;
+      }
+    }
+  }
+  registerError(token,ProblemHighlightType.LIKE_UNUSED_SYMBOL);
 }
