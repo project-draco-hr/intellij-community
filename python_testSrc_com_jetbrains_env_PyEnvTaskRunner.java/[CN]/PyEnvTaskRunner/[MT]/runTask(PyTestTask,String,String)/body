@@ -1,0 +1,47 @@
+{
+  boolean wasExecuted=false;
+  List<String> passedRoots=Lists.newArrayList();
+  for (  String root : myRoots) {
+    final Set<String> requredTags=Sets.union(testTask.getTags(),Sets.newHashSet(tagsRequiedByTest));
+    if (!isSuitableForTask(PyEnvTestCase.loadEnvTags(root),requredTags) || !shouldRun(root,testTask)) {
+      continue;
+    }
+    try {
+      testTask.setUp(testName);
+      wasExecuted=true;
+      if (isJython(root)) {
+        testTask.useLongTimeout();
+      }
+ else {
+        testTask.useNormalTimeout();
+      }
+      final String executable=getExecutable(root,testTask);
+      if (executable == null) {
+        throw new RuntimeException("Cannot find Python interpreter in " + root);
+      }
+      final Sdk sdk=createSdkByExecutable(executable);
+      final LanguageLevel languageLevel=PythonSdkType.getLanguageLevelForSdk(sdk);
+      if (testTask.isLanguageLevelSupported(languageLevel)) {
+        testTask.runTestOn(executable);
+        passedRoots.add(root);
+      }
+ else {
+        System.err.println(String.format("Skipping root %s",root));
+      }
+    }
+ catch (    Throwable e) {
+      throw new RuntimeException(PyEnvTestCase.joinStrings(passedRoots,"Tests passed environments: ") + "Test failed on " + getEnvType()+ " environment "+ root,e);
+    }
+ finally {
+      try {
+        testTask.tearDown();
+      }
+ catch (      Exception e) {
+        throw new RuntimeException("Couldn't tear down task",e);
+      }
+    }
+  }
+  if (!wasExecuted) {
+    throw new RuntimeException("test" + testName + " was not executed.\n"+ PyEnvTestCase.joinStrings(myRoots,"All roots: ")+ "\n"+ PyEnvTestCase.joinStrings(testTask.getTags(),"Required tags in tags.txt in root: "));
+  }
+}

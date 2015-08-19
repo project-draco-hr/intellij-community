@@ -1,0 +1,45 @@
+{
+  if (!ApplicationManagerEx.getApplicationEx().isInternal() || "true".equals(System.getProperty("idea.debug.mode")))   return;
+  for (  String argument : ManagementFactory.getRuntimeMXBean().getInputArguments()) {
+    if (argument.startsWith("-agentlib:jdwp")) {
+      String[] params=argument.split(",");
+      for (      String param : params) {
+        if (param.startsWith("address")) {
+          try {
+            String[] address=param.split("=")[1].split(":");
+            if (address.length == 1) {
+              myPort=Integer.parseInt(address[0]);
+            }
+ else {
+              myHost=address[0];
+              myPort=Integer.parseInt(address[1]);
+            }
+          }
+ catch (          Exception e) {
+            LOG.error(e);
+            return;
+          }
+          break;
+        }
+      }
+      break;
+    }
+  }
+  if (myPort < 0)   return;
+  myAlarm=new SingleAlarm(new Runnable(){
+    @Override public void run(){
+      boolean attached=!NetUtils.canConnectToRemoteSocket(myHost,myPort);
+      if (!myReady) {
+        myAttached=attached;
+        myReady=true;
+      }
+ else       if (attached != myAttached) {
+        myAttached=attached;
+        Notifications.Bus.notify(new Notification(Notifications.SYSTEM_MESSAGES_GROUP_ID,"Remote debugger",myAttached ? "attached" : "detached",NotificationType.WARNING));
+      }
+      myAlarm.request();
+    }
+  }
+,5000,Alarm.ThreadToUse.POOLED_THREAD,null);
+  myAlarm.request();
+}
