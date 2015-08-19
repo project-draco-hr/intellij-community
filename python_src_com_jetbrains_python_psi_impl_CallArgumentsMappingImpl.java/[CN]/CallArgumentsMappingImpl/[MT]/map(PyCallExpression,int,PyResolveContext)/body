@@ -1,0 +1,80 @@
+{
+  final Map<PyExpression,PyNamedParameter> results=new LinkedHashMap<PyExpression,PyNamedParameter>();
+  final PyArgumentList argumentList=callExpression.getArgumentList();
+  final PyCallExpression.PyMarkedCallee markedCallee=callExpression.resolveCallee(resolveContext,implicitArgumentOffset);
+  if (markedCallee != null && argumentList != null) {
+    final TypeEvalContext context=resolveContext.getTypeEvalContext();
+    final List<PyParameter> allParameters=PyUtil.getParameters(markedCallee.getCallable(),context);
+    final List<PyParameter> parameters=dropImplicitParameters(allParameters,markedCallee.getImplicitOffset());
+    final List<PyExpression> arguments=Arrays.asList(argumentList.getArguments());
+    final List<PyExpression> positionalArguments=filterPositionalArguments(arguments);
+    final List<PyKeywordArgument> keywordArguments=filterKeywordArguments(arguments);
+    final List<PyExpression> variadicPositionalArguments=filterVariadicPositionalArguments(arguments);
+    final List<PyExpression> variadicKeywordArguments=filterVariadicKeywordArguments(arguments);
+    boolean seenSingleStar=false;
+    final List<PyParameter> unmappedParameters=new ArrayList<PyParameter>();
+    for (    PyParameter parameter : parameters) {
+      if (parameter instanceof PyNamedParameter) {
+        final PyNamedParameter namedParameter=(PyNamedParameter)parameter;
+        final String parameterName=namedParameter.getName();
+        if (namedParameter.isPositionalContainer()) {
+          if (variadicPositionalArguments.size() == 1) {
+            results.put(variadicPositionalArguments.remove(0),namedParameter);
+          }
+ else {
+            positionalArguments.clear();
+            variadicPositionalArguments.clear();
+          }
+        }
+ else         if (namedParameter.isKeywordContainer()) {
+          if (variadicKeywordArguments.size() == 1) {
+            results.put(variadicKeywordArguments.remove(0),namedParameter);
+          }
+ else {
+            keywordArguments.clear();
+            variadicKeywordArguments.clear();
+          }
+        }
+ else         if (seenSingleStar) {
+          final PyExpression keywordArgument=removeKeywordArgument(keywordArguments,parameterName);
+          if (keywordArgument != null) {
+            results.put(keywordArgument,namedParameter);
+          }
+ else           if (variadicKeywordArguments.isEmpty()) {
+            unmappedParameters.add(namedParameter);
+          }
+        }
+ else {
+          if (!positionalArguments.isEmpty()) {
+            final PyExpression positionalArgument=next(positionalArguments);
+            if (positionalArgument != null) {
+              results.put(positionalArgument,namedParameter);
+            }
+ else {
+              unmappedParameters.add(namedParameter);
+            }
+          }
+ else {
+            final PyKeywordArgument keywordArgument=removeKeywordArgument(keywordArguments,parameterName);
+            if (keywordArgument != null) {
+              results.put(keywordArgument,namedParameter);
+            }
+ else             if (variadicPositionalArguments.isEmpty() || variadicKeywordArguments.isEmpty()) {
+              unmappedParameters.add(namedParameter);
+            }
+          }
+        }
+      }
+ else       if (parameter instanceof PyTupleParameter) {
+        unmappedParameters.add(parameter);
+      }
+ else       if (parameter instanceof PySingleStarParameter) {
+        seenSingleStar=true;
+      }
+ else {
+        unmappedParameters.add(parameter);
+      }
+    }
+  }
+  return results;
+}
