@@ -1,0 +1,32 @@
+{
+  final String replacement=buildDocString();
+  PyElementGenerator elementGenerator=PyElementGenerator.getInstance(myProject);
+  if (myStructuredDocString != null) {
+    PyExpression str=elementGenerator.createDocstring(replacement).getExpression();
+    myDocStringExpression.replace(str);
+    myDocStringOwner=CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(myDocStringOwner);
+    if (myDocStringOwner instanceof PyFunction) {
+      myFunction=(PyFunction)myDocStringOwner;
+    }
+  }
+ else {
+    if (myFunction == null) {
+      throw new IllegalStateException("Should be a function");
+    }
+    final PyStatementList statements=myFunction.getStatementList();
+    final String indentation=PyIndentUtil.getExpectedElementIndent(statements);
+    final Document document=PsiDocumentManager.getInstance(myProject).getDocument(getFile());
+    if (document != null) {
+      if (PyUtil.onSameLine(statements,myFunction) || statements.getStatements().length == 0) {
+        PyFunction func=elementGenerator.createFromText(LanguageLevel.forElement(myFunction),PyFunction.class,"def " + myFunction.getName() + myFunction.getParameterList().getText()+ ":\n"+ indentation+ replacement+ "\n"+ indentation+ statements.getText());
+        myFunction=(PyFunction)myFunction.replace(func);
+      }
+ else {
+        PyExpressionStatement str=elementGenerator.createDocstring(replacement);
+        statements.addBefore(str,statements.getStatements()[0]);
+      }
+    }
+    CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(myFunction);
+    myDocStringExpression=myFunction.getDocStringExpression();
+  }
+}
