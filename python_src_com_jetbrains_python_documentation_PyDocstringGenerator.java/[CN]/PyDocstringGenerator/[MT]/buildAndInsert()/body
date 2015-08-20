@@ -1,32 +1,30 @@
 {
   final String replacement=buildDocString();
-  PyElementGenerator elementGenerator=PyElementGenerator.getInstance(myProject);
-  if (myStructuredDocString != null) {
+  final Project project=myDocStringOwner.getProject();
+  PyElementGenerator elementGenerator=PyElementGenerator.getInstance(project);
+  final PyStringLiteralExpression docStringExpression=getDocStringExpression();
+  if (docStringExpression != null) {
     PyExpression str=elementGenerator.createDocstring(replacement).getExpression();
-    myDocStringExpression.replace(str);
-    myDocStringOwner=CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(myDocStringOwner);
-    if (myDocStringOwner instanceof PyFunction) {
-      myFunction=(PyFunction)myDocStringOwner;
-    }
+    docStringExpression.replace(str);
   }
  else {
-    if (myFunction == null) {
+    PyFunction function=PyUtil.as(myDocStringOwner,PyFunction.class);
+    if (function == null) {
       throw new IllegalStateException("Should be a function");
     }
-    final PyStatementList statements=myFunction.getStatementList();
+    final PyStatementList statements=function.getStatementList();
     final String indentation=PyIndentUtil.getExpectedElementIndent(statements);
-    final Document document=PsiDocumentManager.getInstance(myProject).getDocument(getFile());
+    final Document document=PsiDocumentManager.getInstance(project).getDocument(myDocStringOwner.getContainingFile());
     if (document != null) {
-      if (PyUtil.onSameLine(statements,myFunction) || statements.getStatements().length == 0) {
-        PyFunction func=elementGenerator.createFromText(LanguageLevel.forElement(myFunction),PyFunction.class,"def " + myFunction.getName() + myFunction.getParameterList().getText()+ ":\n"+ indentation+ replacement+ "\n"+ indentation+ statements.getText());
-        myFunction=(PyFunction)myFunction.replace(func);
+      if (PyUtil.onSameLine(statements,function) || statements.getStatements().length == 0) {
+        PyFunction func=elementGenerator.createFromText(LanguageLevel.forElement(function),PyFunction.class,"def " + function.getName() + function.getParameterList().getText()+ ":\n"+ indentation+ replacement+ "\n"+ indentation+ statements.getText());
+        myDocStringOwner=(PyFunction)function.replace(func);
       }
  else {
         PyExpressionStatement str=elementGenerator.createDocstring(replacement);
         statements.addBefore(str,statements.getStatements()[0]);
       }
     }
-    CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(myFunction);
-    myDocStringExpression=myFunction.getDocStringExpression();
   }
+  myDocStringOwner=CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(myDocStringOwner);
 }
