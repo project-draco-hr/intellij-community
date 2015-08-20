@@ -21,8 +21,16 @@
     return false;
   }
   final String homePath=sdk.getHomePath();
-  if (homePath == null)   return false;
-  final String ipython=PythonSdkType.getExecutablePath(homePath,"ipython");
+  if (homePath == null) {
+    showWarning(fileEditor,"Python Sdk is invalid, please check Python Interpreter in Settings->Python Interpreter",null);
+    return false;
+  }
+  String ipython=findIPythonRunner(homePath);
+  Map<String,String> env=null;
+  if (ipython == null) {
+    ipython=PythonHelpersLocator.getHelperPath("pycharm/pycharm_load_entry_point.py");
+    env=ImmutableMap.of("PYCHARM_EP_DIST","ipython","PYCHARM_EP_NAME","ipython");
+  }
   final ArrayList<String> parameters=Lists.newArrayList(homePath,ipython,"notebook","--no-browser");
   if (hostPort.getFirst() != null) {
     parameters.add("--ip");
@@ -33,6 +41,9 @@
     parameters.add(hostPort.getSecond());
   }
   final GeneralCommandLine commandLine=new GeneralCommandLine(parameters).withWorkDirectory(myProject.getBasePath());
+  if (env != null) {
+    commandLine.withEnvironment(env);
+  }
   try {
     final KillableColoredProcessHandler processHandler=new KillableColoredProcessHandler(commandLine){
       @Override protected void doDestroyProcess(){
