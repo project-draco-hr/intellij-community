@@ -13,23 +13,32 @@
 ));
   List<PsiMethod> result=ContainerUtil.newArrayList();
   for (  PsiClassType.ClassResolveResult resolveResult : traits) {
-    GrTypeDefinition trait=(GrTypeDefinition)resolveResult.getElement();
+    PsiClass trait=resolveResult.getElement();
     LOG.assertTrue(trait != null);
     List<CandidateInfo> concreteTraitMethods=new TraitProcessor<PsiMethod>(trait,resolveResult.getSubstitutor()){
-      protected void processTrait(      @NotNull GrTypeDefinition trait,      @NotNull PsiSubstitutor substitutor){
-        for (        GrMethod method : trait.getCodeMethods()) {
-          if (!method.getModifierList().hasExplicitModifier(PsiModifier.ABSTRACT)) {
-            addCandidate(method,substitutor);
+      protected void processTrait(      @NotNull PsiClass trait,      @NotNull PsiSubstitutor substitutor){
+        if (trait instanceof GrTypeDefinition) {
+          for (          GrMethod method : ((GrTypeDefinition)trait).getCodeMethods()) {
+            if (!method.getModifierList().hasExplicitModifier(PsiModifier.ABSTRACT)) {
+              addCandidate(method,substitutor);
+            }
+          }
+          for (          GrField field : ((GrTypeDefinition)trait).getCodeFields()) {
+            if (!field.isProperty())             continue;
+            for (            GrAccessorMethod method : field.getGetters()) {
+              addCandidate(method,substitutor);
+            }
+            GrAccessorMethod setter=field.getSetter();
+            if (setter != null) {
+              addCandidate(setter,substitutor);
+            }
           }
         }
-        for (        GrField field : trait.getCodeFields()) {
-          if (!field.isProperty())           continue;
-          for (          GrAccessorMethod method : field.getGetters()) {
-            addCandidate(method,substitutor);
-          }
-          GrAccessorMethod setter=field.getSetter();
-          if (setter != null) {
-            addCandidate(setter,substitutor);
+ else         if (trait instanceof ClsClassImpl) {
+          for (          PsiMethod method : trait.getMethods()) {
+            if (AnnotationUtil.isAnnotated(method,IMPLEMENTED_FQN,false)) {
+              addCandidate(method,substitutor);
+            }
           }
         }
       }
