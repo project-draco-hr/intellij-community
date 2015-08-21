@@ -1,0 +1,44 @@
+{
+  if (myState == DELEGATE_IS_LEXING_LINE || myState == DELEGATE_IS_LEXING_BLOCK) {
+    myDelegate.advance();
+    if (myDelegate.getTokenType() == null) {
+      myState=LEXING_BY_SELF;
+      myTokenEnd=myDelegate.getBufferEnd();
+      advance();
+    }
+  }
+ else {
+    if (myTokenEnd == myEndOffset) {
+      myState=EOF;
+      return;
+    }
+    myTokenStart=myTokenEnd;
+    if (StringUtil.isWhiteSpace(myBuffer.charAt(myTokenStart))) {
+      myTokenType=getIndentTokenType();
+      myTokenEnd=findNonWhitespace(myTokenStart);
+      return;
+    }
+    int curIndent=calcIndent(myTokenStart);
+    if (curIndent > myIndent) {
+      myTokenEnd=findEndByIndent(myTokenStart + 1);
+      if (prevLineWithMinusIsEmpty(myTokenStart)) {
+        myDelegate.start(myBuffer,myTokenStart,myTokenEnd,myDelegate.getState());
+        myState=DELEGATE_IS_LEXING_BLOCK;
+      }
+ else {
+        myTokenType=getEmbeddedContentTokenType();
+      }
+      return;
+    }
+    int embeddedCodeStartMarkerLength=getEmbeddedCodeStartMarkerLength();
+    if (embeddedCodeStartMarkerLength > 0) {
+      myTokenType=MINUS_TYPE;
+      myTokenEnd=myTokenStart + embeddedCodeStartMarkerLength;
+    }
+ else {
+      myTokenEnd=findEol(myTokenStart);
+      myDelegate.start(myBuffer,myTokenStart,myTokenEnd,getDelegateState(myDelegate.getState()));
+      myState=DELEGATE_IS_LEXING_LINE;
+    }
+  }
+}
