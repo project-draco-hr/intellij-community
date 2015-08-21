@@ -11,12 +11,32 @@
   PsiClassType[] types=clause.getReferencedTypes();
   List<PsiClassType.ClassResolveResult> traits=getSuperTraitsByCorrectOrder(types);
   for (  PsiClassType.ClassResolveResult resolveResult : traits) {
-    GrTypeDefinition trait=(GrTypeDefinition)resolveResult.getElement();
+    PsiClass trait=resolveResult.getElement();
     LOG.assertTrue(trait != null);
     List<CandidateInfo> traitFields=new TraitProcessor<PsiField>(trait,resolveResult.getSubstitutor()){
-      protected void processTrait(      @NotNull GrTypeDefinition trait,      @NotNull PsiSubstitutor substitutor){
-        for (        GrField field : trait.getCodeFields()) {
-          addCandidate(field,substitutor);
+      protected void processTrait(      @NotNull PsiClass trait,      @NotNull PsiSubstitutor substitutor){
+        if (trait instanceof GrTypeDefinition) {
+          for (          GrField field : ((GrTypeDefinition)trait).getCodeFields()) {
+            addCandidate(field,substitutor);
+          }
+        }
+ else         if (trait instanceof ClsClassImpl) {
+          final PsiClass traitFieldHelper=myPsiFacade.findClass(trait.getQualifiedName() + "$Trait$FieldHelper",trait.getResolveScope());
+          if (traitFieldHelper == null)           return;
+          final VirtualFile virtualFile=traitFieldHelper.getContainingFile().getVirtualFile();
+          final String key=virtualFile.getCanonicalPath();
+          if (key == null)           return;
+          final List<Collection<TraitFieldDescriptor>> values=FileBasedIndex.getInstance().getValues(GroovyTraitFieldsFileIndex.INDEX_ID,key,trait.getResolveScope());
+          for (          Collection<TraitFieldDescriptor> collection : values) {
+            for (            TraitFieldDescriptor descriptor : collection) {
+              final GrLightField field=new GrLightField(trait,descriptor.getName(),myElementFactory.createTypeFromText(descriptor.getTypeString(),trait),trait);
+              if (descriptor.isStatic()) {
+                field.getModifierList().addModifier(STATIC_MASK);
+              }
+              field.getModifierList().addModifier(descriptor.isPublic() ? PUBLIC_MASK : PRIVATE_MASK);
+              addCandidate(field,substitutor);
+            }
+          }
         }
       }
     }
