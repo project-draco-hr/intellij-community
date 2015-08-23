@@ -6,14 +6,33 @@
         signature=PySignatureCacheManager.getInstance(myDocStringOwner.getProject()).findSignature((PyFunction)myDocStringOwner);
       }
       for (      PyParameter param : ((PyFunction)myDocStringOwner).getParameterList().getParameters()) {
-        String paramName=param.getName();
-        if (StringUtil.isEmpty(paramName) || param.isSelf() || myOriginalDocString != null && myOriginalDocString.getParamTypeSubstring(paramName) != null) {
+        final String paramName=param.getName();
+        final StructuredDocString docString=getStructuredDocString();
+        if (StringUtil.isEmpty(paramName) || param.isSelf() || docString != null && docString.getParamTypeSubstring(paramName) != null) {
           continue;
         }
-        String type=signature != null ? signature.getArgTypeQualifiedName(paramName) : null;
+        final String signatureType=signature != null ? signature.getArgTypeQualifiedName(paramName) : null;
+        String type=null;
+        if (signatureType != null) {
+          type=signatureType;
+        }
+ else         if (PyCodeInsightSettings.getInstance().INSERT_TYPE_DOCSTUB) {
+          type="";
+        }
         withParam(paramName);
         if (type != null) {
           withParamTypedByName(paramName,type);
+        }
+      }
+      if (myGenerateReturn) {
+        final RaiseVisitor visitor=new RaiseVisitor();
+        final PyStatementList statementList=((PyFunction)myDocStringOwner).getStatementList();
+        statementList.accept(visitor);
+        if (visitor.myHasReturn) {
+          myParams.add(new DocstringParam("",null,true));
+          if (PyCodeInsightSettings.getInstance().INSERT_TYPE_DOCSTUB) {
+            withReturnValue("");
+          }
         }
       }
     }
