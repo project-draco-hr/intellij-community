@@ -11,13 +11,13 @@
     return;
   }
   final CompletionResultSet result=JavaCompletionSorting.addJavaSorting(parameters,_result);
-  if (ANNOTATION_ATTRIBUTE_NAME.accepts(position) && !JavaCompletionData.isAfterPrimitiveOrArrayType(position)) {
-    JavaCompletionData.addExpectedTypeMembers(parameters,result);
+  if (ANNOTATION_ATTRIBUTE_NAME.accepts(position) && !JavaKeywordCompletion.isAfterPrimitiveOrArrayType(position)) {
+    JavaKeywordCompletion.addExpectedTypeMembers(parameters,result);
     completeAnnotationAttributeName(result,position,parameters);
     result.stopHere();
     return;
   }
-  final InheritorsHolder inheritors=new InheritorsHolder(position,result);
+  final InheritorsHolder inheritors=new InheritorsHolder(result);
   if (JavaSmartCompletionContributor.IN_TYPE_ARGS.accepts(position)) {
     new TypeArgumentCompletionProvider(false,inheritors).addCompletions(parameters,new ProcessingContext(),result);
   }
@@ -27,6 +27,24 @@
   PrefixMatcher matcher=result.getPrefixMatcher();
   if (JavaSmartCompletionContributor.AFTER_NEW.accepts(position)) {
     new JavaInheritorsGetter(ConstructorInsertHandler.BASIC_INSTANCE).generateVariants(parameters,matcher,inheritors);
+  }
+  if (MethodReturnTypeProvider.IN_METHOD_RETURN_TYPE.accepts(position)) {
+    MethodReturnTypeProvider.addProbableReturnTypes(parameters,new Consumer<LookupElement>(){
+      @Override public void consume(      LookupElement element){
+        registerClassFromTypeElement(element,inheritors);
+        result.addElement(element);
+      }
+    }
+);
+  }
+  if (SmartCastProvider.shouldSuggestCast(parameters)) {
+    SmartCastProvider.addCastVariants(parameters,new Consumer<LookupElement>(){
+      @Override public void consume(      LookupElement element){
+        registerClassFromTypeElement(element,inheritors);
+        result.addElement(PrioritizedLookupElement.withPriority(element,1));
+      }
+    }
+);
   }
   PsiElement parent=position.getParent();
   if (parent instanceof PsiReferenceExpression) {
