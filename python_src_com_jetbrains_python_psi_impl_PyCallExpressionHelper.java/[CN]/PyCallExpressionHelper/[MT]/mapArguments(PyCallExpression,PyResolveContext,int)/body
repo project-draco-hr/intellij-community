@@ -2,15 +2,17 @@
   final PyArgumentList argumentList=callExpression.getArgumentList();
   final PyCallExpression.PyMarkedCallee markedCallee=callExpression.resolveCallee(resolveContext,implicitOffset);
   if (markedCallee == null || argumentList == null) {
-    return new PyCallExpression.PyArgumentsMapping(callExpression,null,Collections.<PyExpression,PyNamedParameter>emptyMap(),Collections.<PyParameter>emptyList(),Collections.<PyExpression>emptyList(),Collections.<PyNamedParameter>emptyList(),Collections.<PyNamedParameter>emptyList());
+    return new PyCallExpression.PyArgumentsMapping(callExpression,null,Collections.<PyExpression,PyNamedParameter>emptyMap(),Collections.<PyParameter>emptyList(),Collections.<PyExpression>emptyList(),Collections.<PyNamedParameter>emptyList(),Collections.<PyNamedParameter>emptyList(),Collections.<PyExpression,PyTupleParameter>emptyMap());
   }
   boolean seenSingleStar=false;
   boolean mappedVariadicArgumentsToParameters=false;
   final TypeEvalContext context=resolveContext.getTypeEvalContext();
   final Map<PyExpression,PyNamedParameter> mappedParameters=new LinkedHashMap<PyExpression,PyNamedParameter>();
   final List<PyParameter> unmappedParameters=new ArrayList<PyParameter>();
+  final List<PyExpression> unmappedArguments=new ArrayList<PyExpression>();
   final List<PyNamedParameter> parametersMappedToVariadicKeywordArguments=new ArrayList<PyNamedParameter>();
   final List<PyNamedParameter> parametersMappedToVariadicPositionalArguments=new ArrayList<PyNamedParameter>();
+  final Map<PyExpression,PyTupleParameter> tupleMappedParameters=new LinkedHashMap<PyExpression,PyTupleParameter>();
   final List<PyParameter> allParameters=PyUtil.getParameters(markedCallee.getCallable(),context);
   final List<PyParameter> parameters=dropImplicitParameters(allParameters,markedCallee.getImplicitOffset());
   final List<PyExpression> arguments=new ArrayList<PyExpression>(Arrays.asList(argumentList.getArguments()));
@@ -96,15 +98,21 @@
     }
  else     if (parameter instanceof PyTupleParameter) {
       final PyExpression positionalArgument=next(allPositionalArguments);
-      if (positionalArgument == null) {
-        if (variadicPositionalArguments.isEmpty()) {
-          if (!parameter.hasDefaultValue()) {
-            unmappedParameters.add(parameter);
-          }
+      if (positionalArgument != null) {
+        final PyTupleParameter tupleParameter=(PyTupleParameter)parameter;
+        tupleMappedParameters.put(positionalArgument,tupleParameter);
+        final TupleMappingResults tupleMappingResults=mapComponentsOfTupleParameter(positionalArgument,tupleParameter);
+        mappedParameters.putAll(tupleMappingResults.getParameters());
+        unmappedParameters.addAll(tupleMappingResults.getUnmappedParameters());
+        unmappedArguments.addAll(tupleMappingResults.getUnmappedArguments());
+      }
+ else       if (variadicPositionalArguments.isEmpty()) {
+        if (!parameter.hasDefaultValue()) {
+          unmappedParameters.add(parameter);
         }
+      }
  else {
-          mappedVariadicArgumentsToParameters=true;
-        }
+        mappedVariadicArgumentsToParameters=true;
       }
     }
  else     if (parameter instanceof PySingleStarParameter) {
@@ -118,10 +126,9 @@
     variadicPositionalArguments.clear();
     variadicKeywordArguments.clear();
   }
-  final List<PyExpression> unmappedArguments=new ArrayList<PyExpression>();
   unmappedArguments.addAll(allPositionalArguments);
   unmappedArguments.addAll(keywordArguments);
   unmappedArguments.addAll(variadicPositionalArguments);
   unmappedArguments.addAll(variadicKeywordArguments);
-  return new PyCallExpression.PyArgumentsMapping(callExpression,markedCallee,mappedParameters,unmappedParameters,unmappedArguments,parametersMappedToVariadicPositionalArguments,parametersMappedToVariadicKeywordArguments);
+  return new PyCallExpression.PyArgumentsMapping(callExpression,markedCallee,mappedParameters,unmappedParameters,unmappedArguments,parametersMappedToVariadicPositionalArguments,parametersMappedToVariadicKeywordArguments,tupleMappedParameters);
 }
