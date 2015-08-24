@@ -1,32 +1,65 @@
 {
   final String indentation=getDocStringIndentation();
   final DocStringFormat format=getDocStringFormat();
+  DocStringBuilder builder=null;
   if (format == DocStringFormat.EPYTEXT || format == DocStringFormat.REST) {
-    final TagBasedDocStringBuilder builder=new TagBasedDocStringBuilder(format == DocStringFormat.EPYTEXT ? "@" : ":");
+    builder=new TagBasedDocStringBuilder(format == DocStringFormat.EPYTEXT ? "@" : ":");
+    TagBasedDocStringBuilder tagBuilder=(TagBasedDocStringBuilder)builder;
     if (myAddFirstEmptyLine) {
-      builder.addEmptyLine();
+      tagBuilder.addEmptyLine();
     }
     for (    DocstringParam param : myParams) {
       if (param.isReturnValue()) {
         if (param.getType() != null) {
-          builder.addReturnValueType(param.getType());
+          tagBuilder.addReturnValueType(param.getType());
         }
  else {
-          builder.addReturnValueDescription("");
+          tagBuilder.addReturnValueDescription("");
         }
       }
  else {
         if (param.getType() != null) {
-          builder.addParameterType(param.getName(),param.getType());
+          tagBuilder.addParameterType(param.getName(),param.getType());
         }
  else {
-          builder.addParameterDescription(param.getName(),"");
+          tagBuilder.addParameterDescription(param.getName(),"");
         }
       }
     }
-    if (!builder.getLines().isEmpty()) {
-      return myQuotes + '\n' + builder.buildContent(indentation,true)+ '\n'+ indentation+ myQuotes;
+  }
+ else   if (format == DocStringFormat.GOOGLE || format == DocStringFormat.NUMPY) {
+    builder=format == DocStringFormat.GOOGLE ? new GoogleCodeStyleDocStringBuilder() : new NumpyDocStringBuilder();
+    final SectionBasedDocStringBuilder sectionBuilder=(SectionBasedDocStringBuilder)builder;
+    if (myAddFirstEmptyLine) {
+      sectionBuilder.addEmptyLine();
     }
+    final List<DocstringParam> parameters=ContainerUtil.findAll(myParams,new Condition<DocstringParam>(){
+      @Override public boolean value(      DocstringParam param){
+        return !param.isReturnValue();
+      }
+    }
+);
+    if (!parameters.isEmpty()) {
+      sectionBuilder.startParametersSection();
+      for (      DocstringParam param : parameters) {
+        sectionBuilder.addParameter(param.getName(),param.getType(),"");
+      }
+    }
+    final List<DocstringParam> returnValues=ContainerUtil.findAll(myParams,new Condition<DocstringParam>(){
+      @Override public boolean value(      DocstringParam param){
+        return param.isReturnValue();
+      }
+    }
+);
+    if (!returnValues.isEmpty()) {
+      sectionBuilder.startReturnsSection();
+      for (      DocstringParam returnValue : returnValues) {
+        sectionBuilder.addReturnValue(null,StringUtil.notNullize(returnValue.getType()),"");
+      }
+    }
+  }
+  if (builder != null && !builder.getLines().isEmpty()) {
+    return myQuotes + '\n' + builder.buildContent(indentation,true)+ '\n'+ indentation+ myQuotes;
   }
   return myQuotes + '\n' + indentation+ myQuotes;
 }
