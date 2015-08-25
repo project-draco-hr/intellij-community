@@ -13,7 +13,8 @@
   JpsArtifactUtil.processPackagingElements(myArtifact.getRootElement(),new Processor<JpsPackagingElement>(){
     @Override public boolean process(    JpsPackagingElement element){
       if (!(element instanceof JpsFileCopyPackagingElement))       return true;
-      final String filePath=((JpsFileCopyPackagingElement)element).getFilePath();
+      final JpsFileCopyPackagingElement fileCopyPackagingElement=(JpsFileCopyPackagingElement)element;
+      final String filePath=fileCopyPackagingElement.getFilePath();
       final File skinnyManifest=new File(filePath);
       if (!"SKINNY_MANIFEST.MF".equals(skinnyManifest.getName()))       return true;
       final String skinnyWarModuleName=skinnyManifest.getParentFile().getParentFile().getName();
@@ -31,24 +32,40 @@
         }
         final Attributes warManifestMainAttributes=warManifest.getMainAttributes();
         warManifestMainAttributes.putValue("Class-Path",StringUtil.join(skinnyWarClasspath," "));
+        File skinnyManifestTargetFile=null;
         FileUtil.createParentDirs(skinnyManifest);
         FileOutputStream outputStream=new FileOutputStream(skinnyManifest);
         try {
           warManifest.write(outputStream);
-          final ProjectDescriptor projectDescriptor=context.getProjectDescriptor();
-          final Collection<BuildRootDescriptor> descriptors=projectDescriptor.getBuildRootIndex().findAllParentDescriptors(skinnyManifest,context);
-          for (          BuildRootDescriptor descriptor : descriptors) {
-            try {
-              projectDescriptor.fsState.markDirty(context,skinnyManifest,descriptor,projectDescriptor.timestamps.getStorage());
-            }
- catch (            IOException e) {
-              LOG.debug(e);
+          if (fileCopyPackagingElement instanceof JpsElementBase) {
+            final LinkedList<String> pathParts=new LinkedList<String>();
+            pathParts.add(fileCopyPackagingElement.getRenamedOutputFileName());
+            JpsElementBase parent=((JpsElementBase)fileCopyPackagingElement).getParent();
+            while (parent != null) {
+              if (parent instanceof JpsDirectoryPackagingElement) {
+                pathParts.addFirst(((JpsDirectoryPackagingElement)parent).getDirectoryName());
+              }
+ else               if (parent instanceof JpsArtifact) {
+                final String outputPath=((JpsArtifact)parent).getOutputPath();
+                if (outputPath != null) {
+                  pathParts.addFirst(outputPath);
+                  skinnyManifestTargetFile=new File(StringUtil.join(pathParts,"/"));
+                  break;
+                }
+              }
+              parent=parent.getParent();
             }
           }
         }
   finally {
           StreamUtil.closeStream(outputStream);
         }
+        if (skinnyManifestTargetFile != null) {
+          FileUtil.createParentDirs(skinnyManifestTargetFile);
+          FileUtil.copy(skinnyManifest,skinnyManifestTargetFile);
+        }
+        FSOperations.markDirtyIfNotDeleted(context,CompilationRound.NEXT,skinnyManifest);
+        FSOperations.markDirtyIfNotDeleted(context,CompilationRound.NEXT,skinnyManifestTargetFile);
       }
  catch (      IOException e) {
         LOG.debug(e);
