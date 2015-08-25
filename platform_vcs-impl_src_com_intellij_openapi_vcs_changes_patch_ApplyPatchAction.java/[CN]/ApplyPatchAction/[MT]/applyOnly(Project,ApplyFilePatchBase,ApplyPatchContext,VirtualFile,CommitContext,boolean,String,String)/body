@@ -6,10 +6,42 @@
   }
   final ApplyPatchForBaseRevisionTexts mergeData=result.getMergeData();
   if (mergeData == null)   return status;
-  if (mergeData.getBase() != null) {
-    return showMergeDialog(project,file,mergeData.getBase(),mergeData.getPatched(),reverse,leftPanelTitle,rightPanelTitle);
+  final Document document=FileDocumentManager.getInstance().getDocument(file);
+  if (document == null)   return ApplyPatchStatus.FAILURE;
+  String baseContent=toString(mergeData.getBase());
+  String localContent=toString(mergeData.getLocal());
+  String patchedContent=mergeData.getPatched();
+  if (localContent == null)   return ApplyPatchStatus.FAILURE;
+  final Ref<Boolean> successRef=new Ref<Boolean>();
+  Consumer<MergeResult> callback=new Consumer<MergeResult>(){
+    @Override public void consume(    MergeResult result){
+      FileDocumentManager.getInstance().saveDocument(document);
+      successRef.set(result != MergeResult.CANCEL);
+    }
   }
+;
+  try {
+    MergeRequest request;
+    if (baseContent != null) {
+      if (reverse) {
+        if (leftPanelTitle == null)         leftPanelTitle=VcsBundle.message("patch.apply.conflict.patched.version");
+        if (rightPanelTitle == null)         rightPanelTitle=VcsBundle.message("patch.apply.conflict.local.version");
+        List<String> contents=ContainerUtil.list(patchedContent,baseContent,localContent);
+        List<String> titles=ContainerUtil.list(leftPanelTitle,null,rightPanelTitle);
+        request=PatchDiffRequestFactory.createMergeRequest(project,document,file,contents,null,titles,callback);
+      }
  else {
-    return showBadMergeDialog(project,file,mergeData);
+        request=PatchDiffRequestFactory.createMergeRequest(project,document,file,baseContent,localContent,patchedContent,callback);
+      }
+    }
+ else {
+      request=PatchDiffRequestFactory.createBadMergeRequest(project,document,file,localContent,patchedContent,callback);
+    }
+    DiffManager.getInstance().showMerge(project,request);
+    return successRef.get() == Boolean.TRUE ? ApplyPatchStatus.SUCCESS : ApplyPatchStatus.FAILURE;
+  }
+ catch (  InvalidDiffRequestException e) {
+    LOG.warn(e);
+    return ApplyPatchStatus.FAILURE;
   }
 }
