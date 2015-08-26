@@ -1,16 +1,22 @@
 {
   myProjectStartupTaskManager=ProjectStartupTaskManager.getInstance(myProject);
-  myTree=new Tree();
-  installRenderer();
-  myDecorator=ToolbarDecorator.createDecorator(myTree).setAddAction(new AnActionButtonRunnable(){
+  myModel=new ProjectStartupTasksTableModel(RunManagerEx.getInstanceEx(myProject));
+  myTable=new JBTable(myModel);
+  new TableSpeedSearch(myTable);
+  DefaultCellEditor defaultEditor=(DefaultCellEditor)myTable.getDefaultEditor(Object.class);
+  defaultEditor.setClickCountToStart(1);
+  myTable.getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+  installRenderers();
+  myDecorator=ToolbarDecorator.createDecorator(myTable).setAddAction(new AnActionButtonRunnable(){
     @Override public void run(    AnActionButton button){
       selectAndAddConfiguration(button);
     }
   }
 ).setEditAction(new AnActionButtonRunnable(){
     @Override public void run(    AnActionButton button){
-      RunnerAndConfigurationSettings selected=getSelectedSettings();
-      if (selected == null)       return;
+      final int row=myTable.getSelectedRow();
+      if (row < 0)       return;
+      final RunnerAndConfigurationSettings selected=myModel.getAllConfigurations().get(row);
       final RunManager runManager=RunManagerImpl.getInstance(myProject);
       final RunnerAndConfigurationSettings was=runManager.getSelectedConfiguration();
       try {
@@ -20,41 +26,24 @@
   finally {
         runManager.setSelectedConfiguration(was);
       }
-      setModel(new ProjectStartupTasksTreeModel(((ProjectStartupTasksTreeModel)myTree.getModel()).getConfigurations()));
+      myModel.fireTableDataChanged();
       selectPathOrFirst(selected);
     }
   }
 ).setEditActionUpdater(new AnActionButtonUpdater(){
     @Override public boolean isEnabled(    AnActionEvent e){
-      return getSelectedSettings() != null;
+      return myTable.getSelectedRow() >= 0;
     }
   }
 ).setRemoveAction(new AnActionButtonRunnable(){
     @Override public void run(    AnActionButton button){
-      RunnerAndConfigurationSettings selected=getSelectedSettings();
-      if (selected == null)       return;
-      final ProjectStartupTasksTreeModel oldModel=(ProjectStartupTasksTreeModel)myTree.getModel();
-      final List<RunnerAndConfigurationSettings> configurations=oldModel.getConfigurations();
-      if (!configurations.contains(selected)) {
-        return;
-      }
-      configurations.remove(selected);
-      Collections.sort(configurations,new Comparator<RunnerAndConfigurationSettings>(){
-        @Override public int compare(        RunnerAndConfigurationSettings o1,        RunnerAndConfigurationSettings o2){
-          return o1.getName().compareToIgnoreCase(o2.getName());
-        }
-      }
-);
-      setModel(new ProjectStartupTasksTreeModel(configurations));
+      final int row=myTable.getSelectedRow();
+      if (row < 0)       return;
+      myModel.removeRow(row);
       selectPathOrFirst(null);
     }
   }
-);
-  myTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+).disableUpAction().disableDownAction();
   final JPanel tasksPanel=myDecorator.createPanel();
-  mySharedCheckBox=new JBCheckBox("Share");
-  mySharedCheckBox.setMnemonic('s');
-  final JPanel panel=new JPanel(new BorderLayout());
-  panel.add(mySharedCheckBox,BorderLayout.EAST);
-  return FormBuilder.createFormBuilder().addLabeledComponent(new JLabel("Tasks to be executed right after opening the project."),panel).addComponentFillVertically(tasksPanel,2).getPanel();
+  return FormBuilder.createFormBuilder().addLabeledComponentFillVertically("Tasks to be executed right after opening the project.",tasksPanel).getPanel();
 }
