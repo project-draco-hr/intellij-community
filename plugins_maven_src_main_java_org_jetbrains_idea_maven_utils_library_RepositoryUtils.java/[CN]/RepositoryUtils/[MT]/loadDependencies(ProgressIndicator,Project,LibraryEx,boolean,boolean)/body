@@ -1,0 +1,35 @@
+{
+  indicator.setText(ProjectBundle.message("maven.loading.library.hint",library.getName()));
+  @NotNull final RepositoryLibraryProperties libraryProperties=(RepositoryLibraryProperties)library.getProperties();
+  final String storageRoot=getStorageRoot(library,project);
+  RepositoryAttachHandler.doResolveInner(project,Collections.singletonList(new MavenId(libraryProperties.getGroupId(),libraryProperties.getArtifactId(),resolveEffectiveVersion(project,libraryProperties))),createExtraArtifactTypeList(downloadSources,downloadJavaDocs),RepositoryLibraryDescription.findDescription(libraryProperties).getRemoteRepositories(),new Processor<List<MavenArtifact>>(){
+    @Override public boolean process(    List<MavenArtifact> artifacts){
+      if (library.isDisposed()) {
+        return false;
+      }
+      if (artifacts == null || artifacts.isEmpty()) {
+        return true;
+      }
+      final List<OrderRoot> roots=RepositoryAttachHandler.createRoots(artifacts,storageRoot);
+      ApplicationManager.getApplication().invokeLater(new Runnable(){
+        @Override public void run(){
+          AccessToken token=WriteAction.start();
+          try {
+            final NewLibraryEditor editor=new NewLibraryEditor(null,libraryProperties);
+            editor.removeAllRoots();
+            editor.addRoots(roots);
+            final Library.ModifiableModel model=library.getModifiableModel();
+            editor.applyTo((LibraryEx.ModifiableModelEx)model);
+            model.commit();
+          }
+  finally {
+            token.finish();
+          }
+        }
+      }
+);
+      return true;
+    }
+  }
+,indicator);
+}
