@@ -1,60 +1,80 @@
 {
+  if (!myInProgress) {
+    if ((charToCheck == '"' && myQuoteMode)) {
+      myInProgress=true;
+      myStart=charNumber;
+    }
+    return false;
+  }
   if (myWaitingForCharAfterSemicolon) {
     if (charToCheck == '/' || charToCheck == '\\') {
       myFileName.append(':');
       myFileName.append(charToCheck);
       myWaitingForCharAfterSemicolon=false;
-      return PyFilesStateMachineResult.IN_PROGRESS;
+      return false;
     }
     if (Character.isDigit(charToCheck)) {
       myLookingForFile=false;
       myLineNumber.append(charToCheck);
       myWaitingForCharAfterSemicolon=false;
-      return PyFilesStateMachineResult.IN_PROGRESS;
+      return false;
     }
-    return PyFilesStateMachineResult.FAILED;
+    resetState();
+    return false;
   }
   if (charToCheck == '"') {
-    if (myHasQuote && myFileName.length() > 0 && myLineNumber.length() > 0) {
-      return PyFilesStateMachineResult.FINISHED;
+    if (myQuoteMode && myFileName.length() > 0 && myLineNumber.length() > 0) {
+      return true;
     }
-    return PyFilesStateMachineResult.FAILED;
+    resetState();
+    if (myQuoteMode) {
+      myInProgress=true;
+      myStart=charNumber;
+    }
+    return false;
   }
   if (charToCheck == ' ') {
-    if (myHasQuote && myLookingForFile) {
+    if (myQuoteMode && myLookingForFile) {
       myFileName.append(' ');
-      return PyFilesStateMachineResult.IN_PROGRESS;
+      return false;
     }
-    if (!myHasQuote && myFileName.length() > 0 && myLineNumber.length() > 0) {
-      return PyFilesStateMachineResult.FINISHED;
+    if (!myQuoteMode && myFileName.length() > 0 && myLineNumber.length() > 0) {
+      return true;
     }
-    return PyFilesStateMachineResult.FAILED;
+    resetState();
+    if (!myQuoteMode) {
+      myInProgress=true;
+      myStart=charNumber;
+    }
+    return false;
   }
   if (Character.isLetter(charToCheck) || charToCheck == '/' || charToCheck == '\\' || charToCheck == '.' || charToCheck == '_') {
     if (myLookingForFile) {
       myFileName.append(charToCheck);
-      return PyFilesStateMachineResult.IN_PROGRESS;
+      return false;
     }
   }
   if (charToCheck == ':') {
     if (myLookingForFile) {
       myWaitingForCharAfterSemicolon=true;
-      return PyFilesStateMachineResult.IN_PROGRESS;
+      return false;
     }
   }
   if (Character.isDigit(charToCheck)) {
     if (!myLookingForFile) {
       myLineNumber.append(charToCheck);
-      return PyFilesStateMachineResult.IN_PROGRESS;
+      return false;
     }
     if (myFileName.length() == 0) {
-      return PyFilesStateMachineResult.FAILED;
+      resetState();
+      return false;
     }
     myFileName.append(charToCheck);
-    return PyFilesStateMachineResult.IN_PROGRESS;
+    return false;
   }
   if (myFileName.length() > 0 && myLineNumber.length() > 0) {
-    return PyFilesStateMachineResult.FINISHED;
+    return true;
   }
-  return PyFilesStateMachineResult.FAILED;
+  resetState();
+  return false;
 }
