@@ -1,0 +1,49 @@
+{
+  if (SystemInfo.isUnix && "root".equals(System.getenv("USER"))) {
+    return commandLine;
+  }
+  List<String> command=ContainerUtil.newArrayList();
+  command.add(commandLine.getExePath());
+  command.addAll(commandLine.getParametersList().getList());
+  GeneralCommandLine sudoCommandLine;
+  if (SystemInfo.isMac) {
+    String escapedCommandLine=StringUtil.join(command,new Function<String,String>(){
+      @Override public String fun(      String s){
+        return escapeAppleScriptArgument(s);
+      }
+    }
+," & \" \" & ");
+    String escapedScript="tell current application\n" + "   activate\n" + "   do shell script " + escapedCommandLine + " with administrator privileges without altering line endings\n"+ "end tell";
+    sudoCommandLine=new GeneralCommandLine(getOsascriptPath(),"-e",escapedScript);
+  }
+ else   if (hasGkSudo.getValue()) {
+    List<String> sudoCommand=ContainerUtil.newArrayList();
+    sudoCommand.addAll(Arrays.asList("gksudo","--message",prompt,"--"));
+    sudoCommand.addAll(command);
+    sudoCommandLine=new GeneralCommandLine(sudoCommand);
+  }
+ else   if (hasKdeSudo.getValue()) {
+    List<String> sudoCommand=ContainerUtil.newArrayList();
+    sudoCommand.addAll(Arrays.asList("kdesudo","--comment",prompt,"--"));
+    sudoCommand.addAll(command);
+    sudoCommandLine=new GeneralCommandLine(sudoCommand);
+  }
+ else   if (hasPkExec.getValue()) {
+    command.add(0,"pkexec");
+    sudoCommandLine=new GeneralCommandLine(command);
+  }
+ else   if (SystemInfo.isUnix && hasTerminalApp()) {
+    String escapedCommandLine=StringUtil.join(command,new Function<String,String>(){
+      @Override public String fun(      String s){
+        return escapeUnixShellArgument(s);
+      }
+    }
+," ");
+    File script=createTempExecutableScript("sudo",".sh","#!/bin/sh\n" + "echo " + escapeUnixShellArgument(prompt) + "\n"+ "echo\n"+ "sudo -- "+ escapedCommandLine+ "\n"+ "STATUS=$?\n"+ "echo\n"+ "read -p \"Press Enter to close this window...\" TEMP\n"+ "exit $STATUS\n");
+    sudoCommandLine=new GeneralCommandLine(getTerminalCommand("Install",script.getAbsolutePath()));
+  }
+ else {
+    throw new UnsupportedSystemException();
+  }
+  return sudoCommandLine.withWorkDirectory(commandLine.getWorkDirectory()).withEnvironment(commandLine.getEnvironment()).withPassParentEnvironment(commandLine.isPassParentEnvironment()).withRedirectErrorStream(commandLine.isRedirectErrorStream());
+}
