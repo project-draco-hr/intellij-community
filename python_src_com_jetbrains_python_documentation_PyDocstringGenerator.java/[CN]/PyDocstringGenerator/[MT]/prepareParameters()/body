@@ -1,28 +1,13 @@
 {
   if (!myParametersPrepared && myAddedParams.isEmpty() && myRemovedParams.isEmpty()) {
     if (myDocStringOwner instanceof PyFunction) {
-      PySignature signature=null;
-      if (myUseTypesFromDebuggerSignature) {
-        signature=PySignatureCacheManager.getInstance(myDocStringOwner.getProject()).findSignature((PyFunction)myDocStringOwner);
-      }
       for (      PyParameter param : ((PyFunction)myDocStringOwner).getParameterList().getParameters()) {
         final String paramName=param.getName();
         final StructuredDocString docString=getStructuredDocString();
         if (StringUtil.isEmpty(paramName) || param.isSelf() || docString != null && docString.getParameters().contains(paramName)) {
           continue;
         }
-        final String signatureType=signature != null ? signature.getArgTypeQualifiedName(paramName) : null;
-        String type=null;
-        if (signatureType != null) {
-          type=signatureType;
-        }
- else         if (PyCodeInsightSettings.getInstance().INSERT_TYPE_DOCSTUB) {
-          type="";
-        }
         withParam(paramName);
-        if (type != null) {
-          withParamTypedByName(paramName,type);
-        }
       }
       final RaiseVisitor visitor=new RaiseVisitor();
       final PyStatementList statementList=((PyFunction)myDocStringOwner).getStatementList();
@@ -35,22 +20,57 @@
       }
     }
   }
-  final DocStringFormat format=getDocStringFormat();
-  if (format == DocStringFormat.GOOGLE || format == DocStringFormat.NUMPY) {
-    final ArrayList<DocstringParam> copy=new ArrayList<DocstringParam>(myAddedParams);
-    for (    final DocstringParam param : copy) {
-      if (param.getType() == null) {
-        final DocstringParam sameParamWithType=ContainerUtil.find(myAddedParams,new Condition<DocstringParam>(){
-          @Override public boolean value(          DocstringParam other){
-            return other.isReturnValue() == param.isReturnValue() && other.getName().equals(param.getName()) && other.getType() != null;
-          }
-        }
-);
-        if (sameParamWithType != null) {
-          myAddedParams.remove(param);
-        }
-      }
+  final Set<Pair<String,Boolean>> withoutType=Sets.newHashSet();
+  final Map<Pair<String,Boolean>,String> paramTypes=Maps.newHashMap();
+  for (  DocstringParam param : myAddedParams) {
+    if (param.getType() == null) {
+      withoutType.add(Pair.create(param.getName(),param.isReturnValue()));
+    }
+ else {
+      paramTypes.put(Pair.create(param.getName(),param.isReturnValue()),param.getType());
     }
   }
+  PySignature signature=null;
+  if (myDocStringOwner instanceof PyFunction && myUseTypesFromDebuggerSignature) {
+    signature=PySignatureCacheManager.getInstance(myDocStringOwner.getProject()).findSignature((PyFunction)myDocStringOwner);
+  }
+  final DocStringFormat format=getDocStringFormat();
+  final ArrayList<DocstringParam> filtered=Lists.newArrayList();
+  final Set<Pair<String,Boolean>> processed=Sets.newHashSet();
+  for (  DocstringParam param : myAddedParams) {
+    final Pair<String,Boolean> paramCoordinates=Pair.create(param.getName(),param.isReturnValue());
+    if (processed.contains(paramCoordinates)) {
+      continue;
+    }
+    if (param.getType() == null) {
+      String type=paramTypes.get(paramCoordinates);
+      if (type == null && PyCodeInsightSettings.getInstance().INSERT_TYPE_DOCSTUB) {
+        if (signature != null) {
+          type=StringUtil.notNullize(signature.getArgTypeQualifiedName(param.getName()));
+        }
+ else {
+          type="";
+        }
+      }
+      if (type != null) {
+        if (format == DocStringFormat.GOOGLE || format == DocStringFormat.NUMPY) {
+          filtered.add(new DocstringParam(param.getName(),type,param.isReturnValue()));
+        }
+ else {
+          filtered.add(param);
+          filtered.add(new DocstringParam(param.getName(),type,param.isReturnValue()));
+        }
+      }
+ else {
+        filtered.add(param);
+      }
+    }
+ else     if (!withoutType.contains(paramCoordinates)) {
+      filtered.add(param);
+    }
+    processed.add(paramCoordinates);
+  }
+  myAddedParams.clear();
+  myAddedParams.addAll(filtered);
   myParametersPrepared=true;
 }
