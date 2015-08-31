@@ -1,0 +1,45 @@
+{
+  if (expression instanceof PsiReferenceExpression) {
+    final PsiElement expressionParent=expression.getParent();
+    if (expressionParent instanceof PsiReturnStatement || isIterableMethodParameter(expressionParent,expression)) {
+      return addCollectionToList(expression);
+    }
+    return null;
+  }
+  final PsiMethodCallExpression parentMethodCall=PsiTreeUtil.getParentOfType(expression,PsiMethodCallExpression.class);
+  if (parentMethodCall != null && parentMethodCall.getMethodExpression().getQualifierExpression() == expression) {
+    final PsiMethod seqTailMethod=parentMethodCall.resolveMethod();
+    if (seqTailMethod == null) {
+      return null;
+    }
+    final PsiClass seqTailMethodClass=seqTailMethod.getContainingClass();
+    if (seqTailMethodClass != null && GuavaFluentIterableInspection.GUAVA_OPTIONAL.equals(seqTailMethodClass.getQualifiedName())) {
+      final PsiMethodCallExpression newParentMethodCall=GuavaOptionalConverter.convertGuavaOptionalToJava(parentMethodCall,myElementFactory);
+      expression=newParentMethodCall.getMethodExpression().getQualifierExpression();
+    }
+  }
+  if (expression instanceof PsiMethodCallExpression) {
+    expression=convertMethodCallDeep((PsiMethodCallExpression)expression);
+  }
+  if (expression == null) {
+    return null;
+  }
+  final PsiElement parent=expression.getParent();
+  if (parent instanceof PsiExpressionList) {
+    final PsiMethodCallExpression methodCall=(PsiMethodCallExpression)parent.getParent();
+    PsiExpression[] expressions=methodCall.getArgumentList().getExpressions();
+    int index=ArrayUtil.indexOf(expressions,expression);
+    LOG.assertTrue(index >= 0);
+    final PsiMethod method=methodCall.resolveMethod();
+    LOG.assertTrue(method != null);
+    final PsiType parameterType=method.getParameterList().getParameters()[index].getType();
+    return addCollectToListIfNeed(expression,parameterType);
+  }
+ else   if (parent instanceof PsiReturnStatement) {
+    final PsiMethod containingMethod=PsiTreeUtil.getParentOfType(parent,PsiMethod.class);
+    LOG.assertTrue(containingMethod != null);
+    final PsiType returnType=containingMethod.getReturnType();
+    return addCollectToListIfNeed(expression,returnType);
+  }
+  return expression;
+}

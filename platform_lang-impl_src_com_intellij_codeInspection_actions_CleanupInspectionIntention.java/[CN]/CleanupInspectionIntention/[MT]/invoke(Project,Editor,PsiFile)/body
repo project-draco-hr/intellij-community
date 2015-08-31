@@ -15,29 +15,19 @@
     }
   }
 );
-  boolean applicableFixFound=false;
-  for (  final ProblemDescriptor descriptor : descriptions) {
-    final QuickFix[] fixes=descriptor.getFixes();
-    if (fixes != null && fixes.length > 0) {
-      for (      final QuickFix<CommonProblemDescriptor> fix : fixes) {
-        if (fix != null && fix.getClass().isAssignableFrom(myQuickfixClass)) {
-          final PsiElement element=descriptor.getPsiElement();
-          if (element != null && element.isValid()) {
-            applicableFixFound=true;
-            ApplicationManager.getApplication().runWriteAction(new Runnable(){
-              @Override public void run(){
-                fix.applyFix(project,descriptor);
-              }
-            }
-);
-            PsiDocumentManager.getInstance(project).commitAllDocuments();
-          }
-          break;
-        }
-      }
+  final String templatePresentationText="Apply Fixes";
+  final SequentialModalProgressTask progressTask=new SequentialModalProgressTask(project,templatePresentationText,false);
+  final PerformFixesTask fixesTask=new PerformFixesTask(project,descriptions.toArray(new CommonProblemDescriptor[descriptions.size()]),progressTask);
+  CommandProcessor.getInstance().executeCommand(project,new Runnable(){
+    @Override public void run(){
+      CommandProcessor.getInstance().markCurrentCommandAsGlobal(project);
+      progressTask.setMinIterationTime(200);
+      progressTask.setTask(fixesTask);
+      ProgressManager.getInstance().run(progressTask);
     }
   }
-  if (!applicableFixFound) {
+,templatePresentationText,null);
+  if (!fixesTask.isApplicableFixFound()) {
     HintManager.getInstance().showErrorHint(editor,"Unfortunately '" + myText + "' is currently not available for batch mode");
   }
 }
