@@ -1,0 +1,57 @@
+{
+  if (isRemote(sdkUpdater.getSdk()) && project == null && ownerComponent == null) {
+    LOG.error("For refreshing skeletons of remote SDK, either project or owner component must be specified");
+  }
+  final ProgressManager progressManager=ProgressManager.getInstance();
+  boolean sdkPathsUpdated=UIUtil.<Boolean>invokeAndWaitIfNeeded(new Computable<Boolean>(){
+    @Override public Boolean compute(){
+      sdkUpdater.modifySdk(new PySdkUpdater.SdkModificationProcessor(){
+        @Override public void process(        @NotNull Sdk sdk,        @NotNull SdkModificator sdkModificator){
+          sdkModificator.removeAllRoots();
+        }
+      }
+);
+      try {
+        updateSdkRootsFromSysPath(sdkUpdater);
+        updateUserAddedPaths(sdkUpdater);
+        PythonSdkUpdater.getInstance().markAlreadyUpdated(sdkUpdater.getHomePath());
+        return true;
+      }
+ catch (      InvalidSdkException ignored) {
+      }
+      return false;
+    }
+  }
+);
+  final Application application=ApplicationManager.getApplication();
+  if (sdkPathsUpdated && !application.isUnitTestMode()) {
+    application.invokeLater(new Runnable(){
+      @Override public void run(){
+        progressManager.run(new Task.Backgroundable(project,PyBundle.message("sdk.gen.updating.skels"),false){
+          @Override public void run(          @NotNull ProgressIndicator indicator){
+            try {
+              final String skeletonsPath=getSkeletonsPath(PathManager.getSystemPath(),sdkUpdater.getHomePath());
+              PythonSdkUpdater.updateSdk(project,ownerComponent,sdkUpdater,skeletonsPath);
+            }
+ catch (            InvalidSdkException e) {
+              if (isVagrant(sdkUpdater.getSdk())) {
+                notifyRemoteSdkSkeletonsFail(e,new Runnable(){
+                  @Override public void run(){
+                    setupSdkPaths(sdkUpdater.getSdk(),project,ownerComponent);
+                  }
+                }
+);
+              }
+ else               if (!isInvalid(sdkUpdater.getSdk())) {
+                LOG.error(e);
+              }
+            }
+          }
+        }
+);
+      }
+    }
+);
+  }
+  return sdkPathsUpdated;
+}
