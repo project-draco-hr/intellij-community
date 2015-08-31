@@ -3,9 +3,9 @@
   try {
     final InputStream inputStream=((FileSystemInterface)file.getFileSystem()).getInputStream(file);
     final Ref<FileType> result=new Ref<FileType>(UnknownFileType.INSTANCE);
-    boolean r;
+    boolean r=false;
     try {
-      r=FileUtil.processFirstBytes(inputStream,DETECT_BUFFER_SIZE,new Processor<ByteSequence>(){
+      r=processFirstBytes(inputStream,DETECT_BUFFER_SIZE,new Processor<ByteSequence>(){
         @Override public boolean process(        ByteSequence byteSequence){
           boolean isText=guessIfText(file,byteSequence);
           CharSequence text;
@@ -40,23 +40,23 @@
 );
     }
   finally {
+      if (toLog()) {
+        byte[] buffer=new byte[50];
+        InputStream newStream=((FileSystemInterface)file.getFileSystem()).getInputStream(file);
+        int n=newStream.read(buffer,0,buffer.length);
+        log("F: Redetect run for file: " + file.getName() + "; result: "+ result.get().getName()+ "; processor ret: "+ r+ "; stream: "+ streamInfo(inputStream)+ "; newStream: "+ streamInfo(newStream)+ "; read: "+ n+ "; buffer: "+ Arrays.toString(buffer));
+        newStream.close();
+        try {
+          InputStream in=ReflectionUtil.getField(newStream.getClass(),newStream,InputStream.class,"in");
+          String path=ReflectionUtil.getField(in.getClass(),in,String.class,"path");
+          log("F: inputStream.in: " + in + "("+ in.getClass()+ "; in.path: "+ path+ "; path.exists "+ new File(path).exists()+ "; canRead: "+ new File(path).canRead());
+        }
+ catch (        Exception ignored) {
+        }
+      }
       inputStream.close();
     }
     FileType fileType=result.get();
-    if (toLog()) {
-      byte[] buffer=new byte[50];
-      InputStream newStream=((FileSystemInterface)file.getFileSystem()).getInputStream(file);
-      int n=newStream.read(buffer,0,buffer.length);
-      newStream.close();
-      log("F: Redetect run for file: " + file.getName() + "; result: "+ fileType.getName()+ "; processor ret: "+ r+ "; stream: "+ inputStream+ "; newStream: "+ newStream+ "; read: "+ n+ "; buffer: "+ Arrays.toString(buffer));
-      try {
-        InputStream in=ReflectionUtil.getField(newStream.getClass(),newStream,InputStream.class,"in");
-        String path=ReflectionUtil.getField(in.getClass(),in,String.class,"path");
-        log("F: inputStream.in: " + in + "("+ in.getClass()+ "; in.path: "+ path+ "; path.exists "+ new File(path).exists()+ "; canRead: "+ new File(path).canRead());
-      }
- catch (      Exception ignored) {
-      }
-    }
     if (LOG.isDebugEnabled()) {
       LOG.debug(file + "; type=" + fileType.getDescription()+ "; "+ counterAutoDetect);
     }
