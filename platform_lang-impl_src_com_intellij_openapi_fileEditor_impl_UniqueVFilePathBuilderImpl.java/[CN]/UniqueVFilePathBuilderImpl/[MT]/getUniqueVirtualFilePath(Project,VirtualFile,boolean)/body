@@ -1,29 +1,27 @@
 {
-  String fileName=file.getName();
-  Collection<VirtualFile> filesWithSameName=skipNonOpenedFiles ? Collections.<VirtualFile>emptySet() : FilenameIndex.getVirtualFilesByName(project,fileName,ProjectScope.getProjectScope(project));
-  THashSet<VirtualFile> setOfFilesWithTheSameName=new THashSet<VirtualFile>(filesWithSameName);
-  for (  VirtualFile openFile : FileEditorManager.getInstance(project).getOpenFiles()) {
-    if (openFile.getName().equals(fileName)) {
-      setOfFilesWithTheSameName.add(openFile);
+  Key<CachedValue<ConcurrentFactoryMap<String,UniqueNameBuilder<VirtualFile>>>> key=skipNonOpenedFiles ? ourShortNameOpenedBuilderCacheKey : ourShortNameBuilderCacheKey;
+  CachedValue<ConcurrentFactoryMap<String,UniqueNameBuilder<VirtualFile>>> data=project.getUserData(key);
+  if (data == null) {
+    project.putUserData(key,data=CachedValuesManager.getManager(project).createCachedValue(new CachedValueProvider<ConcurrentFactoryMap<String,UniqueNameBuilder<VirtualFile>>>(){
+      @Nullable @Override public Result<ConcurrentFactoryMap<String,UniqueNameBuilder<VirtualFile>>> compute(){
+        return new Result<ConcurrentFactoryMap<String,UniqueNameBuilder<VirtualFile>>>(new ConcurrentFactoryMap<String,UniqueNameBuilder<VirtualFile>>(){
+          @Nullable @Override protected UniqueNameBuilder<VirtualFile> create(          String key){
+            final UniqueNameBuilder<VirtualFile> builder=filesWithTheSameName(key,project,skipNonOpenedFiles,ProjectScope.getProjectScope(project));
+            return builder != null ? builder : ourEmptyBuilder;
+          }
+        }
+,PsiModificationTracker.MODIFICATION_COUNT,ProjectRootManager.getInstance(project),FileEditorManagerImpl.OPEN_FILE_SET_MODIFICATION_COUNT);
+      }
     }
+,false));
   }
-  for (  VirtualFile recentlyEditedFile : IdeDocumentHistory.getInstance(project).getChangedFiles()) {
-    if (recentlyEditedFile.getName().equals(fileName)) {
-      setOfFilesWithTheSameName.add(recentlyEditedFile);
-    }
-  }
-  filesWithSameName=setOfFilesWithTheSameName;
-  if (filesWithSameName.size() > 1 && filesWithSameName.contains(file)) {
+  UniqueNameBuilder<VirtualFile> uniqueNameBuilderForShortName=data.getValue().get(file.getName());
+  if (uniqueNameBuilderForShortName == ourEmptyBuilder)   uniqueNameBuilderForShortName=null;
+  if (uniqueNameBuilderForShortName != null && uniqueNameBuilderForShortName.contains(file)) {
     if (file instanceof VirtualFilePathWrapper) {
       return ((VirtualFilePathWrapper)file).getPresentablePath();
     }
-    String path=project.getBasePath();
-    path=path == null ? "" : FileUtil.toSystemIndependentName(path);
-    UniqueNameBuilder<VirtualFile> builder=new UniqueNameBuilder<VirtualFile>(path,File.separator,25);
-    for (    VirtualFile virtualFile : filesWithSameName) {
-      builder.addPath(virtualFile,virtualFile.getPath());
-    }
-    return getEditorTabText(file,builder,UISettings.getInstance().HIDE_KNOWN_EXTENSION_IN_TABS);
+    return getEditorTabText(file,uniqueNameBuilderForShortName,UISettings.getInstance().HIDE_KNOWN_EXTENSION_IN_TABS);
   }
   return file.getPresentableName();
 }

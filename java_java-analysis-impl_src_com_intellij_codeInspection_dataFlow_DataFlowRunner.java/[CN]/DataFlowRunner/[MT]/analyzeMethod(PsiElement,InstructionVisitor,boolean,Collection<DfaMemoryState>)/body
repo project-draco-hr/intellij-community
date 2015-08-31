@@ -1,7 +1,9 @@
 {
   try {
-    final ControlFlow flow=createControlFlowAnalyzer().buildControlFlow(psiBlock,ignoreAssertions);
+    ControlFlowAnalyzer analyzer=createControlFlowAnalyzer();
+    final ControlFlow flow=analyzer.buildControlFlow(psiBlock,ignoreAssertions);
     if (flow == null)     return RunnerResult.NOT_APPLICABLE;
+    int[] loopNumber=LoopAnalyzer.calcInLoop(flow);
     int endOffset=flow.getInstructionCount();
     myInstructions=flow.getInstructions();
     myNestedClosures.clear();
@@ -39,7 +41,8 @@
     WorkingTimeMeasurer measurer=new WorkingTimeMeasurer(msLimit * 1000 * 1000);
     int count=0;
     while (!queue.isEmpty()) {
-      for (      DfaInstructionState instructionState : queue.getNextInstructionStates(joinInstructions)) {
+      List<DfaInstructionState> states=queue.getNextInstructionStates(joinInstructions);
+      for (      DfaInstructionState instructionState : states) {
         if (count++ % 1024 == 0 && measurer.isTimeOver()) {
           LOG.debug("Too complex because the analysis took too long");
           psiBlock.putUserData(TOO_EXPENSIVE_HASH,psiBlock.getText().hashCode());
@@ -60,7 +63,9 @@
             LOG.debug("Too complex because too many different possible states");
             return RunnerResult.TOO_COMPLEX;
           }
-          processedStates.putValue(branching,instructionState.getMemoryState().createCopy());
+          if (loopNumber[branching.getIndex()] != 0) {
+            processedStates.putValue(branching,instructionState.getMemoryState().createCopy());
+          }
         }
         DfaInstructionState[] after=acceptInstruction(visitor,instructionState);
         for (        DfaInstructionState state : after) {
@@ -68,12 +73,15 @@
           if (nextInstruction.getIndex() >= endOffset) {
             continue;
           }
+          handleStepOutOfLoop(instruction,nextInstruction,loopNumber,processedStates,incomingStates,states,after,queue);
           if (nextInstruction instanceof BranchingInstruction) {
             BranchingInstruction branching=(BranchingInstruction)nextInstruction;
             if (processedStates.get(branching).contains(state.getMemoryState()) || incomingStates.get(branching).contains(state.getMemoryState())) {
               continue;
             }
-            incomingStates.putValue(branching,state.getMemoryState().createCopy());
+            if (loopNumber[branching.getIndex()] != 0) {
+              incomingStates.putValue(branching,state.getMemoryState().createCopy());
+            }
           }
           queue.offer(state);
         }

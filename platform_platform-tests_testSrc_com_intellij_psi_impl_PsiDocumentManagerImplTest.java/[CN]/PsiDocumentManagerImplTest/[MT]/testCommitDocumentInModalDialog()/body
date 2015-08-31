@@ -1,0 +1,50 @@
+{
+  VirtualFile vFile=getVirtualFile(createTempFile("a.txt","abc"));
+  PsiFile psiFile=getPsiManager().findFile(vFile);
+  final Document document=getPsiDocumentManager().getDocument(psiFile);
+  final DialogWrapper dialog=new DialogWrapper(getProject()){
+    @Nullable @Override protected JComponent createCenterPanel(){
+      return null;
+    }
+  }
+;
+  disposeOnTearDown(new Disposable(){
+    @Override public void dispose(){
+      dialog.close(DialogWrapper.OK_EXIT_CODE);
+    }
+  }
+);
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    @Override public void run(){
+      document.setText("xx");
+      LaterInvocator.enterModal(dialog);
+    }
+  }
+);
+  assertNotSame(ModalityState.NON_MODAL,ApplicationManager.getApplication().getCurrentModalityState());
+  long start=System.currentTimeMillis();
+  while (System.currentTimeMillis() - start < 10000) {
+    UIUtil.dispatchAllInvocationEvents();
+    assertFalse(getPsiDocumentManager().isCommitted(document));
+  }
+  LaterInvocator.leaveModal(dialog);
+  assertEquals(ModalityState.NON_MODAL,ApplicationManager.getApplication().getCurrentModalityState());
+  start=System.currentTimeMillis();
+  while (System.currentTimeMillis() - start < 10000 && !getPsiDocumentManager().isCommitted(document)) {
+    UIUtil.dispatchAllInvocationEvents();
+  }
+  assertTrue(getPsiDocumentManager().isCommitted(document));
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    @Override public void run(){
+      LaterInvocator.enterModal(dialog);
+      document.setText("yyy");
+    }
+  }
+);
+  assertNotSame(ModalityState.NON_MODAL,ApplicationManager.getApplication().getCurrentModalityState());
+  while (System.currentTimeMillis() - start < 10000 && !getPsiDocumentManager().isCommitted(document)) {
+    UIUtil.dispatchAllInvocationEvents();
+  }
+  assertTrue(getPsiDocumentManager().isCommitted(document));
+  LaterInvocator.leaveModal(dialog);
+}

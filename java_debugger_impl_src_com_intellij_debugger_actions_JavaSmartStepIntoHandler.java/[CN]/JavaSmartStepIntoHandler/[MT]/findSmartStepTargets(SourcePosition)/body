@@ -35,6 +35,7 @@
       final Stack<PsiMethod> myContextStack=new Stack<PsiMethod>();
       final Stack<String> myParamNameStack=new Stack<String>();
       private int myNextLambdaExpressionOrdinal=0;
+      private boolean myInsideLambda=false;
       @Nullable private String getCurrentParamName(){
         return myParamNameStack.isEmpty() ? null : myParamNameStack.peek();
       }
@@ -44,7 +45,10 @@
         }
       }
       public void visitLambdaExpression(      PsiLambdaExpression expression){
+        boolean inLambda=myInsideLambda;
+        myInsideLambda=true;
         super.visitLambdaExpression(expression);
+        myInsideLambda=inLambda;
         targets.add(new LambdaSmartStepTarget(expression,getCurrentParamName(),expression.getBody(),myNextLambdaExpressionOrdinal++,null));
       }
       @Override public void visitMethodReferenceExpression(      PsiMethodReferenceExpression expression){
@@ -54,6 +58,18 @@
           if (navMethod instanceof PsiMethod) {
             targets.add(new MethodSmartStepTarget(((PsiMethod)navMethod),null,expression,true,null));
           }
+        }
+      }
+      @Override public void visitField(      PsiField field){
+        TextRange range=field.getTextRange();
+        if (lineRange.intersects(range)) {
+          super.visitField(field);
+        }
+      }
+      @Override public void visitMethod(      PsiMethod method){
+        TextRange range=method.getTextRange();
+        if (lineRange.intersects(range)) {
+          super.visitMethod(method);
         }
       }
       @Override public void visitStatement(      PsiStatement statement){
@@ -96,7 +112,7 @@
         final PsiMethod psiMethod=expression.resolveMethod();
         if (psiMethod != null) {
           myContextStack.push(psiMethod);
-          targets.add(new MethodSmartStepTarget(psiMethod,null,expression instanceof PsiMethodCallExpression ? ((PsiMethodCallExpression)expression).getMethodExpression().getReferenceNameElement() : expression instanceof PsiNewExpression ? ((PsiNewExpression)expression).getClassOrAnonymousClassReference() : expression,false,null));
+          targets.add(new MethodSmartStepTarget(psiMethod,null,expression instanceof PsiMethodCallExpression ? ((PsiMethodCallExpression)expression).getMethodExpression().getReferenceNameElement() : expression instanceof PsiNewExpression ? ((PsiNewExpression)expression).getClassOrAnonymousClassReference() : expression,myInsideLambda,null));
         }
         try {
           super.visitCallExpression(expression);

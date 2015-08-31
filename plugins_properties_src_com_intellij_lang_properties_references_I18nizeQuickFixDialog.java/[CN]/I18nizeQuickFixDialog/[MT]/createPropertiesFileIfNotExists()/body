@@ -7,32 +7,38 @@
     myPropertiesFile.requestFocusInWindow();
     return false;
   }
-  FileType fileType=FileTypeManager.getInstance().getFileTypeByFileName(path);
-  if (fileType != StdFileTypes.PROPERTIES) {
+  final FileType fileType=FileTypeManager.getInstance().getFileTypeByFileName(path);
+  if (fileType != StdFileTypes.PROPERTIES && fileType != StdFileTypes.XML) {
     String message=CodeInsightBundle.message("i18nize.cant.create.properties.file.because.its.name.is.associated",myPropertiesFile.getText(),fileType.getDescription());
     Messages.showErrorDialog(myProject,message,CodeInsightBundle.message("i18nize.error.creating.properties.file"));
     myPropertiesFile.requestFocusInWindow();
     return false;
   }
-  final VirtualFile virtualFile;
   try {
     final File file=new File(path).getCanonicalFile();
     FileUtil.createParentDirs(file);
-    virtualFile=ApplicationManager.getApplication().runWriteAction(new ThrowableComputable<VirtualFile,IOException>(){
-      @Override public VirtualFile compute() throws IOException {
+    ApplicationManager.getApplication().runWriteAction(new ThrowableComputable<PsiFile,Exception>(){
+      @Override public PsiFile compute() throws Exception {
         VirtualFile dir=LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file.getParentFile());
+        final PsiManager psiManager=PsiManager.getInstance(myProject);
         if (dir == null) {
           throw new IOException("Error creating directory structure for file '" + path + "'");
         }
-        return dir.createChildData(this,file.getName());
+        if (fileType == StdFileTypes.PROPERTIES) {
+          return psiManager.findFile(dir.createChildData(this,file.getName()));
+        }
+ else {
+          FileTemplate template=FileTemplateManager.getInstance(myProject).getInternalTemplate("XML Properties File.xml");
+          LOG.assertTrue(template != null);
+          return (PsiFile)FileTemplateUtil.createFromTemplate(template,file.getName(),null,psiManager.findDirectory(dir));
+        }
       }
     }
 );
   }
- catch (  IOException e) {
+ catch (  Exception e) {
     Messages.showErrorDialog(myProject,e.getLocalizedMessage(),CodeInsightBundle.message("i18nize.error.creating.properties.file"));
     return false;
   }
-  PsiFile psiFile=PsiManager.getInstance(myProject).findFile(virtualFile);
-  return psiFile instanceof PropertiesFile;
+  return true;
 }

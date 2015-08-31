@@ -1,7 +1,10 @@
 {
   KeymapGroup result=KeymapGroupFactory.getInstance().createGroup(ExternalSystemBundle.message("external.system.keymap.group"),ExternalSystemIcons.TaskGroup);
   if (project == null)   return result;
-  MultiMap<Pair<ProjectSystemId,String>,String> projectToActionsMapping=MultiMap.create();
+  MultiMap<ProjectSystemId,String> projectToActionsMapping=MultiMap.create();
+  for (  ExternalSystemManager<?,?,?,?,?> manager : ExternalSystemApiUtil.getAllManagers()) {
+    projectToActionsMapping.putValues(manager.getSystemId(),ContainerUtil.<String>emptyList());
+  }
   ActionManager actionManager=ActionManager.getInstance();
   if (actionManager != null) {
     for (    String eachId : actionManager.getActionIds(getActionPrefix(project,null))) {
@@ -9,32 +12,51 @@
       if (!(eachAction instanceof MyExternalSystemAction))       continue;
       if (condition != null && !condition.value(actionManager.getActionOrStub(eachId)))       continue;
       MyExternalSystemAction taskAction=(MyExternalSystemAction)eachAction;
-      projectToActionsMapping.putValue(Pair.create(taskAction.getSystemId(),taskAction.getGroup()),eachId);
+      projectToActionsMapping.putValue(taskAction.getSystemId(),eachId);
     }
   }
   Map<ProjectSystemId,KeymapGroup> keymapGroupMap=ContainerUtil.newHashMap();
-  for (  Pair<ProjectSystemId,String> pair : projectToActionsMapping.keySet()) {
-    if (!keymapGroupMap.containsKey(pair.first)) {
-      final Icon projectIcon=ExternalSystemUiUtil.getUiAware(pair.first).getProjectIcon();
-      KeymapGroup group=KeymapGroupFactory.getInstance().createGroup(pair.first.getReadableName(),projectIcon);
+  for (  ProjectSystemId systemId : projectToActionsMapping.keySet()) {
+    if (!keymapGroupMap.containsKey(systemId)) {
+      final Icon projectIcon=ExternalSystemUiUtil.getUiAware(systemId).getProjectIcon();
+      KeymapGroup group=KeymapGroupFactory.getInstance().createGroup(systemId.getReadableName(),projectIcon);
       result.addGroup(group);
-      keymapGroupMap.put(pair.first,group);
+      keymapGroupMap.put(systemId,group);
     }
   }
-  for (  Map.Entry<Pair<ProjectSystemId,String>,Collection<String>> each : projectToActionsMapping.entrySet()) {
-    String groupName=each.getKey().second;
+  for (  Map.Entry<ProjectSystemId,Collection<String>> each : projectToActionsMapping.entrySet()) {
     Collection<String> tasks=each.getValue();
-    if (tasks.isEmpty())     continue;
-    KeymapGroup group=KeymapGroupFactory.getInstance().createGroup(groupName,ExternalSystemIcons.TaskGroup);
-    final KeymapGroup systemGroup=keymapGroupMap.get(each.getKey().first);
-    if (systemGroup != null) {
-      systemGroup.addGroup(group);
-    }
- else {
-      result.addGroup(group);
-    }
+    final ProjectSystemId systemId=each.getKey();
+    final KeymapGroup systemGroup=keymapGroupMap.get(systemId);
     for (    String actionId : tasks) {
-      group.addActionId(actionId);
+      systemGroup.addActionId(actionId);
+    }
+    if (systemGroup instanceof Group) {
+      Icon icon=SystemInfoRt.isMac ? AllIcons.ToolbarDecorator.Mac.Add : AllIcons.ToolbarDecorator.Add;
+      ((Group)systemGroup).addHyperlink(new Hyperlink(icon,"Choose a task to assign a shortcut"){
+        @Override public void onClick(        MouseEvent e){
+          SelectExternalTaskDialog dialog=new SelectExternalTaskDialog(systemId,project);
+          if (dialog.showAndGet() && dialog.getResult() != null) {
+            TaskData taskData=dialog.getResult().second;
+            String ownerModuleName=dialog.getResult().first;
+            ExternalSystemTaskAction externalSystemAction=(ExternalSystemTaskAction)getOrRegisterAction(project,ownerModuleName,taskData);
+            ApplicationManager.getApplication().getMessageBus().syncPublisher(KeymapListener.CHANGE_TOPIC).processCurrentKeymapChanged();
+            Settings allSettings=Settings.KEY.getData(DataManager.getInstance().getDataContext(e.getComponent()));
+            KeymapPanel keymapPanel=allSettings != null ? allSettings.find(KeymapPanel.class) : null;
+            if (keymapPanel != null) {
+              keymapPanel.showOption("");
+              keymapPanel.selectAction(externalSystemAction.myId);
+            }
+          }
+        }
+      }
+);
+    }
+  }
+  for (  ActionsProvider extension : ActionsProvider.EP_NAME.getExtensions()) {
+    KeymapGroup group=extension.createGroup(condition,project);
+    if (group != null) {
+      result.addGroup(group);
     }
   }
   return result;

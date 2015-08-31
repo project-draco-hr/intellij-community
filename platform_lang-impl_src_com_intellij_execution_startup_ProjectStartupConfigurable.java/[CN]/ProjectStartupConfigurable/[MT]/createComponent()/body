@@ -1,0 +1,58 @@
+{
+  initManager();
+  myModel=new ProjectStartupTasksTableModel(RunManagerEx.getInstanceEx(myProject));
+  myTable=new JBTable(myModel);
+  new TableSpeedSearch(myTable);
+  DefaultCellEditor defaultEditor=(DefaultCellEditor)myTable.getDefaultEditor(Object.class);
+  defaultEditor.setClickCountToStart(1);
+  myTable.getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+  new DumbAwareAction(){
+    @Override public void actionPerformed(    AnActionEvent e){
+      final int row=myTable.getSelectedRow();
+      if (row >= 0 && myModel.isCellEditable(row,ProjectStartupTasksTableModel.IS_SHARED_COLUMN)) {
+        myModel.setValueAt(!Boolean.TRUE.equals(myTable.getValueAt(row,ProjectStartupTasksTableModel.IS_SHARED_COLUMN)),row,ProjectStartupTasksTableModel.IS_SHARED_COLUMN);
+      }
+    }
+  }
+.registerCustomShortcutSet(new CustomShortcutSet(KeyEvent.VK_SPACE),myTable);
+  installRenderers();
+  myDecorator=ToolbarDecorator.createDecorator(myTable).setAddAction(new AnActionButtonRunnable(){
+    @Override public void run(    AnActionButton button){
+      selectAndAddConfiguration(button);
+    }
+  }
+).setEditAction(new AnActionButtonRunnable(){
+    @Override public void run(    AnActionButton button){
+      final int row=myTable.getSelectedRow();
+      if (row < 0)       return;
+      final RunnerAndConfigurationSettings selected=myModel.getAllConfigurations().get(row);
+      final RunManager runManager=RunManagerImpl.getInstance(myProject);
+      final RunnerAndConfigurationSettings was=runManager.getSelectedConfiguration();
+      try {
+        runManager.setSelectedConfiguration(selected);
+        new EditConfigurationsDialog(myProject).showAndGet();
+      }
+  finally {
+        runManager.setSelectedConfiguration(was);
+      }
+      myModel.fireTableDataChanged();
+      selectPathOrFirst(selected);
+    }
+  }
+).setEditActionUpdater(new AnActionButtonUpdater(){
+    @Override public boolean isEnabled(    AnActionEvent e){
+      return myTable.getSelectedRow() >= 0;
+    }
+  }
+).setRemoveAction(new AnActionButtonRunnable(){
+    @Override public void run(    AnActionButton button){
+      final int row=myTable.getSelectedRow();
+      if (row < 0)       return;
+      myModel.removeRow(row);
+      selectPathOrFirst(null);
+    }
+  }
+).disableUpAction().disableDownAction();
+  final JPanel tasksPanel=myDecorator.createPanel();
+  return FormBuilder.createFormBuilder().addLabeledComponentFillVertically("Tasks to be executed right after opening the project.",tasksPanel).getPanel();
+}
