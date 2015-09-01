@@ -1,0 +1,43 @@
+{
+  final Map<String,List<String>> errors=new TreeMap<String,List<String>>();
+  final List<String> failedSdks=new SmartList<String>();
+  final ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
+  final String homePath=sdkUpdater.getHomePath();
+  if (skeletonsPath == null) {
+    LOG.info("Could not find skeletons path for SDK path " + homePath);
+  }
+ else {
+    LOG.info("Refreshing skeletons for " + homePath);
+    SkeletonVersionChecker checker=new SkeletonVersionChecker(0);
+    final PySkeletonRefresher refresher=new PySkeletonRefresher(project,ownerComponent,sdkUpdater.getSdk(),skeletonsPath,indicator,null);
+    changeGeneratingSkeletons(1);
+    try {
+      List<String> sdkErrors=refresher.regenerateSkeletons(checker);
+      if (sdkErrors.size() > 0) {
+        String sdkName=sdkUpdater.getSdk().getName();
+        List<String> knownErrors=errors.get(sdkName);
+        if (knownErrors == null) {
+          errors.put(sdkName,sdkErrors);
+        }
+ else {
+          knownErrors.addAll(sdkErrors);
+        }
+      }
+    }
+  finally {
+      changeGeneratingSkeletons(-1);
+    }
+  }
+  if (failedSdks.size() > 0 || errors.size() > 0) {
+    int module_errors=0;
+    for (    String sdk_name : errors.keySet())     module_errors+=errors.get(sdk_name).size();
+    String message;
+    if (failedSdks.size() > 0) {
+      message=PyBundle.message("sdk.errorlog.$0.mods.fail.in.$1.sdks.$2.completely",module_errors,errors.size(),failedSdks.size());
+    }
+ else {
+      message=PyBundle.message("sdk.errorlog.$0.mods.fail.in.$1.sdks",module_errors,errors.size());
+    }
+    logErrors(errors,failedSdks,message);
+  }
+}
