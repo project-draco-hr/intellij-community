@@ -1,0 +1,26 @@
+{
+  List<Runnable> delayedTasks=ContainerUtil.newArrayList();
+  for (  VFileEvent event : events) {
+    final VirtualFile file=event.getFile();
+    if (file == null)     continue;
+    final FilePropertyPusher[] pushers=file.isDirectory() ? myPushers : myFilePushers;
+    if (pushers.length == 0)     continue;
+    if (event instanceof VFileCreateEvent) {
+      if (!event.isFromRefresh() || !file.isDirectory()) {
+        doPushRecursively(file,pushers,ProjectRootManager.getInstance(myProject).getFileIndex());
+      }
+ else       if (!ProjectCoreUtil.isProjectOrWorkspaceFile(file)) {
+        ContainerUtil.addIfNotNull(delayedTasks,createRecursivePushTask(file,pushers));
+      }
+    }
+ else     if (event instanceof VFileMoveEvent) {
+      for (      FilePropertyPusher pusher : pushers) {
+        file.putUserData(pusher.getFileDataKey(),null);
+      }
+      doPushRecursively(file,pushers,ProjectRootManager.getInstance(myProject).getFileIndex());
+    }
+  }
+  if (!delayedTasks.isEmpty()) {
+    queueTasks(delayedTasks);
+  }
+}
