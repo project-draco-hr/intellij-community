@@ -4,29 +4,22 @@
     return false;
   }
   StructuredDocString docString=DocStringUtil.parse(text,node);
-  if (docString == null) {
-    return false;
-  }
-  List<Substring> docstringParams=docString.getParameterSubstrings();
-  if (docstringParams == null) {
+  if (docString instanceof PlainDocString) {
     return false;
   }
   if (pyDocStringOwner instanceof PyFunction) {
-    PyDecoratorList decoratorList=((PyFunction)pyDocStringOwner).getDecoratorList();
-    boolean isClassMethod=false;
-    if (decoratorList != null) {
-      isClassMethod=decoratorList.findDecorator(PyNames.CLASSMETHOD) != null;
-    }
     PyParameter[] realParams=((PyFunction)pyDocStringOwner).getParameterList().getParameters();
-    List<PyParameter> missingParams=getMissingParams(realParams,docstringParams,isClassMethod);
+    List<PyParameter> missingParams=getMissingParams(docString,realParams);
     boolean registered=false;
     if (!missingParams.isEmpty()) {
       for (      PyParameter param : missingParams) {
-        registerProblem(param,"Missing parameter " + param.getName() + " in docstring",new DocstringQuickFix(param.getName(),null));
+        final DocStringFormat format=DocStringUtil.getConfiguredDocStringFormat(pyDocStringOwner);
+        final String docParamName=DocStringUtil.getPreferredParameterName(format,param);
+        registerProblem(param,"Missing parameter " + param.getName() + " in docstring",new DocstringQuickFix(docParamName,null));
       }
       registered=true;
     }
-    List<Substring> unexpectedParams=getUnexpectedParams(docstringParams,realParams,node);
+    List<Substring> unexpectedParams=getUnexpectedParams(docString,realParams);
     if (!unexpectedParams.isEmpty()) {
       for (      Substring param : unexpectedParams) {
         ProblemsHolder holder=getHolder();
