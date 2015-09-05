@@ -5,6 +5,7 @@
   }
   final SdkAdditionalData sdkData=mySdk.getSdkAdditionalData();
   if (sdkData instanceof PyRemoteSdkAdditionalDataBase) {
+    boolean docker=false;
     RemoteSdkCredentials remoteSdkCredentials;
     try {
       remoteSdkCredentials=((RemoteSdkAdditionalData)sdkData).getRemoteSdkCredentials(false);
@@ -14,10 +15,16 @@
       remoteSdkCredentials=null;
     }
 catch (    ExecutionException e) {
-      throw analyzeException(e,helperPath,args);
+      if (e.getCause() instanceof UnsupportedOperationException) {
+        docker=true;
+        remoteSdkCredentials=null;
+      }
+ else {
+        throw analyzeException(e,helperPath,args);
+      }
     }
     final PythonRemoteInterpreterManager manager=PythonRemoteInterpreterManager.getInstance();
-    if (manager != null && remoteSdkCredentials != null) {
+    if (manager != null && (docker || remoteSdkCredentials != null)) {
       final List<String> cmdline=new ArrayList<String>();
       cmdline.add(homePath);
       cmdline.add(RemoteFile.detectSystemByPath(homePath).createRemoteFile(helperPath).getPath());
@@ -27,13 +34,20 @@ catch (    ExecutionException e) {
         }
       }
 ));
-      if (askForSudo) {
+      if (askForSudo && !docker) {
         askForSudo=!manager.ensureCanWrite(null,remoteSdkCredentials,remoteSdkCredentials.getInterpreterPath());
       }
       ProcessOutput processOutput;
       do {
-        PyRemotePathMapper pathMapper=manager.setupMappings(null,(PyRemoteSdkAdditionalDataBase)sdkData,null);
-        processOutput=manager.runRemoteProcess(null,remoteSdkCredentials,pathMapper,ArrayUtil.toStringArray(cmdline),workingDir,askForSudo,mySdk.getHomePath());
+        final PyRemoteSdkAdditionalDataBase remoteSdkAdditionalData=(PyRemoteSdkAdditionalDataBase)sdkData;
+        final PyRemotePathMapper pathMapper=manager.setupMappings(null,remoteSdkAdditionalData,null);
+        final boolean finalAskForSudo=askForSudo;
+        processOutput=PyRemoteProcessStarterManagerUtil.execute(remoteSdkAdditionalData,new PyRemoteProcessStarterManagerUtil.ProcessManagerTask<ProcessOutput>(){
+          @Override public ProcessOutput execute(          PyRemoteProcessStarterManager processManager) throws ExecutionException, InterruptedException {
+            return processManager.executeRemoteProcess(null,ArrayUtil.toStringArray(cmdline),workingDir,manager,remoteSdkAdditionalData,pathMapper,finalAskForSudo);
+          }
+        }
+);
         if (askForSudo && processOutput.getStderr().contains("sudo: 3 incorrect password attempts")) {
           continue;
         }
