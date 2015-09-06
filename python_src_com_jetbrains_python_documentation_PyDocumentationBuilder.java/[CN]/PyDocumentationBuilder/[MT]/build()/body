@@ -1,24 +1,23 @@
 {
-  final ChainIterable<String> reassignmentChain=new ChainIterable<String>();
   final TypeEvalContext context=TypeEvalContext.userInitiated(myElement.getProject(),myElement.getContainingFile());
   PsiElement outerElement=myOriginalElement != null ? myOriginalElement.getParent() : null;
-  PsiElement followed=resolveToDocStringOwner(reassignmentChain);
-  final boolean isProperty=buildForProperty(followed,outerElement);
+  PsiElement elementDefinition=resolveToDocStringOwner();
+  final boolean isProperty=buildForProperty(elementDefinition,outerElement);
   if (myProlog.isEmpty() && !isProperty && !isAttribute()) {
-    myProlog.add(reassignmentChain);
+    myProlog.add(myReassignmentChain);
   }
-  if (followed instanceof PyDocStringOwner) {
+  if (elementDefinition instanceof PyDocStringOwner) {
     PyClass cls;
     String docString=null;
-    PyStringLiteralExpression docStringExpression=((PyDocStringOwner)followed).getDocStringExpression();
+    PyStringLiteralExpression docStringExpression=((PyDocStringOwner)elementDefinition).getDocStringExpression();
     if (docStringExpression != null)     docString=docStringExpression.getStringValue();
-    if (followed instanceof PyClass) {
-      cls=(PyClass)followed;
+    if (elementDefinition instanceof PyClass) {
+      cls=(PyClass)elementDefinition;
       myBody.add(PythonDocumentationProvider.describeDecorators(cls,TagItalic,BR,LCombUp));
       myBody.add(PythonDocumentationProvider.describeClass(cls,TagBold,true,false));
     }
- else     if (followed instanceof PyFunction) {
-      PyFunction fun=(PyFunction)followed;
+ else     if (elementDefinition instanceof PyFunction) {
+      PyFunction fun=(PyFunction)elementDefinition;
       if (!isProperty) {
         cls=fun.getContainingClass();
         if (cls != null) {
@@ -33,8 +32,8 @@
         addInheritedDocString(fun,cls);
       }
     }
- else     if (followed instanceof PyFile) {
-      addModulePath((PyFile)followed);
+ else     if (elementDefinition instanceof PyFile) {
+      addModulePath((PyFile)elementDefinition);
     }
     if (docString != null) {
       myBody.addItem(BR);
@@ -44,9 +43,9 @@
  else   if (isAttribute()) {
     addAttributeDoc();
   }
- else   if (followed instanceof PyNamedParameter) {
-    myBody.addItem(combUp("Parameter " + PyUtil.getReadableRepr(followed,false)));
-    boolean typeFromDocstringAdded=addTypeAndDescriptionFromDocstring((PyNamedParameter)followed);
+ else   if (elementDefinition instanceof PyNamedParameter) {
+    myBody.addItem(combUp("Parameter " + PyUtil.getReadableRepr(elementDefinition,false)));
+    boolean typeFromDocstringAdded=addTypeAndDescriptionFromDocstring((PyNamedParameter)elementDefinition);
     if (outerElement instanceof PyExpression) {
       PyType type=context.getType((PyExpression)outerElement);
       if (type != null) {
@@ -61,7 +60,7 @@
             PsiElement target=outerElement.getReference().resolve();
             if (target instanceof PyTargetExpression) {
               final String targetName=((PyTargetExpression)target).getName();
-              if (targetName != null && targetName.equals(((PyNamedParameter)followed).getName())) {
+              if (targetName != null && targetName.equals(((PyNamedParameter)elementDefinition).getName())) {
                 typeString="\nReassigned value has type: ";
               }
             }
@@ -72,12 +71,12 @@
         }
         if (typeString != null) {
           myBody.addItem(combUp(typeString));
-          PythonDocumentationProvider.describeTypeWithLinks(myBody,followed,type,context);
+          PythonDocumentationProvider.describeTypeWithLinks(myBody,elementDefinition,type,context);
         }
       }
     }
   }
- else   if (followed != null && outerElement instanceof PyReferenceExpression) {
+ else   if (elementDefinition != null && outerElement instanceof PyReferenceExpression) {
     myBody.addItem(combUp("\nInferred type: "));
     PythonDocumentationProvider.describeExpressionTypeWithLinks(myBody,(PyReferenceExpression)outerElement,context);
   }
