@@ -1,12 +1,13 @@
 {
-  TrackingPathMacroSubstitutor substitutor=store.getStateStorageManager().getMacroSubstitutor();
+  final TrackingPathMacroSubstitutor substitutor=store.getStateStorageManager().getMacroSubstitutor();
   if (substitutor == null) {
     return;
   }
-  final LinkedHashSet<String> macros=new LinkedHashSet<String>(substitutor.getUnknownMacros(componentName));
-  if (macros.isEmpty()) {
+  Set<String> immutableMacros=substitutor.getUnknownMacros(componentName);
+  if (immutableMacros.isEmpty()) {
     return;
   }
+  final Set<String> macros=new LinkedHashSet<String>(immutableMacros);
   AppUIUtil.invokeOnEdt(new Runnable(){
     @Override public void run(){
       List<String> notified=null;
@@ -24,15 +25,7 @@
         return;
       }
       LOG.debug("Reporting unknown path macros " + macros + " in component "+ componentName);
-      String format="<p><i>%s</i> %s undefined. <a href=\"define\">Fix it</a></p>";
-      String productName=ApplicationNamesInfo.getInstance().getProductName();
-      String content=String.format(format,StringUtil.join(macros,", "),macros.size() == 1 ? "is" : "are") + "<br>Path variables are used to substitute absolute paths " + "in "+ productName+ " project files "+ "and allow project file sharing in version control systems.<br>"+ "Some of the files describing the current project settings contain unknown path variables "+ "and "+ productName+ " cannot restore those paths.";
-      new UnknownMacroNotification("Load Error","Load error: undefined path variables",content,NotificationType.ERROR,new NotificationListener(){
-        @Override public void hyperlinkUpdate(        @NotNull Notification notification,        @NotNull HyperlinkEvent event){
-          checkUnknownMacros(store,project,true);
-        }
-      }
-,macros).notify(project);
+      doNotify(macros,project,Collections.singletonMap(substitutor,store));
     }
   }
 ,project.getDisposed());

@@ -1,0 +1,42 @@
+{
+  final ProgressManager progman=ProgressManager.getInstance();
+  final Sdk basicSdk=getSdk();
+  final Task.Modal createTask=new Task.Modal(myProject,"Creating virtual environment for " + basicSdk.getName(),false){
+    String myPath;
+    public void run(    @NotNull final ProgressIndicator indicator){
+      final PyPackageManager packageManager=PyPackageManager.getInstance(basicSdk);
+      try {
+        indicator.setText("Creating virtual environment for " + basicSdk.getName());
+        myPath=packageManager.createVirtualEnv(getDestination(),useGlobalSitePackages());
+      }
+ catch (      final ExecutionException e) {
+        ApplicationManager.getApplication().invokeLater(new Runnable(){
+          @Override public void run(){
+            final PackageManagementService.ErrorDescription description=PyPackageManagementService.toErrorDescription(Collections.singletonList(e),basicSdk);
+            if (description != null) {
+              PackagesNotificationPanel.showError("Failed to Create Virtual Environment",description);
+            }
+          }
+        }
+,ModalityState.any());
+      }
+    }
+    @Override public void onSuccess(){
+      if (myPath != null) {
+        ApplicationManager.getApplication().invokeLater(new Runnable(){
+          @Override public void run(){
+            DumbService.allowStartingDumbModeInside(DumbModePermission.MAY_START_BACKGROUND,new Runnable(){
+              @Override public void run(){
+                setupVirtualEnvSdk(myPath,associateWithProject(),callback);
+              }
+            }
+);
+          }
+        }
+);
+      }
+    }
+  }
+;
+  progman.run(createTask);
+}

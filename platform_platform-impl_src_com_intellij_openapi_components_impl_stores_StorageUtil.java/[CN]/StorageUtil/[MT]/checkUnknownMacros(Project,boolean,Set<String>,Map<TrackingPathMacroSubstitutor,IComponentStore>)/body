@@ -1,0 +1,32 @@
+{
+  if (unknownMacros.isEmpty() || (showDialog && !ProjectMacrosUtil.checkMacros(project,new THashSet<String>(unknownMacros)))) {
+    return;
+  }
+  PathMacros pathMacros=PathMacros.getInstance();
+  for (Iterator<String> it=unknownMacros.iterator(); it.hasNext(); ) {
+    String macro=it.next();
+    if (StringUtil.isEmptyOrSpaces(pathMacros.getValue(macro)) && !pathMacros.isIgnoredMacroName(macro)) {
+      it.remove();
+    }
+  }
+  if (unknownMacros.isEmpty()) {
+    return;
+  }
+  for (  Map.Entry<TrackingPathMacroSubstitutor,IComponentStore> entry : substitutorToStore.entrySet()) {
+    TrackingPathMacroSubstitutor substitutor=entry.getKey();
+    Set<String> components=substitutor.getComponents(unknownMacros);
+    IComponentStore store=entry.getValue();
+    if (store.isReloadPossible(components)) {
+      substitutor.invalidateUnknownMacros(unknownMacros);
+      for (      UnknownMacroNotification notification : NotificationsManager.getNotificationsManager().getNotificationsOfType(UnknownMacroNotification.class,project)) {
+        if (unknownMacros.containsAll(notification.getMacros())) {
+          notification.expire();
+        }
+      }
+      store.reloadStates(components,project.getMessageBus());
+    }
+ else     if (Messages.showYesNoDialog(project,"Component could not be reloaded. Reload project?","Configuration Changed",Messages.getQuestionIcon()) == Messages.YES) {
+      ProjectManagerEx.getInstanceEx().reloadProject(project);
+    }
+  }
+}
