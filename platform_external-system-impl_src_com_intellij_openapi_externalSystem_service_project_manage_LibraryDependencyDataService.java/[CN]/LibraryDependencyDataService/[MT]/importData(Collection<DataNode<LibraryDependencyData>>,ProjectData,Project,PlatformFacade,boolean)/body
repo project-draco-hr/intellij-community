@@ -2,13 +2,23 @@
   if (toImport.isEmpty()) {
     return;
   }
-  MultiMap<DataNode<ModuleData>,DataNode<LibraryDependencyData>> byModule=ExternalSystemApiUtil.groupBy(toImport,MODULE);
-  for (  Map.Entry<DataNode<ModuleData>,Collection<DataNode<LibraryDependencyData>>> entry : byModule.entrySet()) {
-    Module module=platformFacade.findIdeModule(entry.getKey().getData(),project);
-    if (module == null) {
-      LOG.warn(String.format("Can't import library dependencies %s. Reason: target module (%s) is not found at the ide and can't be imported",entry.getValue(),entry.getKey()));
-      continue;
+  MyImporter importer=new MyImporter(platformFacade);
+  try {
+    MultiMap<DataNode<ModuleData>,DataNode<LibraryDependencyData>> byModule=ExternalSystemApiUtil.groupBy(toImport,MODULE);
+    for (    Map.Entry<DataNode<ModuleData>,Collection<DataNode<LibraryDependencyData>>> entry : byModule.entrySet()) {
+      Module module=platformFacade.findIdeModule(entry.getKey().getData(),project);
+      Collection<DataNode<LibraryDependencyData>> libraryDependency=entry.getValue();
+      if (module == null) {
+        LOG.warn(String.format("Can't import library dependencies %s. Reason: target module (%s) is not found at the ide and can't be imported",libraryDependency,entry.getKey()));
+        continue;
+      }
+      importer.importData(module,libraryDependency);
     }
-    importData(entry.getValue(),module,platformFacade,synchronous);
+    ExternalSystemApiUtil.commitChangedModels(synchronous,project,importer.getLibraryModels());
+    ExternalSystemApiUtil.commitModels(synchronous,project,importer.getModels());
+  }
+ catch (  Throwable t) {
+    ExternalSystemApiUtil.disposeModels(importer.getModels());
+    ExceptionUtil.rethrowUnchecked(t);
   }
 }
