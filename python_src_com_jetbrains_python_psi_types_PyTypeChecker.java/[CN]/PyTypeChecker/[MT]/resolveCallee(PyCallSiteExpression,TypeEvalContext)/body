@@ -1,0 +1,30 @@
+{
+  final PyResolveContext resolveContext=PyResolveContext.noImplicits().withTypeEvalContext(context);
+  if (callSite instanceof PyCallExpression) {
+    final PyCallExpression callExpr=(PyCallExpression)callSite;
+    final PyCallExpression.PyMarkedCallee callee=callExpr.resolveCallee(resolveContext);
+    return callee != null ? Collections.singletonList(callee.getCallable()) : Collections.<PyCallable>emptyList();
+  }
+ else   if (callSite instanceof PySubscriptionExpression || callSite instanceof PyBinaryExpression) {
+    final List<PyCallable> results=new ArrayList<PyCallable>();
+    boolean resolvedToUnknownResult=false;
+    for (    PsiElement result : PyUtil.multiResolveTopPriority(callSite,resolveContext)) {
+      if (result instanceof PyCallable) {
+        results.add((PyCallable)result);
+        continue;
+      }
+      if (result instanceof PyTypedElement) {
+        final PyType resultType=context.getType((PyTypedElement)result);
+        if (resultType instanceof PyFunctionType) {
+          results.add(((PyFunctionType)resultType).getCallable());
+          continue;
+        }
+      }
+      resolvedToUnknownResult=true;
+    }
+    return resolvedToUnknownResult ? Collections.<PyCallable>emptyList() : results;
+  }
+ else {
+    return Collections.emptyList();
+  }
+}
