@@ -6,17 +6,23 @@
       log("F: Redetect file: " + file.getName() + "; shouldRedetect: "+ shouldRedetect);
     }
     if (shouldRedetect) {
-      int id=file instanceof VirtualFileWithId ? ((VirtualFileWithId)file).getId() : -1;
-      FileType before=getAutoDetectedType(file,id);
-      int flags=ATTRIBUTES_WERE_LOADED_MASK;
-      packedFlags.set(id,flags);
+      int id=((VirtualFileWithId)file).getId();
+      long flags=packedFlags.get(id);
+      FileType before=ObjectUtils.notNull(textOrBinaryFromCachedFlags(file,flags),ObjectUtils.notNull(file.getUserData(DETECTED_FROM_CONTENT_FILE_TYPE_KEY),PlainTextFileType.INSTANCE));
       if (toLog()) {
         log("F: reDetect(" + file.getName() + ") prepare to redetect. flags: "+ flags);
       }
-      file.putUserData(DETECTED_FROM_CONTENT_FILE_TYPE_KEY,null);
-      FileType after=getFileTypeByFile(file);
+      FileType after=getOrDetectByFile(file);
+      if (after == null) {
+        after=detectFromContentAndCache(file);
+      }
+ else {
+        file.putUserData(DETECTED_FROM_CONTENT_FILE_TYPE_KEY,null);
+        flags=0;
+        packedFlags.set(id,flags);
+      }
       if (toLog()) {
-        log("F: After redetect file: " + file.getName() + "; before: "+ before.getName()+ "; after: "+ after.getName()+ "; now getFileType()="+ file.getFileType().getName());
+        log("F: After redetect file: " + file.getName() + "; before: "+ before.getName()+ "; after: "+ after.getName()+ "; now getFileType()="+ file.getFileType().getName()+ "; DETECTED_FROM_CONTENT_FILE_TYPE_KEY: "+ file.getUserData(DETECTED_FROM_CONTENT_FILE_TYPE_KEY));
       }
       if (before != after) {
         changed.add(file);
