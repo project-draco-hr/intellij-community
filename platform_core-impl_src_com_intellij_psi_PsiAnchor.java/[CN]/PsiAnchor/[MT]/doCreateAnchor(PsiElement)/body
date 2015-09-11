@@ -1,0 +1,39 @@
+{
+  if (element instanceof PsiFile) {
+    VirtualFile virtualFile=((PsiFile)element).getVirtualFile();
+    if (virtualFile != null)     return new PsiFileReference(virtualFile,(PsiFile)element);
+    return new HardReference(element);
+  }
+  if (element instanceof PsiDirectory) {
+    VirtualFile virtualFile=((PsiDirectory)element).getVirtualFile();
+    return new PsiDirectoryReference(virtualFile,element.getProject());
+  }
+  PsiFile file=element.getContainingFile();
+  if (file == null) {
+    return new HardReference(element);
+  }
+  VirtualFile virtualFile=file.getVirtualFile();
+  if (virtualFile == null)   return new HardReference(element);
+  PsiAnchor stubRef=createStubReference(element,file);
+  if (stubRef != null)   return stubRef;
+  if (!element.isPhysical()) {
+    return wrapperOrHardReference(element);
+  }
+  TextRange textRange=element.getTextRange();
+  if (textRange == null) {
+    return wrapperOrHardReference(element);
+  }
+  Language lang=null;
+  final FileViewProvider viewProvider=file.getViewProvider();
+  final Set<Language> languages=viewProvider.getLanguages();
+  for (  Language l : languages) {
+    if (PsiTreeUtil.isAncestor(viewProvider.getPsi(l),element,false)) {
+      lang=l;
+      break;
+    }
+  }
+  if (lang == null) {
+    return wrapperOrHardReference(element);
+  }
+  return new TreeRangeReference(file,textRange.getStartOffset(),textRange.getEndOffset(),element.getClass(),lang,virtualFile);
+}
