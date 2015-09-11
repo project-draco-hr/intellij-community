@@ -1,0 +1,88 @@
+{
+  final Project project=context.getProject();
+  File outputDir=null;
+  File srcDir=null;
+  if (context.isRebuild()) {
+    outputDir=JavaScratchRunConfigurationExtension.getScratchOutputDirectory(project);
+    if (outputDir == null) {
+      return true;
+    }
+    FileUtil.delete(outputDir);
+    srcDir=JavaScratchRunConfigurationExtension.getScratchTempDirectory(project);
+    if (srcDir != null) {
+      FileUtil.delete(srcDir);
+    }
+  }
+  final RunConfiguration configuration=CompileStepBeforeRun.getRunConfiguration(context);
+  if (!(configuration instanceof ModuleBasedConfiguration)) {
+    return true;
+  }
+  final String scratchUrl=JavaScratchRunConfigurationExtension.getScratchFileUrl(configuration);
+  if (scratchUrl == null) {
+    return true;
+  }
+  final Module configModule=((ModuleBasedConfiguration)configuration).getConfigurationModule().getModule();
+  if (configModule == null) {
+    return true;
+  }
+  final ModuleRootManager moduleRootManager=ModuleRootManager.getInstance(configModule);
+  final Sdk targetSdk=moduleRootManager.getSdk();
+  if (targetSdk == null || !(targetSdk.getSdkType() instanceof JavaSdkType)) {
+    return true;
+  }
+  if (outputDir == null) {
+    outputDir=JavaScratchRunConfigurationExtension.getScratchOutputDirectory(project);
+    if (outputDir == null) {
+      return true;
+    }
+  }
+  try {
+    final File scratchFile=new File(VirtualFileManager.extractPath(scratchUrl));
+    File srcFile=scratchFile;
+    if (!StringUtil.endsWith(srcFile.getName(),".java")) {
+      if (srcDir == null) {
+        srcDir=JavaScratchRunConfigurationExtension.getScratchTempDirectory(project);
+        if (srcDir == null) {
+          return true;
+        }
+      }
+      srcFile=new File(srcDir,FileUtil.getNameWithoutExtension(scratchFile) + ".java");
+      FileUtil.copy(scratchFile,srcFile);
+    }
+    final Collection<File> files=Collections.singleton(srcFile);
+    final Set<File> cp=new LinkedHashSet<File>();
+    for (    String s : moduleRootManager.orderEntries().compileOnly().recursively().exportedOnly().withoutSdk().getPathsList().getPathList()) {
+      cp.add(new File(s));
+    }
+    final List<File> platformCp=new ArrayList<File>();
+    for (    String s : moduleRootManager.orderEntries().compileOnly().sdkOnly().getPathsList().getPathList()) {
+      platformCp.add(new File(s));
+    }
+    final List<String> options=new ArrayList<String>();
+    final JavaSdkVersion sdkVersion=JavaSdk.getInstance().getVersion(targetSdk);
+    if (sdkVersion != null) {
+      final String langLevel="1." + Integer.valueOf(3 + sdkVersion.getMaxLanguageLevel().ordinal());
+      options.add("-source");
+      options.add(langLevel);
+      options.add("-target");
+      options.add(langLevel);
+    }
+    options.add("-proc:none");
+    final Collection<ClassObject> result=CompilerManager.getInstance(project).compileJavaCode(options,platformCp,cp,Collections.<File>emptyList(),files,outputDir);
+    for (    ClassObject classObject : result) {
+      final byte[] bytes=classObject.getContent();
+      if (bytes != null) {
+        FileUtil.writeToFile(new File(classObject.getPath()),bytes);
+      }
+    }
+  }
+ catch (  CompilationException e) {
+    for (    CompilationException.Message m : e.getMessages()) {
+      context.addMessage(m.getCategory(),m.getText(),scratchUrl,m.getLine(),m.getColumn());
+    }
+  }
+catch (  IOException e) {
+    context.addMessage(CompilerMessageCategory.ERROR,e.getMessage(),scratchUrl,-1,-1);
+  }
+  return true;
+}
