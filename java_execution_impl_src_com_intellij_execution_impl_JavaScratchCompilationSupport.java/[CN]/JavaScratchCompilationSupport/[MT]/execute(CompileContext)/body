@@ -1,18 +1,5 @@
 {
   final Project project=context.getProject();
-  File outputDir=null;
-  File srcDir=null;
-  if (context.isRebuild()) {
-    outputDir=JavaScratchRunConfigurationExtension.getScratchOutputDirectory(project);
-    if (outputDir == null) {
-      return true;
-    }
-    FileUtil.delete(outputDir);
-    srcDir=JavaScratchRunConfigurationExtension.getScratchTempDirectory(project);
-    if (srcDir != null) {
-      FileUtil.delete(srcDir);
-    }
-  }
   final RunConfiguration configuration=CompileStepBeforeRun.getRunConfiguration(context);
   if (!(configuration instanceof ModuleBasedConfiguration)) {
     return true;
@@ -30,23 +17,49 @@
   if (targetSdk == null || !(targetSdk.getSdkType() instanceof JavaSdkType)) {
     return true;
   }
+  final File outputDir=JavaScratchRunConfigurationExtension.getScratchOutputDirectory(project);
   if (outputDir == null) {
-    outputDir=JavaScratchRunConfigurationExtension.getScratchOutputDirectory(project);
-    if (outputDir == null) {
-      return true;
-    }
+    return true;
   }
+  FileUtil.delete(outputDir);
   try {
     final File scratchFile=new File(VirtualFileManager.extractPath(scratchUrl));
     File srcFile=scratchFile;
     if (!StringUtil.endsWith(srcFile.getName(),".java")) {
+      final File srcDir=JavaScratchRunConfigurationExtension.getScratchTempDirectory(project);
       if (srcDir == null) {
-        srcDir=JavaScratchRunConfigurationExtension.getScratchTempDirectory(project);
-        if (srcDir == null) {
-          return true;
+        return true;
+      }
+      FileUtil.delete(srcDir);
+      final String srcFileName=ApplicationManager.getApplication().runReadAction(new Computable<String>(){
+        @Override public String compute(){
+          final VirtualFile vFile=VirtualFileManager.getInstance().findFileByUrl(scratchUrl);
+          if (vFile != null) {
+            final PsiFile psiFile=PsiManager.getInstance(project).findFile(vFile);
+            if (psiFile instanceof PsiJavaFile) {
+              String name=null;
+              for (              PsiClass aClass : ((PsiJavaFile)psiFile).getClasses()) {
+                if (name == null) {
+                  name=aClass.getName();
+                  if (isPublic(aClass)) {
+                    break;
+                  }
+                }
+ else                 if (isPublic(aClass)) {
+                  name=aClass.getName();
+                  break;
+                }
+              }
+              if (name != null) {
+                return name;
+              }
+            }
+          }
+          return FileUtil.getNameWithoutExtension(scratchFile);
         }
       }
-      srcFile=new File(srcDir,FileUtil.getNameWithoutExtension(scratchFile) + ".java");
+);
+      srcFile=new File(srcDir,srcFileName + ".java");
       FileUtil.copy(scratchFile,srcFile);
     }
     final Collection<File> files=Collections.singleton(srcFile);
