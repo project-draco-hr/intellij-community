@@ -27,16 +27,24 @@
           beforeData.addElements(new PsiElement[]{statement1,statement2});
           project.getMessageBus().syncPublisher(RefactoringEventListener.REFACTORING_EVENT_TOPIC).refactoringStarted(getRefactoringId(),beforeData);
           final StringBuilder builder=new StringBuilder();
+          final boolean isAsync=fragment.isAsync();
+          if (isAsync) {
+            builder.append("async ");
+          }
+          builder.append("def f():\n    ");
           final List<PsiElement> newMethodElements=new ArrayList<PsiElement>(elementsRange);
           final boolean hasOutputVariables=!fragment.getOutputVariables().isEmpty();
           final PyElementGenerator generator=PyElementGenerator.getInstance(project);
           final LanguageLevel languageLevel=LanguageLevel.forElement(statement1);
           if (hasOutputVariables) {
-            StringUtil.join(fragment.getOutputVariables(),", ",builder);
-            final PsiElement returnStatement=generator.createFromText(languageLevel,PyElement.class,"return " + builder.toString());
+            final String outputVariables=StringUtil.join(fragment.getOutputVariables(),", ");
+            String newMethodText=builder + "return " + outputVariables;
+            builder.append(outputVariables);
+            final PyFunction function=generator.createFromText(languageLevel,PyFunction.class,newMethodText);
+            final PsiElement returnStatement=function.getStatementList().getStatements()[0];
             newMethodElements.add(returnStatement);
           }
-          PyFunction generatedMethod=generateMethodFromElements(project,methodName,variableData,newMethodElements,flags);
+          PyFunction generatedMethod=generateMethodFromElements(project,methodName,variableData,newMethodElements,flags,isAsync);
           generatedMethod=insertGeneratedMethod(statement1,generatedMethod);
           final PsiElement firstElement=elementsRange.get(0);
           final boolean isMethod=PyPsiUtils.isMethodContext(firstElement);
@@ -49,7 +57,10 @@
  else           if (fragment.isReturnInstructionInside()) {
             builder.append("return ");
           }
-          if (fragment.isYieldInside()) {
+          if (isAsync) {
+            builder.append("await ");
+          }
+ else           if (fragment.isYieldInside()) {
             builder.append("yield from ");
           }
           if (isMethod) {
@@ -57,7 +68,8 @@
           }
           builder.append(methodName).append("(");
           builder.append(createCallArgsString(variableData)).append(")");
-          PsiElement callElement=generator.createFromText(languageLevel,PyElement.class,builder.toString());
+          final PyFunction function=generator.createFromText(languageLevel,PyFunction.class,builder.toString());
+          PsiElement callElement=function.getStatementList().getStatements()[0];
           callElement=replaceElements(elementsRange,callElement);
           callElement=CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(callElement);
           if (callElement != null) {
