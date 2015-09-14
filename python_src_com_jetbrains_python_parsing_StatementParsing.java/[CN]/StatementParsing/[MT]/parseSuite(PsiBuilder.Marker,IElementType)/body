@@ -1,0 +1,53 @@
+{
+  if (myBuilder.getTokenType() == PyTokenTypes.STATEMENT_BREAK) {
+    myBuilder.advanceLexer();
+    final PsiBuilder.Marker marker=myBuilder.mark();
+    final boolean indentFound=myBuilder.getTokenType() == PyTokenTypes.INDENT;
+    if (indentFound) {
+      myBuilder.advanceLexer();
+      if (myBuilder.eof()) {
+        myBuilder.error("Indented block expected");
+      }
+ else {
+        while (!myBuilder.eof() && myBuilder.getTokenType() != PyTokenTypes.DEDENT) {
+          parseStatement();
+        }
+      }
+    }
+ else {
+      myBuilder.error("Indent expected");
+    }
+    marker.done(PyElementTypes.STATEMENT_LIST);
+    marker.setCustomEdgeTokenBinders(LeadingCommentsBinder.INSTANCE,FollowingCommentBinder.INSTANCE);
+    if (endMarker != null) {
+      endMarker.done(elType);
+    }
+    if (indentFound && !myBuilder.eof()) {
+      checkMatches(PyTokenTypes.DEDENT,"Dedent expected");
+    }
+  }
+ else {
+    final PsiBuilder.Marker marker=myBuilder.mark();
+    if (myBuilder.eof()) {
+      myBuilder.error("Statement expected");
+    }
+ else {
+      final ParsingContext context=getParsingContext();
+      context.pushScope(context.getScope().withSuite(true));
+      parseSimpleStatement();
+      context.popScope();
+      while (matchToken(PyTokenTypes.SEMICOLON)) {
+        if (matchToken(PyTokenTypes.STATEMENT_BREAK)) {
+          break;
+        }
+        context.pushScope(context.getScope().withSuite(true));
+        parseSimpleStatement();
+        context.popScope();
+      }
+    }
+    marker.done(PyElementTypes.STATEMENT_LIST);
+    if (endMarker != null) {
+      endMarker.done(elType);
+    }
+  }
+}
