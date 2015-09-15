@@ -1,0 +1,76 @@
+{
+  final PyDocumentationSettings docSettings=PyDocumentationSettings.getInstance(module);
+  ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+    public void run(){
+      if (delay > 0) {
+        try {
+          Thread.sleep(delay);
+        }
+ catch (        InterruptedException ignore) {
+        }
+      }
+      LOG.debug("Integrated tools configurator has started");
+      ApplicationManager.getApplication().invokeLater(new Runnable(){
+        @Override public void run(){
+          @NotNull DocStringFormat docFormat=DocStringFormat.PLAIN;
+          @NotNull String testRunner=detectTestRunnerFromSetupPy(module);
+          if (!testRunner.isEmpty()) {
+            LOG.debug("Test runner '" + testRunner + "' was discovered from setup.py in the module '"+ module.getModuleFilePath()+ "'");
+          }
+          final String extension=PythonFileType.INSTANCE.getDefaultExtension();
+          final GlobalSearchScope searchScope=module.getModuleContentScope();
+          final Collection<VirtualFile> pyFiles=FilenameIndex.getAllFilesByExt(module.getProject(),extension,searchScope);
+          for (          VirtualFile file : pyFiles) {
+            if (file.getName().startsWith("test")) {
+              if (testRunner.isEmpty()) {
+                testRunner=checkImports(file,module);
+                if (!testRunner.isEmpty()) {
+                  LOG.debug("Test runner '" + testRunner + "' was detected from imports in the file '"+ file.getPath()+ "'");
+                }
+              }
+            }
+ else             if (docFormat == DocStringFormat.PLAIN) {
+              docFormat=checkDocstring(file,module);
+              if (docFormat != DocStringFormat.PLAIN) {
+                LOG.debug("Docstring format '" + docFormat + "' was detected from content of the file '"+ file.getPath()+ "'");
+              }
+            }
+            if (!testRunner.isEmpty() && docFormat != DocStringFormat.PLAIN) {
+              break;
+            }
+          }
+          if (testRunner.isEmpty()) {
+            final Sdk sdk=PythonSdkType.findPythonSdk(module);
+            if (sdk != null && sdk.getSdkType() instanceof PythonSdkType) {
+              final Boolean nose=VFSTestFrameworkListener.isTestFrameworkInstalled(sdk,PyNames.NOSE_TEST);
+              final Boolean pytest=VFSTestFrameworkListener.isTestFrameworkInstalled(sdk,PyNames.PY_TEST);
+              final Boolean attest=VFSTestFrameworkListener.isTestFrameworkInstalled(sdk,PyNames.AT_TEST);
+              if (nose != null && nose)               testRunner=PythonTestConfigurationsModel.PYTHONS_NOSETEST_NAME;
+ else               if (pytest != null && pytest)               testRunner=PythonTestConfigurationsModel.PY_TEST_NAME;
+ else               if (attest != null && attest)               testRunner=PythonTestConfigurationsModel.PYTHONS_ATTEST_NAME;
+              if (!testRunner.isEmpty()) {
+                LOG.debug("Test runner '" + testRunner + "' was detected from SDK "+ sdk);
+              }
+            }
+          }
+          final TestRunnerService runnerService=TestRunnerService.getInstance(module);
+          if (runnerService != null) {
+            if (testRunner.isEmpty()) {
+              runnerService.setProjectConfiguration(PythonTestConfigurationsModel.PYTHONS_UNITTEST_NAME);
+            }
+ else {
+              runnerService.setProjectConfiguration(testRunner);
+              LOG.info("Test runner '" + testRunner + "' was detected by project configurator");
+            }
+          }
+          if (docFormat != DocStringFormat.PLAIN) {
+            docSettings.setFormat(docFormat);
+            LOG.info("Docstring format '" + docFormat + "' was detected by project configurator");
+          }
+        }
+      }
+,ModalityState.any(),module.getDisposed());
+    }
+  }
+);
+}

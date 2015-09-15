@@ -1,0 +1,70 @@
+{
+  DocStringBuilder builder=null;
+  if (myDocStringFormat == DocStringFormat.EPYTEXT || myDocStringFormat == DocStringFormat.REST) {
+    builder=new TagBasedDocStringBuilder(myDocStringFormat == DocStringFormat.EPYTEXT ? "@" : ":");
+    TagBasedDocStringBuilder tagBuilder=(TagBasedDocStringBuilder)builder;
+    if (myAddFirstEmptyLine) {
+      tagBuilder.addEmptyLine();
+    }
+    for (    DocstringParam param : myAddedParams) {
+      if (param.isReturnValue()) {
+        if (param.getType() != null) {
+          tagBuilder.addReturnValueType(param.getType());
+        }
+ else {
+          tagBuilder.addReturnValueDescription("");
+        }
+      }
+ else {
+        if (param.getType() != null) {
+          tagBuilder.addParameterType(param.getName(),param.getType());
+        }
+ else {
+          tagBuilder.addParameterDescription(param.getName(),"");
+        }
+      }
+    }
+  }
+ else   if (myDocStringFormat == DocStringFormat.GOOGLE || myDocStringFormat == DocStringFormat.NUMPY) {
+    builder=myDocStringFormat == DocStringFormat.GOOGLE ? new GoogleCodeStyleDocStringBuilder() : new NumpyDocStringBuilder();
+    final SectionBasedDocStringBuilder sectionBuilder=(SectionBasedDocStringBuilder)builder;
+    if (myAddFirstEmptyLine) {
+      sectionBuilder.addEmptyLine();
+    }
+    final List<DocstringParam> parameters=ContainerUtil.findAll(myAddedParams,new Condition<DocstringParam>(){
+      @Override public boolean value(      DocstringParam param){
+        return !param.isReturnValue();
+      }
+    }
+);
+    if (!parameters.isEmpty()) {
+      sectionBuilder.startParametersSection();
+      for (      DocstringParam param : parameters) {
+        sectionBuilder.addParameter(param.getName(),param.getType(),"");
+      }
+    }
+    final List<DocstringParam> returnValues=ContainerUtil.findAll(myAddedParams,new Condition<DocstringParam>(){
+      @Override public boolean value(      DocstringParam param){
+        return param.isReturnValue();
+      }
+    }
+);
+    if (!returnValues.isEmpty()) {
+      sectionBuilder.startReturnsSection();
+      boolean hasTypedReturns=false;
+      for (      DocstringParam returnValue : returnValues) {
+        if (StringUtil.isNotEmpty(returnValue.getType())) {
+          sectionBuilder.addReturnValue(null,returnValue.getType(),"");
+          hasTypedReturns=true;
+        }
+      }
+      if (!hasTypedReturns) {
+        sectionBuilder.addEmptyLine();
+      }
+    }
+  }
+  if (builder != null && !builder.getLines().isEmpty()) {
+    return myQuotes + '\n' + builder.buildContent(myDocStringIndent,true)+ '\n'+ myDocStringIndent+ myQuotes;
+  }
+  return createEmptyFallbackDocString();
+}
