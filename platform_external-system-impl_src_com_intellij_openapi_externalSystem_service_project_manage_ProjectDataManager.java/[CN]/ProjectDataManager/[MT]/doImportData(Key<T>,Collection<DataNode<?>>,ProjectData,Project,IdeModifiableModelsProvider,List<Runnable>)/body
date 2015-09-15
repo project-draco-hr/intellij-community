@@ -1,0 +1,45 @@
+{
+  if (project.isDisposed())   return;
+  if (project instanceof ProjectImpl) {
+    assert((ProjectImpl)project).isComponentsCreated();
+  }
+  final List<DataNode<T>> toImport=ContainerUtil.newSmartList();
+  final List<DataNode<T>> toIgnore=ContainerUtil.newSmartList();
+  for (  DataNode node : nodes) {
+    if (!key.equals(node.getKey()))     continue;
+    if (node.isIgnored()) {
+      toIgnore.add(node);
+    }
+ else {
+      toImport.add(node);
+    }
+  }
+  ensureTheDataIsReadyToUse((Collection)toImport);
+  final List<ProjectDataService<?,?>> services=myServices.getValue().get(key);
+  if (services == null) {
+    LOG.warn(String.format("Can't import data nodes '%s'. Reason: no service is registered for key %s. Available services for %s",toImport,key,myServices.getValue().keySet()));
+  }
+ else {
+    for (    ProjectDataService<?,?> service : services) {
+      final long importStartTime=System.currentTimeMillis();
+      ((ProjectDataService)service).importData(toImport,projectData,project,modelsProvider);
+      final long importTimeInMs=(System.currentTimeMillis() - importStartTime);
+      LOG.debug(String.format("Service %s imported data in %d ms",service.getClass().getSimpleName(),importTimeInMs));
+    }
+  }
+  ensureTheDataIsReadyToUse((Collection)toIgnore);
+  if (services != null && projectData != null) {
+    postImportTasks.add(new Runnable(){
+      @Override public void run(){
+        for (        ProjectDataService<?,?> service : services) {
+          final long removeStartTime=System.currentTimeMillis();
+          final Computable<Collection<?>> orphanIdeDataComputable=((ProjectDataService)service).computeOrphanData(toImport,projectData,project,modelsProvider);
+          ((ProjectDataService)service).removeData(orphanIdeDataComputable,toIgnore,projectData,project,modelsProvider);
+          final long removeTimeInMs=(System.currentTimeMillis() - removeStartTime);
+          LOG.debug(String.format("Service %s computed and removed data in %d ms",service.getClass().getSimpleName(),removeTimeInMs));
+        }
+      }
+    }
+);
+  }
+}
