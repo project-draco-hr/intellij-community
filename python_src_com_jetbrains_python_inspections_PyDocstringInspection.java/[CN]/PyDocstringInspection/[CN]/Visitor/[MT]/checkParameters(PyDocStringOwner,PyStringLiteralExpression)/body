@@ -3,33 +3,24 @@
   if (text == null) {
     return false;
   }
-  StructuredDocString docString=DocStringUtil.parse(text);
-  if (docString == null) {
-    return false;
-  }
-  List<Substring> docstringParams=docString.getParameterSubstrings();
-  if (docstringParams == null) {
+  final StructuredDocString docString=DocStringUtil.parse(text,node);
+  if (docString instanceof PlainDocString) {
     return false;
   }
   if (pyDocStringOwner instanceof PyFunction) {
-    PyDecoratorList decoratorList=((PyFunction)pyDocStringOwner).getDecoratorList();
-    boolean isClassMethod=false;
-    if (decoratorList != null) {
-      isClassMethod=decoratorList.findDecorator(PyNames.CLASSMETHOD) != null;
-    }
-    PyParameter[] realParams=((PyFunction)pyDocStringOwner).getParameterList().getParameters();
-    List<PyParameter> missingParams=getMissingParams(realParams,docstringParams,isClassMethod);
+    final PyParameter[] realParams=((PyFunction)pyDocStringOwner).getParameterList().getParameters();
+    final List<PyNamedParameter> missingParams=getMissingParams(docString,realParams);
     boolean registered=false;
     if (!missingParams.isEmpty()) {
-      for (      PyParameter param : missingParams) {
-        registerProblem(param,"Missing parameter " + param.getName() + " in docstring",new DocstringQuickFix(param.getName(),null));
+      for (      PyNamedParameter param : missingParams) {
+        registerProblem(param,"Missing parameter " + param.getName() + " in docstring",new DocstringQuickFix(param,null));
       }
       registered=true;
     }
-    List<Substring> unexpectedParams=getUnexpectedParams(docstringParams,realParams,node);
+    final List<Substring> unexpectedParams=getUnexpectedParams(docString,realParams);
     if (!unexpectedParams.isEmpty()) {
       for (      Substring param : unexpectedParams) {
-        ProblemsHolder holder=getHolder();
+        final ProblemsHolder holder=getHolder();
         if (holder != null) {
           holder.registerProblem(node,param.getTextRange(),"Unexpected parameter " + param + " in docstring",new DocstringQuickFix(null,param.getValue()));
         }
