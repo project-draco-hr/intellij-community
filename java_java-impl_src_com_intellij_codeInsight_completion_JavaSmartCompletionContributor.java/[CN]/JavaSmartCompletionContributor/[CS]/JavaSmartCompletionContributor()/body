@@ -1,2 +1,77 @@
 {
+  extend(CompletionType.SMART,SmartCastProvider.TYPECAST_TYPE_CANDIDATE,new SmartCastProvider());
+  extend(CompletionType.SMART,SameSignatureCallParametersProvider.IN_CALL_ARGUMENT,new SameSignatureCallParametersProvider());
+  extend(CompletionType.SMART,MethodReturnTypeProvider.IN_METHOD_RETURN_TYPE,new MethodReturnTypeProvider());
+  extend(CompletionType.SMART,InstanceofTypeProvider.AFTER_INSTANCEOF,new InstanceofTypeProvider());
+  extend(CompletionType.SMART,psiElement(),new CompletionProvider<CompletionParameters>(){
+    @Override protected void addCompletions(    @NotNull final CompletionParameters parameters,    final ProcessingContext context,    @NotNull final CompletionResultSet result){
+      if (SmartCastProvider.shouldSuggestCast(parameters))       return;
+      final PsiElement element=parameters.getPosition();
+      final PsiReference reference=element.getContainingFile().findReferenceAt(parameters.getOffset());
+      if (reference != null) {
+        ElementFilter filter=getClassReferenceFilter(element);
+        if (filter != null) {
+          final List<ExpectedTypeInfo> infos=Arrays.asList(getExpectedTypes(parameters));
+          for (          final LookupElement item : completeReference(element,reference,filter,true,false,parameters,result.getPrefixMatcher())) {
+            if (item.getObject() instanceof PsiClass) {
+              result.addElement(decorate(LookupElementDecorator.withInsertHandler(item,ConstructorInsertHandler.SMART_INSTANCE),infos));
+            }
+          }
+        }
+ else         if (INSIDE_TYPECAST_EXPRESSION.accepts(element)) {
+          final PsiTypeCastExpression cast=PsiTreeUtil.getContextOfType(element,PsiTypeCastExpression.class,true);
+          if (cast != null && cast.getCastType() != null) {
+            filter=new AssignableToFilter(cast.getCastType().getType());
+            for (            final LookupElement item : completeReference(element,reference,filter,false,true,parameters,result.getPrefixMatcher())) {
+              result.addElement(item);
+            }
+          }
+        }
+      }
+    }
+  }
+);
+  extend(CompletionType.SMART,INSIDE_EXPRESSION,new ExpectedTypeBasedCompletionProvider(){
+    @Override protected void addCompletions(    final CompletionParameters params,    final CompletionResultSet result,    final Collection<ExpectedTypeInfo> _infos){
+      if (SmartCastProvider.shouldSuggestCast(params))       return;
+      Consumer<LookupElement> noTypeCheck=decorateWithoutTypeCheck(result,_infos);
+      THashSet<ExpectedTypeInfo> mergedInfos=new THashSet<ExpectedTypeInfo>(_infos,EXPECTED_TYPE_INFO_STRATEGY);
+      List<Runnable> chainedEtc=new ArrayList<Runnable>();
+      for (      final ExpectedTypeInfo info : mergedInfos) {
+        Runnable slowContinuation=ReferenceExpressionCompletionContributor.fillCompletionVariants(new JavaSmartCompletionParameters(params,info),noTypeCheck);
+        ContainerUtil.addIfNotNull(chainedEtc,slowContinuation);
+      }
+      addExpectedTypeMembers(params,mergedInfos,true,noTypeCheck);
+      PsiElement parent=params.getPosition().getParent();
+      if (parent instanceof PsiReferenceExpression) {
+        CollectConversion.addCollectConversion((PsiReferenceExpression)parent,mergedInfos,noTypeCheck);
+      }
+      for (      final ExpectedTypeInfo info : mergedInfos) {
+        BasicExpressionCompletionContributor.fillCompletionVariants(new JavaSmartCompletionParameters(params,info),new Consumer<LookupElement>(){
+          @Override public void consume(          LookupElement lookupElement){
+            final PsiType psiType=JavaCompletionUtil.getLookupElementType(lookupElement);
+            if (psiType != null && info.getType().isAssignableFrom(psiType)) {
+              result.addElement(decorate(lookupElement,_infos));
+            }
+          }
+        }
+,result.getPrefixMatcher());
+      }
+      for (      Runnable runnable : chainedEtc) {
+        runnable.run();
+      }
+      final boolean searchInheritors=params.getInvocationCount() > 1;
+      if (searchInheritors) {
+        addExpectedTypeMembers(params,mergedInfos,false,noTypeCheck);
+      }
+    }
+  }
+);
+  extend(CompletionType.SMART,ExpectedAnnotationsProvider.ANNOTATION_ATTRIBUTE_VALUE,new ExpectedAnnotationsProvider());
+  extend(CompletionType.SMART,CatchTypeProvider.CATCH_CLAUSE_TYPE,new CatchTypeProvider());
+  extend(CompletionType.SMART,TypeArgumentCompletionProvider.IN_TYPE_ARGS,new TypeArgumentCompletionProvider(true,null));
+  extend(CompletionType.SMART,AFTER_NEW,new JavaInheritorsGetter(ConstructorInsertHandler.SMART_INSTANCE));
+  extend(CompletionType.SMART,LabelReferenceCompletion.LABEL_REFERENCE,new LabelReferenceCompletion());
+  extend(CompletionType.SMART,psiElement(),new FunctionalExpressionCompletionProvider());
+  extend(CompletionType.SMART,psiElement(),new MethodReferenceCompletionProvider());
 }
