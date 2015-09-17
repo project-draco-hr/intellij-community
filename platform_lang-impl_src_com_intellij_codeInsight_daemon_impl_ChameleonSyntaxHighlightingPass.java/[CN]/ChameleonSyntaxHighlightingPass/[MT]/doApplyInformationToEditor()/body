@@ -1,0 +1,41 @@
+{
+  ApplicationManager.getApplication().assertIsDispatchThread();
+  EditorColorsScheme scheme=myEditor.getColorsScheme();
+  TextAttributes defaultAttrs=scheme.getAttributes(HighlighterColors.TEXT);
+  SyntaxTraverser<PsiElement> s=psiTraverser(myFile).expand(compose(psiApi().TO_RANGE(),new Condition<TextRange>(){
+    @Override public boolean value(    TextRange range){
+      return range.intersects(myStartOffset,myEndOffset);
+    }
+  }
+)).filterTypes(instanceOf(ILazyParseableElementType.class)).filterTypes(notInstanceOf(IFileElementType.class));
+  List<HighlightInfo> infos=ContainerUtil.newArrayList();
+  for (  PsiElement e : s) {
+    Language language=ILazyParseableElementType.LANGUAGE_KEY.get(e.getNode());
+    if (language == null)     continue;
+    SyntaxHighlighter syntaxHighlighter=SyntaxHighlighterFactory.getSyntaxHighlighter(language,myProject,myFile.getVirtualFile());
+    for (    PsiElement token : psiTraverser(e).traverse(TreeTraversal.LEAVES_DFS)) {
+      TextRange tr=token.getTextRange();
+      if (tr.isEmpty())       continue;
+      IElementType type=PsiUtilCore.getElementType(token);
+      TextAttributesKey[] keys=syntaxHighlighter.getTokenHighlights(type);
+      TextAttributes attributes=null;
+      for (      TextAttributesKey key : keys) {
+        TextAttributes attrs2=scheme.getAttributes(key);
+        if (attrs2 != null) {
+          attributes=attributes == null ? attrs2 : TextAttributes.merge(attributes,attrs2);
+        }
+      }
+      TextAttributes forcedAttributes;
+      if (attributes == null || attributes.isEmpty() || attributes.equals(defaultAttrs)) {
+        forcedAttributes=TextAttributes.ERASE_MARKER;
+      }
+ else {
+        infos.add(HighlightInfo.newHighlightInfo(HighlightInfoType.INJECTED_LANGUAGE_FRAGMENT).range(tr).textAttributes(TextAttributes.ERASE_MARKER).createUnconditionally());
+        forcedAttributes=new TextAttributes(attributes.getForegroundColor(),attributes.getBackgroundColor(),attributes.getEffectColor(),attributes.getEffectType(),attributes.getFontType());
+      }
+      infos.add(HighlightInfo.newHighlightInfo(HighlightInfoType.INJECTED_LANGUAGE_FRAGMENT).range(tr).textAttributes(forcedAttributes).createUnconditionally());
+    }
+  }
+  if (infos.isEmpty())   return;
+  UpdateHighlightersUtil.setHighlightersToEditor(myProject,myDocument,myStartOffset,myEndOffset,infos,getColorsScheme(),getId());
+}
