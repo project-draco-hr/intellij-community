@@ -1,29 +1,41 @@
 {
-  Project project=getProject();
-  LightPlatformTestCase.doTearDown(project,myApplication,false);
-  for (  ModuleFixtureBuilder moduleFixtureBuilder : myModuleFixtureBuilders) {
-    moduleFixtureBuilder.getFixture().tearDown();
-  }
-  UIUtil.invokeAndWaitIfNeeded(new Runnable(){
-    @Override public void run(){
-      ApplicationManager.getApplication().runWriteAction(new Runnable(){
-        @Override public void run(){
-          Disposer.dispose(myProject);
-          myProject=null;
-        }
+  final Project project=getProject();
+  final List<Throwable> exceptions=new SmartList<Throwable>();
+  try {
+    LightPlatformTestCase.doTearDown(project,myApplication,false,exceptions);
+    for (    ModuleFixtureBuilder moduleFixtureBuilder : myModuleFixtureBuilders) {
+      moduleFixtureBuilder.getFixture().tearDown();
+    }
+    EdtTestUtil.runInEdtAndWait(new ThrowableRunnable<Throwable>(){
+      @Override public void run() throws Throwable {
+        PlatformTestCase.closeAndDisposeProjectAndCheckThatNoOpenProjects(project,exceptions);
       }
+    }
 );
+    myProject=null;
+    for (    File fileToDelete : myFilesToDelete) {
+      if (!FileUtil.delete(fileToDelete)) {
+        exceptions.add(new IOException("Can't delete " + fileToDelete));
+      }
     }
   }
-);
-  for (  final File fileToDelete : myFilesToDelete) {
-    boolean deleted=FileUtil.delete(fileToDelete);
-    Assert.assertTrue("Can't delete " + fileToDelete,deleted);
+ catch (  Throwable e) {
+    exceptions.add(e);
   }
-  super.tearDown();
-  myEditorListenerTracker.checkListenersLeak();
-  myThreadTracker.checkLeak();
-  LightPlatformTestCase.checkEditorsReleased();
-  PlatformTestCase.cleanupApplicationCaches(project);
-  InjectedLanguageManagerImpl.checkInjectorsAreDisposed(project);
+  try {
+    super.tearDown();
+  }
+ catch (  Throwable e) {
+    exceptions.add(e);
+  }
+  try {
+    myEditorListenerTracker.checkListenersLeak();
+    myThreadTracker.checkLeak();
+    LightPlatformTestCase.checkEditorsReleased(exceptions);
+    PlatformTestCase.cleanupApplicationCaches(project);
+    InjectedLanguageManagerImpl.checkInjectorsAreDisposed(project);
+  }
+  finally {
+    CompoundRuntimeException.throwIfNotEmpty(exceptions);
+  }
 }

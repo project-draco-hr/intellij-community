@@ -1,16 +1,29 @@
 {
   Project project=getProject();
   CodeStyleSettingsManager.getInstance(project).dropTemporarySettings();
-  List<Throwable> errors=checkForSettingsDamage();
-  VirtualFilePointerManagerImpl filePointerManager=(VirtualFilePointerManagerImpl)VirtualFilePointerManager.getInstance();
-  doTearDown(project,ourApplication,true);
+  List<Throwable> errors=new SmartList<Throwable>();
+  try {
+    checkForSettingsDamage(errors);
+    doTearDown(project,ourApplication,true,errors);
+  }
+ catch (  Throwable e) {
+    errors.add(e);
+  }
   try {
     super.tearDown();
   }
-  finally {
+ catch (  Throwable e) {
+    errors.add(e);
+  }
+  try {
     myThreadTracker.checkLeak();
     InjectedLanguageManagerImpl.checkInjectorsAreDisposed(project);
-    filePointerManager.assertPointersAreDisposed();
+    ((VirtualFilePointerManagerImpl)VirtualFilePointerManager.getInstance()).assertPointersAreDisposed();
   }
-  CompoundRuntimeException.doThrow(errors);
+ catch (  Throwable e) {
+    errors.add(e);
+  }
+ finally {
+    CompoundRuntimeException.throwIfNotEmpty(errors);
+  }
 }

@@ -1,25 +1,19 @@
 {
-  UIUtil.invokeAndWaitIfNeeded(new Runnable(){
-    @Override public void run(){
-      try {
-        File tempDirectory=FileUtil.createTempDirectory(myName,"");
-        PlatformTestCase.synchronizeTempDirVfs(LocalFileSystem.getInstance().refreshAndFindFileByIoFile(tempDirectory));
-        myFilesToDelete.add(tempDirectory);
-        File projectFile=new File(tempDirectory,myName + PROJECT_FILE_SUFFIX);
-        LocalFileSystem.getInstance().refreshAndFindFileByIoFile(projectFile);
-        ByteArrayOutputStream buffer=new ByteArrayOutputStream();
-        new Throwable(projectFile.getPath()).printStackTrace(new PrintStream(buffer));
-        myProject=PlatformTestCase.createProject(projectFile,buffer.toString());
-        ProjectManagerEx.getInstanceEx().openTestProject(myProject);
-        for (        ModuleFixtureBuilder moduleFixtureBuilder : myModuleFixtureBuilders) {
-          moduleFixtureBuilder.getFixture().setUp();
-        }
-        LightPlatformTestCase.clearUncommittedDocuments(myProject);
-        ((FileTypeManagerImpl)FileTypeManager.getInstance()).drainReDetectQueue();
+  File tempDirectory=FileUtil.createTempDirectory(myName,"");
+  PlatformTestCase.synchronizeTempDirVfs(LocalFileSystem.getInstance().refreshAndFindFileByIoFile(tempDirectory));
+  myFilesToDelete.add(tempDirectory);
+  String projectPath=FileUtil.toSystemIndependentName(tempDirectory.getPath()) + "/" + myName+ ProjectFileType.DOT_DEFAULT_EXTENSION;
+  ByteArrayOutputStream buffer=new ByteArrayOutputStream();
+  new Throwable(projectPath).printStackTrace(new PrintStream(buffer));
+  myProject=PlatformTestCase.createProject(projectPath,buffer.toString());
+  EdtTestUtil.runInEdtAndWait(new ThrowableRunnable<Throwable>(){
+    @SuppressWarnings("TestOnlyProblems") @Override public void run() throws Throwable {
+      ProjectManagerEx.getInstanceEx().openTestProject(myProject);
+      for (      ModuleFixtureBuilder moduleFixtureBuilder : myModuleFixtureBuilders) {
+        moduleFixtureBuilder.getFixture().setUp();
       }
- catch (      Exception e) {
-        throw new RuntimeException(e);
-      }
+      LightPlatformTestCase.clearUncommittedDocuments(myProject);
+      ((FileTypeManagerImpl)FileTypeManager.getInstance()).drainReDetectQueue();
     }
   }
 );
