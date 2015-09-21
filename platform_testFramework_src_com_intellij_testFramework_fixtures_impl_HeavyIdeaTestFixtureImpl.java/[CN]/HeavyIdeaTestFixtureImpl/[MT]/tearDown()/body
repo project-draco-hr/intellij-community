@@ -1,37 +1,41 @@
 {
   final Project project=getProject();
+  final List<Throwable> exceptions=new SmartList<Throwable>();
   try {
-    LightPlatformTestCase.doTearDown(project,myApplication,false);
+    LightPlatformTestCase.doTearDown(project,myApplication,false,exceptions);
     for (    ModuleFixtureBuilder moduleFixtureBuilder : myModuleFixtureBuilders) {
       moduleFixtureBuilder.getFixture().tearDown();
     }
-    final CompositeException compositeException=new CompositeException();
     EdtTestUtil.runInEdtAndWait(new ThrowableRunnable<Throwable>(){
       @Override public void run() throws Throwable {
-        PlatformTestCase.closeAndDisposeProjectAndCheckThatNoOpenProjects(project,compositeException);
+        PlatformTestCase.closeAndDisposeProjectAndCheckThatNoOpenProjects(project,exceptions);
       }
     }
 );
     myProject=null;
     for (    File fileToDelete : myFilesToDelete) {
       if (!FileUtil.delete(fileToDelete)) {
-        compositeException.add(new IOException("Can't delete " + fileToDelete));
+        exceptions.add(new IOException("Can't delete " + fileToDelete));
       }
     }
-    if (!compositeException.isEmpty()) {
-      throw compositeException;
-    }
+  }
+ catch (  Throwable e) {
+    exceptions.add(e);
+  }
+  try {
+    super.tearDown();
+  }
+ catch (  Throwable e) {
+    exceptions.add(e);
+  }
+  try {
+    myEditorListenerTracker.checkListenersLeak();
+    myThreadTracker.checkLeak();
+    LightPlatformTestCase.checkEditorsReleased(exceptions);
+    PlatformTestCase.cleanupApplicationCaches(project);
+    InjectedLanguageManagerImpl.checkInjectorsAreDisposed(project);
   }
   finally {
-    try {
-      super.tearDown();
-    }
-  finally {
-      myEditorListenerTracker.checkListenersLeak();
-      myThreadTracker.checkLeak();
-      LightPlatformTestCase.checkEditorsReleased();
-      PlatformTestCase.cleanupApplicationCaches(project);
-      InjectedLanguageManagerImpl.checkInjectorsAreDisposed(project);
-    }
+    CompoundRuntimeException.throwIfNotEmpty(exceptions);
   }
 }

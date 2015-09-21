@@ -1,0 +1,46 @@
+{
+  Field firstTimerF;
+  Object timerQueue;
+  Object timer;
+  try {
+    Class<?> TimerQueueC=Class.forName("javax.swing.TimerQueue");
+    Method sharedInstance=TimerQueueC.getDeclaredMethod("sharedInstance");
+    sharedInstance.setAccessible(true);
+    firstTimerF=ReflectionUtil.getDeclaredField(TimerQueueC,"firstTimer");
+    timerQueue=sharedInstance.invoke(null);
+    if (firstTimerF == null) {
+      DelayQueue delayQueue=ReflectionUtil.getField(TimerQueueC,timerQueue,DelayQueue.class,"queue");
+      timer=delayQueue.peek();
+    }
+ else {
+      firstTimerF.setAccessible(true);
+      timer=firstTimerF.get(timerQueue);
+    }
+  }
+ catch (  Throwable e) {
+    exceptions.add(e);
+    return;
+  }
+  if (timer != null) {
+    if (firstTimerF != null) {
+      ReflectionUtil.resetField(timerQueue,firstTimerF);
+    }
+    String text="";
+    if (timer instanceof Delayed) {
+      long delay=((Delayed)timer).getDelay(TimeUnit.MILLISECONDS);
+      text="(delayed for " + delay + "ms)";
+      Method getTimer=ReflectionUtil.getDeclaredMethod(timer.getClass(),"getTimer");
+      getTimer.setAccessible(true);
+      try {
+        timer=getTimer.invoke(timer);
+      }
+ catch (      Exception e) {
+        exceptions.add(e);
+        return;
+      }
+    }
+    Timer t=(Timer)timer;
+    text="Timer (listeners: " + Arrays.asList(t.getActionListeners()) + ") "+ text;
+    exceptions.add(new AssertionFailedError("Not disposed Timer: " + text + "; queue:"+ timerQueue));
+  }
+}

@@ -1,7 +1,6 @@
 {
-  final Throwable[] throwables=new Throwable[1];
-  Runnable runnable=new Runnable(){
-    @Override public void run(){
+  ThrowableRunnable<Throwable> runnable=new ThrowableRunnable<Throwable>(){
+    @Override public void run() throws Throwable {
       ourTestThread=Thread.currentThread();
       ourTestTime=getTimeRequired();
       try {
@@ -9,34 +8,37 @@
           setUp();
         }
  catch (        Throwable e) {
-          CompositeException result=new CompositeException(e);
           try {
             tearDown();
           }
- catch (          Throwable th) {
-            result.add(th);
+ catch (          Throwable ignored) {
           }
-          throw result;
+          throw e;
         }
+        Throwable exception=null;
         try {
           myAssertionsInTestDetected=true;
           runTest();
           myAssertionsInTestDetected=false;
         }
  catch (        Throwable e) {
-          throwables[0]=e;
-          throw e;
+          exception=e;
         }
  finally {
-          tearDown();
+          try {
+            tearDown();
+          }
+ catch (          Throwable e) {
+            if (exception == null) {
+              exception=e;
+            }
+          }
+        }
+        if (exception != null) {
+          throw exception;
         }
       }
- catch (      Throwable throwable) {
-        if (throwables[0] == null) {
-          throwables[0]=throwable;
-        }
-      }
- finally {
+  finally {
         ourTestThread=null;
       }
     }
@@ -45,9 +47,6 @@
   runBareRunnable(runnable);
   if (IdeaLogger.ourErrorsOccurred != null) {
     throw IdeaLogger.ourErrorsOccurred;
-  }
-  if (throwables[0] != null) {
-    throw throwables[0];
   }
   waitForAllLaters();
   if (IdeaLogger.ourErrorsOccurred != null) {
