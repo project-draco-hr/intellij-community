@@ -1,5 +1,6 @@
 {
-  assertIsDispatchThread(getStatus(),"Write access is allowed from event dispatch thread only");
+  Status status=getStatus();
+  assertIsDispatchThread(status,"Write access is allowed from event dispatch thread only");
   boolean writeActionPending=myWriteActionPending;
   myWriteActionPending=true;
   long start=System.currentTimeMillis();
@@ -7,26 +8,26 @@
     ActivityTracker.getInstance().inc();
     fireBeforeWriteActionStart(clazz);
     try {
-      if (!isWriteAccessAllowed()) {
+      if (!myLock.isWriteLocked()) {
         assertNoPsiLock();
-      }
-      if (!myLock.writeLock().tryLock()) {
-        final AtomicBoolean lockAcquired=new AtomicBoolean(false);
-        if (ourDumpThreadsOnLongWriteActionWaiting > 0) {
-          executeOnPooledThread(new Runnable(){
-            @Override public void run(){
-              while (!lockAcquired.get()) {
-                TimeoutUtil.sleep(ourDumpThreadsOnLongWriteActionWaiting);
-                if (!lockAcquired.get()) {
-                  PerformanceWatcher.getInstance().dumpThreads("waiting",true);
+        if ((status.stamp=myLock.tryWriteLock()) == 0) {
+          final AtomicBoolean lockAcquired=new AtomicBoolean(false);
+          if (ourDumpThreadsOnLongWriteActionWaiting > 0) {
+            executeOnPooledThread(new Runnable(){
+              @Override public void run(){
+                while (!lockAcquired.get()) {
+                  TimeoutUtil.sleep(ourDumpThreadsOnLongWriteActionWaiting);
+                  if (!lockAcquired.get()) {
+                    PerformanceWatcher.getInstance().dumpThreads("waiting",true);
+                  }
                 }
               }
             }
-          }
 );
+          }
+          status.stamp=myLock.writeLockInterruptibly();
+          lockAcquired.set(true);
         }
-        myLock.writeLock().lockInterruptibly();
-        lockAcquired.set(true);
       }
     }
  catch (    InterruptedException e) {
