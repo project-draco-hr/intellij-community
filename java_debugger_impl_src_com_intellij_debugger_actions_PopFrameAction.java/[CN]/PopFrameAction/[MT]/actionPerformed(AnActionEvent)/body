@@ -11,60 +11,27 @@
       return;
     }
     debugProcess.getSession().setSteppingThrough(stackFrame.getStackFrameProxy().threadProxy());
-    if (!DebuggerSettings.EVALUATE_FINALLY_NEVER.equals(DebuggerSettings.getInstance().EVALUATE_FINALLY_ON_POP_FRAME)) {
-      List<PsiStatement> statements=getFinallyStatements(debuggerContext.getSourcePosition());
-      if (!statements.isEmpty()) {
-        StringBuilder sb=new StringBuilder();
-        for (        PsiStatement statement : statements) {
-          sb.append("\n").append(statement.getText());
-        }
-        if (DebuggerSettings.EVALUATE_FINALLY_ALWAYS.equals(DebuggerSettings.getInstance().EVALUATE_FINALLY_ON_POP_FRAME)) {
-          evaluateAndPop(project,stackFrame,debuggerContext,debugProcess,sb);
-          return;
-        }
- else {
-          int res=MessageDialogBuilder.yesNoCancel(UIUtil.removeMnemonic(ActionsBundle.actionText(DebuggerActions.POP_FRAME)),DebuggerBundle.message("warning.finally.block.detected") + sb).project(project).icon(Messages.getWarningIcon()).yesText(DebuggerBundle.message("button.execute.finally")).noText(DebuggerBundle.message("button.drop.anyway")).cancelText(CommonBundle.message("button.cancel")).doNotAsk(new DialogWrapper.DoNotAskOption(){
-            @Override public boolean isToBeShown(){
-              return !DebuggerSettings.EVALUATE_FINALLY_ALWAYS.equals(DebuggerSettings.getInstance().EVALUATE_FINALLY_ON_POP_FRAME) && !DebuggerSettings.EVALUATE_FINALLY_NEVER.equals(DebuggerSettings.getInstance().EVALUATE_FINALLY_ON_POP_FRAME);
-            }
-            @Override public void setToBeShown(            boolean value,            int exitCode){
-              if (!value) {
-                DebuggerSettings.getInstance().EVALUATE_FINALLY_ON_POP_FRAME=exitCode == Messages.YES ? DebuggerSettings.EVALUATE_FINALLY_ALWAYS : DebuggerSettings.EVALUATE_FINALLY_NEVER;
-              }
- else {
-                DebuggerSettings.getInstance().EVALUATE_FINALLY_ON_POP_FRAME=DebuggerSettings.EVALUATE_FINALLY_ASK;
-              }
-            }
-            @Override public boolean canBeHidden(){
-              return true;
-            }
-            @Override public boolean shouldSaveOptionsOnCancel(){
-              return false;
-            }
-            @NotNull @Override public String getDoNotShowMessage(){
-              return CommonBundle.message("dialog.options.do.not.show");
-            }
+    if (evaluateFinallyBlocks(project,UIUtil.removeMnemonic(ActionsBundle.actionText(DebuggerActions.POP_FRAME)),stackFrame,new XDebuggerEvaluator.XEvaluationCallback(){
+      @Override public void evaluated(      @NotNull XValue result){
+        popFrame(debugProcess,debuggerContext,stackFrame);
+      }
+      @Override public void errorOccurred(      @NotNull final String errorMessage){
+        ApplicationManager.getApplication().invokeLater(new Runnable(){
+          @Override public void run(){
+            Messages.showMessageDialog(project,DebuggerBundle.message("error.executing.finally",errorMessage),UIUtil.removeMnemonic(ActionsBundle.actionText(DebuggerActions.POP_FRAME)),Messages.getErrorIcon());
           }
-).show();
-switch (res) {
-case Messages.CANCEL:
-            return;
-case Messages.NO:
-          break;
-case Messages.YES:
-        evaluateAndPop(project,stackFrame,debuggerContext,debugProcess,sb);
-      return;
+        }
+);
+      }
+    }
+))     return;
+    popFrame(debugProcess,debuggerContext,stackFrame);
   }
-}
-}
-}
-debugProcess.getManagerThread().schedule(debugProcess.createPopFrameCommand(debuggerContext,stackFrame.getStackFrameProxy()));
-}
- catch (NativeMethodException e2) {
-Messages.showMessageDialog(project,DebuggerBundle.message("error.native.method.exception"),UIUtil.removeMnemonic(ActionsBundle.actionText(DebuggerActions.POP_FRAME)),Messages.getErrorIcon());
-}
-catch (InvalidStackFrameException ignored) {
-}
-catch (VMDisconnectedException ignored) {
-}
+ catch (  NativeMethodException e2) {
+    Messages.showMessageDialog(project,DebuggerBundle.message("error.native.method.exception"),UIUtil.removeMnemonic(ActionsBundle.actionText(DebuggerActions.POP_FRAME)),Messages.getErrorIcon());
+  }
+catch (  InvalidStackFrameException ignored) {
+  }
+catch (  VMDisconnectedException ignored) {
+  }
 }
