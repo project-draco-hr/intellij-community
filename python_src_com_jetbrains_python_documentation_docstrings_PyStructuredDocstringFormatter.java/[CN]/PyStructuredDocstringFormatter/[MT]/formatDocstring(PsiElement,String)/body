@@ -1,0 +1,43 @@
+{
+  Module module=ModuleUtilCore.findModuleForPsiElement(element);
+  if (module == null) {
+    final Module[] modules=ModuleManager.getInstance(element.getProject()).getModules();
+    if (modules.length == 0)     return Lists.newArrayList();
+    module=modules[0];
+  }
+  if (module == null)   return Lists.newArrayList();
+  final List<String> result=new ArrayList<String>();
+  final String[] lines=PyDocumentationBuilder.removeCommonIndentation(docstring);
+  final String preparedDocstring=StringUtil.join(lines,"\n");
+  final HelperPackage formatter;
+  final StructuredDocString structuredDocString;
+  final DocStringFormat format=DocStringUtil.guessDocStringFormat(preparedDocstring,element);
+  if (format == DocStringFormat.GOOGLE) {
+    formatter=PythonHelper.GOOGLE_FORMATTER;
+    structuredDocString=DocStringUtil.parseDocString(DocStringFormat.GOOGLE,preparedDocstring);
+  }
+ else   if (format == DocStringFormat.NUMPY) {
+    formatter=PythonHelper.NUMPY_FORMATTER;
+    structuredDocString=DocStringUtil.parseDocString(DocStringFormat.NUMPY,preparedDocstring);
+  }
+ else   if (format == DocStringFormat.EPYTEXT) {
+    formatter=PythonHelper.EPYDOC_FORMATTER;
+    structuredDocString=DocStringUtil.parseDocString(DocStringFormat.EPYTEXT,preparedDocstring);
+    result.add(formatStructuredDocString(structuredDocString));
+  }
+ else   if (format == DocStringFormat.REST) {
+    formatter=PythonHelper.REST_FORMATTER;
+    structuredDocString=DocStringUtil.parseDocString(DocStringFormat.REST,preparedDocstring);
+  }
+ else {
+    return null;
+  }
+  final String output=runExternalTool(module,formatter,docstring);
+  if (output != null) {
+    result.add(0,output);
+  }
+ else {
+    result.add(0,structuredDocString.getDescription());
+  }
+  return result;
+}

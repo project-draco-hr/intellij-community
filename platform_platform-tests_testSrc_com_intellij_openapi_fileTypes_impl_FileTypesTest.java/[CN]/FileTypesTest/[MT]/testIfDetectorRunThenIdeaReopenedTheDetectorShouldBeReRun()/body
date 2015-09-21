@@ -1,0 +1,41 @@
+{
+  final UserBinaryFileType myType=new UserBinaryFileType();
+  myType.setName("myType");
+  final Set<VirtualFile> detectorCalled=ContainerUtil.newConcurrentSet();
+  FileTypeRegistry.FileTypeDetector detector=new FileTypeRegistry.FileTypeDetector(){
+    @Nullable @Override public FileType detect(    @NotNull VirtualFile file,    @NotNull ByteSequence firstBytes,    @Nullable CharSequence firstCharsIfText){
+      detectorCalled.add(file);
+      FileType result=FileUtil.isHashBangLine(firstCharsIfText,"stuff") ? myType : null;
+      log("T: my detector for file " + file.getName() + " run. result="+ (result == null ? null : result.getName()));
+      return result;
+    }
+    @Override public int getVersion(){
+      return 0;
+    }
+  }
+;
+  Extensions.getRootArea().getExtensionPoint(FileTypeRegistry.FileTypeDetector.EP_NAME).registerExtension(detector);
+  myFileTypeManager.toLog=true;
+  try {
+    log("T: ------ akjdhfksdjgf");
+    File f=createTempFile("xx.asfdasdfas","akjdhfksdjgf");
+    VirtualFile file=getVirtualFile(f);
+    ensureRedetected(file,detectorCalled);
+    assertTrue(file.getFileType().toString(),file.getFileType() instanceof PlainTextFileType);
+    log("T: ------ my");
+    setFileText(file,"#!stuff\nxx");
+    ensureRedetected(file,detectorCalled);
+    assertTrue(file.getFileType().toString(),file.getFileType() == myType);
+    log("T: ------ reload");
+    myFileTypeManager.drainReDetectQueue();
+    myFileTypeManager.clearCaches();
+    file.putUserData(FileTypeManagerImpl.DETECTED_FROM_CONTENT_FILE_TYPE_KEY,null);
+    ensureRedetected(file,detectorCalled);
+    assertTrue(file.getFileType().toString(),file.getFileType() == myType);
+    log("T: ------");
+  }
+  finally {
+    Extensions.getRootArea().getExtensionPoint(FileTypeRegistry.FileTypeDetector.EP_NAME).unregisterExtension(detector);
+    myFileTypeManager.toLog=false;
+  }
+}

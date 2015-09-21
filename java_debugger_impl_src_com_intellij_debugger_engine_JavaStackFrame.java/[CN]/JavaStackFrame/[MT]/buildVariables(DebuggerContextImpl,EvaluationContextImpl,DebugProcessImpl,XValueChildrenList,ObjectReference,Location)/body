@@ -27,11 +27,10 @@
       superBuildVariables(evaluationContext,children);
     }
  else {
-      final Map<String,LocalVariableProxyImpl> visibleVariables=FrameVariablesTree.getVisibleVariables(getStackFrameProxy());
-      final EvaluationContextImpl evalContext=evaluationContext;
+      final Map<String,LocalVariableProxyImpl> visibleVariables=getVisibleVariables(getStackFrameProxy());
       final Pair<Set<String>,Set<TextWithImports>> usedVars=ApplicationManager.getApplication().runReadAction(new Computable<Pair<Set<String>,Set<TextWithImports>>>(){
         @Override public Pair<Set<String>,Set<TextWithImports>> compute(){
-          return FrameVariablesTree.findReferencedVars(ContainerUtil.union(visibleVariables.keySet(),visibleLocals),sourcePosition,evalContext);
+          return findReferencedVars(ContainerUtil.union(visibleVariables.keySet(),visibleLocals),sourcePosition);
         }
       }
 );
@@ -48,31 +47,21 @@
       }
       final EvaluationContextImpl evalContextCopy=evaluationContext.createEvaluationContext(evaluationContext.getThisObject());
       evalContextCopy.setAutoLoadClasses(false);
-      final Set<TextWithImports> extraVars=computeExtraVars(usedVars,sourcePosition,evalContext);
+      final Set<TextWithImports> extraVars=computeExtraVars(usedVars,sourcePosition,evaluationContext);
       addToChildrenFrom(extraVars,children,evaluationContext);
       addToChildrenFrom(usedVars.second,children,evalContextCopy);
     }
   }
  catch (  EvaluateException e) {
     if (e.getCause() instanceof AbsentInformationException) {
-      final StackFrameProxyImpl frame=getStackFrameProxy();
-      final Collection<Value> argValues=frame.getArgumentValues();
-      int index=0;
-      for (      Value argValue : argValues) {
-        children.add(createArgumentValue(index++,argValue,null,evaluationContext));
-      }
       children.add(new DummyMessageValueNode(MessageDescriptor.LOCAL_VARIABLES_INFO_UNAVAILABLE.getLabel(),XDebuggerUIConstants.INFORMATION_MESSAGE_ICON));
-      final List<DecompiledLocalVariable> decompiled=FrameVariablesTree.collectVariablesFromBytecode(frame,argValues.size());
-      if (!decompiled.isEmpty()) {
-        try {
-          final Map<DecompiledLocalVariable,Value> values=LocalVariablesUtil.fetchValues(frame.getStackFrame(),decompiled);
-          for (          DecompiledLocalVariable var : decompiled) {
-            children.add(createArgumentValue(var.getSlot(),values.get(var),var.getName(),evaluationContext));
-          }
+      try {
+        for (        Map.Entry<DecompiledLocalVariable,Value> entry : LocalVariablesUtil.fetchValues(getStackFrameProxy(),debugProcess).entrySet()) {
+          children.add(JavaValue.create(myNodeManager.getArgumentValueDescriptor(null,entry.getKey(),entry.getValue()),evaluationContext,myNodeManager));
         }
- catch (        Exception ex) {
-          LOG.info(ex);
-        }
+      }
+ catch (      Exception ex) {
+        LOG.info(ex);
       }
     }
  else {

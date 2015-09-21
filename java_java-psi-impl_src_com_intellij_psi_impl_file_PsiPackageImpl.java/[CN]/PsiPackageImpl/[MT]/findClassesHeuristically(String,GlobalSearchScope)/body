@@ -1,0 +1,26 @@
+{
+  if (findSubPackageByName(name) != null) {
+    return PsiClass.EMPTY_ARRAY;
+  }
+  Map<Pair<GlobalSearchScope,String>,PsiClass[]> partial=SoftReference.dereference(myDumbModePartialCache);
+  if (partial == null) {
+    myDumbModePartialCache=new SoftReference<Map<Pair<GlobalSearchScope,String>,PsiClass[]>>(partial=ContainerUtil.newConcurrentMap());
+  }
+  PsiClass[] result=partial.get(Pair.create(scope,name));
+  if (result == null) {
+    List<PsiClass> fastClasses=ContainerUtil.newArrayList();
+    for (    PsiDirectory directory : getDirectories(scope)) {
+      List<PsiFile> sameNamed=ContainerUtil.filter(directory.getFiles(),new Condition<PsiFile>(){
+        @Override public boolean value(        PsiFile file){
+          return file.getName().contains(name);
+        }
+      }
+);
+      Collections.addAll(fastClasses,CoreJavaDirectoryService.getPsiClasses(directory,sameNamed.toArray(new PsiFile[sameNamed.size()])));
+    }
+    if (!fastClasses.isEmpty()) {
+      partial.put(Pair.create(scope,name),result=fastClasses.toArray(new PsiClass[fastClasses.size()]));
+    }
+  }
+  return result;
+}

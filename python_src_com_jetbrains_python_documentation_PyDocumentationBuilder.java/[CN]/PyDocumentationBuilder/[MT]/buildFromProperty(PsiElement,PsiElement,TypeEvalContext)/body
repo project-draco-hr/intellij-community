@@ -1,0 +1,54 @@
+{
+  if (myOriginalElement == null) {
+    return false;
+  }
+  final String elementName=myOriginalElement.getText();
+  if (!PyNames.isIdentifier(elementName)) {
+    return false;
+  }
+  if (!(outerElement instanceof PyQualifiedExpression)) {
+    return false;
+  }
+  final PyExpression qualifier=((PyQualifiedExpression)outerElement).getQualifier();
+  if (qualifier == null) {
+    return false;
+  }
+  final PyType type=context.getType(qualifier);
+  if (!(type instanceof PyClassType)) {
+    return false;
+  }
+  final PyClass cls=((PyClassType)type).getPyClass();
+  final Property property=cls.findProperty(elementName,true,null);
+  if (property == null) {
+    return false;
+  }
+  final AccessDirection direction=AccessDirection.of((PyElement)outerElement);
+  final Maybe<PyCallable> accessor=property.getByDirection(direction);
+  myProlog.addItem("property ").addWith(TagBold,$().addWith(TagCode,$(elementName))).addItem(" of ").add(PythonDocumentationProvider.describeClass(cls,TagCode,true,true));
+  if (accessor.isDefined() && property.getDoc() != null) {
+    myBody.addItem(": ").addItem(property.getDoc()).addItem(BR);
+  }
+ else {
+    final PyCallable getter=property.getGetter().valueOrNull();
+    if (getter != null && getter != myElement && getter instanceof PyFunction) {
+      final PyStringLiteralExpression docstring=((PyFunction)getter).getDocStringExpression();
+      if (docstring != null) {
+        myProlog.addItem(BR).addWith(TagItalic,$("Copied from getter:")).addItem(BR).addItem(docstring.getStringValue());
+      }
+    }
+    myBody.addItem(BR);
+  }
+  myBody.addItem(BR);
+  if (accessor.isDefined() && accessor.value() == null)   elementDefinition=null;
+  final String accessorKind=getAccessorKind(direction);
+  if (elementDefinition != null) {
+    myEpilog.addWith(TagSmall,$(BR,BR,accessorKind," of property")).addItem(BR);
+  }
+  if (!(elementDefinition instanceof PyDocStringOwner)) {
+    myBody.addWith(TagItalic,elementDefinition != null ? $("Declaration: ") : $(accessorKind + " is not defined.")).addItem(BR);
+    if (elementDefinition != null) {
+      myBody.addItem(combUp(PyUtil.getReadableRepr(elementDefinition,false)));
+    }
+  }
+  return true;
+}

@@ -1,20 +1,10 @@
 {
-  final Pair<Sdk,JavaSdkVersion> runtime=BuildManager.getBuildProcessRuntimeSdk(myEvaluationContext.getProject());
   final Module module=ApplicationManager.getApplication().runReadAction(new Computable<Module>(){
     @Override public Module compute(){
       return ModuleUtilCore.findModuleForPsiElement(myPsiContext);
     }
   }
 );
-  String javaHome=null;
-  final Sdk sdk=runtime.getFirst();
-  final SdkTypeId type=sdk.getSdkType();
-  if (type instanceof JavaSdkType) {
-    javaHome=sdk.getHomePath();
-  }
-  if (javaHome == null) {
-    throw new EvaluateException("Was not able to determine JDK for current evaluation context");
-  }
   final List<String> options=new ArrayList<String>();
   options.add("-proc:none");
   options.add("-encoding");
@@ -30,6 +20,7 @@
       platformClasspath.add(new File(s));
     }
   }
+  final Pair<Sdk,JavaSdkVersion> runtime=BuildManager.getBuildProcessRuntimeSdk(myEvaluationContext.getProject());
   final JavaSdkVersion buildRuntimeVersion=runtime.getSecond();
   if (buildRuntimeVersion != null && debuggeeVersion != null) {
     final JavaSdkVersion minVersion=buildRuntimeVersion.ordinal() > debuggeeVersion.ordinal() ? debuggeeVersion : buildRuntimeVersion;
@@ -39,33 +30,23 @@
     options.add("-target");
     options.add(sourceOption);
   }
+  final CompilerManager compilerManager=CompilerManager.getInstance(myEvaluationContext.getProject());
   File sourceFile=null;
-  final OutputCollector outputSink=new OutputCollector();
   try {
-    final ExternalJavacManager javacManager=getJavacManager();
-    if (javacManager == null) {
-      throw new EvaluateException("Cannot compile java code");
-    }
-    sourceFile=generateTempSourceFile(javacManager.getWorkingDir());
+    sourceFile=generateTempSourceFile(compilerManager.getJavacCompilerWorkingDir());
     final File srcDir=sourceFile.getParentFile();
-    final Map<File,Set<File>> output=Collections.singletonMap(srcDir,Collections.singleton(srcDir));
-    DiagnosticCollector diagnostic=new DiagnosticCollector();
-    final List<String> vmOptions=Collections.emptyList();
     final List<File> sourcePath=Collections.emptyList();
     final Set<File> sources=Collections.singleton(sourceFile);
-    boolean compiledOK=javacManager.forkJavac(javaHome,-1,vmOptions,options,platformClasspath,classpath,sourcePath,sources,output,diagnostic,outputSink,new JavacCompilerTool(),CanceledStatus.NULL);
-    if (!compiledOK) {
-      final StringBuilder res=new StringBuilder("Compilation failed:\n");
-      for (      Diagnostic<? extends JavaFileObject> d : diagnostic.getDiagnostics()) {
-        if (d.getKind() == Diagnostic.Kind.ERROR) {
-          res.append(d.getMessage(Locale.US));
-        }
-      }
-      throw new EvaluateException(res.toString());
-    }
+    return compilerManager.compileJavaCode(options,platformClasspath,classpath,sourcePath,sources,srcDir);
   }
- catch (  EvaluateException e) {
-    throw e;
+ catch (  CompilationException e) {
+    final StringBuilder res=new StringBuilder("Compilation failed:\n");
+    for (    CompilationException.Message m : e.getMessages()) {
+      if (m.getCategory() == CompilerMessageCategory.ERROR) {
+        res.append(m.getText()).append("\n");
+      }
+    }
+    throw new EvaluateException(res.toString());
   }
 catch (  Exception e) {
     throw new EvaluateException(e.getMessage());
@@ -75,5 +56,4 @@ catch (  Exception e) {
       FileUtil.delete(sourceFile);
     }
   }
-  return outputSink.getCompiledClasses();
 }

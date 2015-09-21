@@ -6,18 +6,14 @@
   }
   boolean isFromUI=model != null;
   final List<Module> modules=ContainerUtil.newSmartList();
-  final PlatformFacade platformFacade=isFromUI ? new PlatformFacadeImpl(){
-    @NotNull @Override public Collection<Module> getModules(    @NotNull Project project){
-      return ContainerUtil.list(modulesProvider.getModules());
-    }
-    @Override public Module newModule(    Project project,    @NotNull @NonNls String filePath,    String moduleTypeId){
-      final Module module=model.newModule(filePath,moduleTypeId);
-      module.setOption(Module.ELEMENT_TYPE,moduleTypeId);
+  final IdeModifiableModelsProvider modelsProvider=isFromUI ? new IdeUIModifiableModelsProvider(project,model,(ModulesConfigurator)modulesProvider,artifactModel){
+    @NotNull @Override public Module newModule(    @NotNull @NonNls String filePath,    String moduleTypeId){
+      final Module module=super.newModule(filePath,moduleTypeId);
       modules.add(module);
       return module;
     }
   }
- : ServiceManager.getService(PlatformFacade.class);
+ : new IdeModifiableModelsProviderImpl(project);
   AbstractExternalSystemSettings systemSettings=ExternalSystemApiUtil.getSettings(project,myExternalSystemId);
   final ExternalProjectSettings projectSettings=getCurrentExternalProjectSettings();
   Set<ExternalProjectSettings> projects=ContainerUtilRt.newHashSet(systemSettings.getLinkedProjectsSettings());
@@ -33,18 +29,8 @@
  else {
       dialog.dispose();
     }
-    ExternalSystemApiUtil.executeProjectChangeAction(new DisposeAwareProjectChange(project){
-      @Override public void execute(){
-        ProjectRootManagerEx.getInstanceEx(project).mergeRootsChangesDuring(new Runnable(){
-          @Override public void run(){
-            myProjectDataManager.importData(externalProjectNode,project,platformFacade,true);
-            myExternalProjectNode=null;
-          }
-        }
-);
-      }
-    }
-);
+    myProjectDataManager.importData(externalProjectNode,project,modelsProvider,true);
+    myExternalProjectNode=null;
     final Runnable resolveDependenciesTask=new Runnable(){
       @Override public void run(){
         ExternalSystemUtil.refreshProject(project,myExternalSystemId,projectSettings.getExternalProjectPath(),false,ProgressExecutionMode.IN_BACKGROUND_ASYNC);

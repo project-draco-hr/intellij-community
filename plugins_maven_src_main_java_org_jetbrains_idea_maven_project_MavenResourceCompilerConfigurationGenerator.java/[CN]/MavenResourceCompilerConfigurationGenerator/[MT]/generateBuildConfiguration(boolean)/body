@@ -10,19 +10,24 @@
   final File mavenConfigFile=new File(projectSystemDir,MavenProjectConfiguration.CONFIGURATION_FILE_RELATIVE_PATH);
   ProjectRootManager projectRootManager=ProjectRootManager.getInstance(myProject);
   ProjectFileIndex fileIndex=projectRootManager.getFileIndex();
-  final int crc=myProjectsTree.getFilterConfigCrc(fileIndex) + (int)projectRootManager.getModificationCount();
+  final int projectRootModificationCount=(int)projectRootManager.getModificationCount();
+  final int mavenConfigCrc=myProjectsTree.getFilterConfigCrc(fileIndex);
+  final int crc=mavenConfigCrc + projectRootModificationCount;
   final File crcFile=new File(mavenConfigFile.getParent(),"configuration.crc");
   if (!force) {
     try {
       DataInputStream crcInput=new DataInputStream(new FileInputStream(crcFile));
       try {
-        if (crcInput.readInt() == crc)         return;
+        final int lastCrc=crcInput.readInt();
+        if (lastCrc == crc)         return;
+        LOG.debug(String.format("project configuration changed: lastCrc = %d, currentCrc = %d, projectRootModificationCount = %d, mavenConfigCrc = %d",lastCrc,crc,projectRootModificationCount,mavenConfigCrc));
       }
   finally {
         crcInput.close();
       }
     }
  catch (    IOException ignored) {
+      LOG.debug("Unable to read or find config file: " + ignored.getMessage());
     }
   }
   MavenProjectConfiguration projectConfig=new MavenProjectConfiguration();
@@ -90,6 +95,7 @@
         }
       }
  catch (      IOException e) {
+        LOG.debug("Unable to write config file",e);
         throw new RuntimeException(e);
       }
     }

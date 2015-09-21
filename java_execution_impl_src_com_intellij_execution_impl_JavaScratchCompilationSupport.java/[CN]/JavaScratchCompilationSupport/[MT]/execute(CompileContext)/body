@@ -1,0 +1,108 @@
+{
+  final Project project=context.getProject();
+  final RunConfiguration configuration=CompileStepBeforeRun.getRunConfiguration(context);
+  if (!(configuration instanceof ModuleBasedConfiguration)) {
+    return true;
+  }
+  final String scratchUrl=JavaScratchRunConfigurationExtension.getScratchFileUrl(configuration);
+  if (scratchUrl == null) {
+    return true;
+  }
+  final Module configModule=((ModuleBasedConfiguration)configuration).getConfigurationModule().getModule();
+  if (configModule == null) {
+    context.addMessage(CompilerMessageCategory.ERROR,"A module must be specified for the run configuration",scratchUrl,-1,-1);
+    return true;
+  }
+  final ModuleRootManager moduleRootManager=ModuleRootManager.getInstance(configModule);
+  final Sdk targetSdk=moduleRootManager.getSdk();
+  if (targetSdk == null) {
+    context.addMessage(CompilerMessageCategory.ERROR,"Cannot find associated SDK for run configuration module \"" + configModule.getName() + "\".\nPlease check project settings.",scratchUrl,-1,-1);
+    return true;
+  }
+  if (!(targetSdk.getSdkType() instanceof JavaSdkType)) {
+    context.addMessage(CompilerMessageCategory.ERROR,"Expected Java SDK for run configuration module \"" + configModule.getName() + "\".\nPlease check project settings.",scratchUrl,-1,-1);
+    return true;
+  }
+  final File outputDir=JavaScratchRunConfigurationExtension.getScratchOutputDirectory(project);
+  if (outputDir == null) {
+    return true;
+  }
+  FileUtil.delete(outputDir);
+  try {
+    final File scratchFile=new File(VirtualFileManager.extractPath(scratchUrl));
+    File srcFile=scratchFile;
+    if (!StringUtil.endsWith(srcFile.getName(),".java")) {
+      final File srcDir=JavaScratchRunConfigurationExtension.getScratchTempDirectory(project);
+      if (srcDir == null) {
+        return true;
+      }
+      FileUtil.delete(srcDir);
+      final String srcFileName=ApplicationManager.getApplication().runReadAction(new Computable<String>(){
+        @Override public String compute(){
+          final VirtualFile vFile=VirtualFileManager.getInstance().findFileByUrl(scratchUrl);
+          if (vFile != null) {
+            final PsiFile psiFile=PsiManager.getInstance(project).findFile(vFile);
+            if (psiFile instanceof PsiJavaFile) {
+              String name=null;
+              for (              PsiClass aClass : ((PsiJavaFile)psiFile).getClasses()) {
+                if (name == null) {
+                  name=aClass.getName();
+                  if (isPublic(aClass)) {
+                    break;
+                  }
+                }
+ else                 if (isPublic(aClass)) {
+                  name=aClass.getName();
+                  break;
+                }
+              }
+              if (name != null) {
+                return name;
+              }
+            }
+          }
+          return FileUtil.getNameWithoutExtension(scratchFile);
+        }
+      }
+);
+      srcFile=new File(srcDir,srcFileName + ".java");
+      FileUtil.copy(scratchFile,srcFile);
+    }
+    final Collection<File> files=Collections.singleton(srcFile);
+    final Set<File> cp=new LinkedHashSet<File>();
+    for (    String s : moduleRootManager.orderEntries().compileOnly().recursively().exportedOnly().withoutSdk().getPathsList().getPathList()) {
+      cp.add(new File(s));
+    }
+    final List<File> platformCp=new ArrayList<File>();
+    for (    String s : moduleRootManager.orderEntries().compileOnly().sdkOnly().getPathsList().getPathList()) {
+      platformCp.add(new File(s));
+    }
+    final List<String> options=new ArrayList<String>();
+    options.add("-g");
+    final JavaSdkVersion sdkVersion=JavaSdk.getInstance().getVersion(targetSdk);
+    if (sdkVersion != null) {
+      final String langLevel="1." + Integer.valueOf(3 + sdkVersion.getMaxLanguageLevel().ordinal());
+      options.add("-source");
+      options.add(langLevel);
+      options.add("-target");
+      options.add(langLevel);
+    }
+    options.add("-proc:none");
+    final Collection<ClassObject> result=CompilerManager.getInstance(project).compileJavaCode(options,platformCp,cp,Collections.<File>emptyList(),files,outputDir);
+    for (    ClassObject classObject : result) {
+      final byte[] bytes=classObject.getContent();
+      if (bytes != null) {
+        FileUtil.writeToFile(new File(classObject.getPath()),bytes);
+      }
+    }
+  }
+ catch (  CompilationException e) {
+    for (    CompilationException.Message m : e.getMessages()) {
+      context.addMessage(m.getCategory(),m.getText(),scratchUrl,m.getLine(),m.getColumn());
+    }
+  }
+catch (  IOException e) {
+    context.addMessage(CompilerMessageCategory.ERROR,e.getMessage(),scratchUrl,-1,-1);
+  }
+  return true;
+}

@@ -1,0 +1,42 @@
+{
+  if (formula instanceof ExpressionCompatibilityConstraint) {
+    final PsiExpression expression=((ExpressionCompatibilityConstraint)formula).getExpression();
+    final PsiCall callExpression=PsiTreeUtil.getParentOfType(expression,PsiCall.class,false);
+    if (callExpression != null) {
+      final InferenceSession session=myNestedSessions.get(callExpression);
+      if (session != null) {
+        formula.apply(session.myInferenceSubstitution,true);
+        collectVarsToResolve(varsToResolve,(InputOutputConstraintFormula)formula);
+      }
+    }
+  }
+  PsiSubstitutor substitutor=resolveSubset(varsToResolve,siteSubstitutor);
+  if (substitutor == null) {
+    return false;
+  }
+  if (myContext instanceof PsiCall) {
+    PsiExpressionList argumentList=((PsiCall)myContext).getArgumentList();
+    LOG.assertTrue(argumentList != null);
+    MethodCandidateInfo.updateSubstitutor(argumentList,substitutor);
+  }
+  try {
+    formula.apply(substitutor,true);
+    myConstraints.add(formula);
+    if (!repeatInferencePhases(true)) {
+      return false;
+    }
+    if (formula instanceof ExpressionCompatibilityConstraint) {
+      PsiExpression expression=((ExpressionCompatibilityConstraint)formula).getExpression();
+      if (expression instanceof PsiLambdaExpression) {
+        PsiType parameterType=((ExpressionCompatibilityConstraint)formula).getT();
+        if (!isProperType(parameterType)) {
+          collectLambdaReturnExpression(additionalConstraints,(PsiLambdaExpression)expression,parameterType);
+        }
+      }
+    }
+  }
+  finally {
+    LambdaUtil.ourFunctionTypes.set(null);
+  }
+  return true;
+}

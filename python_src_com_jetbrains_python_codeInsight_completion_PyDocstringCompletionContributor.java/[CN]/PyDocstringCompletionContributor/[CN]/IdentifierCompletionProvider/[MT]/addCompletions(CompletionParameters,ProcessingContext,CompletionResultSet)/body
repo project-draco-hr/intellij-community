@@ -1,16 +1,32 @@
 {
-  if (parameters.isAutoPopup())   return;
   final PsiElement element=parameters.getOriginalPosition();
   if (element == null)   return;
   final PsiFile file=element.getContainingFile();
-  if (file.findReferenceAt(parameters.getOffset()) != null)   return;
-  final PyDocStringOwner docStringOwner=PsiTreeUtil.getParentOfType(element,PyDocStringOwner.class);
-  final Module module=ModuleUtilCore.findModuleForPsiElement(element);
-  if (module != null) {
-    result=result.withPrefixMatcher(getPrefix(parameters.getOffset(),file));
-    final Collection<String> identifiers=PyRefactoringUtil.collectUsedNames(docStringOwner);
-    for (    String identifier : identifiers)     result.addElement(LookupElementBuilder.create(identifier).withAutoCompletionPolicy(AutoCompletionPolicy.NEVER_AUTOCOMPLETE));
-    final Collection<String> fileIdentifiers=PyRefactoringUtil.collectUsedNames(parameters.getOriginalFile());
-    for (    String identifier : fileIdentifiers)     result.addElement(LookupElementBuilder.create(identifier).withAutoCompletionPolicy(AutoCompletionPolicy.NEVER_AUTOCOMPLETE));
+  final PsiReference reference=file.findReferenceAt(parameters.getOffset());
+  if (reference == null) {
+    if (parameters.isAutoPopup())     return;
+    final PyDocStringOwner docStringOwner=PsiTreeUtil.getParentOfType(element,PyDocStringOwner.class);
+    final Module module=ModuleUtilCore.findModuleForPsiElement(element);
+    if (module != null) {
+      result=result.withPrefixMatcher(getPrefix(parameters.getOffset(),file));
+      final Collection<String> identifiers=PyRefactoringUtil.collectUsedNames(docStringOwner);
+      for (      String identifier : identifiers) {
+        result.addElement(LookupElementBuilder.create(identifier).withAutoCompletionPolicy(AutoCompletionPolicy.NEVER_AUTOCOMPLETE));
+      }
+      final Collection<String> fileIdentifiers=PyRefactoringUtil.collectUsedNames(parameters.getOriginalFile());
+      for (      String identifier : fileIdentifiers) {
+        result.addElement(LookupElementBuilder.create(identifier).withAutoCompletionPolicy(AutoCompletionPolicy.NEVER_AUTOCOMPLETE));
+      }
+    }
+  }
+ else   if (reference instanceof DocStringParameterReference) {
+    for (    PyNamedParameter param : ((DocStringParameterReference)reference).collectParameterVariants()) {
+      result.addElement(LookupElementBuilder.createWithIcon(param));
+    }
+  }
+ else   if (reference instanceof DocStringTypeReference) {
+    for (    Object variant : ((DocStringTypeReference)reference).collectTypeVariants()) {
+      result.addElement(LookupElementBuilder.create(variant));
+    }
   }
 }
