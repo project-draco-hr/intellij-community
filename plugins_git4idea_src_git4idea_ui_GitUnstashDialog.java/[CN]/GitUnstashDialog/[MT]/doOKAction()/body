@@ -17,15 +17,20 @@
   AccessToken token=DvcsUtil.workingTreeChangeStarted(myProject);
   try {
     final Ref<GitCommandResult> result=Ref.create();
-    ProgressManager.getInstance().run(new Task.Modal(h.project(),GitBundle.getString("unstash.unstashing"),false){
-      public void run(      @NotNull final ProgressIndicator indicator){
+    final Ref<Boolean> cancelled=Ref.create();
+    ProgressManager.getInstance().run(new Task.Modal(h.project(),GitBundle.getString("unstash.unstashing"),true){
+      @Override public void run(      @NotNull final ProgressIndicator indicator){
         indicator.setIndeterminate(true);
         h.addLineListener(new GitHandlerUtil.GitLineHandlerListenerProgress(indicator,h,"stash",false));
         Git git=ServiceManager.getService(Git.class);
         result.set(git.runCommand(new Computable.PredefinedValueComputable<GitLineHandler>(h)));
       }
+      @Override public void onCancel(){
+        cancelled.set(true);
+      }
     }
 );
+    if (cancelled.get())     return;
     ServiceManager.getService(myProject,GitPlatformFacade.class).hardRefresh(root);
     GitCommandResult res=result.get();
     if (conflict.get()) {
