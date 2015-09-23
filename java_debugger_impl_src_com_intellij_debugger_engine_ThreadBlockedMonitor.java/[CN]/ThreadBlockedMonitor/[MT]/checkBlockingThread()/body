@@ -1,0 +1,28 @@
+{
+  myProcess.getManagerThread().schedule(new DebuggerCommandImpl(){
+    @Override protected void action() throws Exception {
+      if (myWatchedThreads.isEmpty())       return;
+      VirtualMachineProxyImpl vmProxy=myProcess.getVirtualMachineProxy();
+      vmProxy.getVirtualMachine().suspend();
+      try {
+        for (        ThreadReferenceProxy thread : myWatchedThreads) {
+          ObjectReference waitedMonitor=vmProxy.canGetCurrentContendedMonitor() ? thread.getThreadReference().currentContendedMonitor() : null;
+          if (waitedMonitor != null && vmProxy.canGetMonitorInfo()) {
+            ThreadReference blockingThread=waitedMonitor.owningThread();
+            if (blockingThread != null) {
+              onThreadBlocked(thread.getThreadReference(),blockingThread,myProcess);
+            }
+          }
+        }
+      }
+ catch (      IncompatibleThreadStateException e) {
+        e.printStackTrace();
+      }
+ finally {
+        vmProxy.getVirtualMachine().resume();
+        myAlarm.request();
+      }
+    }
+  }
+);
+}
