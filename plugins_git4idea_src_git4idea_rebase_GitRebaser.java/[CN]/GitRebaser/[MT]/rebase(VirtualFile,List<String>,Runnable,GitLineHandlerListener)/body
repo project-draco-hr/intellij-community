@@ -11,35 +11,22 @@
   GitLocalChangesWouldBeOverwrittenDetector localChangesDetector=new GitLocalChangesWouldBeOverwrittenDetector(root,CHECKOUT);
   rebaseHandler.addLineListener(untrackedFilesDetector);
   rebaseHandler.addLineListener(localChangesDetector);
-  String progressTitle="Rebasing";
-  GitTask rebaseTask=new GitTask(myProject,rebaseHandler,progressTitle);
-  rebaseTask.setProgressIndicator(myProgressIndicator);
-  rebaseTask.setProgressAnalyzer(new GitStandardProgressAnalyzer());
-  final AtomicReference<GitUpdateResult> updateResult=new AtomicReference<GitUpdateResult>();
-  final AtomicBoolean failure=new AtomicBoolean();
+  rebaseHandler.addLineListener(GitStandardProgressAnalyzer.createListener(myProgressIndicator));
   AccessToken token=DvcsUtil.workingTreeChangeStarted(myProject);
   try {
-    rebaseTask.executeInBackground(true,new GitTaskResultHandlerAdapter(){
-      @Override protected void onSuccess(){
-        updateResult.set(GitUpdateResult.SUCCESS);
-      }
-      @Override protected void onCancel(){
-        if (onCancel != null) {
-          onCancel.run();
-        }
-        updateResult.set(GitUpdateResult.CANCEL);
-      }
-      @Override protected void onFailure(){
-        failure.set(true);
-      }
-    }
-);
-    if (failure.get()) {
-      updateResult.set(handleRebaseFailure(rebaseHandler,root,rebaseConflictDetector,untrackedFilesDetector,localChangesDetector));
-    }
+    String oldText=myProgressIndicator.getText();
+    myProgressIndicator.setText("Rebasing...");
+    GitCommandResult result=myGit.runCommand(rebaseHandler);
+    myProgressIndicator.setText(oldText);
+    return result.success() ? GitUpdateResult.SUCCESS : handleRebaseFailure(rebaseHandler,root,rebaseConflictDetector,untrackedFilesDetector,localChangesDetector);
   }
-  finally {
+ catch (  ProcessCanceledException pce) {
+    if (onCancel != null) {
+      onCancel.run();
+    }
+    return GitUpdateResult.CANCEL;
+  }
+ finally {
     DvcsUtil.workingTreeChangeFinished(myProject,token);
   }
-  return updateResult.get();
 }
