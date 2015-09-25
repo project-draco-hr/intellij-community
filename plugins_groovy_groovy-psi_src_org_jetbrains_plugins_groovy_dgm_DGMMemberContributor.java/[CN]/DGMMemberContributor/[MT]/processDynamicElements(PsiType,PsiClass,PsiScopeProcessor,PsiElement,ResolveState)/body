@@ -1,10 +1,20 @@
 {
-  Project project=place.getProject();
-  GlobalSearchScope resolveScope=place.getResolveScope();
-  GroovyPsiManager groovyPsiManager=GroovyPsiManager.getInstance(project);
-  Couple<List<String>> extensions=GroovyExtensionProvider.getInstance(project).collectExtensions(resolveScope);
-  List<String> instanceCategories=extensions.getFirst();
-  List<String> staticCategories=extensions.getSecond();
-  if (!processCategories(qualifierType,processor,state,project,resolveScope,groovyPsiManager,instanceCategories,false))   return;
-  if (!processCategories(qualifierType,processor,state,project,resolveScope,groovyPsiManager,staticCategories,true))   return;
+  final Project project=place.getProject();
+  ConcurrentMap<GlobalSearchScope,List<GdkMethodHolder>> map=CachedValuesManager.getManager(project).getCachedValue(project,new CachedValueProvider<ConcurrentMap<GlobalSearchScope,List<GdkMethodHolder>>>(){
+    @Nullable @Override public Result<ConcurrentMap<GlobalSearchScope,List<GdkMethodHolder>>> compute(){
+      ConcurrentMap<GlobalSearchScope,List<GdkMethodHolder>> value=ContainerUtil.createConcurrentSoftValueMap();
+      return Result.create(value,PsiModificationTracker.MODIFICATION_COUNT);
+    }
+  }
+);
+  GlobalSearchScope scope=place.getResolveScope();
+  List<GdkMethodHolder> gdkMethods=map.get(scope);
+  if (gdkMethods == null) {
+    map.put(scope,gdkMethods=calcGdkMethods(project,scope));
+  }
+  for (  GdkMethodHolder holder : gdkMethods) {
+    if (!holder.processMethods(processor,state,qualifierType,project)) {
+      return;
+    }
+  }
 }
