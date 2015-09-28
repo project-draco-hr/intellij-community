@@ -1,0 +1,33 @@
+{
+  final ControlFlow controlFlow=ControlFlowCache.getControlFlow(owner);
+  final List<PsiElement> readFromEnclosingScope=new ArrayList<PsiElement>();
+  final List<PyTargetExpression> nonlocalWrites=new ArrayList<PyTargetExpression>();
+  for (  Instruction instruction : controlFlow.getInstructions()) {
+    if (instruction instanceof ReadWriteInstruction) {
+      final ReadWriteInstruction readWriteInstruction=(ReadWriteInstruction)instruction;
+      final PsiElement element=readWriteInstruction.getElement();
+      if (element == null) {
+        continue;
+      }
+      if (readWriteInstruction.getAccess().isReadAccess()) {
+        for (        PsiElement resolved : PyUtil.multiResolveTopPriority(element,context)) {
+          if (resolved != null && isFromEnclosingScope(resolved,targetFunction)) {
+            readFromEnclosingScope.add(element);
+            break;
+          }
+        }
+      }
+      if (readWriteInstruction.getAccess().isWriteAccess()) {
+        if (element instanceof PyTargetExpression && element.getParent() instanceof PyNonlocalStatement) {
+          for (          PsiElement resolved : PyUtil.multiResolveTopPriority(element,context)) {
+            if (resolved != null && isFromEnclosingScope(resolved,targetFunction)) {
+              nonlocalWrites.add((PyTargetExpression)element);
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+  return new AnalysisResult(readFromEnclosingScope,nonlocalWrites);
+}
