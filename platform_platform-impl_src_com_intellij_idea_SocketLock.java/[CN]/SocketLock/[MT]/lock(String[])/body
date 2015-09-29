@@ -1,19 +1,15 @@
 {
   if (LOG.isDebugEnabled()) {
-    LOG.debug("enter: lock(configPath='" + configPath + "', systemPath='"+ systemPath+ "')");
+    LOG.debug("enter: lock(configPath='" + myConfigPath + "', systemPath='"+ mySystemPath+ "')");
   }
   try {
-    final File config=new File(configPath);
-    final File system=new File(systemPath);
-    final File portMarkerC=new File(config,"port");
-    final File portMarkerS=new File(system,"port");
-    return executeAndClose(new Executor<ActivateStatus>(){
-      @Override public ActivateStatus execute(      @NotNull List<Closeable> closeables) throws Throwable {
-        lockPortMarker(config,closeables);
-        lockPortMarker(system,closeables);
+    return underLocks(new Callable<ActivateStatus>(){
+      @Override public ActivateStatus call() throws Exception {
+        File portMarkerC=new File(myConfigPath,PORT_FILE);
+        File portMarkerS=new File(mySystemPath,PORT_FILE);
         MultiMap<Integer,String> portToPath=MultiMap.createSmart();
-        addExistingPort(portMarkerC,configPath,portToPath);
-        addExistingPort(portMarkerS,systemPath,portToPath);
+        addExistingPort(portMarkerC,myConfigPath,portToPath);
+        addExistingPort(portMarkerS,mySystemPath,portToPath);
         if (!portToPath.isEmpty()) {
           for (          Map.Entry<Integer,Collection<String>> entry : portToPath.entrySet()) {
             ActivateStatus status=tryActivate(entry.getKey(),entry.getValue(),args);
@@ -22,14 +18,14 @@
             }
           }
         }
-        final String[] lockedPaths={configPath,systemPath};
-        server=BuiltInServer.start(1,6942,50,false,new NotNullProducer<ChannelHandler>(){
+        final String[] lockedPaths={myConfigPath,mySystemPath};
+        myServer=BuiltInServer.start(1,6942,50,false,new NotNullProducer<ChannelHandler>(){
           @NotNull @Override public ChannelHandler produce(){
-            return new MyChannelInboundHandler(lockedPaths,activateListener);
+            return new MyChannelInboundHandler(lockedPaths,myActivateListener);
           }
         }
 );
-        byte[] portBytes=Integer.toString(server.getPort()).getBytes(CharsetToolkit.UTF8_CHARSET);
+        byte[] portBytes=Integer.toString(myServer.getPort()).getBytes(CharsetToolkit.UTF8_CHARSET);
         FileUtil.writeToFile(portMarkerC,portBytes);
         FileUtil.writeToFile(portMarkerS,portBytes);
         return ActivateStatus.NO_INSTANCE;
