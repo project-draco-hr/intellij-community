@@ -1,0 +1,44 @@
+{
+  long nanos=unit.toNanos(timeout);
+  final List<Future<T>> futures=new SmartList<Future<T>>();
+  boolean done=false;
+  try {
+    long lastCheck=System.nanoTime();
+    for (    Callable<T> task : tasks) {
+      futures.add(submit(task));
+    }
+    long now=System.nanoTime();
+    nanos-=now - lastCheck;
+    if (nanos <= 0) {
+      return futures;
+    }
+    lastCheck=now;
+    for (    Future<T> future : futures) {
+      if (!future.isDone()) {
+        if (nanos <= 0) {
+          return futures;
+        }
+        try {
+          future.get(nanos,TimeUnit.NANOSECONDS);
+        }
+ catch (        ExecutionException ignored) {
+        }
+catch (        TimeoutException e) {
+          return futures;
+        }
+        now=System.nanoTime();
+        nanos-=now - lastCheck;
+        lastCheck=now;
+      }
+    }
+    done=true;
+    return futures;
+  }
+  finally {
+    if (!done) {
+      for (      Future<T> future : futures) {
+        future.cancel(true);
+      }
+    }
+  }
+}

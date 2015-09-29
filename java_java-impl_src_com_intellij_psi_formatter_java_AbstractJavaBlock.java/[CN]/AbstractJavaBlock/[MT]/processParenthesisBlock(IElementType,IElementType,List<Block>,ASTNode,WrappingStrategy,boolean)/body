@@ -1,7 +1,9 @@
 {
-  final Indent externalIndent=Indent.getNoneIndent();
-  final Indent internalIndent=Indent.getContinuationWithoutFirstIndent(myIndentSettings.USE_RELATIVE_INDENTS);
-  final Indent internalIndentEnforcedToChildren=Indent.getIndent(Indent.Type.CONTINUATION,myIndentSettings.USE_RELATIVE_INDENTS,true);
+  Indent externalIndent=Indent.getNoneIndent();
+  Indent internalIndent=Indent.getContinuationWithoutFirstIndent(myIndentSettings.USE_RELATIVE_INDENTS);
+  if (isInsideMethodCallParenthesis(child)) {
+    internalIndent=Indent.getSmartIndent(Indent.Type.CONTINUATION);
+  }
   AlignmentStrategy alignmentStrategy=AlignmentStrategy.wrap(createAlignment(doAlign,null),JavaTokenType.COMMA);
   setChildIndent(internalIndent);
   setChildAlignment(alignmentStrategy.getAlignment(null));
@@ -18,7 +20,6 @@
   boolean isAfterIncomplete=false;
   ASTNode prev=child;
   boolean afterAnonymousClass=false;
-  final boolean enforceIndent=shouldEnforceIndentToChildren();
   while (child != null) {
     isAfterIncomplete=isAfterIncomplete || child.getElementType() == TokenType.ERROR_ELEMENT || child.getElementType() == JavaElementType.EMPTY_EXPRESSION;
     if (!FormatterUtil.containsWhiteSpacesOnly(child) && child.getTextLength() > 0) {
@@ -26,14 +27,14 @@
         result.add(createJavaBlock(child,mySettings,myJavaSettings,externalIndent,null,bracketAlignment));
       }
  else       if (child.getElementType() == to) {
-        result.add(createJavaBlock(child,mySettings,myJavaSettings,isAfterIncomplete && !afterAnonymousClass ? internalIndent : externalIndent,null,isAfterIncomplete ? alignmentStrategy.getAlignment(null) : bracketAlignment));
+        Block block=createJavaBlock(child,mySettings,myJavaSettings,isAfterIncomplete && !afterAnonymousClass ? internalIndent : externalIndent,null,isAfterIncomplete ? alignmentStrategy.getAlignment(null) : bracketAlignment);
+        result.add(block);
         return child;
       }
  else {
         final IElementType elementType=child.getElementType();
-        Indent indentToUse=enforceIndent ? internalIndentEnforcedToChildren : internalIndent;
         AlignmentStrategy alignmentStrategyToUse=canUseAnonymousClassAlignment(child) ? anonymousClassStrategy : alignmentStrategy;
-        processChild(result,child,alignmentStrategyToUse.getAlignment(elementType),wrappingStrategy.getWrap(elementType),indentToUse);
+        processChild(result,child,alignmentStrategyToUse.getAlignment(elementType),wrappingStrategy.getWrap(elementType),internalIndent);
         if (to == null) {
           return child;
         }

@@ -7,12 +7,13 @@
     ThreadReferenceProxyImpl threadProxy=null;
     int lastFrameIndex=-1;
     PsiVariable variable=null;
+    DebugProcessImpl process=context.getDebugProcess();
     boolean topFrame=true;
     while (true) {
       try {
         LocalVariableProxyImpl local=frameProxy.visibleVariableByName(myLocalVariableName);
         if (local != null) {
-          if (topFrame || variable.equals(resolveVariable(frameProxy,myLocalVariableName,context.getProject(),context.getDebugProcess()))) {
+          if (topFrame || variable.equals(resolveVariable(frameProxy,myLocalVariableName,context.getProject(),process))) {
             myEvaluatedVariable=local;
             myContext=context;
             return frameProxy.getValue(local);
@@ -23,20 +24,22 @@
         if (!(e.getCause() instanceof AbsentInformationException)) {
           throw e;
         }
-        if (topFrame) {
-          if (myParameterIndex < 0) {
-            throw e;
+        try {
+          Map<DecompiledLocalVariable,Value> vars=LocalVariablesUtil.fetchValues(frameProxy,process);
+          for (          Map.Entry<DecompiledLocalVariable,Value> entry : vars.entrySet()) {
+            DecompiledLocalVariable var=entry.getKey();
+            if (var.getMatchedNames().contains(myLocalVariableName) || var.getDefaultName().equals(myLocalVariableName)) {
+              return entry.getValue();
+            }
           }
-          final List<Value> values=frameProxy.getArgumentValues();
-          if (values.isEmpty() || myParameterIndex >= values.size()) {
-            throw e;
-          }
-          return values.get(myParameterIndex);
+        }
+ catch (        Exception e1) {
+          LOG.info(e1);
         }
       }
       if (myCanScanFrames) {
         if (topFrame) {
-          variable=resolveVariable(frameProxy,myLocalVariableName,context.getProject(),context.getDebugProcess());
+          variable=resolveVariable(frameProxy,myLocalVariableName,context.getProject(),process);
           if (variable == null)           break;
         }
         if (threadProxy == null) {

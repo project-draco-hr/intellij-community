@@ -1,22 +1,25 @@
 {
-  Key<CachedValue<ConcurrentFactoryMap<String,UniqueNameBuilder<VirtualFile>>>> key=skipNonOpenedFiles ? ourShortNameOpenedBuilderCacheKey : ourShortNameBuilderCacheKey;
-  CachedValue<ConcurrentFactoryMap<String,UniqueNameBuilder<VirtualFile>>> data=project.getUserData(key);
+  Key<CachedValue<ConcurrentMap<String,UniqueNameBuilder<VirtualFile>>>> key=skipNonOpenedFiles ? ourShortNameOpenedBuilderCacheKey : ourShortNameBuilderCacheKey;
+  CachedValue<ConcurrentMap<String,UniqueNameBuilder<VirtualFile>>> data=project.getUserData(key);
   if (data == null) {
-    project.putUserData(key,data=CachedValuesManager.getManager(project).createCachedValue(new CachedValueProvider<ConcurrentFactoryMap<String,UniqueNameBuilder<VirtualFile>>>(){
-      @Nullable @Override public Result<ConcurrentFactoryMap<String,UniqueNameBuilder<VirtualFile>>> compute(){
-        return new Result<ConcurrentFactoryMap<String,UniqueNameBuilder<VirtualFile>>>(new ConcurrentFactoryMap<String,UniqueNameBuilder<VirtualFile>>(){
-          @Nullable @Override protected UniqueNameBuilder<VirtualFile> create(          String key){
-            final UniqueNameBuilder<VirtualFile> builder=filesWithTheSameName(key,project,skipNonOpenedFiles,ProjectScope.getProjectScope(project));
-            return builder != null ? builder : ourEmptyBuilder;
-          }
-        }
-,PsiModificationTracker.MODIFICATION_COUNT,ProjectRootManager.getInstance(project),FileEditorManagerImpl.OPEN_FILE_SET_MODIFICATION_COUNT);
+    project.putUserData(key,data=CachedValuesManager.getManager(project).createCachedValue(new CachedValueProvider<ConcurrentMap<String,UniqueNameBuilder<VirtualFile>>>(){
+      @Nullable @Override public Result<ConcurrentMap<String,UniqueNameBuilder<VirtualFile>>> compute(){
+        return new Result<ConcurrentMap<String,UniqueNameBuilder<VirtualFile>>>(ContainerUtil.<String,UniqueNameBuilder<VirtualFile>>createConcurrentSoftValueMap(),PsiModificationTracker.MODIFICATION_COUNT,FileEditorManagerImpl.OPEN_FILE_SET_MODIFICATION_COUNT);
       }
     }
 ,false));
   }
-  UniqueNameBuilder<VirtualFile> uniqueNameBuilderForShortName=data.getValue().get(file.getName());
-  if (uniqueNameBuilderForShortName == ourEmptyBuilder)   uniqueNameBuilderForShortName=null;
+  final ConcurrentMap<String,UniqueNameBuilder<VirtualFile>> valueMap=data.getValue();
+  final String fileName=file.getName();
+  UniqueNameBuilder<VirtualFile> uniqueNameBuilderForShortName=valueMap.get(fileName);
+  if (uniqueNameBuilderForShortName == null) {
+    final UniqueNameBuilder<VirtualFile> builder=filesWithTheSameName(fileName,project,skipNonOpenedFiles,ProjectScope.getProjectScope(project));
+    valueMap.put(fileName,builder != null ? builder : ourEmptyBuilder);
+    uniqueNameBuilderForShortName=builder;
+  }
+ else   if (uniqueNameBuilderForShortName == ourEmptyBuilder) {
+    uniqueNameBuilderForShortName=null;
+  }
   if (uniqueNameBuilderForShortName != null && uniqueNameBuilderForShortName.contains(file)) {
     if (file instanceof VirtualFilePathWrapper) {
       return ((VirtualFilePathWrapper)file).getPresentablePath();

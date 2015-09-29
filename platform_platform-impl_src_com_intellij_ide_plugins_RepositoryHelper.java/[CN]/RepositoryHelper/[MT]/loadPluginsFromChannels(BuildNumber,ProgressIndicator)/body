@@ -1,0 +1,32 @@
+{
+  Map<PluginId,List<Pair<String,IdeaPluginDescriptor>>> result=new LinkedHashMap<PluginId,List<Pair<String,IdeaPluginDescriptor>>>();
+  String url;
+  try {
+    URIBuilder uriBuilder=new URIBuilder(ApplicationInfoImpl.getShadowInstance().getChannelsListUrl());
+    uriBuilder.addParameter("build",(buildnumber != null ? buildnumber.asString() : ApplicationInfoImpl.getShadowInstance().getApiVersion()));
+    url=uriBuilder.build().toString();
+  }
+ catch (  URISyntaxException e) {
+    throw new IOException(e);
+  }
+  boolean forceHttps=IdeaApplication.isLoaded() && UpdateSettings.getInstance().canUseSecureConnection();
+  List<String> channelList=HttpRequests.request(url).forceHttps(forceHttps).connect(new HttpRequests.RequestProcessor<List<String>>(){
+    @Override public List<String> process(    @NotNull HttpRequests.Request request) throws IOException {
+      return (List<String>)JsonUtil.nextObject(new JsonReaderEx(request.getReader().readLine())).get("channels");
+    }
+  }
+);
+  for (  String channel : channelList) {
+    List<IdeaPluginDescriptor> channelPlugins=loadPlugins(null,buildnumber,channel,forceHttps,indicator);
+    for (    IdeaPluginDescriptor plugin : channelPlugins) {
+      PluginId pluginId=plugin.getPluginId();
+      List<Pair<String,IdeaPluginDescriptor>> pluginChannelDescriptors=result.get(pluginId);
+      if (pluginChannelDescriptors == null) {
+        pluginChannelDescriptors=new SmartList<Pair<String,IdeaPluginDescriptor>>();
+        result.put(pluginId,pluginChannelDescriptors);
+      }
+      pluginChannelDescriptors.add(Pair.create(channel,plugin));
+    }
+  }
+  return result;
+}
