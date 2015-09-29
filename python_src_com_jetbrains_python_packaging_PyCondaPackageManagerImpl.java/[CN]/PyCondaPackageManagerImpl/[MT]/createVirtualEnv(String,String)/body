@@ -1,0 +1,22 @@
+{
+  final String condaName=SystemInfo.isWindows ? "conda.exe" : "conda";
+  final String condaExecutable=PyCondaPackageService.getCondaExecutable(condaName);
+  if (condaExecutable == null)   throw new PyExecutionException("Cannot find conda","Conda",Collections.<String>emptyList(),new ProcessOutput());
+  final ArrayList<String> parameters=Lists.newArrayList(condaExecutable,"create","-p",destinationDir,"python=" + version,"-y");
+  final GeneralCommandLine commandLine=new GeneralCommandLine(parameters);
+  final Process process=commandLine.createProcess();
+  final CapturingProcessHandler handler=new CapturingProcessHandler(process);
+  final ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
+  final ProcessOutput result=handler.runProcessWithProgressIndicator(indicator);
+  if (result.isCancelled()) {
+    throw new RunCanceledByUserException();
+  }
+  final int exitCode=result.getExitCode();
+  if (exitCode != 0) {
+    final String message=StringUtil.isEmptyOrSpaces(result.getStdout()) && StringUtil.isEmptyOrSpaces(result.getStderr()) ? "Permission denied" : "Non-zero exit code";
+    throw new PyExecutionException(message,"Conda",parameters,result);
+  }
+  final String binary=PythonSdkType.getPythonExecutable(destinationDir);
+  final String binaryFallback=destinationDir + File.separator + "bin"+ File.separator+ "python";
+  return (binary != null) ? binary : binaryFallback;
+}
