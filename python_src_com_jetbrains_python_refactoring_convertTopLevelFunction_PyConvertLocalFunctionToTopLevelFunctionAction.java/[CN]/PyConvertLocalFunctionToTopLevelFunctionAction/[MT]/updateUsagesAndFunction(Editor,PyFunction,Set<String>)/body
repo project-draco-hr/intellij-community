@@ -1,0 +1,30 @@
+{
+  final String commaSeparatedNames=StringUtil.join(enclosingScopeReads,", ");
+  final Project project=targetFunction.getProject();
+  final PyElementGenerator elementGenerator=PyElementGenerator.getInstance(project);
+  for (  UsageInfo usage : PyRefactoringUtil.findUsages(targetFunction,false)) {
+    final PsiElement element=usage.getElement();
+    if (element != null) {
+      final PyCallExpression parentCall=as(element.getParent(),PyCallExpression.class);
+      if (parentCall != null) {
+        final PyArgumentList argList=parentCall.getArgumentList();
+        if (argList != null) {
+          final StringBuilder argListText=new StringBuilder(argList.getText());
+          argListText.insert(1,commaSeparatedNames + (argList.getArguments().length > 0 ? ", " : ""));
+          argList.replace(elementGenerator.createArgumentList(LanguageLevel.forElement(element),argListText.toString()));
+        }
+      }
+    }
+  }
+  PyFunction copiedFunction=(PyFunction)targetFunction.copy();
+  final PyParameterList paramList=copiedFunction.getParameterList();
+  final StringBuilder paramListText=new StringBuilder(paramList.getText());
+  paramListText.insert(1,commaSeparatedNames + (paramList.getParameters().length > 0 ? ", " : ""));
+  paramList.replace(elementGenerator.createParameterList(LanguageLevel.forElement(targetFunction),paramListText.toString()));
+  final PsiFile file=targetFunction.getContainingFile();
+  final PsiElement anchor=PyPsiUtils.getParentRightBefore(targetFunction,file);
+  copiedFunction=(PyFunction)file.addAfter(copiedFunction,anchor);
+  targetFunction.delete();
+  editor.getSelectionModel().removeSelection();
+  editor.getCaretModel().moveToOffset(copiedFunction.getTextOffset());
+}
