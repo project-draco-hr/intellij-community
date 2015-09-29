@@ -1,0 +1,34 @@
+{
+  final Map<Pair<String,DependencyScope>,ModuleOrderEntry> toRemove=ContainerUtilRt.newHashMap();
+  for (  OrderEntry entry : modelsProvider.getOrderEntries(module)) {
+    if (entry instanceof ModuleOrderEntry) {
+      ModuleOrderEntry e=(ModuleOrderEntry)entry;
+      toRemove.put(Pair.create(e.getModuleName(),e.getScope()),e);
+    }
+  }
+  final ModifiableRootModel modifiableRootModel=modelsProvider.getModifiableRootModel(module);
+  for (  DataNode<ModuleDependencyData> dependencyNode : toImport) {
+    final ModuleDependencyData dependencyData=dependencyNode.getData();
+    toRemove.remove(Pair.create(dependencyData.getInternalName(),dependencyData.getScope()));
+    final String moduleName=dependencyData.getInternalName();
+    Module ideDependencyModule=modelsProvider.findIdeModule(moduleName);
+    ModuleOrderEntry orderEntry;
+    if (module.equals(ideDependencyModule)) {
+      continue;
+    }
+ else {
+      if (ideDependencyModule == null) {
+        LOG.warn(String.format("Can't import module dependency for '%s' module. Reason: target module (%s) is not found at the ide",module.getName(),dependencyData));
+      }
+      orderEntry=modelsProvider.findIdeModuleDependency(dependencyData,module);
+      if (orderEntry == null) {
+        orderEntry=ideDependencyModule == null ? modifiableRootModel.addInvalidModuleEntry(moduleName) : modifiableRootModel.addModuleOrderEntry(ideDependencyModule);
+      }
+    }
+    orderEntry.setScope(dependencyData.getScope());
+    orderEntry.setExported(dependencyData.isExported());
+  }
+  if (!toRemove.isEmpty()) {
+    removeData(toRemove.values(),module,modelsProvider);
+  }
+}

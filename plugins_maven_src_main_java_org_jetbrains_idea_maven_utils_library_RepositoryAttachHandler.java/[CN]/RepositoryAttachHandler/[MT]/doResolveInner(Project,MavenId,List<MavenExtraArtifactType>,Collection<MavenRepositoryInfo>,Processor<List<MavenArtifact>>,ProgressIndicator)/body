@@ -1,3 +1,58 @@
 {
-  doResolveInner(project,Collections.singletonList(mavenId),extraTypes,repositories,resultProcessor,indicator);
+  boolean cancelled=false;
+  final Collection<MavenArtifact> result=new LinkedHashSet<MavenArtifact>();
+  MavenEmbeddersManager manager=MavenProjectsManager.getInstance(project).getEmbeddersManager();
+  MavenEmbedderWrapper embedder=manager.getEmbedder(MavenEmbeddersManager.FOR_DOWNLOAD);
+  try {
+    final MavenGeneralSettings mavenGeneralSettings=MavenProjectsManager.getInstance(project).getGeneralSettings();
+    embedder.customizeForResolve(new SoutMavenConsole(mavenGeneralSettings.getOutputLevel(),mavenGeneralSettings.isPrintErrorStackTraces()),new MavenProgressIndicator(indicator));
+    List<MavenRemoteRepository> remoteRepositories=convertRepositories(repositories);
+    List<MavenArtifactInfo> artifacts=Collections.singletonList(new MavenArtifactInfo(mavenId,"jar",null));
+    List<MavenArtifact> firstResult=embedder.resolveTransitively(artifacts,remoteRepositories);
+    for (    MavenArtifact artifact : firstResult) {
+      if (!artifact.isResolved() || MavenConstants.SCOPE_TEST.equals(artifact.getScope())) {
+        continue;
+      }
+      result.add(artifact);
+    }
+    if (!extraTypes.isEmpty()) {
+      Set<String> allowedClassifiers=JBIterable.from(extraTypes).transform(new Function<MavenExtraArtifactType,String>(){
+        @Override public String fun(        MavenExtraArtifactType extraType){
+          return extraType.getDefaultClassifier();
+        }
+      }
+).toSet();
+      List<MavenArtifactInfo> resolve=JBIterable.from(extraTypes).transform(new Function<MavenExtraArtifactType,MavenArtifactInfo>(){
+        @Override public MavenArtifactInfo fun(        MavenExtraArtifactType extraType){
+          return new MavenArtifactInfo(mavenId,extraType.getDefaultExtension(),extraType.getDefaultClassifier());
+        }
+      }
+).toList();
+      for (      MavenArtifact artifact : embedder.resolveTransitively(new ArrayList<MavenArtifactInfo>(resolve),remoteRepositories)) {
+        if (!artifact.isResolved() || MavenConstants.SCOPE_TEST.equals(artifact.getScope()) || !allowedClassifiers.contains(artifact.getClassifier())) {
+          continue;
+        }
+        result.add(artifact);
+      }
+    }
+  }
+ catch (  MavenProcessCanceledException e) {
+    cancelled=true;
+  }
+ finally {
+    manager.release(embedder);
+    if (!cancelled && resultProcessor != null) {
+      ApplicationManager.getApplication().invokeAndWait(new Runnable(){
+        public void run(){
+          DumbService.allowStartingDumbModeInside(DumbModePermission.MAY_START_BACKGROUND,new Runnable(){
+            @Override public void run(){
+              resultProcessor.process(new ArrayList<MavenArtifact>(result));
+            }
+          }
+);
+        }
+      }
+,indicator.getModalityState());
+    }
+  }
 }

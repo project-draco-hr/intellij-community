@@ -3,11 +3,16 @@
   commandLine.setExePath(gitExecutable);
   commandLine.addParameter("--version");
   CapturingProcessHandler handler=new CapturingProcessHandler(commandLine.createProcess(),CharsetToolkit.getDefaultSystemCharset());
-  ProcessOutput result=handler.runProcess(30 * 1000);
+  ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
+  ProcessOutput result=indicator == null ? handler.runProcess(ExecutableValidator.TIMEOUT_MS) : handler.runProcessWithProgressIndicator(indicator);
   if (result.isTimeout()) {
     throw new TimeoutException("Couldn't identify the version of Git - stopped by timeout.");
   }
-  if (result.getExitCode() != 0 || !result.getStderr().isEmpty()) {
+ else   if (result.isCancelled()) {
+    LOG.info("Cancelled by user. exitCode=" + result.getExitCode());
+    throw new ProcessCanceledException();
+  }
+ else   if (result.getExitCode() != 0 || !result.getStderr().isEmpty()) {
     LOG.info("getVersion exitCode=" + result.getExitCode() + " errors: "+ result.getStderr());
     try {
       parse(result.getStdout());

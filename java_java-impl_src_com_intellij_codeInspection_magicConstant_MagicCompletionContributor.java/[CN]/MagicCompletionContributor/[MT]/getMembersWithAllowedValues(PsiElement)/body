@@ -1,0 +1,74 @@
+{
+  List<Pair<PsiModifierListOwner,PsiType>> result=ContainerUtil.newArrayList();
+  if (IN_METHOD_CALL_ARGUMENT.accepts(pos)) {
+    PsiCall call=PsiTreeUtil.getParentOfType(pos,PsiCall.class);
+    if (!(call instanceof PsiExpression))     return Collections.emptyList();
+    PsiType type=((PsiExpression)call).getType();
+    PsiResolveHelper resolveHelper=JavaPsiFacade.getInstance(call.getProject()).getResolveHelper();
+    JavaResolveResult[] methods=call instanceof PsiMethodCallExpression ? ((PsiMethodCallExpression)call).getMethodExpression().multiResolve(true) : call instanceof PsiNewExpression && type instanceof PsiClassType ? resolveHelper.multiResolveConstructor((PsiClassType)type,call.getArgumentList(),call) : JavaResolveResult.EMPTY_ARRAY;
+    for (    JavaResolveResult resolveResult : methods) {
+      PsiElement element=resolveResult.getElement();
+      if (!(element instanceof PsiMethod))       return Collections.emptyList();
+      PsiMethod method=(PsiMethod)element;
+      if (!resolveHelper.isAccessible(method,call,null))       continue;
+      PsiElement argument=pos;
+      while (!(argument.getContext() instanceof PsiExpressionList))       argument=argument.getContext();
+      PsiExpressionList list=(PsiExpressionList)argument.getContext();
+      int i=ArrayUtil.indexOf(list.getExpressions(),argument);
+      if (i == -1)       continue;
+      PsiParameter[] params=method.getParameterList().getParameters();
+      if (i >= params.length)       continue;
+      PsiParameter parameter=params[i];
+      result.add(new Pair<PsiModifierListOwner,PsiType>(parameter,parameter.getType()));
+    }
+  }
+ else   if (IN_BINARY_COMPARISON.accepts(pos)) {
+    PsiBinaryExpression exp=PsiTreeUtil.getParentOfType(pos,PsiBinaryExpression.class);
+    if (exp != null && (exp.getOperationTokenType() == JavaTokenType.EQEQ || exp.getOperationTokenType() == JavaTokenType.NE)) {
+      PsiExpression l=exp.getLOperand();
+      PsiModifierListOwner resolved=resolveExpression(l);
+      if (resolved != null) {
+        result.add(Pair.create(resolved,l.getType()));
+      }
+      PsiExpression r=exp.getROperand();
+      resolved=resolveExpression(r);
+      if (r != null && resolved != null) {
+        result.add(Pair.create(resolved,r.getType()));
+      }
+    }
+  }
+ else   if (IN_ASSIGNMENT.accepts(pos)) {
+    PsiAssignmentExpression assignment=PsiTreeUtil.getParentOfType(pos,PsiAssignmentExpression.class);
+    PsiExpression l=assignment == null ? null : assignment.getLExpression();
+    PsiElement resolved=resolveExpression(l);
+    if (resolved != null && PsiTreeUtil.isAncestor(assignment.getRExpression(),pos,false)) {
+      result.add(Pair.create((PsiModifierListOwner)resolved,l.getType()));
+    }
+  }
+ else   if (IN_RETURN.accepts(pos)) {
+    PsiReturnStatement statement=PsiTreeUtil.getParentOfType(pos,PsiReturnStatement.class);
+    PsiExpression l=statement == null ? null : statement.getReturnValue();
+    PsiElement element=PsiTreeUtil.getParentOfType(l,PsiMethod.class,PsiLambdaExpression.class);
+    if (element instanceof PsiMethod) {
+      result.add(Pair.create((PsiModifierListOwner)element,((PsiMethod)element).getReturnType()));
+    }
+ else     if (element instanceof PsiLambdaExpression) {
+      final PsiType interfaceType=((PsiLambdaExpression)element).getFunctionalInterfaceType();
+      final PsiMethod interfaceMethod=LambdaUtil.getFunctionalInterfaceMethod(interfaceType);
+      if (interfaceMethod != null) {
+        result.add(Pair.create((PsiModifierListOwner)interfaceMethod,LambdaUtil.getFunctionalInterfaceReturnType(interfaceType)));
+      }
+    }
+  }
+ else   if (IN_ANNOTATION_INITIALIZER.accepts(pos)) {
+    PsiNameValuePair pair=(PsiNameValuePair)pos.getParent().getParent();
+    if (pair.getValue() instanceof PsiExpression) {
+      PsiReference ref=pair.getReference();
+      PsiMethod method=ref == null ? null : (PsiMethod)ref.resolve();
+      if (method != null) {
+        result.add(new Pair<PsiModifierListOwner,PsiType>(method,method.getReturnType()));
+      }
+    }
+  }
+  return result;
+}

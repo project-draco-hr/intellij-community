@@ -11,12 +11,17 @@
     return false;
   }
   fireProjectOpened(project);
-  DumbService.getInstance(project).queueTask(new DumbModeTask(){
-    @Override public void performInDumbMode(    @NotNull ProgressIndicator indicator){
-      waitForFileWatcher(indicator);
-    }
-    @Override public String toString(){
-      return "wait for file watcher";
+  DumbService.allowStartingDumbModeInside(DumbModePermission.MAY_START_BACKGROUND,new Runnable(){
+    @Override public void run(){
+      DumbService.getInstance(project).queueTask(new DumbModeTask(){
+        @Override public void performInDumbMode(        @NotNull ProgressIndicator indicator){
+          waitForFileWatcher(indicator);
+        }
+        @Override public String toString(){
+          return "wait for file watcher";
+        }
+      }
+);
     }
   }
 );
@@ -35,6 +40,10 @@
         @Override public void run(){
           if (!project.isDisposed()) {
             startupManager.runPostStartupActivities();
+            Application application=ApplicationManager.getApplication();
+            if (!(application.isHeadlessEnvironment() || application.isUnitTestMode())) {
+              StorageUtil.checkUnknownMacros(project,true);
+            }
           }
         }
       }
@@ -47,6 +56,5 @@
     notifyProjectOpenFailed();
     return false;
   }
-  StorageUtil.checkUnknownMacros(project,project);
   return true;
 }
