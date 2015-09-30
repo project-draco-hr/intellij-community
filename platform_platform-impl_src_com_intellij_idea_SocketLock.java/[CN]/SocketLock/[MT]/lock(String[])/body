@@ -1,51 +1,32 @@
 {
-  if (LOG.isDebugEnabled()) {
-    LOG.debug("enter: lock(configPath='" + configPath + "', systemPath='"+ systemPath+ "')");
-  }
-  try {
-    final File config=new File(configPath);
-    final File system=new File(systemPath);
-    final File portMarkerC=new File(config,"port");
-    final File portMarkerS=new File(system,"port");
-    return executeAndClose(new Executor<ActivateStatus>(){
-      @Override public ActivateStatus execute(      @NotNull List<Closeable> closeables) throws Throwable {
-        lockPortMarker(config,closeables);
-        lockPortMarker(system,closeables);
-        MultiMap<Integer,String> portToPath=MultiMap.createSmart();
-        addExistingPort(portMarkerC,configPath,portToPath);
-        addExistingPort(portMarkerS,systemPath,portToPath);
-        if (!portToPath.isEmpty()) {
-          for (          Map.Entry<Integer,Collection<String>> entry : portToPath.entrySet()) {
-            ActivateStatus status=tryActivate(entry.getKey(),entry.getValue(),args);
-            if (status != ActivateStatus.NO_INSTANCE) {
-              return status;
-            }
+  log("enter: lock(config=%s system=%s)",myConfigPath,mySystemPath);
+  return underLocks(new Callable<ActivateStatus>(){
+    @Override public ActivateStatus call() throws Exception {
+      File portMarkerC=new File(myConfigPath,PORT_FILE);
+      File portMarkerS=new File(mySystemPath,PORT_FILE);
+      MultiMap<Integer,String> portToPath=MultiMap.createSmart();
+      addExistingPort(portMarkerC,myConfigPath,portToPath);
+      addExistingPort(portMarkerS,mySystemPath,portToPath);
+      if (!portToPath.isEmpty()) {
+        for (        Map.Entry<Integer,Collection<String>> entry : portToPath.entrySet()) {
+          ActivateStatus status=tryActivate(entry.getKey(),entry.getValue(),args);
+          if (status != ActivateStatus.NO_INSTANCE) {
+            return status;
           }
         }
-        final String[] lockedPaths={configPath,systemPath};
-        server=BuiltInServer.start(1,6942,50,false,new NotNullProducer<ChannelHandler>(){
-          @NotNull @Override public ChannelHandler produce(){
-            return new MyChannelInboundHandler(lockedPaths,activateListener);
-          }
-        }
-);
-        byte[] portBytes=Integer.toString(server.getPort()).getBytes(CharsetToolkit.UTF8_CHARSET);
-        FileUtil.writeToFile(portMarkerC,portBytes);
-        FileUtil.writeToFile(portMarkerS,portBytes);
-        return ActivateStatus.NO_INSTANCE;
       }
-    }
+      final String[] lockedPaths={myConfigPath,mySystemPath};
+      myServer=BuiltInServer.start(1,6942,50,false,new NotNullProducer<ChannelHandler>(){
+        @NotNull @Override public ChannelHandler produce(){
+          return new MyChannelInboundHandler(lockedPaths,myActivateListener);
+        }
+      }
 );
-  }
- catch (  Throwable e) {
-    logError(e);
-    if (Main.isHeadless()) {
-      Main.showMessage("Cannot lock system folders",e);
+      byte[] portBytes=Integer.toString(myServer.getPort()).getBytes(CharsetToolkit.UTF8_CHARSET);
+      FileUtil.writeToFile(portMarkerC,portBytes);
+      FileUtil.writeToFile(portMarkerS,portBytes);
+      return ActivateStatus.NO_INSTANCE;
     }
- else {
-      String pathToLogFile=PathManager.getLogPath() + "/idea.log file".replace('/',File.separatorChar);
-      JOptionPane.showMessageDialog(JOptionPane.getRootFrame(),CommonBundle.message("cannot.start.other.instance.is.running.error.message",ApplicationNamesInfo.getInstance().getProductName(),pathToLogFile),CommonBundle.message("title.warning"),JOptionPane.WARNING_MESSAGE);
-    }
-    return null;
   }
+);
 }
