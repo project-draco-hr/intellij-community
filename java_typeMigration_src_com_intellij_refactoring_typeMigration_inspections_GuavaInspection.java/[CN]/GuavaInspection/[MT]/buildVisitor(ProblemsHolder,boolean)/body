@@ -3,14 +3,17 @@
     return PsiElementVisitor.EMPTY_VISITOR;
   }
   return new JavaElementVisitor(){
-    private final AtomicNotNullLazyValue<Map<String,String>> myGuavaClassConversions=new AtomicNotNullLazyValue<Map<String,String>>(){
-      @NotNull @Override protected Map<String,String> compute(){
-        Map<String,String> map=new HashMap<String,String>();
+    private final AtomicNotNullLazyValue<Map<String,PsiClass>> myGuavaClassConversions=new AtomicNotNullLazyValue<Map<String,PsiClass>>(){
+      @NotNull @Override protected Map<String,PsiClass> compute(){
+        Map<String,PsiClass> map=new HashMap<String,PsiClass>();
         for (        TypeConversionRule rule : TypeConversionRule.EP_NAME.getExtensions()) {
           if (rule instanceof BaseGuavaTypeConversionRule) {
             final String fromClass=((BaseGuavaTypeConversionRule)rule).ruleFromClass();
             final String toClass=((BaseGuavaTypeConversionRule)rule).ruleToClass();
-            map.put(fromClass,toClass);
+            final Project project=holder.getProject();
+            final JavaPsiFacade javaPsiFacade=JavaPsiFacade.getInstance(project);
+            final PsiClass targetClass=javaPsiFacade.findClass(toClass,GlobalSearchScope.allScope(project));
+            map.put(fromClass,targetClass);
           }
         }
         return map;
@@ -24,17 +27,12 @@
         final PsiClass psiClass=resolveResult.getElement();
         if (psiClass != null) {
           final String qName=psiClass.getQualifiedName();
-          final String toQName=myGuavaClassConversions.getValue().get(qName);
-          if (toQName != null) {
-            final Project project=holder.getProject();
-            final JavaPsiFacade javaPsiFacade=JavaPsiFacade.getInstance(project);
-            final PsiClass targetClass=javaPsiFacade.findClass(toQName,GlobalSearchScope.allScope(project));
-            if (targetClass != null) {
-              final Collection<PsiType> typeParameters=resolveResult.getSubstitutor().getSubstitutionMap().values();
-              final PsiClassType targetType=javaPsiFacade.getElementFactory().createType(targetClass,typeParameters.toArray(new PsiType[typeParameters.size()]));
-              final VariableTypeFix fix=TypeMigrationVariableTypeFixProvider.createTypeMigrationFix(variable,targetType);
-              holder.registerProblem(variable,PROBLEM_DESCRIPTION,fix);
-            }
+          final PsiClass targetClass=myGuavaClassConversions.getValue().get(qName);
+          if (targetClass != null) {
+            final Collection<PsiType> typeParameters=resolveResult.getSubstitutor().getSubstitutionMap().values();
+            final PsiClassType targetType=JavaPsiFacade.getElementFactory(holder.getProject()).createType(targetClass,typeParameters.toArray(new PsiType[typeParameters.size()]));
+            final VariableTypeFix fix=TypeMigrationVariableTypeFixProvider.createTypeMigrationFix(variable,targetType);
+            holder.registerProblem(variable,PROBLEM_DESCRIPTION,fix);
           }
         }
       }
