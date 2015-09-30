@@ -1,7 +1,6 @@
 {
   final ControlFlow controlFlow=ControlFlowCache.getControlFlow(owner);
-  final List<PsiElement> readFromEnclosingScope=new ArrayList<PsiElement>();
-  final List<PyTargetExpression> nonlocalWrites=new ArrayList<PyTargetExpression>();
+  final AnalysisResult result=new AnalysisResult();
   for (  Instruction instruction : controlFlow.getInstructions()) {
     if (instruction instanceof ReadWriteInstruction) {
       final ReadWriteInstruction readWriteInstruction=(ReadWriteInstruction)instruction;
@@ -11,9 +10,18 @@
       }
       if (readWriteInstruction.getAccess().isReadAccess()) {
         for (        PsiElement resolved : PyUtil.multiResolveTopPriority(element,myContext)) {
-          if (resolved != null && isFromEnclosingScope(resolved)) {
-            readFromEnclosingScope.add(element);
-            break;
+          if (resolved != null) {
+            if (isFromEnclosingScope(resolved)) {
+              result.readsFromEnclosingScope.add(element);
+            }
+            if (resolved instanceof PyParameter && ((PyParameter)resolved).isSelf()) {
+              if (PsiTreeUtil.getParentOfType(resolved,PyFunction.class) == myFunction) {
+                result.readsOfSelfParameter.add((PyParameter)resolved);
+              }
+ else               if (!PsiTreeUtil.isAncestor(myFunction,resolved,true)) {
+                result.readsOfSelfParametersFromEnclosingScope.add((PyParameter)resolved);
+              }
+            }
           }
         }
       }
@@ -21,13 +29,12 @@
         if (element instanceof PyTargetExpression && element.getParent() instanceof PyNonlocalStatement) {
           for (          PsiElement resolved : PyUtil.multiResolveTopPriority(element,myContext)) {
             if (resolved != null && isFromEnclosingScope(resolved)) {
-              nonlocalWrites.add((PyTargetExpression)element);
-              break;
+              result.nonlocalWritesToEnclosingScope.add((PyTargetExpression)element);
             }
           }
         }
       }
     }
   }
-  return new AnalysisResult(readFromEnclosingScope,nonlocalWrites);
+  return result;
 }
