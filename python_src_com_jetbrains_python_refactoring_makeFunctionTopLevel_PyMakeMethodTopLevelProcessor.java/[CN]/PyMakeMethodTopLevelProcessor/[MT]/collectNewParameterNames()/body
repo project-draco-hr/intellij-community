@@ -1,0 +1,38 @@
+{
+  final Set<String> paramNames=new LinkedHashSet<String>();
+  for (  ScopeOwner owner : PsiTreeUtil.collectElementsOfType(myFunction,ScopeOwner.class)) {
+    final AnalysisResult result=analyseScope(owner);
+    if (!result.nonlocalWritesToEnclosingScope.isEmpty()) {
+      throw new IncorrectOperationException(PyBundle.message("refactoring.make.function.top.level.error.nonlocal.writes"));
+    }
+    if (!result.readsOfSelfParametersFromEnclosingScope.isEmpty()) {
+      throw new IncorrectOperationException(PyBundle.message("refactoring.make.function.top.level.error.self.reads"));
+    }
+    if (!result.readsFromEnclosingScope.isEmpty()) {
+      throw new IncorrectOperationException(PyBundle.message("refactoring.make.function.top.level.error.outer.scope.reads"));
+    }
+    if (!result.writesToSelfParameter.isEmpty()) {
+      throw new IncorrectOperationException(PyBundle.message("refactoring.make.function.top.level.error.special.usage.of.self"));
+    }
+    for (    PsiElement usage : result.readsOfSelfParameter) {
+      if (usage.getParent() instanceof PyTargetExpression) {
+        throw new IncorrectOperationException(PyBundle.message("refactoring.make.function.top.level.error.attribute.writes"));
+      }
+      final PyReferenceExpression parentReference=as(usage.getParent(),PyReferenceExpression.class);
+      if (parentReference != null) {
+        final String attrName=parentReference.getName();
+        if (attrName != null && PyUtil.isClassPrivateName(attrName)) {
+          throw new IncorrectOperationException(PyBundle.message("refactoring.make.function.top.level.error.private.attributes"));
+        }
+        if (parentReference.getParent() instanceof PyCallExpression) {
+          throw new IncorrectOperationException(PyBundle.message("refactoring.make.function.top.level.error.method.calls"));
+        }
+        ContainerUtil.addIfNotNull(paramNames,attrName);
+      }
+ else {
+        throw new IncorrectOperationException(PyBundle.message("refactoring.make.function.top.level.error.special.usage.of.self"));
+      }
+    }
+  }
+  return paramNames;
+}

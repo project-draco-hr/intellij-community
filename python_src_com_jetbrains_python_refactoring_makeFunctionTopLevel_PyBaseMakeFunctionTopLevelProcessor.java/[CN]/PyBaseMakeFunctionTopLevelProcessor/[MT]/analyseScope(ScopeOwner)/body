@@ -1,0 +1,43 @@
+{
+  final ControlFlow controlFlow=ControlFlowCache.getControlFlow(owner);
+  final AnalysisResult result=new AnalysisResult();
+  for (  Instruction instruction : controlFlow.getInstructions()) {
+    if (instruction instanceof ReadWriteInstruction) {
+      final ReadWriteInstruction readWriteInstruction=(ReadWriteInstruction)instruction;
+      final PsiElement element=readWriteInstruction.getElement();
+      if (element == null) {
+        continue;
+      }
+      if (readWriteInstruction.getAccess().isReadAccess()) {
+        for (        PsiElement resolved : PyUtil.multiResolveTopPriority(element,myContext)) {
+          if (resolved != null) {
+            if (isFromEnclosingScope(resolved)) {
+              result.readsFromEnclosingScope.add(element);
+            }
+            if (resolved instanceof PyParameter && ((PyParameter)resolved).isSelf()) {
+              if (PsiTreeUtil.getParentOfType(resolved,PyFunction.class) == myFunction) {
+                result.readsOfSelfParameter.add(element);
+              }
+ else               if (!PsiTreeUtil.isAncestor(myFunction,resolved,true)) {
+                result.readsOfSelfParametersFromEnclosingScope.add(element);
+              }
+            }
+          }
+        }
+      }
+      if (readWriteInstruction.getAccess().isWriteAccess() && element instanceof PyTargetExpression) {
+        for (        PsiElement resolved : PyUtil.multiResolveTopPriority(element,myContext)) {
+          if (resolved != null) {
+            if (element.getParent() instanceof PyNonlocalStatement && isFromEnclosingScope(resolved)) {
+              result.nonlocalWritesToEnclosingScope.add((PyTargetExpression)element);
+            }
+            if (resolved instanceof PyParameter && ((PyParameter)resolved).isSelf() && PsiTreeUtil.getParentOfType(resolved,PyFunction.class) == myFunction) {
+              result.writesToSelfParameter.add((PyTargetExpression)element);
+            }
+          }
+        }
+      }
+    }
+  }
+  return result;
+}
