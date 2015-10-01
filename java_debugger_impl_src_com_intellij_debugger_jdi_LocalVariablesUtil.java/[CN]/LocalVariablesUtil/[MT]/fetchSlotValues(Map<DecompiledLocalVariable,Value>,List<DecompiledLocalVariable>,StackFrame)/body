@@ -1,0 +1,26 @@
+{
+  final Field frameIdField=frame.getClass().getDeclaredField("id");
+  frameIdField.setAccessible(true);
+  final Object frameId=frameIdField.get(frame);
+  final VirtualMachine vm=frame.virtualMachine();
+  final Method stateMethod=vm.getClass().getDeclaredMethod("state");
+  stateMethod.setAccessible(true);
+  Object slotInfoArray=createSlotInfoArray(vars);
+  Object ps;
+  final Object vmState=stateMethod.invoke(vm);
+synchronized (vmState) {
+    ps=ourEnqueueMethod.invoke(null,vm,frame.thread(),frameId,slotInfoArray);
+  }
+  final Object reply=ourWaitForReplyMethod.invoke(null,vm,ps);
+  final Field valuesField=reply.getClass().getDeclaredField("values");
+  valuesField.setAccessible(true);
+  final Value[] values=(Value[])valuesField.get(reply);
+  if (vars.size() != values.length) {
+    throw new InternalException("Wrong number of values returned from target VM");
+  }
+  int idx=0;
+  for (  DecompiledLocalVariable var : vars) {
+    map.put(var,values[idx++]);
+  }
+  return map;
+}

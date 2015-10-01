@@ -15,13 +15,12 @@ class MyTextField extends JTextField {
   gbConstraints.weightx=0;
   gbConstraints.weighty=1;
   gbConstraints.anchor=GridBagConstraints.EAST;
-  JLabel label=new JLabel(IdeBundle.message("editbox.line.number"));
+  JLabel label=new JLabel("Line [:column]:");
   panel.add(label,gbConstraints);
   gbConstraints.fill=GridBagConstraints.BOTH;
   gbConstraints.weightx=1;
   myField=new MyTextField();
   panel.add(myField,gbConstraints);
-  myField.setToolTipText(IdeBundle.message("tooltip.syntax.linenumber.columnnumber"));
   LogicalPosition position=myEditor.getCaretModel().getLogicalPosition();
   myField.setText(String.format("%d:%d",position.line + 1,position.column + 1));
   if (isInternal()) {
@@ -35,7 +34,39 @@ class MyTextField extends JTextField {
     gbConstraints.weightx=1;
     myOffsetField=new MyTextField();
     panel.add(myOffsetField,gbConstraints);
-    myOffsetField.setToolTipText(String.valueOf(myEditor.getCaretModel().getOffset()));
+    myOffsetField.setText(String.valueOf(myEditor.getCaretModel().getOffset()));
+    DocumentAdapter valueSync=new DocumentAdapter(){
+      boolean inSync;
+      @Override protected void textChanged(      DocumentEvent e){
+        if (inSync)         return;
+        inSync=true;
+        String s="<invalid>";
+        JTextField f=null;
+        try {
+          if (e.getDocument() == myField.getDocument()) {
+            f=myOffsetField;
+            LogicalPosition p=getLogicalPosition();
+            s=p == null ? s : String.valueOf(myEditor.logicalPositionToOffset(p));
+          }
+ else {
+            f=myField;
+            int offset=StringUtil.parseInt(myOffsetField.getText(),-1);
+            LogicalPosition p=offset >= 0 ? myEditor.offsetToLogicalPosition(Math.min(myEditor.getDocument().getTextLength() - 1,offset)) : null;
+            s=p == null ? s : String.format("%d:%d",p.line + 1,p.column + 1);
+          }
+          f.setText(s);
+        }
+ catch (        IndexOutOfBoundsException ignored) {
+          if (f != null)           f.setText(s);
+        }
+ finally {
+          inSync=false;
+        }
+      }
+    }
+;
+    myField.getDocument().addDocumentListener(valueSync);
+    myOffsetField.getDocument().addDocumentListener(valueSync);
   }
   return panel;
 }

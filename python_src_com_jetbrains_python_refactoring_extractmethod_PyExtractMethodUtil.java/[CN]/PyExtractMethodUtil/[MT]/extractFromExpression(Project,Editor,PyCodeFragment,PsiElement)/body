@@ -23,12 +23,20 @@
       @Override public void run(){
         ApplicationManager.getApplication().runWriteAction(new Runnable(){
           @Override public void run(){
-            PyFunction generatedMethod=generateMethodFromExpression(project,methodName,variableData,expression,flags);
+            final boolean isAsync=fragment.isAsync();
+            PyFunction generatedMethod=generateMethodFromExpression(project,methodName,variableData,expression,flags,isAsync);
             generatedMethod=insertGeneratedMethod(expression,generatedMethod);
             final boolean isMethod=PyPsiUtils.isMethodContext(expression);
             processParameters(project,generatedMethod,variableData,isMethod,isClassMethod,isStaticMethod);
             final StringBuilder builder=new StringBuilder();
-            if (fragment.isYieldInside()) {
+            if (isAsync) {
+              builder.append("async ");
+            }
+            builder.append("def f():\n    ");
+            if (isAsync) {
+              builder.append("await ");
+            }
+ else             if (fragment.isYieldInside()) {
               builder.append("yield from ");
             }
  else {
@@ -40,7 +48,8 @@
             builder.append(methodName);
             builder.append("(").append(createCallArgsString(variableData)).append(")");
             final PyElementGenerator generator=PyElementGenerator.getInstance(project);
-            final PyElement generated=generator.createFromText(LanguageLevel.forElement(expression),PyElement.class,builder.toString());
+            final PyFunction function=generator.createFromText(LanguageLevel.forElement(expression),PyFunction.class,builder.toString());
+            final PyElement generated=function.getStatementList().getStatements()[0];
             PsiElement callElement=null;
             if (generated instanceof PyReturnStatement) {
               callElement=((PyReturnStatement)generated).getExpression();

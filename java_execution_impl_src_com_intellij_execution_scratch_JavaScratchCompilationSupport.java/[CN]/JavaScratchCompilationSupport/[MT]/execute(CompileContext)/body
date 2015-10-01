@@ -1,0 +1,123 @@
+{
+  final Project project=context.getProject();
+  final RunConfiguration configuration=CompileStepBeforeRun.getRunConfiguration(context);
+  if (!(configuration instanceof JavaScratchConfiguration)) {
+    return true;
+  }
+  final JavaScratchConfiguration scratchConfig=(JavaScratchConfiguration)configuration;
+  final String scratchUrl=scratchConfig.getScratchFileUrl();
+  if (scratchUrl == null) {
+    context.addMessage(CompilerMessageCategory.ERROR,"Associated scratch file not found",null,-1,-1);
+    return false;
+  }
+  @Nullable final Module module=scratchConfig.getConfigurationModule().getModule();
+  final Sdk targetSdk=module != null ? ModuleRootManager.getInstance(module).getSdk() : ProjectRootManager.getInstance(project).getProjectSdk();
+  if (targetSdk == null) {
+    final String message=module != null ? "Cannot find associated SDK for run configuration module \"" + module.getName() + "\".\nPlease check project settings." : "Cannot find associated project SDK for the run configuration.\nPlease check project settings.";
+    context.addMessage(CompilerMessageCategory.ERROR,message,scratchUrl,-1,-1);
+    return true;
+  }
+  if (!(targetSdk.getSdkType() instanceof JavaSdkType)) {
+    final String message=module != null ? "Expected Java SDK for run configuration module \"" + module.getName() + "\".\nPlease check project settings." : "Expected Java SDK for project \"" + project.getName() + "\".\nPlease check project settings.";
+    context.addMessage(CompilerMessageCategory.ERROR,message,scratchUrl,-1,-1);
+    return true;
+  }
+  final File outputDir=getScratchOutputDirectory(project);
+  if (outputDir == null) {
+    return true;
+  }
+  FileUtil.delete(outputDir);
+  try {
+    final File scratchFile=new File(VirtualFileManager.extractPath(scratchUrl));
+    File srcFile=scratchFile;
+    if (!StringUtil.endsWith(srcFile.getName(),".java")) {
+      final File srcDir=getScratchTempDirectory(project);
+      if (srcDir == null) {
+        return true;
+      }
+      FileUtil.delete(srcDir);
+      final String srcFileName=ApplicationManager.getApplication().runReadAction(new Computable<String>(){
+        @Override public String compute(){
+          final VirtualFile vFile=VirtualFileManager.getInstance().findFileByUrl(scratchUrl);
+          if (vFile != null) {
+            final PsiFile psiFile=PsiManager.getInstance(project).findFile(vFile);
+            if (psiFile instanceof PsiJavaFile) {
+              String name=null;
+              for (              PsiClass aClass : ((PsiJavaFile)psiFile).getClasses()) {
+                if (name == null) {
+                  name=aClass.getName();
+                  if (isPublic(aClass)) {
+                    break;
+                  }
+                }
+ else                 if (isPublic(aClass)) {
+                  name=aClass.getName();
+                  break;
+                }
+              }
+              if (name != null) {
+                return name;
+              }
+            }
+          }
+          return FileUtil.getNameWithoutExtension(scratchFile);
+        }
+      }
+);
+      srcFile=new File(srcDir,srcFileName + ".java");
+      FileUtil.copy(scratchFile,srcFile);
+    }
+    final Collection<File> files=Collections.singleton(srcFile);
+    final Set<File> cp=new LinkedHashSet<File>();
+    final List<File> platformCp=new ArrayList<File>();
+    final Computable<OrderEnumerator> orderEnumerator=module != null ? new Computable<OrderEnumerator>(){
+      @Override public OrderEnumerator compute(){
+        return ModuleRootManager.getInstance(module).orderEntries();
+      }
+    }
+ : new Computable<OrderEnumerator>(){
+      @Override public OrderEnumerator compute(){
+        return ProjectRootManager.getInstance(project).orderEntries();
+      }
+    }
+;
+    ApplicationManager.getApplication().runReadAction(new Runnable(){
+      @Override public void run(){
+        for (        String s : orderEnumerator.compute().compileOnly().recursively().exportedOnly().withoutSdk().getPathsList().getPathList()) {
+          cp.add(new File(s));
+        }
+        for (        String s : orderEnumerator.compute().compileOnly().sdkOnly().getPathsList().getPathList()) {
+          platformCp.add(new File(s));
+        }
+      }
+    }
+);
+    final List<String> options=new ArrayList<String>();
+    options.add("-g");
+    final JavaSdkVersion sdkVersion=JavaSdk.getInstance().getVersion(targetSdk);
+    if (sdkVersion != null) {
+      final String langLevel="1." + Integer.valueOf(3 + sdkVersion.getMaxLanguageLevel().ordinal());
+      options.add("-source");
+      options.add(langLevel);
+      options.add("-target");
+      options.add(langLevel);
+    }
+    options.add("-proc:none");
+    final Collection<ClassObject> result=CompilerManager.getInstance(project).compileJavaCode(options,platformCp,cp,Collections.<File>emptyList(),files,outputDir);
+    for (    ClassObject classObject : result) {
+      final byte[] bytes=classObject.getContent();
+      if (bytes != null) {
+        FileUtil.writeToFile(new File(classObject.getPath()),bytes);
+      }
+    }
+  }
+ catch (  CompilationException e) {
+    for (    CompilationException.Message m : e.getMessages()) {
+      context.addMessage(m.getCategory(),m.getText(),scratchUrl,m.getLine(),m.getColumn());
+    }
+  }
+catch (  IOException e) {
+    context.addMessage(CompilerMessageCategory.ERROR,e.getMessage(),scratchUrl,-1,-1);
+  }
+  return true;
+}

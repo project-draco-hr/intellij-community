@@ -1,0 +1,27 @@
+{
+  File file=IoTestUtil.createTestFile("file.txt");
+  long stamp=file.lastModified();
+  VirtualFile vFile=myFS.refreshAndFindFileByIoFile(file);
+  assertNotNull(vFile);
+  int[] updated={0};
+  MessageBusConnection connection=ApplicationManager.getApplication().getMessageBus().connect(getTestRootDisposable());
+  connection.subscribe(VirtualFileManager.VFS_CHANGES,new BulkFileListener.Adapter(){
+    @Override public void after(    @NotNull List<? extends VFileEvent> events){
+      for (      VFileEvent event : events) {
+        if (event instanceof VFileContentChangeEvent && vFile.equals(event.getFile())) {
+          updated[0]++;
+          break;
+        }
+      }
+    }
+  }
+);
+  FileUtil.writeToFile(file,"content");
+  assertTrue(file.setLastModified(stamp));
+  vFile.refresh(false,false);
+  assertEquals(1,updated[0]);
+  FileUtil.writeToFile(file,"more content");
+  assertTrue(file.setLastModified(stamp));
+  vFile.refresh(false,false);
+  assertEquals(2,updated[0]);
+}

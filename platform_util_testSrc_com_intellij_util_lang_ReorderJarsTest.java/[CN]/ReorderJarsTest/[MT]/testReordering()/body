@@ -1,0 +1,46 @@
+{
+  String path=getTestDataPath() + "/ide/plugins/reorderJars";
+  JBZipFile zipFile1=new JBZipFile(path + "/annotations.jar");
+  try {
+    List<JBZipEntry> entries=zipFile1.getEntries();
+    System.out.println(entries);
+  }
+  finally {
+    zipFile1.close();
+  }
+  ReorderJarsMain.main(new String[]{path + "/order.txt",path,myTempDirectory.getPath()});
+  File[] files=myTempDirectory.listFiles();
+  assertNotNull(files);
+  assertEquals(1,files.length);
+  File file=files[0];
+  assertEquals("annotations.jar",file.getName());
+  byte[] data;
+  JBZipFile zipFile2=new JBZipFile(file);
+  try {
+    List<JBZipEntry> entries=zipFile2.getEntries();
+    System.out.println(entries);
+    assertEquals(JarMemoryLoader.SIZE_ENTRY,entries.get(0).getName());
+    JBZipEntry entry=entries.get(1);
+    data=entry.getData();
+    assertEquals(548,data.length);
+    assertEquals("org/jetbrains/annotations/Nullable.class",entry.getName());
+    assertEquals("org/jetbrains/annotations/NotNull.class",entries.get(2).getName());
+    assertEquals("META-INF/",entries.get(3).getName());
+  }
+  finally {
+    zipFile2.close();
+  }
+  ZipFile zipFile3=new ZipFile(file);
+  try {
+    JarMemoryLoader loader=JarMemoryLoader.load(zipFile3,file.toURI().toURL(),null);
+    assertNotNull(loader);
+    Resource resource=loader.getResource("org/jetbrains/annotations/Nullable.class");
+    assertNotNull(resource);
+    byte[] bytes=resource.getBytes();
+    assertEquals(548,bytes.length);
+    assertTrue(Arrays.equals(data,bytes));
+  }
+  finally {
+    zipFile3.close();
+  }
+}

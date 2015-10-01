@@ -28,6 +28,9 @@
   final PsiResolveHelper resolveHelper=JavaPsiFacade.getInstance(containingScope.getProject()).getResolveHelper();
   final String initializationName=initialization.getName();
   final boolean finalVariableIntroduction=!initialization.hasModifierProperty(PsiModifier.FINAL) && variable.hasModifierProperty(PsiModifier.FINAL) || PsiUtil.isLanguageLevel8OrHigher(initialization) && !HighlightControlFlowUtil.isEffectivelyFinal(initialization,containingScope,null) && HighlightControlFlowUtil.isEffectivelyFinal(variable,containingScope,null);
+  final PsiType variableType=variable.getType();
+  final PsiType initializationType=initialization.getType();
+  final boolean sameType=Comparing.equal(variableType,initializationType);
   for (  PsiReference ref : ReferencesSearch.search(variable,new LocalSearchScope(containingScope))) {
     final PsiElement refElement=ref.getElement();
     if (finalVariableIntroduction) {
@@ -39,6 +42,15 @@
     if (resolveHelper.resolveReferencedVariable(initializationName,refElement) != initialization) {
       return false;
     }
+    if (!sameType) {
+      final PsiElement parent=refElement.getParent();
+      if (parent instanceof PsiReferenceExpression) {
+        final PsiElement resolve=((PsiReferenceExpression)parent).resolve();
+        if (resolve instanceof PsiMember && ((PsiMember)resolve).hasModifierProperty(PsiModifier.PRIVATE)) {
+          return false;
+        }
+      }
+    }
   }
-  return !TypeConversionUtil.boxingConversionApplicable(variable.getType(),initialization.getType());
+  return !TypeConversionUtil.boxingConversionApplicable(variableType,initializationType);
 }

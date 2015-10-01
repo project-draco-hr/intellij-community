@@ -2,31 +2,23 @@
   if (myImportBlock.isEmpty()) {
     return;
   }
-  LanguageLevel langLevel=LanguageLevel.forElement(myFile);
+  boolean hasSplittedImports=false;
+  final LanguageLevel langLevel=LanguageLevel.forElement(myFile);
+  final PyElementGenerator generator=PyElementGenerator.getInstance(myFile.getProject());
   for (  PyImportStatementBase importStatement : myImportBlock) {
-    if (importStatement instanceof PyFromImportStatement && ((PyFromImportStatement)importStatement).isFromFuture()) {
-      continue;
-    }
+    final ImportPriority priority=AddImportHelper.getImportPriority(importStatement);
     if (importStatement instanceof PyImportStatement && importStatement.getImportElements().length > 1) {
       for (      PyImportElement importElement : importStatement.getImportElements()) {
-        myMissorted=true;
-        final PyImportStatement splitImport=myGenerator.createImportStatement(langLevel,importElement.getText(),null);
-        prioritize(splitImport,importElement.resolve());
+        hasSplittedImports=true;
+        final PyImportStatement splitImport=generator.createImportStatement(langLevel,importElement.getText(),null);
+        myGroups.get(priority).add(splitImport);
       }
     }
  else {
-      final PsiElement toImport;
-      if (importStatement instanceof PyFromImportStatement) {
-        toImport=((PyFromImportStatement)importStatement).resolveImportSource();
-      }
- else {
-        final PyImportElement firstImportElement=ArrayUtil.getFirstElement(importStatement.getImportElements());
-        toImport=firstImportElement != null ? firstImportElement.resolve() : null;
-      }
-      prioritize(importStatement,toImport);
+      myGroups.get(priority).add(importStatement);
     }
   }
-  if (myMissorted || needBlankLinesBetweenGroups()) {
+  if (hasSplittedImports || needBlankLinesBetweenGroups() || groupsNotSorted()) {
     applyResults();
   }
 }
