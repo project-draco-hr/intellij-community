@@ -3,20 +3,28 @@
   final Project project=CommonDataKeys.PROJECT.getData(dataContext);
   if (project == null)   return;
   Editor editor=CommonDataKeys.EDITOR.getData(dataContext);
-  if (editor == null)   return;
-  final PsiFile file=PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument());
+  final VirtualFile[] files=CommonDataKeys.VIRTUAL_FILE_ARRAY.getData(dataContext);
+  PsiFile file;
+  if (editor == null && files != null && files.length == 1 && !files[0].isDirectory()) {
+    file=PsiManager.getInstance(project).findFile(files[0]);
+  }
+ else {
+    file=PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument());
+  }
   if (file == null)   return;
   Language language=file.getLanguage();
   final FLangCodeStyleExtractor extractor=FLangCodeStyleExtractor.EXTENSION.forLanguage(language);
   if (extractor == null)   return;
   final CodeStyleSettings settings=CodeStyleSettingsManager.getSettings(project);
   final FCodeStyleDeriveProcessor genProcessor=new FGenProcessor(extractor);
+  final PsiFile finalFile=file;
   final Task.Backgroundable task=new Task.Backgroundable(project,"Code style extractor",true){
     @Override public void run(    @NotNull ProgressIndicator indicator){
       try {
         CodeStyleSettings cloneSettings=settings.clone();
-        FValuesContainer res=genProcessor.runWithProgress(project,cloneSettings,file,indicator);
-        reportResult(res,project,cloneSettings,file);
+        Map<FValue,Object> backup=genProcessor.backupValues(cloneSettings,finalFile.getLanguage());
+        FValuesExtractionResult res=genProcessor.runWithProgress(project,cloneSettings,finalFile,indicator);
+        reportResult(res,project,cloneSettings,finalFile,backup);
       }
  catch (      ProcessCanceledException e) {
         FUtils.logError("Code extraction was canceled");
