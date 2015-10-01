@@ -1,0 +1,34 @@
+{
+  final String storageRoot=getStorageRoot(library,project);
+  final RepositoryLibraryProperties libraryProperties=(RepositoryLibraryProperties)library.getProperties();
+  loadDependencies(indicator,project,libraryProperties,downloadSources,downloadJavaDocs,library.getName(),new Processor<List<MavenArtifact>>(){
+    @Override public boolean process(    List<MavenArtifact> artifacts){
+      if (artifacts == null || artifacts.isEmpty()) {
+        return true;
+      }
+      final List<OrderRoot> roots=RepositoryAttachHandler.createRoots(artifacts,storageRoot);
+      ApplicationManager.getApplication().invokeLater(new Runnable(){
+        @Override public void run(){
+          if (library.isDisposed()) {
+            return;
+          }
+          AccessToken token=WriteAction.start();
+          try {
+            final NewLibraryEditor editor=new NewLibraryEditor(null,libraryProperties);
+            editor.removeAllRoots();
+            editor.addRoots(roots);
+            final Library.ModifiableModel model=library.getModifiableModel();
+            editor.applyTo((LibraryEx.ModifiableModelEx)model);
+            model.commit();
+          }
+  finally {
+            token.finish();
+          }
+        }
+      }
+);
+      return true;
+    }
+  }
+);
+}

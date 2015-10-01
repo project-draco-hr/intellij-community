@@ -1,0 +1,45 @@
+{
+  String fragment=null;
+  int hashPosition=relativeLink.indexOf('#');
+  if (hashPosition >= 0) {
+    fragment=relativeLink.substring(hashPosition + 1);
+    relativeLink=relativeLink.substring(0,hashPosition);
+  }
+  PsiElement targetElement;
+  if (relativeLink.isEmpty()) {
+    targetElement=(contextElement instanceof PsiField || contextElement instanceof PsiMethod) ? ((PsiMember)contextElement).getContainingClass() : contextElement;
+  }
+ else {
+    if (!relativeLink.toLowerCase().endsWith(".htm") && !relativeLink.toLowerCase().endsWith(".html")) {
+      return null;
+    }
+    relativeLink=relativeLink.substring(0,relativeLink.lastIndexOf('.'));
+    String packageName=getPackageName(contextElement);
+    if (packageName == null)     return null;
+    Couple<String> pathWithPackage=removeParentReferences(Couple.of(relativeLink,packageName));
+    if (pathWithPackage == null)     return null;
+    relativeLink=pathWithPackage.first;
+    packageName=pathWithPackage.second;
+    relativeLink=relativeLink.replace('/','.');
+    String qualifiedTargetClassName=packageName.isEmpty() ? relativeLink : packageName + "." + relativeLink;
+    targetElement=JavaPsiFacade.getInstance(contextElement.getProject()).findClass(qualifiedTargetClassName,contextElement.getResolveScope());
+  }
+  if (targetElement == null)   return null;
+  String rawFragment=null;
+  if (fragment != null && targetElement instanceof PsiClass) {
+    if (fragment.contains("-") || fragment.contains("(")) {
+      rawFragment=fragment;
+      fragment=null;
+    }
+ else {
+      for (      PsiField field : ((PsiClass)targetElement).getFields()) {
+        if (field.getName().equals(fragment)) {
+          rawFragment=fragment;
+          fragment=null;
+          break;
+        }
+      }
+    }
+  }
+  return DocumentationManagerProtocol.PSI_ELEMENT_PROTOCOL + JavaDocUtil.getReferenceText(targetElement.getProject(),targetElement) + (rawFragment == null ? "" : ('#' + rawFragment))+ (fragment == null ? "" : DocumentationManagerProtocol.PSI_ELEMENT_PROTOCOL_REF_SEPARATOR + fragment);
+}

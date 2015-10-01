@@ -1,0 +1,57 @@
+{
+  JLabel informationalLabel=new JLabel();
+  informationalLabel.setText("Copy property " + ContainerUtil.getFirstItem(myProperties).getName());
+  informationalLabel.setFont(informationalLabel.getFont().deriveFont(Font.BOLD));
+  final Collection<ResourceBundle> resourceBundles=new HashSet<ResourceBundle>();
+  PropertiesReferenceManager.getInstance(myProject).processAllPropertiesFiles(new PropertiesFileProcessor(){
+    @Override public boolean process(    String baseName,    PropertiesFile propertiesFile){
+      final PsiFile file=propertiesFile.getContainingFile();
+      if (file.isWritable()) {
+        resourceBundles.add(propertiesFile.getResourceBundle());
+      }
+      return true;
+    }
+  }
+);
+  List<ResourceBundle> resourceBundleList=ContainerUtil.filter(resourceBundles,new Condition<ResourceBundle>(){
+    @Override public boolean value(    ResourceBundle resourceBundle){
+      return resourceBundle.getBaseDirectory() != null;
+    }
+  }
+);
+  Collections.sort(resourceBundleList,new Comparator<ResourceBundle>(){
+    @Override public int compare(    ResourceBundle o1,    ResourceBundle o2){
+      return Comparing.compare(o1.getBaseName(),o2.getBaseName());
+    }
+  }
+);
+  final List<PsiFileSystemItem> resourceBundlesAsFileSystemItems=ContainerUtil.map(resourceBundleList,new Function<ResourceBundle,PsiFileSystemItem>(){
+    @Override public PsiFileSystemItem fun(    ResourceBundle resourceBundle){
+      return new ResourceBundleAsFileSystemItem(resourceBundle);
+    }
+  }
+);
+  final ComboBoxWithWidePopup resourceBundleComboBox=new ComboBoxWithWidePopup(resourceBundlesAsFileSystemItems.toArray(new PsiFileSystemItem[resourceBundlesAsFileSystemItems.size()]));
+  resourceBundleComboBox.setRenderer(new GotoFileCellRenderer(500){
+    @Override public Component getListCellRendererComponent(    JList list,    Object value,    int index,    boolean isSelected,    boolean cellHasFocus){
+      final Component component=super.getListCellRendererComponent(list,value,index,isSelected,cellHasFocus);
+      UIUtil.setBackgroundRecursively(component,isSelected ? UIUtil.getListSelectionBackground() : resourceBundleComboBox.getBackground());
+      return component;
+    }
+  }
+);
+  resourceBundleComboBox.addItemListener(new ItemListener(){
+    @Override public void itemStateChanged(    @NotNull ItemEvent e){
+      myCurrentResourceBundle=((ResourceBundleAsFileSystemItem)e.getItem()).getResourceBundle();
+    }
+  }
+);
+  myPropertyNameTextField=new JBTextField(ContainerUtil.getFirstItem(myProperties).getKey());
+  myPropertyNameTextField.getDocument().addDocumentListener(new DocumentAdapter(){
+    @Override protected void textChanged(    DocumentEvent e){
+      myCurrentPropertyName=myPropertyNameTextField.getText();
+    }
+  }
+);
+  return FormBuilder.createFormBuilder().addComponent(informationalLabel).addLabeledComponent("&New name:",myPropertyNameTextField,UIUtil.LARGE_VGAP).addLabeledComponent("&Destination resource bundle:",resourceBundleComboBox).getPanel();
+}

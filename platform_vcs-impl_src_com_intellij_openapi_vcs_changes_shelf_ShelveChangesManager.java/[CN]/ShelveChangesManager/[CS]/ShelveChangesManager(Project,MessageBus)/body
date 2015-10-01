@@ -1,15 +1,23 @@
 {
   super(project);
+  myPathMacroSubstitutor=PathMacroManager.getInstance(myProject).createTrackingSubstitutor();
   myBus=bus;
-  if (project.isDefault()) {
-    myFileProcessor=new CompoundShelfFileProcessor(null,PathManager.getConfigPath() + File.separator + SHELF_DIR_NAME);
+  mySchemeManager=SchemesManagerFactory.getInstance(project).create(SHELVE_MANAGER_DIR_PATH,new BaseSchemeProcessor<ShelvedChangeList>(){
+    @Nullable @Override public ShelvedChangeList readScheme(    @NotNull Element element) throws InvalidDataException {
+      return readOneShelvedChangeList(element);
+    }
+    @Override public Parent writeScheme(    @NotNull ShelvedChangeList scheme) throws WriteExternalException {
+      Element child=new Element(ELEMENT_CHANGELIST);
+      scheme.writeExternal(child);
+      myPathMacroSubstitutor.collapsePaths(child);
+      return child;
+    }
   }
- else   if (ProjectUtil.isDirectoryBased(project)) {
-    VirtualFile dir=project.getBaseDir();
-    String shelfBaseDirPath=dir == null ? "" : dir.getPath() + File.separator + Project.DIRECTORY_STORE_FOLDER;
-    myFileProcessor=new CompoundShelfFileProcessor(shelfBaseDirPath);
+);
+  File shelfDirectory=mySchemeManager.getRootDirectory();
+  myFileProcessor=new CompoundShelfFileProcessor(shelfDirectory);
+  if (shelfDirectory.exists()) {
+    ChangeListManager.getInstance(project).addDirectoryToIgnoreImplicitly(shelfDirectory.getAbsolutePath());
   }
- else {
-    myFileProcessor=new CompoundShelfFileProcessor();
-  }
+  mySchemeManager.loadSchemes();
 }

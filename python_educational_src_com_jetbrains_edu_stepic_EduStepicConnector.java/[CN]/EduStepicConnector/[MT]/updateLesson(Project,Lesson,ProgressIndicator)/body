@@ -1,0 +1,35 @@
+{
+  final HttpPut request=new HttpPut(stepicApiUrl + "lessons/" + String.valueOf(lesson.id));
+  if (ourClient == null) {
+    if (!login()) {
+      LOG.error("Failed to push lesson");
+      return 0;
+    }
+  }
+  setHeaders(request,"application/json");
+  String requestBody=new Gson().toJson(new LessonWrapper(lesson));
+  request.setEntity(new StringEntity(requestBody,ContentType.APPLICATION_JSON));
+  try {
+    final CloseableHttpResponse response=ourClient.execute(request);
+    final HttpEntity responseEntity=response.getEntity();
+    final String responseString=responseEntity != null ? EntityUtils.toString(responseEntity) : "";
+    final StatusLine line=response.getStatusLine();
+    if (line.getStatusCode() != 200) {
+      LOG.error("Failed to push " + responseString);
+      return 0;
+    }
+    final Lesson postedLesson=new Gson().fromJson(responseString,Course.class).getLessons().get(0);
+    for (    Integer step : postedLesson.steps) {
+      deleteTask(step);
+    }
+    for (    Task task : lesson.getTaskList()) {
+      indicator.checkCanceled();
+      postTask(project,task,lesson.id);
+    }
+    return lesson.id;
+  }
+ catch (  IOException e) {
+    LOG.error(e.getMessage());
+  }
+  return -1;
+}

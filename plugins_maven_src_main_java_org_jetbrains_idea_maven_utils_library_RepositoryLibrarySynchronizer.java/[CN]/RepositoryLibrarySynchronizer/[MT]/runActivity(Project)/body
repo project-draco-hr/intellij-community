@@ -3,11 +3,26 @@
     @Override public void run(){
       ApplicationManager.getApplication().invokeLater(new DumbAwareRunnable(){
         @Override public void run(){
-          final MultiMap<Library,Module> libraries=collectLibraries(project);
+          final Collection<Library> libraries=collectLibraries(project,new Predicate<Library>(){
+            @Override public boolean apply(            Library library){
+              if (!(library instanceof LibraryEx)) {
+                return false;
+              }
+              LibraryEx libraryEx=(LibraryEx)library;
+              return libraryEx.getKind() == RepositoryLibraryType.REPOSITORY_LIBRARY_KIND && libraryEx.getProperties() instanceof RepositoryLibraryProperties;
+            }
+          }
+);
           if (libraries.isEmpty())           return;
           Task task=new Task.Backgroundable(project,"Maven",false){
             public void run(            @NotNull ProgressIndicator indicator){
-              ensureLibrariesAreDownloaded(project,libraries,indicator);
+              for (              Library library : libraries) {
+                LibraryEx libraryEx=(LibraryEx)library;
+                RepositoryLibraryProperties properties=(RepositoryLibraryProperties)libraryEx.getProperties();
+                if (isLibraryNeedToBeReloaded(libraryEx,properties)) {
+                  RepositoryUtils.reloadDependencies(indicator,project,libraryEx);
+                }
+              }
             }
           }
 ;

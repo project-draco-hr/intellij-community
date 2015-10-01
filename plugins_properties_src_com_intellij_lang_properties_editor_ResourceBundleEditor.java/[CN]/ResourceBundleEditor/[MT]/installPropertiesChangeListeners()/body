@@ -1,2 +1,49 @@
 {
+  final VirtualFileManager virtualFileManager=VirtualFileManager.getInstance();
+  if (myVfsListener != null) {
+    throw new AssertionError("Listeners can't be initialized twice");
+  }
+  myVfsListener=new VirtualFileAdapter(){
+    @Override public void fileCreated(    @NotNull VirtualFileEvent event){
+      if (PropertiesImplUtil.isPropertiesFile(event.getFile(),myProject)) {
+        recreateEditorsPanel();
+      }
+    }
+    @Override public void fileDeleted(    @NotNull VirtualFileEvent event){
+      for (      PropertiesFile file : myEditors.keySet()) {
+        if (Comparing.equal(file.getVirtualFile(),event.getFile())) {
+          recreateEditorsPanel();
+          return;
+        }
+      }
+    }
+    @Override public void propertyChanged(    @NotNull VirtualFilePropertyEvent event){
+      if (PropertiesImplUtil.isPropertiesFile(event.getFile(),myProject)) {
+        if (VirtualFile.PROP_NAME.equals(event.getPropertyName())) {
+          recreateEditorsPanel();
+        }
+ else {
+          updateEditorsFromProperties();
+        }
+      }
+    }
+  }
+;
+  virtualFileManager.addVirtualFileListener(myVfsListener,this);
+  PsiTreeChangeAdapter psiTreeChangeAdapter=new PsiTreeChangeAdapter(){
+    @Override public void childAdded(    @NotNull PsiTreeChangeEvent event){
+      final PsiFile file=event.getFile();
+      if (file instanceof XmlFile) {
+        final PropertiesFile propertiesFile=PropertiesImplUtil.getPropertiesFile(file);
+        if (propertiesFile != null) {
+          final ResourceBundle bundle=propertiesFile.getResourceBundle();
+          if (bundle.equals(myResourceBundle) && !myEditors.containsKey(propertiesFile)) {
+            recreateEditorsPanel();
+          }
+        }
+      }
+    }
+  }
+;
+  PsiManager.getInstance(myProject).addPsiTreeChangeListener(psiTreeChangeAdapter,this);
 }

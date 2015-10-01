@@ -1,0 +1,32 @@
+{
+  final List<MavenDomProjectModel> models=new ArrayList<MavenDomProjectModel>(fromModules.size());
+  List<XmlFile> files=new ArrayList<XmlFile>(fromModules.size());
+  List<MavenProject> projectToUpdate=new ArrayList<MavenProject>(fromModules.size());
+  for (  Module from : fromModules) {
+    if (!myProjectsManager.isMavenizedModule(from))     return null;
+    MavenProject fromProject=myProjectsManager.findProject(from);
+    if (fromProject == null)     return null;
+    final MavenDomProjectModel model=MavenDomUtil.getMavenDomProjectModel(myProject,fromProject.getFile());
+    if (model == null)     return null;
+    models.add(model);
+    files.add(DomUtil.getFile(model));
+    projectToUpdate.add(fromProject);
+  }
+  new WriteCommandAction(myProject,"Add Maven Dependency",PsiUtilCore.toPsiFileArray(files)){
+    @Override protected void run(    @NotNull Result result) throws Throwable {
+      for (      MavenDomProjectModel model : models) {
+        MavenDomDependency dependency=MavenDomUtil.createDomDependency(model,null,mavenId);
+        String mavenScope=getMavenScope(scope);
+        if (mavenScope != null) {
+          dependency.getScope().setStringValue(mavenScope);
+        }
+        Document document=PsiDocumentManager.getInstance(myProject).getDocument(DomUtil.getFile(model));
+        if (document != null) {
+          FileDocumentManager.getInstance().saveDocument(document);
+        }
+      }
+    }
+  }
+.execute();
+  return myProjectsManager.forceUpdateProjects(projectToUpdate);
+}
