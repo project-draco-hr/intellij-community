@@ -1,0 +1,32 @@
+{
+  final JavaCommandLineState state=new JavaApplicationCommandLineState<JavaScratchConfiguration>(this,env){
+    @Override protected void setupJavaParameters(    JavaParameters params) throws ExecutionException {
+      super.setupJavaParameters(params);
+      final File scrachesOutput=JavaScratchCompilationSupport.getScratchOutputDirectory(getProject());
+      if (scrachesOutput != null) {
+        params.getClassPath().add(scrachesOutput);
+      }
+    }
+    @NotNull @Override protected OSProcessHandler startProcess() throws ExecutionException {
+      final OSProcessHandler handler=super.startProcess();
+      if (getRunnerSettings() instanceof DebuggingRunnerData) {
+        final VirtualFile vFile=getConfiguration().getScratchVirtualFile();
+        if (vFile != null) {
+          DebuggerManager.getInstance(getProject()).addDebugProcessListener(handler,new DebugProcessAdapter(){
+            @Override public void processAttached(            DebugProcess process){
+              if (vFile.isValid()) {
+                process.appendPositionManager(new JavaScratchPositionManager((DebugProcessImpl)process,vFile));
+              }
+              process.removeDebugProcessListener(this);
+            }
+          }
+);
+        }
+      }
+      return handler;
+    }
+  }
+;
+  state.setConsoleBuilder(TextConsoleBuilderFactory.getInstance().createBuilder(getProject(),getConfigurationModule().getSearchScope()));
+  return state;
+}
