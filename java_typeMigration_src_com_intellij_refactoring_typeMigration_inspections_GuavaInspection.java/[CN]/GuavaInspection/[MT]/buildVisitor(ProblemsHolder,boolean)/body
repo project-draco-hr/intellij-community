@@ -31,12 +31,26 @@
           final String qName=psiClass.getQualifiedName();
           final PsiClass targetClass=myGuavaClassConversions.getValue().get(qName);
           if (targetClass != null) {
-            final Collection<PsiType> typeParameters=resolveResult.getSubstitutor().getSubstitutionMap().values();
-            final PsiClassType targetType=JavaPsiFacade.getElementFactory(holder.getProject()).createType(targetClass,typeParameters.toArray(new PsiType[typeParameters.size()]));
-            final VariableTypeFix fix=TypeMigrationVariableTypeFixProvider.createTypeMigrationFix(variable,targetType);
-            holder.registerProblem(variable,PROBLEM_DESCRIPTION,fix);
+            final VariableTypeFix fix=TypeMigrationVariableTypeFixProvider.createTypeMigrationFix(variable,addTypeParameters(type,resolveResult,targetClass));
+            holder.registerProblem(variable,PROBLEM_DESCRIPTION_FOR_VARIABLE,fix);
           }
         }
+      }
+    }
+    private PsiClassType addTypeParameters(    PsiType currentType,    PsiClassType.ClassResolveResult currentTypeResolveResult,    PsiClass targetClass){
+      final Map<PsiTypeParameter,PsiType> substitutionMap=currentTypeResolveResult.getSubstitutor().getSubstitutionMap();
+      final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(holder.getProject());
+      if (substitutionMap.size() == 1) {
+        return elementFactory.createType(targetClass,ContainerUtil.getFirstItem(substitutionMap.values()));
+      }
+ else {
+        LOG.assertTrue(substitutionMap.size() == 2);
+        LOG.assertTrue(GuavaFunctionConversionRule.JAVA_UTIL_FUNCTION_FUNCTION.equals(targetClass.getQualifiedName()));
+        final PsiType returnType=LambdaUtil.getFunctionalInterfaceReturnType(currentType);
+        final List<PsiType> types=new ArrayList<PsiType>(substitutionMap.values());
+        types.remove(returnType);
+        final PsiType parameterType=types.get(0);
+        return elementFactory.createType(targetClass,parameterType,returnType);
       }
     }
   }
