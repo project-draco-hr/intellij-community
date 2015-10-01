@@ -1,0 +1,58 @@
+{
+  myLabel=new JBLabel(ExecutionBundle.message("run.configuration.jre.label"));
+  myComboBoxModel=new SortedComboBoxModel<JreComboBoxItem>(new Comparator<JreComboBoxItem>(){
+    @Override public int compare(    JreComboBoxItem o1,    JreComboBoxItem o2){
+      int result=Comparing.compare(o1.getOrder(),o2.getOrder());
+      if (result != 0) {
+        return result;
+      }
+      return o1.getPresentableText().compareToIgnoreCase(o2.getPresentableText());
+    }
+  }
+);
+  myDefaultJreItem=new DefaultJreItem();
+  myComboBoxModel.add(myDefaultJreItem);
+  final Sdk[] allJDKs=ProjectJdkTable.getInstance().getAllJdks();
+  for (  Sdk sdk : allJDKs) {
+    myComboBoxModel.add(new SdkAsJreItem(sdk));
+  }
+  final Set<String> jrePaths=new HashSet<String>();
+  for (  JreProvider provider : JreProvider.EP_NAME.getExtensions()) {
+    String path=provider.getJrePath();
+    if (!StringUtil.isEmpty(path)) {
+      jrePaths.add(path);
+      myComboBoxModel.add(new CustomJreItem(path));
+    }
+  }
+  for (  Sdk jdk : allJDKs) {
+    String homePath=jdk.getHomePath();
+    if (!SystemInfo.isMac) {
+      final File jre=new File(jdk.getHomePath(),"jre");
+      if (jre.isDirectory()) {
+        homePath=jre.getPath();
+      }
+    }
+    if (jrePaths.add(homePath)) {
+      myComboBoxModel.add(new CustomJreItem(homePath));
+    }
+  }
+  ComboBox comboBox=new ComboBox(myComboBoxModel);
+  comboBox.setEditable(true);
+  comboBox.setRenderer(new ColoredListCellRendererWrapper<JreComboBoxItem>(){
+    @Override protected void doCustomize(    JList list,    JreComboBoxItem value,    int index,    boolean selected,    boolean hasFocus){
+      value.render(this,selected);
+    }
+  }
+);
+  myComboboxEditor=new JreComboboxEditor(myComboBoxModel);
+  myComboboxEditor.getEditorComponent().setTextToTriggerEmptyTextStatus(DEFAULT_JRE_TEXT);
+  comboBox.setEditor(myComboboxEditor);
+  myPathField=new ComboboxWithBrowseButton(comboBox);
+  myPathField.addBrowseFolderListener(ExecutionBundle.message("run.configuration.select.alternate.jre.label"),ExecutionBundle.message("run.configuration.select.jre.dir.label"),null,BrowseFilesListener.SINGLE_DIRECTORY_DESCRIPTOR,JreComboboxEditor.TEXT_COMPONENT_ACCESSOR);
+  setLayout(new MigLayout("ins 0, gap 10, fill, flowx"));
+  add(myLabel,"shrinkx");
+  add(myPathField,"growx, pushx");
+  InsertPathAction.addTo(myComboboxEditor.getEditorComponent());
+  setAnchor(myLabel);
+  updateUI();
+}
