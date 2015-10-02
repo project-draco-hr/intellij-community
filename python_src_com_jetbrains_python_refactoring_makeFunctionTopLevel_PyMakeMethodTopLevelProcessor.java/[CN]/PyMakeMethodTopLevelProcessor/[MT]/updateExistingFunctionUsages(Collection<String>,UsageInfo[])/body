@@ -1,2 +1,41 @@
 {
+  final PyElementGenerator elementGenerator=PyElementGenerator.getInstance(myProject);
+  for (  UsageInfo usage : usages) {
+    final PsiElement usageElem=usage.getElement();
+    if (usageElem == null) {
+      continue;
+    }
+    if (usageElem instanceof PyReferenceExpression) {
+      final PyExpression qualifier=((PyReferenceExpression)usageElem).getQualifier();
+      final PyCallExpression callExpr=as(usageElem.getParent(),PyCallExpression.class);
+      if (qualifier != null && callExpr != null && callExpr.getArgumentList() != null) {
+        if (newParamNames.size() == 1) {
+          addArguments(callExpr.getArgumentList(),Collections.singleton(qualifier.getText() + "." + ContainerUtil.getFirstItem(newParamNames)));
+        }
+ else         if (!newParamNames.isEmpty()) {
+          final PyStatement anchor=PsiTreeUtil.getParentOfType(callExpr,PyStatement.class);
+          final String targetName="foo";
+          final String assignmentText=targetName + " = " + qualifier.getText();
+          final PyAssignmentStatement assignment=elementGenerator.createFromText(LanguageLevel.forElement(callExpr),PyAssignmentStatement.class,assignmentText);
+          anchor.getParent().addBefore(assignment,anchor);
+          addArguments(callExpr.getArgumentList(),ContainerUtil.map(newParamNames,new Function<String,String>(){
+            @Override public String fun(            String attribute){
+              return targetName + "." + attribute;
+            }
+          }
+));
+        }
+      }
+      final PsiFile usageFile=usage.getFile();
+      final PsiFile origFile=myFunction.getContainingFile();
+      if (usageFile != origFile) {
+        final String funcName=myFunction.getName();
+        final String origModuleName=QualifiedNameFinder.findShortestImportableName(origFile,origFile.getVirtualFile());
+        if (usageFile != null && origModuleName != null && funcName != null) {
+          AddImportHelper.addOrUpdateFromImportStatement(usageFile,origModuleName,funcName,null,ImportPriority.PROJECT,null);
+        }
+      }
+      PyUtil.removeQualifier((PyReferenceExpression)usageElem);
+    }
+  }
 }
