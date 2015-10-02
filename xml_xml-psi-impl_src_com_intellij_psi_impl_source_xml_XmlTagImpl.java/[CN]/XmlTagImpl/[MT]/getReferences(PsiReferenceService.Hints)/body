@@ -1,0 +1,33 @@
+{
+  ProgressManager.checkCanceled();
+  final ASTNode startTagName=XmlChildRole.START_TAG_NAME_FINDER.findChild(this);
+  if (startTagName == null)   return PsiReference.EMPTY_ARRAY;
+  final ASTNode endTagName=XmlChildRole.CLOSING_TAG_NAME_FINDER.findChild(this);
+  List<PsiReference> refs=new ArrayList<PsiReference>();
+  String prefix=getNamespacePrefix();
+  boolean inStartTag=hints.offsetInElement == null || childContainsOffset(startTagName.getPsi(),hints.offsetInElement);
+  if (inStartTag) {
+    TagNameReference startTagRef=TagNameReference.createTagNameReference(this,startTagName,true);
+    if (startTagRef != null) {
+      refs.add(startTagRef);
+    }
+    if (!prefix.isEmpty()) {
+      refs.add(createPrefixReference(startTagName,prefix,startTagRef));
+    }
+  }
+  boolean inEndTag=endTagName != null && (hints.offsetInElement == null || childContainsOffset(endTagName.getPsi(),hints.offsetInElement));
+  if (inEndTag) {
+    TagNameReference endTagRef=TagNameReference.createTagNameReference(this,endTagName,false);
+    if (endTagRef != null) {
+      refs.add(endTagRef);
+    }
+    prefix=XmlUtil.findPrefixByQualifiedName(endTagName.getText());
+    if (StringUtil.isNotEmpty(prefix)) {
+      refs.add(createPrefixReference(endTagName,prefix,endTagRef));
+    }
+  }
+  if (hints.offsetInElement == null || inStartTag || inEndTag || isInsideXmlText(hints.offsetInElement)) {
+    Collections.addAll(refs,ReferenceProvidersRegistry.getReferencesFromProviders(this,hints));
+  }
+  return ContainerUtil.toArray(refs,new PsiReference[refs.size()]);
+}
