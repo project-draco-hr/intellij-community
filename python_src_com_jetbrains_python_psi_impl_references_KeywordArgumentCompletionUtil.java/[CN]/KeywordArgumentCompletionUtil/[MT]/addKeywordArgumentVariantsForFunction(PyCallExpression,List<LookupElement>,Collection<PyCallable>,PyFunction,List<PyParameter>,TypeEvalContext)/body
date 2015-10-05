@@ -1,27 +1,23 @@
 {
-  if (visited.contains(def)) {
-    return;
-  }
-  visited.add(def);
-  boolean needSelf=def.getContainingClass() != null && def.getModifier() != PyFunction.Modifier.STATICMETHOD;
+  boolean needSelf=function.getContainingClass() != null && function.getModifier() != PyFunction.Modifier.STATICMETHOD;
   final KwArgParameterCollector collector=new KwArgParameterCollector(needSelf,ret);
-  final TypeEvalContext context=TypeEvalContext.codeCompletion(def.getProject(),def.getContainingFile());
-  final List<PyParameter> parameters=PyUtil.getParameters(def,context);
   for (  PyParameter parameter : parameters) {
     parameter.accept(collector);
   }
   if (collector.hasKwArgs()) {
     for (    PyKeywordArgumentProvider provider : Extensions.getExtensions(PyKeywordArgumentProvider.EP_NAME)) {
-      final List<String> arguments=provider.getKeywordArguments(def,callExpr);
+      final List<String> arguments=provider.getKeywordArguments(function,callExpr);
       for (      String argument : arguments) {
         ret.add(PyUtil.createNamedParameterLookup(argument,callExpr.getProject()));
       }
     }
     KwArgFromStatementCallCollector fromStatementCallCollector=new KwArgFromStatementCallCollector(ret,collector.getKwArgs());
-    final PyStatementList statementList=def.getStatementList();
-    if (statementList != null)     statementList.acceptChildren(fromStatementCallCollector);
+    final PyStatementList statementList=function.getStatementList();
+    if (statementList != null) {
+      statementList.acceptChildren(fromStatementCallCollector);
+    }
     if (fromStatementCallCollector.isKwArgsTransit()) {
-      final PsiElement superMethod=PySuperMethodsSearch.search(def,context).findFirst();
+      final PsiElement superMethod=PySuperMethodsSearch.search(function,context).findFirst();
       if (superMethod instanceof PyFunction) {
         addKeywordArgumentVariants((PyFunction)superMethod,callExpr,ret,visited);
       }
