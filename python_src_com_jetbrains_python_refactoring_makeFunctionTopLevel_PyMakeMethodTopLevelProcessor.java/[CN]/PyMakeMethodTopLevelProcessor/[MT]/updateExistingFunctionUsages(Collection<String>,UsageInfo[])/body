@@ -1,5 +1,4 @@
 {
-  final PyElementGenerator elementGenerator=PyElementGenerator.getInstance(myProject);
   for (  UsageInfo usage : usages) {
     final PsiElement usageElem=usage.getElement();
     if (usageElem == null) {
@@ -9,24 +8,34 @@
       final PyExpression qualifier=((PyReferenceExpression)usageElem).getQualifier();
       final PyCallExpression callExpr=as(usageElem.getParent(),PyCallExpression.class);
       if (qualifier != null && callExpr != null && callExpr.getArgumentList() != null) {
-        if (isPureReferenceExpression(qualifier)) {
-          addArguments(callExpr.getArgumentList(),ContainerUtil.map(newParamNames,new Function<String,String>(){
+        PyExpression instanceExpr=qualifier;
+        final PyArgumentList argumentList=callExpr.getArgumentList();
+        if (resolvesToClass(qualifier)) {
+          final PyExpression[] arguments=argumentList.getArguments();
+          instanceExpr=arguments[0];
+          if (arguments.length > 0) {
+            arguments[0].delete();
+          }
+        }
+        if (isPureReferenceExpression(instanceExpr)) {
+          final String instanceExprText=instanceExpr.getText();
+          addArguments(argumentList,ContainerUtil.map(newParamNames,new Function<String,String>(){
             @Override public String fun(            String attribute){
-              return qualifier.getText() + "." + attribute;
+              return instanceExprText + "." + attribute;
             }
           }
 ));
         }
  else         if (newParamNames.size() == 1) {
-          addArguments(callExpr.getArgumentList(),Collections.singleton(qualifier.getText() + "." + ContainerUtil.getFirstItem(newParamNames)));
+          addArguments(argumentList,Collections.singleton(instanceExpr.getText() + "." + ContainerUtil.getFirstItem(newParamNames)));
         }
  else         if (!newParamNames.isEmpty()) {
           final PyStatement anchor=PsiTreeUtil.getParentOfType(callExpr,PyStatement.class);
           final String targetName="foo";
-          final String assignmentText=targetName + " = " + qualifier.getText();
-          final PyAssignmentStatement assignment=elementGenerator.createFromText(LanguageLevel.forElement(callExpr),PyAssignmentStatement.class,assignmentText);
+          final String assignmentText=targetName + " = " + instanceExpr.getText();
+          final PyAssignmentStatement assignment=myGenerator.createFromText(LanguageLevel.forElement(callExpr),PyAssignmentStatement.class,assignmentText);
           anchor.getParent().addBefore(assignment,anchor);
-          addArguments(callExpr.getArgumentList(),ContainerUtil.map(newParamNames,new Function<String,String>(){
+          addArguments(argumentList,ContainerUtil.map(newParamNames,new Function<String,String>(){
             @Override public String fun(            String attribute){
               return targetName + "." + attribute;
             }
@@ -43,7 +52,7 @@
           AddImportHelper.addOrUpdateFromImportStatement(usageFile,origModuleName,funcName,null,ImportPriority.PROJECT,null);
         }
       }
-      PyUtil.removeQualifier((PyReferenceExpression)usageElem);
+      removeQualifier((PyReferenceExpression)usageElem);
     }
   }
 }
