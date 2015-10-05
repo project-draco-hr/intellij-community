@@ -2,22 +2,38 @@
   SchemeExporter<CodeStyleScheme> exporter=SchemeExporterEP.getExporter(exporterName,CodeStyleScheme.class);
   if (exporter != null) {
     String ext=exporter.getExtension();
-    FileSaverDialog saver=FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor(ApplicationBundle.message("code.style.scheme.exporter.ui.file.chooser.title"),ApplicationBundle.message("code.style.scheme.exporter.ui.file.chooser.message"),ext),myParentComponent);
+    FileSaverDialog saver=FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor(ApplicationBundle.message("scheme.exporter.ui.file.chooser.title"),ApplicationBundle.message("scheme.exporter.ui.file.chooser.message"),ext),myParentComponent);
     VirtualFileWrapper target=saver.save(null,getFileNameSuggestion() + "." + ext);
     if (target != null) {
       VirtualFile targetFile=target.getVirtualFile(true);
+      String message;
+      MessageType messageType;
       if (targetFile != null) {
+        final AccessToken writeToken=ApplicationManager.getApplication().acquireWriteActionLock(getClass());
         try {
-          exporter.exportScheme(myScheme,targetFile);
-          myStatusCallback.showMessage(ApplicationBundle.message("code.style.scheme.exporter.ui.code.style.exported.message",myScheme.getName(),targetFile.getPresentableUrl()),MessageType.INFO);
+          OutputStream outputStream=targetFile.getOutputStream(this);
+          try {
+            exporter.exportScheme(myScheme,outputStream);
+          }
+  finally {
+            outputStream.close();
+          }
+          message=ApplicationBundle.message("scheme.exporter.ui.code.style.exported.message",myScheme.getName(),targetFile.getPresentableUrl());
+          messageType=MessageType.INFO;
         }
- catch (        SchemeExporterException e) {
-          myStatusCallback.showMessage(e.getMessage(),MessageType.ERROR);
+ catch (        Exception e) {
+          message=ApplicationBundle.message("scheme.exporter.ui.export.failed",e.getMessage());
+          messageType=MessageType.ERROR;
+        }
+ finally {
+          writeToken.finish();
         }
       }
  else {
-        myStatusCallback.showMessage(ApplicationBundle.message("code.style.scheme.exporter.ui.cannot.write.message"),MessageType.ERROR);
+        message=ApplicationBundle.message("scheme.exporter.ui.cannot.write.message");
+        messageType=MessageType.ERROR;
       }
+      myStatusCallback.showMessage(message,messageType);
     }
   }
 }
