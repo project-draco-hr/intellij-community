@@ -1,0 +1,73 @@
+{
+  HierarchyService service=HierarchyService.instance(myProject);
+  if (service.getSingleClassHierarchy() != null) {
+    return;
+  }
+  LOG.info("BuildHierarchy started");
+  final ProgressIndicator indicator=ProgressManager.getInstance().getProgressIndicator();
+  final double classes=0.3;
+  final double completeClasses=0.1;
+  final double sources=0.3;
+  final double collectPsiFilesFraction=0.2;
+  final UnitProcessor processor=new UnitProcessor(myProject,service);
+  LOG.info("read classes start");
+  indicator.setText("Reading classes");
+  ApplicationManager.getApplication().runReadAction(new Runnable(){
+    @Override public void run(){
+      StubIndex.getInstance().processAllKeys(JavaStubIndexKeys.UNITS,myProject,processor);
+    }
+  }
+);
+  indicator.setFraction(classes);
+  testMemory("0");
+  LOG.info("complete classes start");
+  indicator.setText("Completing classes");
+  service.connect1();
+  indicator.setFraction(classes + completeClasses);
+  testMemory("1");
+  LOG.info("read sources start");
+  indicator.setText("Reading sources");
+  processor.isInSourceMode=true;
+  ApplicationManager.getApplication().runReadAction(new Runnable(){
+    @Override public void run(){
+      StubIndex.getInstance().processAllKeys(JavaStubIndexKeys.UNITS,myProject,processor);
+    }
+  }
+);
+  indicator.setFraction(classes + completeClasses + sources);
+  LOG.info("read PSI start");
+  indicator.setText("Collecting PSI Files");
+  final Set<VirtualFile> srcSet=new HashSet<VirtualFile>();
+  collectFiles(srcSet,processor.myProcessedSet);
+  double total=srcSet.size();
+  LOG.info("Processing PSI");
+  indicator.setText("Processing PSI Files");
+  int loadedCound=0;
+  for (  final VirtualFile vFile : srcSet) {
+    String presentableUrl=vFile.getPresentableUrl();
+    if (HierarchyService.PROCESS_PSI) {
+      PsiFile psiFile=ApplicationManager.getApplication().runReadAction(new Computable<PsiFile>(){
+        @Override public PsiFile compute(){
+          return PsiManager.getInstance(myProject).findFile(vFile);
+        }
+      }
+);
+      if (psiFile instanceof PsiClassOwner) {
+        service.processPsiClassOwner((PsiClassOwner)psiFile);
+        LOG.info("PSI: " + presentableUrl);
+      }
+    }
+    loadedCound++;
+    indicator.setFraction(classes + completeClasses + sources+ collectPsiFilesFraction * (loadedCound / total));
+  }
+  testMemory("2");
+  indicator.setText("Completing sources + PSI");
+  service.complete2();
+  LOG.info("Complete end");
+  testMemory("3");
+  indicator.setFraction(0.9);
+  indicator.setText("Connecting subtypes");
+  service.connectSubtypes();
+  LOG.info("Subtypes connected");
+  indicator.setFraction(1);
+}
