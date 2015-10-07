@@ -37,6 +37,47 @@
         }
       }
     }
+    @Override public void visitMethodCallExpression(    PsiMethodCallExpression expression){
+      if (!isFluentIterableFromCall(expression))       return;
+      final PsiMethodCallExpression chain=findGuavaMethodChain(expression);
+      PsiClassType initialType=(PsiClassType)expression.getType();
+      LOG.assertTrue(initialType != null);
+      PsiClass resolvedClass=initialType.resolve();
+      PsiClass target;
+      if (resolvedClass == null || (target=myGuavaClassConversions.getValue().get(resolvedClass.getQualifiedName())) == null) {
+        return;
+      }
+      PsiClassType targetType=addTypeParameters(initialType,initialType.resolveGenerics(),target);
+      holder.registerProblem(chain,PROBLEM_DESCRIPTION_FOR_METHOD_CHAIN,new MigrateFluentIterableChainQuickFix(chain,initialType,targetType));
+    }
+    private boolean isFluentIterableFromCall(    PsiMethodCallExpression expression){
+      PsiMethod method=expression.resolveMethod();
+      if (method == null || !"from".equals(method.getName())) {
+        return false;
+      }
+      PsiClass aClass=method.getContainingClass();
+      return aClass != null && GuavaFluentIterableConversionRule.FLUENT_ITERABLE.equals(aClass.getQualifiedName());
+    }
+    private PsiMethodCallExpression findGuavaMethodChain(    PsiMethodCallExpression expression){
+      PsiMethodCallExpression chain=expression;
+      while (true) {
+        final PsiMethodCallExpression current=PsiTreeUtil.getParentOfType(chain,PsiMethodCallExpression.class);
+        if (current != null && current.getMethodExpression().getQualifierExpression() == chain) {
+          final PsiMethod method=current.resolveMethod();
+          if (method == null) {
+            return chain;
+          }
+          final PsiClass containingClass=method.getContainingClass();
+          if (containingClass == null || !(GuavaFluentIterableConversionRule.FLUENT_ITERABLE.equals(containingClass.getQualifiedName()) || GuavaOptionalConversionRule.GUAVA_OPTIONAL.equals(containingClass.getQualifiedName()))) {
+            return chain;
+          }
+        }
+ else {
+          return chain;
+        }
+        chain=current;
+      }
+    }
     private PsiClassType addTypeParameters(    PsiType currentType,    PsiClassType.ClassResolveResult currentTypeResolveResult,    PsiClass targetClass){
       final Map<PsiTypeParameter,PsiType> substitutionMap=currentTypeResolveResult.getSubstitutor().getSubstitutionMap();
       final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(holder.getProject());
