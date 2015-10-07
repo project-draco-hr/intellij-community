@@ -54,17 +54,25 @@
       return false;
     }
     @Nullable @Override protected Transferable createTransferable(    JComponent component){
-      Set<PsiElement> selection=ContainerUtil.newLinkedHashSet(getPsiElementsFromSelection());
-      if (selection.isEmpty())       return null;
-      List<PsiElement> result=ContainerUtil.newArrayListWithCapacity(selection.size());
-      for (      PsiElement e : selection) {
-        if (!selection.contains(e.getParent())) {
-          result.add(e);
-        }
+      Set<Object> nodes=myAbstractTreeBuilder.getSelectedElements();
+      if (nodes.isEmpty())       return null;
+      List<Pair<FilteringTreeStructure.FilteringNode,PsiElement>> result=ContainerUtil.newArrayListWithCapacity(nodes.size());
+      for (      Object o : nodes) {
+        if (!(o instanceof FilteringTreeStructure.FilteringNode))         continue;
+        FilteringTreeStructure.FilteringNode node=(FilteringTreeStructure.FilteringNode)o;
+        PsiElement psi=getPsi(node);
+        ContainerUtil.addIfNotNull(result,Pair.create(node,psi));
       }
-      String text=StringUtil.join(result,new Function<PsiElement,String>(){
-        @Override public String fun(        PsiElement e){
-          return e.getText();
+      final Set<PsiElement> psiSelection=ContainerUtil.map2LinkedSet(result,Functions.<PsiElement>pairSecond());
+      String text=StringUtil.join(result,new Function<Pair<FilteringTreeStructure.FilteringNode,PsiElement>,String>(){
+        @Override public String fun(        Pair<FilteringTreeStructure.FilteringNode,PsiElement> pair){
+          PsiElement psi=pair.second;
+          String defaultPresentation=pair.first.getPresentation().getPresentableText();
+          if (psi == null)           return defaultPresentation;
+          for (PsiElement p=psi.getParent(); p != null; p=p.getParent()) {
+            if (psiSelection.contains(p))             return null;
+          }
+          return ObjectUtils.chooseNotNull(psi.getText(),defaultPresentation);
         }
       }
 ,"\n");

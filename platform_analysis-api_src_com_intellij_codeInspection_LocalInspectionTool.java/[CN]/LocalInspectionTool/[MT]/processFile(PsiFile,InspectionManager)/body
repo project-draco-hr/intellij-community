@@ -4,10 +4,28 @@
   final PsiElementVisitor customVisitor=buildVisitor(holder,false,session);
   LOG.assertTrue(!(customVisitor instanceof PsiRecursiveElementVisitor),"The visitor returned from LocalInspectionTool.buildVisitor() must not be recursive");
   inspectionStarted(session,false);
+  final InjectedLanguageManager injectedLanguageManager=InjectedLanguageManager.getInstance(holder.getProject());
   file.accept(new PsiRecursiveElementWalkingVisitor(){
     @Override public void visitElement(    PsiElement element){
       element.accept(customVisitor);
+      processInjectedFile(element);
       super.visitElement(element);
+    }
+    private void processInjectedFile(    PsiElement element){
+      if (element instanceof PsiLanguageInjectionHost) {
+        final List<Pair<PsiElement,TextRange>> files=injectedLanguageManager.getInjectedPsiFiles(element);
+        if (files != null) {
+          for (          Pair<PsiElement,TextRange> pair : files) {
+            pair.first.accept(new PsiRecursiveElementWalkingVisitor(){
+              @Override public void visitElement(              PsiElement injectedElement){
+                injectedElement.accept(customVisitor);
+                super.visitElement(injectedElement);
+              }
+            }
+);
+          }
+        }
+      }
     }
   }
 );

@@ -1,0 +1,74 @@
+{
+  if (element instanceof PsiNewExpression) {
+    if (!FileModificationService.getInstance().preparePsiElementForWrite(element))     return null;
+    final PsiAnonymousClass anonymousClass=((PsiNewExpression)element).getAnonymousClass();
+    if (anonymousClass == null)     return null;
+    ChangeContextUtil.encodeContextInfo(anonymousClass,true);
+    final PsiElement lambdaContext=anonymousClass.getParent().getParent();
+    final String canonicalText=anonymousClass.getBaseClassType().getCanonicalText();
+    final PsiMethod method;
+    if (ignoreEqualsMethod) {
+      final List<PsiMethod> methods=ContainerUtil.filter(anonymousClass.getMethods(),new Condition<PsiMethod>(){
+        @Override public boolean value(        PsiMethod method){
+          return !"equals".equals(method.getName());
+        }
+      }
+);
+      method=methods.get(0);
+    }
+ else {
+      method=anonymousClass.getMethods()[0];
+    }
+    if (method == null)     return null;
+    final PsiCodeBlock body=method.getBody();
+    if (body == null)     return null;
+    final ForbiddenRefsChecker checker=new ForbiddenRefsChecker(method,anonymousClass);
+    body.accept(checker);
+    final PsiResolveHelper helper=PsiResolveHelper.SERVICE.getInstance(body.getProject());
+    final Set<PsiVariable> conflictingLocals=checker.getLocals();
+    for (Iterator<PsiVariable> iterator=conflictingLocals.iterator(); iterator.hasNext(); ) {
+      PsiVariable local=iterator.next();
+      final String localName=local.getName();
+      if (localName == null || helper.resolveReferencedVariable(localName,anonymousClass) == null) {
+        iterator.remove();
+      }
+    }
+    final Project project=element.getProject();
+    final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
+    ReplaceWithLambdaFix.giveUniqueNames(project,anonymousClass,elementFactory,body,conflictingLocals.toArray(new PsiVariable[conflictingLocals.size()]));
+    final String withoutTypesDeclared=ReplaceWithLambdaFix.composeLambdaText(method);
+    PsiLambdaExpression lambdaExpression=(PsiLambdaExpression)elementFactory.createExpressionFromText(withoutTypesDeclared,anonymousClass);
+    PsiElement lambdaBody=lambdaExpression.getBody();
+    LOG.assertTrue(lambdaBody != null);
+    lambdaBody.replace(body);
+    ReplaceWithLambdaFix.giveUniqueNames(project,lambdaContext,elementFactory,lambdaExpression,lambdaExpression.getParameterList().getParameters());
+    final PsiNewExpression newExpression=(PsiNewExpression)anonymousClass.getParent();
+    lambdaExpression=(PsiLambdaExpression)newExpression.replace(lambdaExpression);
+    final PsiExpression singleExpr=RedundantLambdaCodeBlockInspection.isCodeBlockRedundant(lambdaExpression,lambdaExpression.getBody());
+    if (singleExpr != null) {
+      lambdaExpression.getBody().replace(singleExpr);
+    }
+    ChangeContextUtil.decodeContextInfo(lambdaExpression,null,null);
+    final JavaCodeStyleManager javaCodeStyleManager=JavaCodeStyleManager.getInstance(project);
+    if (forceIgnoreTypeCast) {
+      return (PsiExpression)javaCodeStyleManager.shortenClassReferences(elementFactory.createExpressionFromText(withoutTypesDeclared,lambdaExpression));
+    }
+    PsiTypeCastExpression typeCast=(PsiTypeCastExpression)elementFactory.createExpressionFromText("(" + canonicalText + ")"+ withoutTypesDeclared,lambdaExpression);
+    final PsiExpression typeCastOperand=typeCast.getOperand();
+    LOG.assertTrue(typeCastOperand instanceof PsiLambdaExpression);
+    final PsiElement fromText=((PsiLambdaExpression)typeCastOperand).getBody();
+    LOG.assertTrue(fromText != null);
+    lambdaBody=lambdaExpression.getBody();
+    LOG.assertTrue(lambdaBody != null);
+    fromText.replace(lambdaBody);
+    ((PsiLambdaExpression)typeCastOperand).getParameterList().replace(lambdaExpression.getParameterList());
+    typeCast=(PsiTypeCastExpression)lambdaExpression.replace(typeCast);
+    if (RedundantCastUtil.isCastRedundant(typeCast)) {
+      final PsiExpression operand=typeCast.getOperand();
+      LOG.assertTrue(operand != null);
+      return (PsiExpression)typeCast.replace(operand);
+    }
+    return (PsiExpression)javaCodeStyleManager.shortenClassReferences(typeCast);
+  }
+  return null;
+}

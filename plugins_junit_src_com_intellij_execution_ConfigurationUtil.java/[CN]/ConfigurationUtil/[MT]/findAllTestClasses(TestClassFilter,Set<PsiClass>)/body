@@ -3,13 +3,29 @@
   final Project project=manager.getProject();
   GlobalSearchScope projectScopeWithoutLibraries=GlobalSearchScope.projectScope(project);
   final GlobalSearchScope scope=projectScopeWithoutLibraries.intersectWith(testClassFilter.getScope());
-  ClassInheritorsSearch.search(testClassFilter.getBase(),scope,true,true,false).forEach(new PsiElementProcessorAdapter<PsiClass>(new PsiElementProcessor<PsiClass>(){
-    public boolean execute(    @NotNull final PsiClass aClass){
-      if (testClassFilter.isAccepted(aClass))       found.add(aClass);
-      return true;
+  SingleClassHierarchy symbols=HierarchyService.isEnabled() ? HierarchyService.instance(project).getSingleClassHierarchy() : null;
+  if (symbols != null) {
+    SmartClassAnchor[] candidates=symbols.getAllSubtypes(testClassFilter.getBase());
+    for (    SmartClassAnchor candidate : candidates) {
+      int fileId=candidate.myFileId;
+      VirtualFile file=PersistentFS.getInstance().findFileById(fileId);
+      if (file != null && scope.contains(file)) {
+        PsiClass aClass=ClassAnchorUtil.retrieveInReadAction(project,candidate);
+        if (testClassFilter.isAccepted(aClass)) {
+          found.add(aClass);
+        }
+      }
     }
   }
+ else {
+    ClassInheritorsSearch.search(testClassFilter.getBase(),scope,true,true,false).forEach(new PsiElementProcessorAdapter<PsiClass>(new PsiElementProcessor<PsiClass>(){
+      public boolean execute(      @NotNull final PsiClass aClass){
+        if (testClassFilter.isAccepted(aClass))         found.add(aClass);
+        return true;
+      }
+    }
 ));
+  }
   final PsiMethod[] suiteMethods=ApplicationManager.getApplication().runReadAction(new Computable<PsiMethod[]>(){
     public PsiMethod[] compute(){
       return PsiShortNamesCache.getInstance(project).getMethodsByName(JUnitUtil.SUITE_METHOD_NAME,scope);
@@ -32,7 +48,7 @@
 );
   }
   Set<PsiClass> processed=ContainerUtil.newHashSet();
-  boolean hasJunit4=addAnnotatedMethodsAnSubclasses(manager,scope,testClassFilter,found,processed,"org.junit.Test",true);
-  hasJunit4|=addAnnotatedMethodsAnSubclasses(manager,scope,testClassFilter,found,processed,"org.junit.runner.RunWith",false);
+  boolean hasJunit4=addAnnotatedMethodsAnSubclasses(manager,scope,testClassFilter,found,processed,"org.junit.Test",true,symbols);
+  hasJunit4|=addAnnotatedMethodsAnSubclasses(manager,scope,testClassFilter,found,processed,"org.junit.runner.RunWith",false,symbols);
   return hasJunit4;
 }
