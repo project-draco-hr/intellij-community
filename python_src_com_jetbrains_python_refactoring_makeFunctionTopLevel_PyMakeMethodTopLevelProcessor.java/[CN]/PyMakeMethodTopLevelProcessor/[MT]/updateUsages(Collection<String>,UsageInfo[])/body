@@ -1,4 +1,19 @@
 {
+  for (  String attrName : myAttributeReferences.keySet()) {
+    final Collection<PyReferenceExpression> reads=myAttributeReferences.get(attrName);
+    final String paramName=myAttributeToParameterName.get(attrName);
+    if (!attrName.equals(paramName)) {
+      for (      PyReferenceExpression read : reads) {
+        read.replace(myGenerator.createExpressionFromText(LanguageLevel.forElement(read),paramName));
+      }
+    }
+ else {
+      for (      PyReferenceExpression read : reads) {
+        removeQualifier(read);
+      }
+    }
+  }
+  final Collection<String> attrNames=myAttributeToParameterName.keySet();
   for (  UsageInfo usage : usages) {
     final PsiElement usageElem=usage.getElement();
     if (usageElem == null) {
@@ -18,16 +33,21 @@
           }
         }
         if (isPureReferenceExpression(instanceExpr)) {
-          final String instanceExprText=instanceExpr.getText();
-          addArguments(argumentList,ContainerUtil.map(newParamNames,new Function<String,String>(){
-            @Override public String fun(            String attribute){
-              return instanceExprText + "." + attribute;
-            }
+          if (myReadsOfSelfParam.contains(instanceExpr)) {
+            addArguments(argumentList,newParamNames);
           }
+ else {
+            final String instanceExprText=instanceExpr.getText();
+            addArguments(argumentList,ContainerUtil.map(attrNames,new Function<String,String>(){
+              @Override public String fun(              String attribute){
+                return instanceExprText + "." + attribute;
+              }
+            }
 ));
+          }
         }
  else         if (newParamNames.size() == 1) {
-          addArguments(argumentList,Collections.singleton(instanceExpr.getText() + "." + ContainerUtil.getFirstItem(newParamNames)));
+          addArguments(argumentList,Collections.singleton(instanceExpr.getText() + "." + ContainerUtil.getFirstItem(attrNames)));
         }
  else         if (!newParamNames.isEmpty()) {
           final PyStatement anchor=PsiTreeUtil.getParentOfType(callExpr,PyStatement.class);
@@ -35,7 +55,7 @@
           final String assignmentText=targetName + " = " + instanceExpr.getText();
           final PyAssignmentStatement assignment=myGenerator.createFromText(LanguageLevel.forElement(callExpr),PyAssignmentStatement.class,assignmentText);
           anchor.getParent().addBefore(assignment,anchor);
-          addArguments(argumentList,ContainerUtil.map(newParamNames,new Function<String,String>(){
+          addArguments(argumentList,ContainerUtil.map(attrNames,new Function<String,String>(){
             @Override public String fun(            String attribute){
               return targetName + "." + attribute;
             }
