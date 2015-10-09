@@ -1,7 +1,31 @@
 {
-  final List<Change> result=new ArrayList<Change>();
+  LinkedMultiMap<FilePath,Change> map=new LinkedMultiMap<FilePath,Change>();
   for (  Change change : changes) {
-    addOrReplaceChange(result,change);
+    ContentRevision bRev=change.getBeforeRevision();
+    ContentRevision aRev=change.getAfterRevision();
+    FilePath bPath=bRev != null ? bRev.getFile() : null;
+    FilePath aPath=aRev != null ? aRev.getFile() : null;
+    if (bRev == null) {
+      map.putValue(aPath,change);
+      continue;
+    }
+    Collection<Change> bucket=map.get(bPath);
+    if (bucket.isEmpty()) {
+      map.putValue(aPath,change);
+      continue;
+    }
+    Change oldChange=bucket.iterator().next();
+    bucket.remove(oldChange);
+    ContentRevision oldRevision=oldChange.getBeforeRevision();
+    if (oldRevision != null || aRev != null) {
+      map.putValue(aPath,new Change(oldRevision,aRev));
+    }
   }
-  return result;
+  Collection<Change> deleted=map.remove(null);
+  if (deleted != null) {
+    for (    Change change : deleted) {
+      map.putValue(change.getBeforeRevision().getFile(),change);
+    }
+  }
+  return new ArrayList<Change>(map.values());
 }

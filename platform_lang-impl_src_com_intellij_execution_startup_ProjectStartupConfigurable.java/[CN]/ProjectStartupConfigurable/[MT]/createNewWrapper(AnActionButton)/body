@@ -7,9 +7,17 @@
       return UIUtil.removeMnemonic(ExecutionBundle.message("add.new.run.configuration.acrtion.name"));
     }
     @Override public void perform(    @NotNull final Project project,    @NotNull final Executor executor,    @NotNull DataContext context){
-      final RunManagerEx runManager=RunManagerImpl.getInstanceEx(project);
+      final RunManagerImpl runManager=RunManagerImpl.getInstanceImpl(project);
       final ConfigurationType[] factories=runManager.getConfigurationFactories();
-      final List<ConfigurationType> factoriesList=Arrays.asList(factories);
+      final Condition<ConfigurationType> filter=new Condition<ConfigurationType>(){
+        private final RunnerRegistry myRegistry=RunnerRegistry.getInstance();
+        @Override public boolean value(        ConfigurationType configurationType){
+          ConfigurationFactory factory=null;
+          return !UnknownConfigurationType.INSTANCE.equals(configurationType) && ((factory=runManager.getFactory(configurationType.getId(),null)) != null) && myRegistry.getRunner(executor.getId(),runManager.getConfigurationTemplate(factory).getConfiguration()) != null;
+        }
+      }
+;
+      final List<ConfigurationType> factoriesList=ContainerUtil.filter(Arrays.asList(factories),filter);
       final ListPopup popup=NewRunConfigurationPopup.createAddPopup(factoriesList,"",new Consumer<ConfigurationFactory>(){
         @Override public void consume(        final ConfigurationFactory factory){
           ApplicationManager.getApplication().invokeLater(new Runnable(){
@@ -20,8 +28,7 @@
                   @Override public void run(){
                     RunnerAndConfigurationSettings configuration=RunManager.getInstance(project).getSelectedConfiguration();
                     if (configuration != null) {
-                      myModel.addConfiguration(configuration);
-                      selectPathOrFirst(configuration);
+                      addConfiguration(configuration);
                     }
                   }
                 }
