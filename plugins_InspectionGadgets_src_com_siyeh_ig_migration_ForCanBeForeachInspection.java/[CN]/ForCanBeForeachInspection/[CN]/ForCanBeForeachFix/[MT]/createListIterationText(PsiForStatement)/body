@@ -1,2 +1,133 @@
 {
+  final PsiBinaryExpression condition=(PsiBinaryExpression)ParenthesesUtils.stripParentheses(forStatement.getCondition());
+  if (condition == null) {
+    return null;
+  }
+  final PsiExpression lhs=ParenthesesUtils.stripParentheses(condition.getLOperand());
+  if (lhs == null) {
+    return null;
+  }
+  final PsiExpression rhs=ParenthesesUtils.stripParentheses(condition.getROperand());
+  if (rhs == null) {
+    return null;
+  }
+  final IElementType tokenType=condition.getOperationTokenType();
+  final String indexName;
+  PsiExpression collectionSize;
+  if (JavaTokenType.LT.equals(tokenType)) {
+    indexName=lhs.getText();
+    collectionSize=rhs;
+  }
+ else   if (JavaTokenType.GT.equals(tokenType)) {
+    indexName=rhs.getText();
+    collectionSize=lhs;
+  }
+ else {
+    return null;
+  }
+  if (collectionSize instanceof PsiReferenceExpression) {
+    final PsiReferenceExpression referenceExpression=(PsiReferenceExpression)collectionSize;
+    final PsiElement target=referenceExpression.resolve();
+    if (target instanceof PsiVariable) {
+      final PsiVariable variable=(PsiVariable)target;
+      collectionSize=ParenthesesUtils.stripParentheses(variable.getInitializer());
+    }
+  }
+  if (!(collectionSize instanceof PsiMethodCallExpression)) {
+    return null;
+  }
+  final PsiMethodCallExpression methodCallExpression=(PsiMethodCallExpression)ParenthesesUtils.stripParentheses(collectionSize);
+  if (methodCallExpression == null) {
+    return null;
+  }
+  final PsiReferenceExpression listLengthExpression=methodCallExpression.getMethodExpression();
+  final PsiExpression qualifier=ParenthesesUtils.stripParentheses(listLengthExpression.getQualifierExpression());
+  final PsiReferenceExpression listReference;
+  if (qualifier instanceof PsiReferenceExpression) {
+    listReference=(PsiReferenceExpression)qualifier;
+  }
+ else {
+    listReference=null;
+  }
+  PsiType parameterType;
+  if (listReference == null) {
+    parameterType=extractListTypeFromContainingClass(forStatement);
+  }
+ else {
+    final PsiType type=listReference.getType();
+    if (type == null) {
+      return null;
+    }
+    parameterType=extractContentTypeFromType(type);
+  }
+  if (parameterType == null) {
+    parameterType=TypeUtils.getObjectType(forStatement);
+  }
+  final String typeString=parameterType.getCanonicalText();
+  final PsiVariable listVariable;
+  if (listReference == null) {
+    listVariable=null;
+  }
+ else {
+    final PsiElement target=listReference.resolve();
+    if (!(target instanceof PsiVariable)) {
+      return null;
+    }
+    listVariable=(PsiVariable)target;
+  }
+  final PsiStatement body=forStatement.getBody();
+  final PsiStatement firstStatement=getFirstStatement(body);
+  final boolean isDeclaration=isListElementDeclaration(firstStatement,listVariable,indexName,parameterType);
+  final String contentVariableName;
+  @NonNls final String finalString;
+  final PsiStatement statementToSkip;
+  if (isDeclaration) {
+    final PsiDeclarationStatement declarationStatement=(PsiDeclarationStatement)firstStatement;
+    final PsiElement[] declaredElements=declarationStatement.getDeclaredElements();
+    final PsiElement declaredElement=declaredElements[0];
+    if (!(declaredElement instanceof PsiVariable)) {
+      return null;
+    }
+    final PsiVariable variable=(PsiVariable)declaredElement;
+    contentVariableName=variable.getName();
+    statementToSkip=declarationStatement;
+    if (variable.hasModifierProperty(PsiModifier.FINAL)) {
+      finalString="final ";
+    }
+ else {
+      finalString="";
+    }
+  }
+ else {
+    final String collectionName;
+    if (listReference == null) {
+      collectionName=null;
+    }
+ else {
+      collectionName=listReference.getReferenceName();
+    }
+    contentVariableName=createNewVariableName(forStatement,parameterType,collectionName);
+    finalString="";
+    statementToSkip=null;
+  }
+  @NonNls final StringBuilder out=new StringBuilder();
+  out.append("for(");
+  out.append(finalString);
+  out.append(typeString);
+  out.append(' ');
+  out.append(contentVariableName);
+  out.append(": ");
+  @NonNls final String listName;
+  if (listReference == null) {
+    listName="this";
+  }
+ else {
+    listName=listReference.getText();
+  }
+  out.append(listName);
+  out.append(')');
+  if (body != null) {
+    replaceCollectionGetAccess(body,contentVariableName,listVariable,indexName,statementToSkip,out);
+  }
+  return out.toString();
 }
