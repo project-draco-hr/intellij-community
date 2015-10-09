@@ -1,0 +1,46 @@
+{
+  final List<IProperty> properties=ContainerUtil.mapNotNull(resourceBundle.getPropertiesFiles(),new Function<PropertiesFile,IProperty>(){
+    @Override public IProperty fun(    PropertiesFile propertiesFile){
+      return propertiesFile.findPropertyByKey(key);
+    }
+  }
+);
+  if (properties.isEmpty()) {
+    return null;
+  }
+  final IProperty property=properties.get(0);
+  final PsiElement representativeElement=property.getPsiElement();
+  final PsiFile representativeFile=representativeElement.getContainingFile();
+  final Project project=representativeElement.getProject();
+  InspectionProfileWrapper profileToUse=InspectionProjectProfileManagerImpl.getInstanceImpl(project).getProfileWrapper();
+  final PsiFile containingFile=representativeFile.getContainingFile();
+  final InspectionToolWrapper[] propertiesTools=profileToUse.getInspectionTools(containingFile);
+  List<ResourceBundleEditorProblemDescriptor> allDescriptors=new SmartList<ResourceBundleEditorProblemDescriptor>();
+  SortedSet<HighlightInfoType> highlightTypes=new TreeSet<HighlightInfoType>(new Comparator<HighlightInfoType>(){
+    @Override public int compare(    HighlightInfoType o1,    HighlightInfoType o2){
+      final HighlightSeverity s1=o1.getSeverity(null);
+      final HighlightSeverity s2=o2.getSeverity(null);
+      return Comparing.compare(s1,s2);
+    }
+  }
+);
+  for (  InspectionToolWrapper tool : propertiesTools) {
+    final HighlightDisplayKey toolKey;
+    if (tool.getTool() instanceof ResourceBundleEditorInspection && profileToUse.isToolEnabled(toolKey=HighlightDisplayKey.find(tool.getShortName()),containingFile)) {
+      final ResourceBundleEditorInspection inspection=(ResourceBundleEditorInspection)tool.getTool();
+      final ResourceBundleEditorProblemDescriptor[] descriptors=inspection.checkPropertyGroup(properties,resourceBundle);
+      if (descriptors != null) {
+        for (        ResourceBundleEditorProblemDescriptor descriptor : descriptors) {
+          final QuickFix[] currentFixes=descriptor.getFixes();
+          if (currentFixes != null && currentFixes.length != 0) {
+            Collections.addAll(allDescriptors,descriptor);
+          }
+          HighlightSeverity severity=profileToUse.getInspectionProfile().getErrorLevel(toolKey,containingFile).getSeverity();
+          final HighlightInfoType infoType=ProblemDescriptorUtil.highlightTypeFromDescriptor(descriptor,severity,SeverityRegistrar.getSeverityRegistrar(project));
+          highlightTypes.add(infoType);
+        }
+      }
+    }
+  }
+  return new InspectionPassInfo(allDescriptors.toArray(new ResourceBundleEditorProblemDescriptor[allDescriptors.size()]),highlightTypes);
+}
