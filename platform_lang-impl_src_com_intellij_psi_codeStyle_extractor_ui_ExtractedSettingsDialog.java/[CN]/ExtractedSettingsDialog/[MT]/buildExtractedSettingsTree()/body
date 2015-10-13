@@ -1,0 +1,106 @@
+{
+  Collection<Value> unusedValues=ContainerUtil.newHashSet(myValues);
+  myRoot=new DefaultMutableTreeNode();
+  for (  Map.Entry<LanguageCodeStyleSettingsProvider.SettingsType,Map<CodeStyleSettingPresentation.SettingsGroup,List<CodeStyleSettingPresentation>>> typeEntry : myNameProvider.mySettings.entrySet()) {
+    DefaultMutableTreeNode settingsNode=null;
+    for (    Map.Entry<CodeStyleSettingPresentation.SettingsGroup,List<CodeStyleSettingPresentation>> groupEntry : typeEntry.getValue().entrySet()) {
+      CodeStyleSettingPresentation.SettingsGroup group=groupEntry.getKey();
+      List<CodeStyleSettingPresentation> representations=groupEntry.getValue();
+      List<CodeStyleSettingPresentation> children=ContainerUtil.emptyList();
+      DefaultMutableTreeNode groupNode=null;
+      if (group.name == null && !representations.isEmpty()) {
+        if (representations.size() > 1) {
+          children=representations.subList(1,representations.size());
+        }
+        CodeStyleSettingPresentation headRep=representations.get(0);
+        Value myValue=CodeStyleSettingsNameProvider.getValue(headRep,myValues);
+        if (myValue == null) {
+          groupNode=new SettingsTreeNode(headRep.getUiName());
+        }
+ else {
+          groupNode=new SettingsTreeNode(headRep.getUiName());
+          groupNode.add(new SettingsTreeNode(headRep.getValueUiName(myValue.value),headRep,true,myValue));
+          unusedValues.remove(myValue);
+        }
+      }
+ else {
+        children=representations;
+      }
+      for (      CodeStyleSettingPresentation representation : children) {
+        Value myValue=CodeStyleSettingsNameProvider.getValue(representation,myValues);
+        if (myValue != null) {
+          if (groupNode == null) {
+            groupNode=new SettingsTreeNode(group.name);
+          }
+          groupNode.add(new SettingsTreeNode(representation.getValueUiName(myValue.value),representation,false,myValue));
+          unusedValues.remove(myValue);
+        }
+      }
+      if (groupNode != null && !groupNode.isLeaf()) {
+        if (settingsNode == null) {
+          settingsNode=new SettingsTreeNode(CodeStyleSettingsNameProvider.getSettingsTypeName(typeEntry.getKey()));
+        }
+        settingsNode.add(groupNode);
+      }
+    }
+    if (settingsNode != null) {
+      myRoot.add(settingsNode);
+    }
+  }
+  final ColumnInfo[] COLUMNS=new ColumnInfo[]{getTitleColumnInfo(),getValueColumnInfo()};
+  ListTreeTableModel model=new ListTreeTableModel(myRoot,COLUMNS);
+  final TreeTable treeTable=new TreeTable(model){
+    @Override public TreeTableCellRenderer createTableRenderer(    TreeTableModel treeTableModel){
+      TreeTableCellRenderer tableRenderer=super.createTableRenderer(treeTableModel);
+      UIUtil.setLineStyleAngled(tableRenderer);
+      tableRenderer.setRootVisible(false);
+      tableRenderer.setShowsRootHandles(true);
+      return tableRenderer;
+    }
+    @Override public TableCellRenderer getCellRenderer(    int row,    int column){
+      TreePath treePath=getTree().getPathForRow(row);
+      if (treePath == null)       return super.getCellRenderer(row,column);
+      Object node=treePath.getLastPathComponent();
+      TableCellRenderer renderer=COLUMNS[column].getRenderer(node);
+      return renderer == null ? super.getCellRenderer(row,column) : renderer;
+    }
+    @Override public TableCellEditor getCellEditor(    int row,    int column){
+      TreePath treePath=getTree().getPathForRow(row);
+      if (treePath == null)       return super.getCellEditor(row,column);
+      Object node=treePath.getLastPathComponent();
+      TableCellEditor editor=COLUMNS[column].getEditor(node);
+      return editor == null ? super.getCellEditor(row,column) : editor;
+    }
+  }
+;
+  new TreeTableSpeedSearch(treeTable).setComparator(new SpeedSearchComparator(false));
+  treeTable.setRootVisible(false);
+  final JTree tree=treeTable.getTree();
+  tree.setCellRenderer(myTitleRenderer);
+  tree.setShowsRootHandles(true);
+  treeTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+  treeTable.setTableHeader(null);
+  OptionTableWithPreviewPanel.expandTree(tree);
+  treeTable.getColumnModel().getSelectionModel().setAnchorSelectionIndex(1);
+  treeTable.getColumnModel().getSelectionModel().setLeadSelectionIndex(1);
+  int maxWidth=tree.getPreferredScrollableViewportSize().width + 10;
+  final TableColumn titleColumn=treeTable.getColumnModel().getColumn(0);
+  titleColumn.setPreferredWidth(maxWidth);
+  titleColumn.setMinWidth(maxWidth);
+  titleColumn.setMaxWidth(maxWidth);
+  titleColumn.setResizable(false);
+  final Dimension valueSize=new JLabel(ApplicationBundle.message("option.table.sizing.text")).getPreferredSize();
+  treeTable.setPreferredScrollableViewportSize(new Dimension(maxWidth + valueSize.width + 10,20));
+  treeTable.setBackground(UIUtil.getPanelBackground());
+  treeTable.setBorder(BorderFactory.createEmptyBorder(0,0,0,10));
+  final Dimension screenSize=treeTable.getToolkit().getScreenSize();
+  JBScrollPane scroller=new JBScrollPane(treeTable){
+    @Override public Dimension getMinimumSize(){
+      return super.getPreferredSize();
+    }
+  }
+;
+  final Dimension preferredSize=new Dimension(Math.min(screenSize.width / 2,treeTable.getPreferredSize().width),Math.min(screenSize.height / 2,treeTable.getPreferredSize().height));
+  getRootPane().setPreferredSize(preferredSize);
+  return scroller;
+}
