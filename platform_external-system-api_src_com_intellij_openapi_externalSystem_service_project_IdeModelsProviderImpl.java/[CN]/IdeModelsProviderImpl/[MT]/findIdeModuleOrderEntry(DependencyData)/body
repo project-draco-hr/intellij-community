@@ -1,0 +1,41 @@
+{
+  Module ownerIdeModule=findIdeModule(data.getOwnerModule());
+  if (ownerIdeModule == null)   return null;
+  LibraryDependencyData libraryDependencyData=null;
+  ModuleDependencyData moduleDependencyData=null;
+  if (data instanceof LibraryDependencyData) {
+    libraryDependencyData=(LibraryDependencyData)data;
+  }
+ else   if (data instanceof ModuleDependencyData) {
+    moduleDependencyData=(ModuleDependencyData)data;
+  }
+ else {
+    return null;
+  }
+  for (  OrderEntry entry : getOrderEntries(ownerIdeModule)) {
+    if (entry instanceof LibraryOrderEntry && libraryDependencyData != null) {
+      if (((LibraryOrderEntry)entry).isModuleLevel() && libraryDependencyData.getLevel() != LibraryLevel.MODULE)       continue;
+      if (StringUtil.isEmpty(((LibraryOrderEntry)entry).getLibraryName())) {
+        final Set<String> paths=ContainerUtil.map2Set(libraryDependencyData.getTarget().getPaths(LibraryPathType.BINARY),new Function<String,String>(){
+          @Override public String fun(          String path){
+            return PathUtil.getLocalPath(path);
+          }
+        }
+);
+        final Set<String> entryPaths=ContainerUtil.map2Set(entry.getUrls(OrderRootType.CLASSES),new Function<String,String>(){
+          @Override public String fun(          String s){
+            return PathUtil.getLocalPath(VfsUtilCore.urlToPath(s));
+          }
+        }
+);
+        if (entryPaths.equals(paths) && ((LibraryOrderEntry)entry).getScope() == data.getScope())         return entry;
+        continue;
+      }
+    }
+    String entryName=libraryDependencyData != null ? libraryDependencyData.getInternalName() : moduleDependencyData.getInternalName();
+    if (entryName.equals(entry.getPresentableName()) && (!(entry instanceof ExportableOrderEntry) || ((ExportableOrderEntry)entry).getScope() == data.getScope())) {
+      return entry;
+    }
+  }
+  return null;
+}

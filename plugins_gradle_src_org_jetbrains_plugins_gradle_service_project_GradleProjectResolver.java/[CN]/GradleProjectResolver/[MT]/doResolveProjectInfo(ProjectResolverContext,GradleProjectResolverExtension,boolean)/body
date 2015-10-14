@@ -29,6 +29,7 @@
     ContainerUtil.addAll(commandLineArgs,GradleConstants.INIT_SCRIPT_CMD_OPTION,initScript.getAbsolutePath());
   }
   GradleExecutionHelper.prepare(buildActionExecutor,resolverCtx.getExternalSystemTaskId(),resolverCtx.getSettings(),resolverCtx.getListener(),parametersList.getParameters(),commandLineArgs,resolverCtx.getConnection());
+  resolverCtx.checkCancelled();
   ProjectImportAction.AllModels allModels;
   final CancellationTokenSource cancellationTokenSource=GradleConnector.newCancellationTokenSource();
   try {
@@ -45,6 +46,7 @@ synchronized (myCancellationMap) {
     }
   }
  catch (  UnsupportedVersionException unsupportedVersionException) {
+    resolverCtx.checkCancelled();
     Class<? extends IdeaProject> aClass=resolverCtx.isPreviewMode() ? BasicIdeaProject.class : IdeaProject.class;
     ModelBuilder<? extends IdeaProject> modelBuilder=myHelper.getModelBuilder(aClass,resolverCtx.getExternalSystemTaskId(),resolverCtx.getSettings(),resolverCtx.getConnection(),resolverCtx.getListener(),parametersList.getParameters());
     final IdeaProject ideaProject=modelBuilder.get();
@@ -55,7 +57,9 @@ synchronized (myCancellationMap) {
       myCancellationMap.remove(resolverCtx.getExternalSystemTaskId(),cancellationTokenSource);
     }
   }
+  resolverCtx.checkCancelled();
   allModels.setBuildEnvironment(buildEnvironment);
+  extractExternalProjectModels(allModels,resolverCtx.isPreviewMode());
   resolverCtx.setModels(allModels);
   ProjectData projectData=projectResolverChain.createProject();
   DataNode<ProjectData> projectDataNode=new DataNode<ProjectData>(ProjectKeys.PROJECT,projectData,null);
@@ -68,10 +72,17 @@ synchronized (myCancellationMap) {
     throw new IllegalStateException("No modules found for the target project: " + ideaProject);
   }
   final Map<String,Pair<DataNode<ModuleData>,IdeaModule>> moduleMap=ContainerUtilRt.newHashMap();
+  final Map<String,Pair<DataNode<GradleSourceSetData>,ExternalSourceSet>> sourceSetsMap=ContainerUtil.newHashMap();
+  projectDataNode.putUserData(RESOLVED_SOURCE_SETS,sourceSetsMap);
+  final Map<String,Pair<String,ExternalSystemSourceType>> moduleOutputsMap=ContainerUtil.newTroveMap(FileUtil.PATH_HASHING_STRATEGY);
+  projectDataNode.putUserData(MODULES_OUTPUTS,moduleOutputsMap);
+  final Map<String,String> artifactsMap=ContainerUtil.newTroveMap(FileUtil.PATH_HASHING_STRATEGY);
+  projectDataNode.putUserData(CONFIGURATION_ARTIFACTS,artifactsMap);
   for (  IdeaModule gradleModule : gradleModules) {
     if (gradleModule == null) {
       continue;
     }
+    resolverCtx.checkCancelled();
     if (ExternalSystemDebugEnvironment.DEBUG_ORPHAN_MODULES_PROCESSING) {
       LOG.info(String.format("Importing module data: %s",gradleModule));
     }
@@ -79,31 +90,51 @@ synchronized (myCancellationMap) {
     if (moduleName == null) {
       throw new IllegalStateException("Module with undefined name detected: " + gradleModule);
     }
-    ModuleData moduleData=projectResolverChain.createModule(gradleModule,projectData);
-    Pair<DataNode<ModuleData>,IdeaModule> previouslyParsedModule=moduleMap.get(moduleName);
-    if (previouslyParsedModule != null) {
-      throw new IllegalStateException(String.format("Modules with duplicate name (%s) detected: '%s' and '%s'",moduleName,moduleData,previouslyParsedModule));
-    }
-    DataNode<ModuleData> moduleDataNode=projectDataNode.createChild(ProjectKeys.MODULE,moduleData);
-    moduleMap.put(moduleName,Pair.create(moduleDataNode,gradleModule));
-    if (StringUtil.equals(moduleData.getLinkedExternalProjectPath(),projectData.getLinkedExternalProjectPath())) {
-      projectData.setGroup(moduleData.getGroup());
-      projectData.setVersion(moduleData.getVersion());
-    }
+    DataNode<ModuleData> moduleDataNode=projectResolverChain.createModule(gradleModule,projectDataNode);
+    String mainModuleId=getModuleId(gradleModule);
+    moduleMap.put(mainModuleId,Pair.create(moduleDataNode,gradleModule));
   }
-  final List<TaskData> allTasks=ContainerUtil.newArrayList();
+  File gradleHomeDir=null;
   for (  final Pair<DataNode<ModuleData>,IdeaModule> pair : moduleMap.values()) {
     final DataNode<ModuleData> moduleDataNode=pair.first;
     final IdeaModule ideaModule=pair.second;
+    if (gradleHomeDir == null) {
+      final BuildScriptClasspathModel buildScriptClasspathModel=resolverCtx.getExtraProject(ideaModule,BuildScriptClasspathModel.class);
+      if (buildScriptClasspathModel != null) {
+        gradleHomeDir=buildScriptClasspathModel.getGradleHomeDir();
+      }
+    }
     projectResolverChain.populateModuleExtraModels(ideaModule,moduleDataNode);
     projectResolverChain.populateModuleContentRoots(ideaModule,moduleDataNode);
     projectResolverChain.populateModuleCompileOutputSettings(ideaModule,moduleDataNode);
-    projectResolverChain.populateModuleDependencies(ideaModule,moduleDataNode,projectDataNode);
     if (!isBuildSrcProject) {
-      final Collection<TaskData> moduleTasks=projectResolverChain.populateModuleTasks(ideaModule,moduleDataNode,projectDataNode);
-      allTasks.addAll(moduleTasks);
+      projectResolverChain.populateModuleTasks(ideaModule,moduleDataNode,projectDataNode);
+    }
+    final List<DataNode<? extends ModuleData>> modules=ContainerUtil.newSmartList();
+    modules.add(moduleDataNode);
+    modules.addAll(ExternalSystemApiUtil.findAll(moduleDataNode,GradleSourceSetData.KEY));
+    final ExternalSystemSourceType[] sourceTypes=new ExternalSystemSourceType[]{ExternalSystemSourceType.SOURCE,ExternalSystemSourceType.RESOURCE,ExternalSystemSourceType.TEST,ExternalSystemSourceType.TEST_RESOURCE};
+    for (    DataNode<? extends ModuleData> module : modules) {
+      final ModuleData moduleData=module.getData();
+      for (      ExternalSystemSourceType sourceType : sourceTypes) {
+        final String path=moduleData.getCompileOutputPath(sourceType);
+        if (path != null) {
+          moduleOutputsMap.put(path,Pair.create(moduleData.getId(),sourceType));
+        }
+      }
+      if (moduleData instanceof GradleSourceSetData) {
+        for (        File artifactFile : moduleData.getArtifacts()) {
+          artifactsMap.put(ExternalSystemApiUtil.toCanonicalPath(artifactFile.getAbsolutePath()),moduleData.getId());
+        }
+      }
     }
   }
+  for (  final Pair<DataNode<ModuleData>,IdeaModule> pair : moduleMap.values()) {
+    final DataNode<ModuleData> moduleDataNode=pair.first;
+    final IdeaModule ideaModule=pair.second;
+    projectResolverChain.populateModuleDependencies(ideaModule,moduleDataNode,projectDataNode);
+  }
+  mergeLibraryAndModuleDependencyData(projectDataNode,gradleHomeDir,gradleVersion);
   Collection<DataNode<LibraryData>> libraries=ExternalSystemApiUtil.getChildren(projectDataNode,ProjectKeys.LIBRARY);
   myLibraryNamesMixer.mixNames(libraries);
   return projectDataNode;
