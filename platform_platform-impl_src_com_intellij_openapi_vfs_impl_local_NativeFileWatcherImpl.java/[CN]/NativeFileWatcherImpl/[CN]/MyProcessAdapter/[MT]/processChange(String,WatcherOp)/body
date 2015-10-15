@@ -1,5 +1,5 @@
 {
-  if (SystemInfo.isWindows && op == WatcherOp.RECDIRTY && path.length() == 3 && Character.isLetter(path.charAt(0))) {
+  if (SystemInfo.isWindows && op == WatcherOp.RECDIRTY) {
     VirtualFile root=LocalFileSystem.getInstance().findFileByPath(path);
     if (root != null) {
       myNotificationSink.notifyPathsRecursive(list(root.getPresentableUrl()));
@@ -7,22 +7,12 @@
     notifyOnAnyEvent();
     return;
   }
-  if (op == WatcherOp.CHANGE) {
-synchronized (myLock) {
-      for (int i=0; i < myLastChangedPaths.length; ++i) {
-        int last=myLastChangedPathIndex - i - 1;
-        if (last < 0)         last+=myLastChangedPaths.length;
-        String lastChangedPath=myLastChangedPaths[last];
-        if (lastChangedPath != null && lastChangedPath.equals(path)) {
-          return;
-        }
-      }
-      myLastChangedPaths[myLastChangedPathIndex++]=path;
-      if (myLastChangedPathIndex == myLastChangedPaths.length)       myLastChangedPathIndex=0;
+  if ((op == WatcherOp.CHANGE || op == WatcherOp.STATS) && isRepetition(path)) {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Repetition: " + path);
     }
+    return;
   }
-  int length=path.length();
-  if (length > 1 && path.charAt(length - 1) == '/')   path=path.substring(0,length - 1);
   boolean exactPath=op != WatcherOp.DIRTY && op != WatcherOp.RECDIRTY;
   Collection<String> paths=checkWatchable(path,exactPath,false);
   if (paths.isEmpty()) {
