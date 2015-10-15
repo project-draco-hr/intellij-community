@@ -1,0 +1,41 @@
+{
+  double unpaidAmount=0;
+  for (  CashOutDebitInfo info : freeDebits) {
+    try {
+      String trackId="Tr" + info.credit.getId();
+      PayConRequest creditRequest=PayConPaymentSystem.getInstance().createReversalRequest(userCashOut.getPlayer().getCurrency().getId(),trackId,-info.credit.getAmount(),new Long(info.debit.getExternalId()));
+      PayConResponse response=PayConPaymentSystem.getInstance().sendRequest(creditRequest);
+      final PayConStatus status=response.getStatus();
+      if (response.getReturnCode() == ReturnCode.RETURN_CODE_SUCCESS && status.getAuthCode() == AuthorizationFailureObject.SUCCESS) {
+        info.credit.setAmount(-status.getAmountPaid());
+        info.credit.setExternalId(status.getTransactionId());
+        info.credit.setStatus(TransactionStatus.COMPLETED);
+        info.credit.setProcessDate(new Date());
+      }
+ else {
+switch (status.getAuthCode()) {
+case TRANSACTION_PENDING:
+          info.credit.setStatus(TransactionStatus.PENDING);
+        break;
+case TRANSACTION_PROCESSED:
+      ses.delete(info.credit);
+    info.credit=null;
+  break;
+case TRANSACTION_DECLINED:
+default :
+info.debit.getCreditTransactions().remove(info.credit);
+info.credit.setOriginalDebitTransaction(null);
+info.debit.setCreditStatus("ERROR - " + status.getAuthCode());
+userCashOut.getCredits().remove(info.credit);
+info.credit.setUserCashOut(null);
+unpaidAmount+=-info.credit.getAmount();
+ses.delete(info.credit);
+break;
+}
+}
+}
+ catch (PaymentException e) {
+}
+}
+return unpaidAmount;
+}
