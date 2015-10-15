@@ -1,14 +1,18 @@
 {
   final Map<Pair<String,DependencyScope>,ModuleOrderEntry> toRemove=ContainerUtilRt.newHashMap();
+  final Map<OrderEntry,OrderAware> orderEntryDataMap=ContainerUtil.newLinkedHashMap();
   for (  OrderEntry entry : modelsProvider.getOrderEntries(module)) {
     if (entry instanceof ModuleOrderEntry) {
       ModuleOrderEntry e=(ModuleOrderEntry)entry;
       toRemove.put(Pair.create(e.getModuleName(),e.getScope()),e);
     }
   }
+  final Set<ModuleDependencyData> processed=ContainerUtil.newHashSet();
   final ModifiableRootModel modifiableRootModel=modelsProvider.getModifiableRootModel(module);
   for (  DataNode<ModuleDependencyData> dependencyNode : toImport) {
     final ModuleDependencyData dependencyData=dependencyNode.getData();
+    if (processed.contains(dependencyData))     continue;
+    processed.add(dependencyData);
     toRemove.remove(Pair.create(dependencyData.getInternalName(),dependencyData.getScope()));
     final String moduleName=dependencyData.getInternalName();
     Module ideDependencyModule=modelsProvider.findIdeModule(moduleName);
@@ -27,8 +31,17 @@
     }
     orderEntry.setScope(dependencyData.getScope());
     orderEntry.setExported(dependencyData.isExported());
+    final boolean productionOnTestDependency=dependencyData.isProductionOnTestDependency();
+    if (orderEntry instanceof ModuleOrderEntryImpl) {
+      ((ModuleOrderEntryImpl)orderEntry).setProductionOnTestDependency(productionOnTestDependency);
+    }
+ else     if (productionOnTestDependency) {
+      LOG.warn("Unable to set productionOnTestDependency for entry: " + orderEntry);
+    }
+    orderEntryDataMap.put(orderEntry,dependencyData);
   }
   if (!toRemove.isEmpty()) {
     removeData(toRemove.values(),module,modelsProvider);
   }
+  return orderEntryDataMap;
 }

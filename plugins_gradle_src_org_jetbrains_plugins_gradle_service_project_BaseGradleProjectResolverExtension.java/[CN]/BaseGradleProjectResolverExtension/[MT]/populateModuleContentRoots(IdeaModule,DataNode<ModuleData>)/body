@@ -1,12 +1,22 @@
 {
-  DomainObjectSet<? extends IdeaContentRoot> contentRoots;
-  ModuleExtendedModel moduleExtendedModel=resolverCtx.getExtraProject(gradleModule,ModuleExtendedModel.class);
-  if (moduleExtendedModel != null) {
-    contentRoots=moduleExtendedModel.getContentRoots();
+  ExternalProject externalProject=resolverCtx.getExtraProject(gradleModule,ExternalProject.class);
+  if (externalProject != null) {
+    processSourceSets(externalProject,ideModule,new SourceSetsProcessor(){
+      @Override public void process(      @NotNull DataNode<GradleSourceSetData> dataNode,      @NotNull ExternalSourceSet sourceSet){
+        for (        Map.Entry<IExternalSystemSourceType,ExternalSourceDirectorySet> directorySetEntry : sourceSet.getSources().entrySet()) {
+          ExternalSystemSourceType sourceType=ExternalSystemSourceType.from(directorySetEntry.getKey());
+          ExternalSourceDirectorySet sourceDirectorySet=directorySetEntry.getValue();
+          for (          File file : sourceDirectorySet.getSrcDirs()) {
+            ContentRootData ideContentRoot=new ContentRootData(GradleConstants.SYSTEM_ID,file.getAbsolutePath());
+            ideContentRoot.storePath(sourceType,file.getAbsolutePath());
+            dataNode.createChild(ProjectKeys.CONTENT_ROOT,ideContentRoot);
+          }
+        }
+      }
+    }
+);
   }
- else {
-    contentRoots=gradleModule.getContentRoots();
-  }
+  DomainObjectSet<? extends IdeaContentRoot> contentRoots=gradleModule.getContentRoots();
   if (contentRoots == null) {
     return;
   }
@@ -15,13 +25,14 @@
     File rootDirectory=gradleContentRoot.getRootDirectory();
     if (rootDirectory == null)     continue;
     ContentRootData ideContentRoot=new ContentRootData(GradleConstants.SYSTEM_ID,rootDirectory.getAbsolutePath());
-    ideModule.getData().setModuleFileDirectoryPath(ideContentRoot.getRootPath());
-    populateContentRoot(ideContentRoot,ExternalSystemSourceType.SOURCE,gradleContentRoot.getSourceDirectories());
-    populateContentRoot(ideContentRoot,ExternalSystemSourceType.TEST,gradleContentRoot.getTestDirectories());
-    if (gradleContentRoot instanceof ExtIdeaContentRoot) {
-      ExtIdeaContentRoot extIdeaContentRoot=(ExtIdeaContentRoot)gradleContentRoot;
-      populateContentRoot(ideContentRoot,ExternalSystemSourceType.RESOURCE,extIdeaContentRoot.getResourceDirectories());
-      populateContentRoot(ideContentRoot,ExternalSystemSourceType.TEST_RESOURCE,extIdeaContentRoot.getTestResourceDirectories());
+    if (externalProject == null) {
+      populateContentRoot(ideContentRoot,ExternalSystemSourceType.SOURCE,gradleContentRoot.getSourceDirectories());
+      populateContentRoot(ideContentRoot,ExternalSystemSourceType.TEST,gradleContentRoot.getTestDirectories());
+      if (gradleContentRoot instanceof ExtIdeaContentRoot) {
+        ExtIdeaContentRoot extIdeaContentRoot=(ExtIdeaContentRoot)gradleContentRoot;
+        populateContentRoot(ideContentRoot,ExternalSystemSourceType.RESOURCE,extIdeaContentRoot.getResourceDirectories());
+        populateContentRoot(ideContentRoot,ExternalSystemSourceType.TEST_RESOURCE,extIdeaContentRoot.getTestResourceDirectories());
+      }
     }
     Set<File> excluded=gradleContentRoot.getExcludeDirectories();
     if (excluded != null) {
