@@ -1,12 +1,35 @@
 {
   final Method method=location.method();
-  if (!myTargetMethodName.equals(method.name())) {
-    return false;
+  boolean lambdaMatched=false;
+  String name=method.name();
+  if (!myTargetMethodName.equals(name)) {
+    if (LambdaMethodFilter.isLambdaName(name)) {
+      lambdaMatched=ApplicationManager.getApplication().runReadAction(new Computable<Boolean>(){
+        @Override public Boolean compute(){
+          PsiParameterListOwner psiMethod=DebuggerUtilsEx.getContainingMethod(process.getPositionManager().getSourcePosition(location));
+          if (psiMethod instanceof PsiLambdaExpression) {
+            PsiType type=((PsiLambdaExpression)psiMethod).getFunctionalInterfaceType();
+            PsiMethod interfaceMethod=LambdaUtil.getFunctionalInterfaceMethod(type);
+            if (type != null && interfaceMethod != null && myTargetMethodName.equals(interfaceMethod.getName())) {
+              try {
+                return type.getCanonicalText().equals(myDeclaringClassName.getName(process).replace('$','.'));
+              }
+ catch (              EvaluateException e) {
+                LOG.info(e);
+              }
+            }
+          }
+          return false;
+        }
+      }
+);
+    }
+    if (!lambdaMatched)     return false;
   }
   if (myTargetMethodSignature != null) {
     if (!signatureMatches(method,myTargetMethodSignature.getName(process))) {
       return false;
     }
   }
-  return DebuggerUtilsEx.isAssignableFrom(myDeclaringClassName.getName(process),location.declaringType());
+  return lambdaMatched || DebuggerUtilsEx.isAssignableFrom(myDeclaringClassName.getName(process),location.declaringType());
 }
