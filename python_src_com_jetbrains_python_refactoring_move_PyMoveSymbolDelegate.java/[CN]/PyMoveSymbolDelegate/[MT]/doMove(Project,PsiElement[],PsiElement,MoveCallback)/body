@@ -1,0 +1,50 @@
+{
+  String initialPath=null;
+  if (targetContainer instanceof PsiFile) {
+    initialPath=StringUtil.notNullize(PyPsiUtils.getContainingFilePath(targetContainer));
+  }
+  if (initialPath == null) {
+    initialPath=StringUtil.notNullize(PyPsiUtils.getContainingFilePath(elements[0]));
+  }
+  final BaseRefactoringProcessor processor;
+  final PyFunction function=findTargetFunction(elements[0]);
+  if (function != null) {
+    final PyMakeFunctionTopLevelDialog dialog=new PyMakeFunctionTopLevelDialog(project,function,initialPath,initialPath);
+    if (!dialog.showAndGet()) {
+      return;
+    }
+    if (function.getContainingClass() != null) {
+      processor=new PyMakeMethodTopLevelProcessor(function,dialog.getTargetPath());
+    }
+ else {
+      processor=new PyMakeLocalFunctionTopLevelProcessor(function,dialog.getTargetPath());
+    }
+    processor.setPreviewUsages(dialog.isPreviewUsages());
+  }
+ else {
+    final List<PsiNamedElement> initialElements=Lists.newArrayList();
+    for (    PsiElement element : elements) {
+      final PsiNamedElement e=PyMoveModuleMembersHelper.extractNamedElement(element);
+      if (e == null) {
+        return;
+      }
+      initialElements.add(e);
+    }
+    final PyMoveModuleMembersDialog dialog=new PyMoveModuleMembersDialog(project,initialElements,initialPath,initialPath);
+    if (!dialog.showAndGet()) {
+      return;
+    }
+    final boolean previewUsages=dialog.isPreviewUsages();
+    final PsiNamedElement[] selectedElements=ContainerUtil.findAllAsArray(dialog.getSelectedTopLevelSymbols(),PsiNamedElement.class);
+    processor=new PyMoveModuleMembersProcessor(project,selectedElements,dialog.getTargetPath(),previewUsages);
+  }
+  try {
+    processor.run();
+  }
+ catch (  IncorrectOperationException e) {
+    if (ApplicationManager.getApplication().isUnitTestMode()) {
+      throw e;
+    }
+    CommonRefactoringUtil.showErrorMessage(RefactoringBundle.message("error.title"),e.getMessage(),null,project);
+  }
+}
