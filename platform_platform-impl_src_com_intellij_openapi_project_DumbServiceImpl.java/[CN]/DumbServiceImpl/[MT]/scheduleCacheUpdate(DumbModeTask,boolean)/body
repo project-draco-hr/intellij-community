@@ -1,5 +1,6 @@
 {
   final Throwable trace=ourForcedTrace != null ? ourForcedTrace : new Throwable();
+  final DumbModePermission schedulerPermission=getExplicitPermission();
   if (LOG.isDebugEnabled())   LOG.debug("Scheduling task " + task,trace);
   final Application application=ApplicationManager.getApplication();
   if (application.isUnitTestMode() || application.isHeadlessEnvironment() || !forceDumbMode && !myDumb && application.isReadAccessAllowed()) {
@@ -25,8 +26,7 @@
       if (myProject.isDisposed()) {
         return;
       }
-      ModalityState modality=ModalityState.current();
-      final DumbModePermission permission=getDumbModePermission(modality);
+      final DumbModePermission permission=schedulerPermission != null ? schedulerPermission : getEdtPermission();
       myProgresses.put(task,new ProgressIndicatorBase());
       Disposer.register(task,new Disposable(){
         @Override public void dispose(){
@@ -38,7 +38,7 @@
       myUpdatesQueue.addLast(task);
       if (!myDumb) {
         if (permission == null) {
-          LOG.info("Dumb mode not permitted in modal environment; see DumbService.allowStartingDumbModeInside documentation." + "\n Current modality: " + modality + "\n all permissions: "+ ourPermissionService.getPermissions(),trace);
+          LOG.info("Dumb mode not permitted in modal environment; see DumbService.allowStartingDumbModeInside documentation",trace);
         }
  else         if (permission == DumbModePermission.MAY_START_MODAL) {
           LOG.info("Starting modal dumb mode, caused by the following trace",trace);
@@ -69,7 +69,7 @@
             }
           }
         }
-,modality,myProject.getDisposed());
+,myProject.getDisposed());
       }
     }
   }
