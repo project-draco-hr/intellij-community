@@ -2,12 +2,17 @@
   if (!FileModificationService.getInstance().prepareFileForWrite(file))   return;
   try {
     final PsiMethodCallExpression expr=(PsiMethodCallExpression)startElement;
+    final boolean isIterableAssignment=isIterableAssignment(expr);
     final TypeMigrationRules rules=new TypeMigrationRules(myInitialType);
     rules.setMigrationRootType(myTargetType);
     rules.setBoundScope(GlobalSearchScope.fileScope(file));
     final TypeConversionDescriptorBase conversion=rules.findConversion(myInitialType,myTargetType,expr.resolveMethod(),expr,new TypeMigrationLabeler(rules));
     LOG.assertTrue(conversion != null);
-    final PsiElement replacedExpression=TypeMigrationReplacementUtil.replaceExpression(expr,project,conversion);
+    PsiElement replacedExpression=TypeMigrationReplacementUtil.replaceExpression(expr,project,conversion);
+    if (isIterableAssignment) {
+      final String expressionText=replacedExpression.getText() + ".collect(java.util.stream.Collectors.toList())";
+      replacedExpression=replacedExpression.replace(JavaPsiFacade.getElementFactory(project).createExpressionFromText(expressionText,replacedExpression));
+    }
     JavaCodeStyleManager.getInstance(project).shortenClassReferences(replacedExpression);
     UndoUtil.markPsiFileForUndo(file);
   }
