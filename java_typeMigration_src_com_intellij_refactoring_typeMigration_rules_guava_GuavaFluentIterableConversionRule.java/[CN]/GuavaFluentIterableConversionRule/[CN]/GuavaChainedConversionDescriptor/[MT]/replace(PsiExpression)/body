@@ -1,21 +1,18 @@
 {
-  PsiExpression toReturn=null;
-  PsiMethodCallExpression methodCallExpression=(PsiMethodCallExpression)expression;
-  final SmartPointerManager smartPointerManager=SmartPointerManager.getInstance(expression.getProject());
-  for (  TypeConversionDescriptorBase descriptor : myMethodDescriptors) {
-    final PsiExpression oldQualifier=methodCallExpression.getMethodExpression().getQualifierExpression();
-    final SmartPsiElementPointer<PsiExpression> qualifierRef=oldQualifier == null ? null : smartPointerManager.createSmartPsiElementPointer(oldQualifier);
-    final PsiExpression replaced=descriptor.replace(methodCallExpression);
-    if (toReturn == null) {
-      toReturn=replaced;
-    }
-    final PsiExpression newQualifier=qualifierRef == null ? null : qualifierRef.getElement();
-    if (newQualifier instanceof PsiMethodCallExpression) {
-      methodCallExpression=(PsiMethodCallExpression)newQualifier;
-    }
- else {
-      return toReturn;
-    }
+  Stack<PsiMethodCallExpression> methodChainStack=new Stack<PsiMethodCallExpression>();
+  PsiMethodCallExpression current=(PsiMethodCallExpression)expression;
+  while (current != null) {
+    methodChainStack.add(current);
+    final PsiExpression qualifier=current.getMethodExpression().getQualifierExpression();
+    current=qualifier instanceof PsiMethodCallExpression ? (PsiMethodCallExpression)qualifier : null;
   }
-  return toReturn;
+  if (methodChainStack.size() != myMethodDescriptors.size()) {
+    return expression;
+  }
+  PsiExpression converted=null;
+  for (  TypeConversionDescriptorBase descriptor : myMethodDescriptors) {
+    final PsiMethodCallExpression toConvert=methodChainStack.pop();
+    converted=descriptor.replace(toConvert);
+  }
+  return converted;
 }
