@@ -5,19 +5,29 @@
   }
   final SdkAdditionalData sdkData=mySdk.getSdkAdditionalData();
   if (sdkData instanceof PyRemoteSdkAdditionalDataBase) {
-    RemoteSdkCredentials remoteSdkCredentials;
-    try {
-      remoteSdkCredentials=((RemoteSdkAdditionalData)sdkData).getRemoteSdkCredentials(false);
-    }
- catch (    InterruptedException e) {
-      LOG.error(e);
-      remoteSdkCredentials=null;
-    }
-catch (    ExecutionException e) {
-      throw analyzeException(e,helperPath,args);
-    }
     final PythonRemoteInterpreterManager manager=PythonRemoteInterpreterManager.getInstance();
-    if (manager != null && remoteSdkCredentials != null) {
+    RemoteSdkCredentials remoteSdkCredentials;
+    if (((PyRemoteSdkAdditionalDataBase)sdkData).getRemoteConnectionType() != CredentialsType.DOCKER) {
+      try {
+        remoteSdkCredentials=((RemoteSdkAdditionalData)sdkData).getRemoteSdkCredentials(false);
+      }
+ catch (      InterruptedException e) {
+        LOG.error(e);
+        remoteSdkCredentials=null;
+      }
+catch (      ExecutionException e) {
+        throw analyzeException(e,helperPath,args);
+      }
+      if (manager != null && remoteSdkCredentials != null) {
+        if (askForSudo) {
+          askForSudo=!manager.ensureCanWrite(null,remoteSdkCredentials,remoteSdkCredentials.getInterpreterPath());
+        }
+      }
+ else {
+        throw new PyExecutionException(PythonRemoteInterpreterManager.WEB_DEPLOYMENT_PLUGIN_IS_DISABLED,helperPath,args);
+      }
+    }
+    if (manager != null) {
       final List<String> cmdline=new ArrayList<String>();
       cmdline.add(homePath);
       cmdline.add(RemoteFile.detectSystemByPath(homePath).createRemoteFile(helperPath).getPath());
@@ -27,13 +37,16 @@ catch (    ExecutionException e) {
         }
       }
 ));
-      if (askForSudo) {
-        askForSudo=!manager.ensureCanWrite(null,remoteSdkCredentials,remoteSdkCredentials.getInterpreterPath());
-      }
       ProcessOutput processOutput;
       do {
-        PyRemotePathMapper pathMapper=manager.setupMappings(null,(PyRemoteSdkAdditionalDataBase)sdkData,null);
-        processOutput=manager.runRemoteProcess(null,remoteSdkCredentials,pathMapper,ArrayUtil.toStringArray(cmdline),workingDir,askForSudo);
+        final PyRemoteSdkAdditionalDataBase remoteSdkAdditionalData=(PyRemoteSdkAdditionalDataBase)sdkData;
+        final PyRemotePathMapper pathMapper=manager.setupMappings(null,remoteSdkAdditionalData,null);
+        try {
+          processOutput=PyRemoteProcessStarterManagerUtil.getManager(remoteSdkAdditionalData).executeRemoteProcess(null,ArrayUtil.toStringArray(cmdline),workingDir,manager,remoteSdkAdditionalData,pathMapper,askForSudo,true);
+        }
+ catch (        InterruptedException e) {
+          throw new ExecutionException(e);
+        }
         if (askForSudo && processOutput.getStderr().contains("sudo: 3 incorrect password attempts")) {
           continue;
         }

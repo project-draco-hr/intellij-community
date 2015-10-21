@@ -5,10 +5,11 @@
   }
   final PsiElementProcessor.CollectElementsWithLimit<PsiMethod> collectProcessor=new PsiElementProcessor.CollectElementsWithLimit<PsiMethod>(2,new THashSet<PsiMethod>());
   final PsiElementProcessor.CollectElementsWithLimit<PsiFunctionalExpression> collectExprProcessor=new PsiElementProcessor.CollectElementsWithLimit<PsiFunctionalExpression>(2,new THashSet<PsiFunctionalExpression>());
+  final boolean isAbstract=method.hasModifierProperty(PsiModifier.ABSTRACT);
   if (!ProgressManager.getInstance().runProcessWithProgressSynchronously(new Runnable(){
     @Override public void run(){
       OverridingMethodsSearch.search(method,true).forEach(new PsiElementProcessorAdapter<PsiMethod>(collectProcessor));
-      if (collectProcessor.getCollection().isEmpty()) {
+      if (isAbstract && collectProcessor.getCollection().size() < 2) {
         final PsiClass aClass=ApplicationManager.getApplication().runReadAction(new Computable<PsiClass>(){
           @Override public PsiClass compute(){
             return method.getContainingClass();
@@ -25,11 +26,13 @@
     return;
   }
   final PsiMethod[] methodOverriders=collectProcessor.toArray(PsiMethod.EMPTY_ARRAY);
-  NavigatablePsiElement[] overridings=ArrayUtil.mergeArrays(methodOverriders,collectExprProcessor.toArray(PsiFunctionalExpression.EMPTY_ARRAY));
-  if (overridings.length == 0)   return;
+  final List<NavigatablePsiElement> overridings=new ArrayList<NavigatablePsiElement>();
+  overridings.addAll(collectProcessor.getCollection());
+  overridings.addAll(collectExprProcessor.getCollection());
+  if (overridings.isEmpty())   return;
   boolean showMethodNames=!PsiUtil.allMethodsHaveSameSignature(methodOverriders);
   MethodOrFunctionalExpressionCellRenderer renderer=new MethodOrFunctionalExpressionCellRenderer(showMethodNames);
-  Arrays.sort(overridings,renderer.getComparator());
+  Collections.sort(overridings,renderer.getComparator());
   final OverridingMethodsUpdater methodsUpdater=new OverridingMethodsUpdater(method,renderer);
-  PsiElementListNavigator.openTargets(e,overridings,methodsUpdater.getCaption(overridings.length),"Overriding methods of " + method.getName(),renderer,methodsUpdater);
+  PsiElementListNavigator.openTargets(e,overridings.toArray(new NavigatablePsiElement[overridings.size()]),methodsUpdater.getCaption(overridings.size()),"Overriding methods of " + method.getName(),renderer,methodsUpdater);
 }

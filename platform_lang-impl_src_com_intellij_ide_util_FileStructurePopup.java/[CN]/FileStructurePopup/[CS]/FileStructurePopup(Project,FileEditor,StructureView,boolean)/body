@@ -42,7 +42,7 @@
     }
   }
 ;
-  myTree=new FileStructureTree(myTreeStructure.getRootElement(),Registry.is("fast.tree.expand.in.structure.view"));
+  myTree=new FileStructureTree(myTreeStructure.getRootElement(),false);
   myTree.setCellRenderer(new NodeRenderer());
   myTree.setTransferHandler(new TransferHandler(){
     @Override public boolean importData(    @NotNull TransferSupport support){
@@ -52,6 +52,35 @@
         return true;
       }
       return false;
+    }
+    @Nullable @Override protected Transferable createTransferable(    JComponent component){
+      Set<Object> nodes=myAbstractTreeBuilder.getSelectedElements();
+      if (nodes.isEmpty())       return null;
+      List<Pair<FilteringTreeStructure.FilteringNode,PsiElement>> result=ContainerUtil.newArrayListWithCapacity(nodes.size());
+      for (      Object o : nodes) {
+        if (!(o instanceof FilteringTreeStructure.FilteringNode))         continue;
+        FilteringTreeStructure.FilteringNode node=(FilteringTreeStructure.FilteringNode)o;
+        PsiElement psi=getPsi(node);
+        ContainerUtil.addIfNotNull(result,Pair.create(node,psi));
+      }
+      final Set<PsiElement> psiSelection=ContainerUtil.map2LinkedSet(result,Functions.<PsiElement>pairSecond());
+      String text=StringUtil.join(result,new Function<Pair<FilteringTreeStructure.FilteringNode,PsiElement>,String>(){
+        @Override public String fun(        Pair<FilteringTreeStructure.FilteringNode,PsiElement> pair){
+          PsiElement psi=pair.second;
+          String defaultPresentation=pair.first.getPresentation().getPresentableText();
+          if (psi == null)           return defaultPresentation;
+          for (PsiElement p=psi.getParent(); p != null; p=p.getParent()) {
+            if (psiSelection.contains(p))             return null;
+          }
+          return ObjectUtils.chooseNotNull(psi.getText(),defaultPresentation);
+        }
+      }
+,"\n");
+      String htmlText="<body>\n" + text + "\n</body>";
+      return new TextTransferable(XmlStringUtil.wrapInHtml(htmlText),text);
+    }
+    @Override public int getSourceActions(    JComponent component){
+      return COPY;
     }
   }
 );

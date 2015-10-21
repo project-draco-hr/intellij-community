@@ -1,0 +1,38 @@
+{
+  for (  OrderEntry entry : moduleRootModel.getOrderEntries()) {
+    if (entry instanceof ModuleLibraryOrderEntryImpl) {
+      ModuleLibraryOrderEntryImpl moduleLibraryOrderEntry=(ModuleLibraryOrderEntryImpl)entry;
+      Library library=moduleLibraryOrderEntry.getLibrary();
+      if (library == null) {
+        LOG.warn("Skipping module-level library entry because it doesn't have backing Library object. Entry: " + entry);
+        continue;
+      }
+      final VirtualFile[] libraryFiles=library.getFiles(OrderRootType.CLASSES);
+      final Set<String> moduleLibraryKey=ContainerUtilRt.newHashSet(libraryFiles.length);
+      for (      VirtualFile file : libraryFiles) {
+        moduleLibraryKey.add(ExternalSystemApiUtil.getLocalFileSystemPath(file) + moduleLibraryOrderEntry.getScope().name());
+      }
+      LibraryDependencyData existing=moduleLibrariesToImport.remove(moduleLibraryKey);
+      if (existing == null || !StringUtil.equals(existing.getInternalName(),library.getName())) {
+        moduleRootModel.removeOrderEntry(entry);
+      }
+ else {
+        orderEntryDataMap.put(entry,existing);
+        syncExistingLibraryDependency(modelsProvider,existing,library,moduleRootModel,moduleLibraryOrderEntry.getOwnerModule());
+        toImport.remove(existing);
+      }
+    }
+ else     if (entry instanceof LibraryOrderEntry) {
+      LibraryOrderEntry libraryOrderEntry=(LibraryOrderEntry)entry;
+      String libraryName=libraryOrderEntry.getLibraryName();
+      LibraryDependencyData existing=projectLibrariesToImport.remove(libraryName + libraryOrderEntry.getScope().name());
+      if (existing != null) {
+        toImport.remove(existing);
+        orderEntryDataMap.put(entry,existing);
+      }
+ else       if (!hasUnresolvedLibraries) {
+        moduleRootModel.removeOrderEntry(entry);
+      }
+    }
+  }
+}

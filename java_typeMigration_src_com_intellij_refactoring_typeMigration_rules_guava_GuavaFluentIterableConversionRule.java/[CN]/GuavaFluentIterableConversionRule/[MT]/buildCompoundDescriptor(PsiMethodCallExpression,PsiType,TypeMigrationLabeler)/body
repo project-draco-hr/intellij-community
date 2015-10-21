@@ -1,0 +1,55 @@
+{
+  List<TypeConversionDescriptorBase> methodDescriptors=new SmartList<TypeConversionDescriptorBase>();
+  NotNullLazyValue<TypeConversionRule> optionalDescriptor=new NotNullLazyValue<TypeConversionRule>(){
+    @NotNull @Override protected TypeConversionRule compute(){
+      for (      TypeConversionRule rule : TypeConversionRule.EP_NAME.getExtensions()) {
+        if (rule instanceof GuavaOptionalConversionRule) {
+          return rule;
+        }
+      }
+      throw new RuntimeException("GuavaOptionalConversionRule extension is not found");
+    }
+  }
+;
+  PsiMethodCallExpression current=expression;
+  while (true) {
+    final PsiMethod method=current.resolveMethod();
+    if (method == null) {
+      break;
+    }
+    final String methodName=method.getName();
+    final PsiClass containingClass=method.getContainingClass();
+    if (containingClass == null) {
+      break;
+    }
+    TypeConversionDescriptorBase descriptor=null;
+    if (FLUENT_ITERABLE.equals(containingClass.getQualifiedName())) {
+      descriptor=getOneMethodDescriptor(methodName,method,current.getType(),null,current);
+    }
+ else     if (GuavaOptionalConversionRule.GUAVA_OPTIONAL.equals(containingClass.getQualifiedName())) {
+      descriptor=optionalDescriptor.getValue().findConversion(null,null,method,current.getMethodExpression(),labeler);
+    }
+    if (descriptor == null) {
+      return null;
+    }
+    methodDescriptors.add(descriptor);
+    final PsiExpression qualifier=current.getMethodExpression().getQualifierExpression();
+    if (qualifier instanceof PsiMethodCallExpression) {
+      current=(PsiMethodCallExpression)qualifier;
+    }
+ else     if (method.hasModifierProperty(PsiModifier.STATIC)) {
+      if (!CHAIN_HEAD_METHODS.contains(methodName)) {
+        return null;
+      }
+      final PsiClass aClass=method.getContainingClass();
+      if (aClass == null || !FLUENT_ITERABLE.equals(aClass.getQualifiedName())) {
+        return null;
+      }
+      break;
+    }
+ else {
+      return null;
+    }
+  }
+  return new GuavaChainedConversionDescriptor(methodDescriptors,to);
+}

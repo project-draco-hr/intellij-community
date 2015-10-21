@@ -1,0 +1,39 @@
+{
+  Session ses=HibernateSessionFactory.currentSession();
+  if (player.getBalanceAmt() < amount) {
+    throw new AmountMoreThanBalanceException();
+  }
+  org.hibernate.Transaction tx=ses.beginTransaction();
+  UserCashOut userCashOut=new UserCashOut();
+  userCashOut.setAmount(amount);
+  userCashOut.setCreateDate(new Date());
+  userCashOut.setPlayer(player);
+  player.getCashOuts().add(userCashOut);
+  ses.save(userCashOut);
+  double checkAmount=0;
+  double amountForPay=amount;
+  boolean freeDebitsExist=true;
+  while (amountForPay > 0 && freeDebitsExist) {
+    List<CashOutDebitInfo> freeDebits=findFreeDebits(player,ses);
+    if (freeDebits.isEmpty()) {
+      freeDebitsExist=false;
+      checkAmount+=amountForPay;
+    }
+ else {
+      double oldAmount=amountForPay;
+      amountForPay=createCredits(amountForPay,player,freeDebits,userCashOut,ses);
+      amountForPay+=payCredits(freeDebits,userCashOut,ses);
+      if (amountForPay == oldAmount) {
+        freeDebitsExist=false;
+        checkAmount+=amountForPay;
+      }
+    }
+    ses.flush();
+  }
+  if (checkAmount > 0) {
+    payCheck(player,ses,userCashOut,checkAmount);
+  }
+  player.setBalanceAmt(player.getBalanceAmt() - amount);
+  tx.commit();
+  return userCashOut;
+}

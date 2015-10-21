@@ -1,0 +1,39 @@
+{
+  DataContext dataContext=e.getDataContext();
+  final Project project=CommonDataKeys.PROJECT.getData(dataContext);
+  if (project == null)   return;
+  Editor editor=CommonDataKeys.EDITOR.getData(dataContext);
+  final VirtualFile[] files=CommonDataKeys.VIRTUAL_FILE_ARRAY.getData(dataContext);
+  PsiFile file=null;
+  if (editor == null && files != null && files.length == 1 && !files[0].isDirectory()) {
+    file=PsiManager.getInstance(project).findFile(files[0]);
+  }
+ else   if (editor != null) {
+    file=PsiDocumentManager.getInstance(project).getPsiFile(editor.getDocument());
+  }
+  if (file == null)   return;
+  Language language=file.getLanguage();
+  final LangCodeStyleExtractor extractor=LangCodeStyleExtractor.EXTENSION.forLanguage(language);
+  if (extractor == null)   return;
+  final CodeStyleSettings settings=CodeStyleSettingsManager.getSettings(project);
+  final CodeStyleDeriveProcessor genProcessor=new GenProcessor(extractor);
+  final PsiFile finalFile=file;
+  final Task.Backgroundable task=new Task.Backgroundable(project,"Code style extractor",true){
+    @Override public void run(    @NotNull ProgressIndicator indicator){
+      try {
+        CodeStyleSettings cloneSettings=settings.clone();
+        Map<Value,Object> backup=genProcessor.backupValues(cloneSettings,finalFile.getLanguage());
+        ValuesExtractionResult res=genProcessor.runWithProgress(project,cloneSettings,finalFile,indicator);
+        reportResult(res,project,cloneSettings,finalFile,backup);
+      }
+ catch (      ProcessCanceledException e) {
+        Utils.logError("Code extraction was canceled");
+      }
+catch (      Throwable t) {
+        Utils.logError("Unexpected exception:\n" + t);
+      }
+    }
+  }
+;
+  ProgressManager.getInstance().run(task);
+}

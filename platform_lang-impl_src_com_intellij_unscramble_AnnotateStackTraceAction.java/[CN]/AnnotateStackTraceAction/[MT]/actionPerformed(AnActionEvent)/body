@@ -7,35 +7,22 @@
     @Override public void onSuccess(){
     }
     private void showGutter(){
-      final EditorGutterAction action=new EditorGutterAction(){
+      ActiveAnnotationGutter gutter=new ActiveAnnotationGutter(){
         @Override public void doAction(        int lineNum){
           final LastRevision revision=cache.get(lineNum);
-          final List<RangeHighlighter> links=myHyperlinks.findAllHyperlinksOnLine(lineNum);
-          if (!links.isEmpty()) {
-            final RangeHighlighter key=links.get(links.size() - 1);
-            HyperlinkInfo info=EditorHyperlinkSupport.getHyperlinkInfo(key);
-            if (info instanceof FileHyperlinkInfo) {
-              final VirtualFile file=((FileHyperlinkInfo)info).getDescriptor().getFile();
-              final Project project=getProject();
-              final AbstractVcs vcs=ProjectLevelVcsManager.getInstance(project).getVcsFor(file);
-              if (vcs != null) {
-                final VcsRevisionNumber number=revision.getNumber();
-                final VcsKey vcsKey=vcs.getKeyInstanceMethod();
-                ShowAllAffectedGenericAction.showSubmittedFiles(project,number,file,vcsKey);
-              }
-            }
+          if (revision == null)           return;
+          VirtualFile file=getHyperlinkVirtualFile(myHyperlinks.findAllHyperlinksOnLine(lineNum));
+          if (file == null)           return;
+          final Project project=getProject();
+          final AbstractVcs vcs=ProjectLevelVcsManager.getInstance(project).getVcsFor(file);
+          if (vcs != null) {
+            final VcsRevisionNumber number=revision.getNumber();
+            final VcsKey vcsKey=vcs.getKeyInstanceMethod();
+            ShowAllAffectedGenericAction.showSubmittedFiles(project,number,file,vcsKey);
           }
         }
         @Override public Cursor getCursor(        int lineNum){
-          return Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
-        }
-      }
-;
-      myEditor.getGutter().registerTextAnnotation(new ActiveAnnotationGutter(){
-        @Override public void doAction(        int lineNum){
-        }
-        @Override public Cursor getCursor(        int lineNum){
-          return Cursor.getDefaultCursor();
+          return cache.containsKey(lineNum) ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR) : Cursor.getDefaultCursor();
         }
         @Override public String getLineText(        int line,        Editor editor){
           final LastRevision revision=cache.get(line);
@@ -47,12 +34,13 @@
         @Override public String getToolTip(        int line,        Editor editor){
           final LastRevision revision=cache.get(line);
           if (revision != null) {
-            return XmlStringUtil.wrapInHtml(revision.getAuthor() + " " + DateFormatUtil.formatDateTime(revision.getDate())+ "<br/>"+ revision.getMessage());
+            return XmlStringUtil.escapeString(revision.getAuthor() + " " + DateFormatUtil.formatDateTime(revision.getDate())+ "\n"+ revision.getMessage());
           }
           return null;
         }
         @Override public EditorFontType getStyle(        int line,        Editor editor){
-          return line == newestLine ? EditorFontType.BOLD : EditorFontType.PLAIN;
+          LastRevision revision=cache.get(line);
+          return revision != null && revision.getDate().equals(newestDate) ? EditorFontType.BOLD : EditorFontType.PLAIN;
         }
         @Override public ColorKey getColor(        int line,        Editor editor){
           return AnnotationSource.LOCAL.getColor();
@@ -67,35 +55,32 @@
           myGutterShowed=false;
         }
       }
-,action);
+;
+      myEditor.getGutter().registerTextAnnotation(gutter,gutter);
       myGutterShowed=true;
     }
-    @Override public void run(    @NotNull ProgressIndicator indicator){
-      Date newestDate=null;
-      List<VirtualFile> files=new ArrayList<VirtualFile>();
-      for (int line=0; line < myEditor.getDocument().getLineCount(); line++) {
-        indicator.checkCanceled();
-        final List<RangeHighlighter> links=myHyperlinks.findAllHyperlinksOnLine(line);
-        if (links.size() > 0) {
-          final RangeHighlighter key=links.get(links.size() - 1);
-          final HyperlinkInfo info=EditorHyperlinkSupport.getHyperlinkInfo(key);
-          if (info instanceof FileHyperlinkInfo) {
-            final OpenFileDescriptor fileDescriptor=((FileHyperlinkInfo)info).getDescriptor();
-            if (fileDescriptor != null) {
-              final VirtualFile file=fileDescriptor.getFile();
-              if (files2lines.containsKey(file)) {
-                files2lines.get(file).add(line);
-              }
+    @Override public void run(    @NotNull final ProgressIndicator indicator){
+      final List<VirtualFile> files=new ArrayList<VirtualFile>();
+      final HashMap<VirtualFile,List<Integer>> files2lines=new HashMap<VirtualFile,List<Integer>>();
+      ApplicationManager.getApplication().runReadAction(new Runnable(){
+        @Override public void run(){
+          for (int line=0; line < myEditor.getDocument().getLineCount(); line++) {
+            indicator.checkCanceled();
+            VirtualFile file=getHyperlinkVirtualFile(myHyperlinks.findAllHyperlinksOnLine(line));
+            if (file == null)             continue;
+            if (files2lines.containsKey(file)) {
+              files2lines.get(file).add(line);
+            }
  else {
-                final ArrayList<Integer> lines=new ArrayList<Integer>();
-                lines.add(line);
-                files2lines.put(file,lines);
-                files.add(file);
-              }
+              final ArrayList<Integer> lines=new ArrayList<Integer>();
+              lines.add(line);
+              files2lines.put(file,lines);
+              files.add(file);
             }
           }
         }
       }
+);
       for (      VirtualFile file : files) {
         indicator.checkCanceled();
         LastRevision revision=getLastRevision(file);
@@ -104,7 +89,6 @@
           final Date date=revision.getDate();
           if (newestDate == null || date.after(newestDate)) {
             newestDate=date;
-            newestLine=lines.get(0);
           }
           final int length=DateFormatUtil.formatPrettyDate(date).length();
           if (length > maxDateLength) {

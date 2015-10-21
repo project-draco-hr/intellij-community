@@ -2,6 +2,7 @@
   final Map<Set<String>,LibraryDependencyData> moduleLibrariesToImport=ContainerUtilRt.newHashMap();
   final Map<String,LibraryDependencyData> projectLibrariesToImport=ContainerUtilRt.newHashMap();
   final Set<LibraryDependencyData> toImport=ContainerUtilRt.newLinkedHashSet();
+  final Map<OrderEntry,OrderAware> orderEntryDataMap=ContainerUtil.newLinkedHashMap();
   boolean hasUnresolved=false;
   for (  DataNode<LibraryDependencyData> dependencyNode : nodesToImport) {
     LibraryDependencyData dependencyData=dependencyNode.getData();
@@ -9,25 +10,24 @@
     hasUnresolved|=libraryData.isUnresolved();
 switch (dependencyData.getLevel()) {
 case MODULE:
-      if (!libraryData.isUnresolved()) {
-        Set<String> paths=ContainerUtilRt.newHashSet();
-        for (        String path : libraryData.getPaths(LibraryPathType.BINARY)) {
-          paths.add(ExternalSystemApiUtil.toCanonicalPath(path) + dependencyData.getScope().name());
-        }
-        moduleLibrariesToImport.put(paths,dependencyData);
-        toImport.add(dependencyData);
-      }
-    break;
+      Set<String> paths=ContainerUtilRt.newHashSet();
+    for (    String path : libraryData.getPaths(LibraryPathType.BINARY)) {
+      paths.add(ExternalSystemApiUtil.toCanonicalPath(path) + dependencyData.getScope().name());
+    }
+  moduleLibrariesToImport.put(paths,dependencyData);
+toImport.add(dependencyData);
+break;
 case PROJECT:
-  projectLibrariesToImport.put(libraryData.getInternalName() + dependencyData.getScope().name(),dependencyData);
+projectLibrariesToImport.put(libraryData.getInternalName() + dependencyData.getScope().name(),dependencyData);
 toImport.add(dependencyData);
 }
 }
 final boolean finalHasUnresolved=hasUnresolved;
 final ModifiableRootModel modifiableRootModel=modelsProvider.getModifiableRootModel(module);
 LibraryTable moduleLibraryTable=modifiableRootModel.getModuleLibraryTable();
-syncExistingAndRemoveObsolete(modelsProvider,moduleLibrariesToImport,projectLibrariesToImport,toImport,modifiableRootModel,finalHasUnresolved);
+syncExistingAndRemoveObsolete(modelsProvider,moduleLibrariesToImport,projectLibrariesToImport,toImport,orderEntryDataMap,modifiableRootModel,finalHasUnresolved);
 if (!toImport.isEmpty()) {
-importMissing(modelsProvider,toImport,modifiableRootModel,moduleLibraryTable,module);
+importMissing(modelsProvider,toImport,orderEntryDataMap,modifiableRootModel,moduleLibraryTable,module);
 }
+return orderEntryDataMap;
 }

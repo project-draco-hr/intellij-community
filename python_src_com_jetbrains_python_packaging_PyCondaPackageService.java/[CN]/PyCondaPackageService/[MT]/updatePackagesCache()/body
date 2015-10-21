@@ -1,0 +1,32 @@
+{
+  final String condaPython=getCondaPython();
+  if (condaPython == null)   return;
+  final String path=PythonHelpersLocator.getHelperPath("conda_packaging_tool.py");
+  final String runDirectory=new File(condaPython).getParent();
+  final ProcessOutput output=PySdkUtil.getProcessOutput(runDirectory,new String[]{condaPython,path,"listall"});
+  if (output.getExitCode() != 0)   return;
+  final List<String> lines=output.getStdoutLines();
+  for (  String line : lines) {
+    final List<String> split=StringUtil.split(line,"\t");
+    if (split.size() < 2)     continue;
+    final String aPackage=CONDA_PACKAGES.get(split.get(0));
+    if (aPackage != null) {
+      if (VersionComparatorUtil.compare(aPackage,split.get(1)) < 0)       CONDA_PACKAGES.put(split.get(0),split.get(1));
+    }
+ else {
+      CONDA_PACKAGES.put(split.get(0),split.get(1));
+    }
+    if (PACKAGES_TO_RELEASES.containsKey(split.get(0))) {
+      final List<String> versions=PACKAGES_TO_RELEASES.get(split.get(0));
+      if (!versions.contains(split.get(1))) {
+        versions.add(split.get(1));
+      }
+    }
+ else {
+      final ArrayList<String> versions=new ArrayList<String>();
+      versions.add(split.get(1));
+      PACKAGES_TO_RELEASES.put(split.get(0),versions);
+    }
+  }
+  LAST_TIME_CHECKED=System.currentTimeMillis();
+}

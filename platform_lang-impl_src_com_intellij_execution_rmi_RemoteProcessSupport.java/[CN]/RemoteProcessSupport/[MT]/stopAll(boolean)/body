@@ -1,16 +1,30 @@
 {
-  ArrayList<ProcessHandler> allHandlers=new ArrayList<ProcessHandler>();
+  final List<Info> infos=ContainerUtil.newArrayList();
 synchronized (myProcMap) {
     for (    Info o : myProcMap.values()) {
-      ContainerUtil.addIfNotNull(o.handler,allHandlers);
+      if (o.handler != null)       infos.add(o);
     }
   }
-  for (  ProcessHandler handler : allHandlers) {
-    handler.destroyProcess();
+  if (infos.isEmpty())   return;
+  Future<?> future=ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+    @Override public void run(){
+      destroyProcessesImpl(infos);
+      if (wait) {
+        for (        Info o : infos) {
+          o.handler.waitFor();
+        }
+      }
+    }
   }
+);
   if (wait) {
-    for (    ProcessHandler handler : allHandlers) {
-      handler.waitFor();
+    try {
+      future.get();
+    }
+ catch (    InterruptedException ignored) {
+    }
+catch (    java.util.concurrent.ExecutionException e) {
+      LOG.warn(e);
     }
   }
 }

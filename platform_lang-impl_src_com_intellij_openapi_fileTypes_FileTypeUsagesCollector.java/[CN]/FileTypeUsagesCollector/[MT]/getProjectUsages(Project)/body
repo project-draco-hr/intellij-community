@@ -9,12 +9,16 @@
     if (project.isDisposed()) {
       throw new CollectUsagesException("Project is disposed");
     }
+    final String ideaDirPath=getIdeaDirPath(project);
     ApplicationManager.getApplication().runReadAction(new Runnable(){
       @Override public void run(){
         FileBasedIndex.getInstance().processValues(FileTypeIndex.NAME,fileType,null,new FileBasedIndex.ValueProcessor<Void>(){
           @Override public boolean process(          VirtualFile file,          Void value){
-            usedFileTypes.add(fileType);
-            return false;
+            if (ideaDirPath == null || FileUtil.isAncestorThreeState(ideaDirPath,file.getPath(),true) == ThreeState.NO) {
+              usedFileTypes.add(fileType);
+              return false;
+            }
+            return true;
           }
         }
 ,GlobalSearchScope.projectScope(project));
@@ -22,7 +26,6 @@
     }
 );
   }
-  usedFileTypes.add(UnknownFileType.INSTANCE);
   return ContainerUtil.map2Set(usedFileTypes,new NotNullFunction<FileType,UsageDescriptor>(){
     @NotNull @Override public UsageDescriptor fun(    FileType fileType){
       return new UsageDescriptor(fileType.getName(),1);

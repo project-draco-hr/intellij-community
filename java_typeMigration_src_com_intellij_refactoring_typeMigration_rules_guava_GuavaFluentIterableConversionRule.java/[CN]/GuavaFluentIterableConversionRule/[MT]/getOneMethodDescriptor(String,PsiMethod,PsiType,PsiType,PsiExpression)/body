@@ -1,0 +1,69 @@
+{
+  TypeConversionDescriptor descriptorBase=null;
+  PsiType conversionType=to;
+  boolean needSpecifyType=true;
+  if (methodName.equals("from")) {
+    descriptorBase=new TypeConversionDescriptor("FluentIterable.from($it$)",null){
+      @Override public PsiExpression replace(      PsiExpression expression){
+        PsiExpression argument=PseudoLambdaReplaceTemplate.replaceTypeParameters(((PsiMethodCallExpression)expression).getArgumentList().getExpressions()[0]);
+        if (argument == null) {
+          return expression;
+        }
+        boolean isCollection=InheritanceUtil.isInheritor(PsiTypesUtil.getPsiClass(argument.getType()),CommonClassNames.JAVA_UTIL_COLLECTION);
+        setReplaceByString(isCollection ? "$it$.stream()" : "java.util.stream.StreamSupport.stream($it$.spliterator(), false)");
+        return super.replace(expression);
+      }
+    }
+;
+  }
+ else   if (methodName.equals("filter")) {
+    descriptorBase=FluentIterableConversionUtil.getFilterDescriptor(method);
+  }
+ else   if (methodName.equals("transformAndConcat")) {
+    descriptorBase=new FluentIterableConversionUtil.TransformAndConcatConversionRule();
+  }
+ else   if (methodName.equals("toArray")) {
+    descriptorBase=FluentIterableConversionUtil.getToArrayDescriptor(from,context);
+    needSpecifyType=false;
+  }
+ else   if (methodName.equals("copyInto")) {
+    descriptorBase=new FluentIterableConversionUtil.CopyIntoDescriptor();
+    needSpecifyType=false;
+  }
+ else   if (methodName.equals("get")) {
+    descriptorBase=new TypeConversionDescriptor("$it$.get($p$)",null){
+      @Override public PsiExpression replace(      PsiExpression expression){
+        PsiMethodCallExpression methodCall=(PsiMethodCallExpression)expression;
+        final PsiExpression[] arguments=methodCall.getArgumentList().getExpressions();
+        setReplaceByString("$it$.skip($p$).findFirst().get()");
+        if (arguments.length == 1 && arguments[0] instanceof PsiLiteralExpression) {
+          final Object value=((PsiLiteralExpression)arguments[0]).getValue();
+          if (value != null && value.equals(0)) {
+            setReplaceByString("$it$.findFirst().get()");
+          }
+        }
+        return super.replace(expression);
+      }
+    }
+;
+    needSpecifyType=false;
+  }
+ else {
+    final TypeConversionDescriptorFactory base=DESCRIPTORS_MAP.get(methodName);
+    if (base != null) {
+      final TypeConversionDescriptor descriptor=base.create();
+      needSpecifyType=base.isChainedMethod();
+      if (needSpecifyType && !base.isFluentIterableReturnType()) {
+        conversionType=JavaPsiFacade.getElementFactory(method.getProject()).createTypeByFQClassName(GuavaOptionalConversionRule.JAVA_OPTIONAL);
+      }
+      descriptorBase=descriptor;
+    }
+  }
+  if (descriptorBase != null) {
+    if (needSpecifyType && conversionType != null) {
+      descriptorBase.withConversionType(conversionType);
+    }
+    return descriptorBase;
+  }
+  return null;
+}

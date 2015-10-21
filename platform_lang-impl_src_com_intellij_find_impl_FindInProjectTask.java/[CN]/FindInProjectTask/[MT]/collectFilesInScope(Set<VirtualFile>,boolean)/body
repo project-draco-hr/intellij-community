@@ -4,7 +4,7 @@
   final ProjectFileIndex fileIndex=ProjectFileIndex.SERVICE.getInstance(myProject);
   final boolean hasTrigrams=hasTrigrams(myFindModel.getStringToFind());
 class EnumContentIterator implements ContentIterator {
-    final Set<VirtualFile> myFiles=new LinkedHashSet<VirtualFile>();
+    private final Set<VirtualFile> myFiles=new LinkedHashSet<VirtualFile>();
     @Override public boolean processFile(    @NotNull final VirtualFile virtualFile){
       ApplicationManager.getApplication().runReadAction(new Runnable(){
         @Override public void run(){
@@ -15,7 +15,21 @@ class EnumContentIterator implements ContentIterator {
           if (skipIndexed && isCoveredByIndex(virtualFile) && (fileIndex.isInContent(virtualFile) || fileIndex.isInLibraryClasses(virtualFile) || fileIndex.isInLibrarySource(virtualFile))) {
             return;
           }
-          if (!alreadySearched.contains(virtualFile))           myFiles.add(virtualFile);
+          PsiFile psiFile=myPsiManager.findFile(virtualFile);
+          VirtualFile sourceVirtualFile=virtualFile;
+          if (psiFile != null && !(psiFile instanceof PsiBinaryFile)) {
+            PsiFile sourceFile=(PsiFile)psiFile.getNavigationElement();
+            if (sourceFile != null) {
+              psiFile=sourceFile;
+              sourceVirtualFile=PsiUtilCore.getVirtualFile(psiFile);
+            }
+          }
+          if (psiFile == null || psiFile.getFileType().isBinary()) {
+            sourceVirtualFile=null;
+          }
+          if (sourceVirtualFile != null && !alreadySearched.contains(sourceVirtualFile)) {
+            myFiles.add(sourceVirtualFile);
+          }
         }
         private final FileBasedIndexImpl fileBasedIndex=(FileBasedIndexImpl)FileBasedIndex.getInstance();
         private boolean isCoveredByIndex(        VirtualFile file){

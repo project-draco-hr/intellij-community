@@ -1,0 +1,65 @@
+{
+  PsiElement parent=expression.getParent();
+  while (parent instanceof PsiParenthesizedExpression) {
+    expression=(PsiExpression)parent;
+    parent=parent.getParent();
+  }
+  if (parent instanceof PsiPolyadicExpression) {
+    final PsiPolyadicExpression polyadicExpression=(PsiPolyadicExpression)parent;
+    if (isPossibleObjectComparison(expression,polyadicExpression)) {
+      return false;
+    }
+  }
+  if (parent instanceof PsiTypeCastExpression) {
+    final PsiTypeCastExpression typeCastExpression=(PsiTypeCastExpression)parent;
+    final PsiTypeElement typeElement=typeCastExpression.getCastType();
+    if (typeElement == null) {
+      return false;
+    }
+    final PsiType castType=typeElement.getType();
+    final PsiType expressionType=expression.getType();
+    if (expressionType == null || !castType.isAssignableFrom(expressionType)) {
+      return false;
+    }
+  }
+ else   if (parent instanceof PsiConditionalExpression) {
+    final PsiConditionalExpression conditionalExpression=(PsiConditionalExpression)parent;
+    final PsiExpression thenExpression=conditionalExpression.getThenExpression();
+    if (thenExpression == null) {
+      return false;
+    }
+    final PsiExpression elseExpression=conditionalExpression.getElseExpression();
+    if (elseExpression == null) {
+      return false;
+    }
+    if (PsiTreeUtil.isAncestor(thenExpression,expression,false)) {
+      final PsiType type=elseExpression.getType();
+      if (!(type instanceof PsiPrimitiveType)) {
+        return false;
+      }
+    }
+ else     if (PsiTreeUtil.isAncestor(elseExpression,expression,false)) {
+      final PsiType type=thenExpression.getType();
+      if (!(type instanceof PsiPrimitiveType)) {
+        return false;
+      }
+    }
+  }
+ else   if (parent instanceof PsiExpressionList) {
+    final PsiElement grandParent=parent.getParent();
+    if (!(grandParent instanceof PsiCallExpression)) {
+      return true;
+    }
+    final PsiCallExpression methodCallExpression=(PsiCallExpression)grandParent;
+    if (!isSameMethodCalledWithoutUnboxing(methodCallExpression,expression,unboxedExpression)) {
+      return false;
+    }
+  }
+  if (onlyReportSuperfluouslyUnboxed) {
+    final PsiType expectedType=ExpectedTypeUtils.findExpectedType(expression,false,true);
+    if (!(expectedType instanceof PsiClassType)) {
+      return false;
+    }
+  }
+  return true;
+}

@@ -1,0 +1,43 @@
+{
+  PsiExpression argument=((PsiMethodCallExpression)expression).getArgumentList().getExpressions()[0];
+  PsiAnonymousClass anonymousClass;
+  if (argument instanceof PsiNewExpression && (anonymousClass=((PsiNewExpression)argument).getAnonymousClass()) != null) {
+    if (AnonymousCanBeLambdaInspection.canBeConvertedToLambda(anonymousClass,true)) {
+      argument=AnonymousCanBeLambdaInspection.replacePsiElementWithLambda(argument,true,true);
+    }
+    ;
+  }
+  final JavaPsiFacade javaPsiFacade=JavaPsiFacade.getInstance(expression.getProject());
+  if (argument != null && !(argument instanceof PsiFunctionalExpression)) {
+    argument=(PsiExpression)argument.replace(javaPsiFacade.getElementFactory().createExpressionFromText("(" + argument.getText() + ")::apply",null));
+  }
+  if (argument instanceof PsiMethodReferenceExpression) {
+    argument=ReplaceMethodRefWithLambdaIntention.convertMethodReferenceToLambda((PsiMethodReferenceExpression)argument);
+  }
+  if (argument instanceof PsiLambdaExpression) {
+    List<Pair<PsiExpression,Boolean>> iterableReturnValues=new SmartList<Pair<PsiExpression,Boolean>>();
+    final PsiElement body=((PsiLambdaExpression)argument).getBody();
+    final PsiClass collection=javaPsiFacade.findClass(CommonClassNames.JAVA_UTIL_COLLECTION,expression.getResolveScope());
+    if (collection == null)     return expression;
+    final PsiClass iterable=javaPsiFacade.findClass(CommonClassNames.JAVA_LANG_ITERABLE,expression.getResolveScope());
+    if (iterable == null)     return expression;
+    if (body instanceof PsiCodeBlock) {
+      for (      PsiReturnStatement statement : PsiUtil.findReturnStatements((PsiCodeBlock)body)) {
+        final PsiExpression retValue=statement.getReturnValue();
+        if (!determineType(retValue,iterableReturnValues,iterable,collection)) {
+          return expression;
+        }
+      }
+    }
+ else     if (!(body instanceof PsiExpression) || !determineType((PsiExpression)body,iterableReturnValues,iterable,collection)) {
+      return expression;
+    }
+    for (    Pair<PsiExpression,Boolean> returnValueAndIsCollection : iterableReturnValues) {
+      convertToStream(returnValueAndIsCollection.getFirst(),returnValueAndIsCollection.getSecond());
+    }
+  }
+ else {
+    return expression;
+  }
+  return super.replace(expression);
+}

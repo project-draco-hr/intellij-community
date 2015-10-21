@@ -1,0 +1,59 @@
+{
+  if (myAborted)   throw new GithubOperationCanceledException();
+  if (EventQueue.isDispatchThread() && !ApplicationManager.getApplication().isUnitTestMode()) {
+    LOG.warn("Network operation in EDT");
+  }
+  CloseableHttpResponse response=null;
+  try {
+    response=doREST(uri,requestBody,headers,verb);
+    if (myAborted)     throw new GithubOperationCanceledException();
+    checkStatusCode(response,requestBody);
+    HttpEntity entity=response.getEntity();
+    if (entity == null) {
+      return createResponse(response);
+    }
+    JsonElement ret=parseResponse(entity.getContent());
+    if (ret.isJsonNull()) {
+      return createResponse(response);
+    }
+    String nextPage=null;
+    Header pageHeader=response.getFirstHeader("Link");
+    if (pageHeader != null) {
+      for (      HeaderElement element : pageHeader.getElements()) {
+        NameValuePair rel=element.getParameterByName("rel");
+        if (rel != null && "next".equals(rel.getValue())) {
+          String urlString=element.toString();
+          int begin=urlString.indexOf('<');
+          int end=urlString.lastIndexOf('>');
+          if (begin == -1 || end == -1) {
+            LOG.error("Invalid 'Link' header","{" + pageHeader.toString() + "}");
+            break;
+          }
+          nextPage=urlString.substring(begin + 1,end);
+          break;
+        }
+      }
+    }
+    return createResponse(ret,nextPage,response);
+  }
+ catch (  SSLHandshakeException e) {
+    if (e.getCause() instanceof ValidatorException) {
+      LOG.info("Host SSL certificate is not trusted",e);
+      throw new GithubOperationCanceledException("Host SSL certificate is not trusted",e);
+    }
+    throw e;
+  }
+catch (  IOException e) {
+    if (myAborted)     throw new GithubOperationCanceledException("Operation canceled",e);
+    throw e;
+  }
+ finally {
+    myRequest=null;
+    if (response != null) {
+      response.close();
+    }
+    if (!myReusable) {
+      myClient.close();
+    }
+  }
+}

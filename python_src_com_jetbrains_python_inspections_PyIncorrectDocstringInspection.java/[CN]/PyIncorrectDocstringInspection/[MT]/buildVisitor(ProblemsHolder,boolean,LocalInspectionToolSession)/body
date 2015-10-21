@@ -1,0 +1,35 @@
+{
+  return new Visitor(holder,session){
+    @Override protected void checkDocString(    @NotNull PyDocStringOwner node){
+      final PyStringLiteralExpression docstringExpr=node.getDocStringExpression();
+      if (docstringExpr != null) {
+        checkParameters(node,docstringExpr);
+      }
+    }
+    private void checkParameters(    @NotNull PyDocStringOwner pyDocStringOwner,    @NotNull PyStringLiteralExpression node){
+      final StructuredDocString docString=DocStringUtil.parseDocString(node);
+      if (docString instanceof PlainDocString) {
+        return;
+      }
+      if (pyDocStringOwner instanceof PyFunction) {
+        final PyParameter[] realParams=((PyFunction)pyDocStringOwner).getParameterList().getParameters();
+        final List<PyNamedParameter> missingParams=getMissingParams(docString,realParams);
+        if (!missingParams.isEmpty()) {
+          for (          PyNamedParameter param : missingParams) {
+            registerProblem(param,PyBundle.message("INSP.missing.parameter.in.docstring",param.getName()),new DocstringQuickFix(param,null));
+          }
+        }
+        final List<Substring> unexpectedParams=getUnexpectedParams(docString,realParams);
+        if (!unexpectedParams.isEmpty()) {
+          for (          Substring param : unexpectedParams) {
+            final ProblemsHolder holder=getHolder();
+            if (holder != null) {
+              holder.registerProblem(node,param.getTextRange(),PyBundle.message("INSP.unexpected.parameter.in.docstring",param),new DocstringQuickFix(null,param.getValue()));
+            }
+          }
+        }
+      }
+    }
+  }
+;
+}

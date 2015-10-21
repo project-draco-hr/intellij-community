@@ -1,0 +1,52 @@
+{
+  final Set<PsiElement> allowed=new THashSet<PsiElement>(new TObjectHashingStrategy<PsiElement>(){
+    @Override public int computeHashCode(    PsiElement object){
+      return 0;
+    }
+    @Override public boolean equals(    PsiElement o1,    PsiElement o2){
+      return parameters.getOriginalFile().getManager().areElementsEquivalent(o1,o2);
+    }
+  }
+);
+  if (allowedValues.canBeOred) {
+    PsiElementFactory factory=JavaPsiFacade.getElementFactory(pos.getProject());
+    PsiExpression zero=factory.createExpressionFromText("0",pos);
+    result.addElement(PrioritizedLookupElement.withPriority(LookupElementBuilder.create(zero,"0"),PRIORITY - 1));
+    PsiExpression minusOne=factory.createExpressionFromText("-1",pos);
+    result.addElement(PrioritizedLookupElement.withPriority(LookupElementBuilder.create(minusOne,"-1"),PRIORITY - 1));
+    allowed.add(zero);
+    allowed.add(minusOne);
+  }
+  List<ExpectedTypeInfo> types=Arrays.asList(JavaSmartCompletionContributor.getExpectedTypes(parameters));
+  for (  PsiAnnotationMemberValue value : allowedValues.values) {
+    if (value instanceof PsiReference) {
+      PsiElement resolved=((PsiReference)value).resolve();
+      if (resolved instanceof PsiNamedElement) {
+        LookupElement lookupElement=LookupItemUtil.objectToLookupItem(resolved);
+        if (lookupElement instanceof VariableLookupItem) {
+          ((VariableLookupItem)lookupElement).setSubstitutor(PsiSubstitutor.EMPTY);
+        }
+        LookupElement element=PrioritizedLookupElement.withPriority(lookupElement,PRIORITY);
+        element=decorate(parameters,types,element);
+        result.addElement(element);
+        allowed.add(resolved);
+        continue;
+      }
+    }
+    LookupElement element=LookupElementBuilder.create(value,value.getText());
+    element=decorate(parameters,types,element);
+    result.addElement(element);
+    allowed.add(value);
+  }
+  result.runRemainingContributors(parameters,new Consumer<CompletionResult>(){
+    @Override public void consume(    CompletionResult completionResult){
+      LookupElement element=completionResult.getLookupElement();
+      Object object=element.getObject();
+      if (object instanceof PsiElement && allowed.contains(object)) {
+        return;
+      }
+      result.passResult(completionResult);
+    }
+  }
+);
+}
