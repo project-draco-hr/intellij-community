@@ -29,10 +29,10 @@
       final ParseResult boundResult=value.getSecond();
       if (boundResult != null) {
         final PyGenericType type=new PyGenericType(name,boundResult.getType());
-        final ParseResult result=new ParseResult(type,range);
+        final ParseResult result=new ParseResult(null,type,range);
         return result.merge(boundResult).withType(type);
       }
-      return new ParseResult(new PyGenericType(name,null),range);
+      return new ParseResult(null,new PyGenericType(name,null),range);
     }
   }
 ).named("type-parameter");
@@ -44,17 +44,24 @@
       final ParseResult second=firstPair.getSecond();
       final List<ParseResult> third=value.getSecond();
       final PyType firstType=first.getType();
-      if (firstType instanceof PyClassType) {
-        final List<PyType> typesInBrackets=new ArrayList<PyType>();
-        typesInBrackets.add(second.getType());
-        ParseResult result=first;
-        result=result.merge(second);
-        for (        ParseResult r : third) {
-          typesInBrackets.add(r.getType());
-          result=result.merge(r);
+      final List<PyType> typesInBrackets=new ArrayList<PyType>();
+      typesInBrackets.add(second.getType());
+      ParseResult result=first;
+      result=result.merge(second);
+      for (      ParseResult r : third) {
+        typesInBrackets.add(r.getType());
+        result=result.merge(r);
+      }
+      final List<PyType> elementTypes=third.isEmpty() ? Collections.singletonList(second.getType()) : typesInBrackets;
+      final PsiElement resolved=first.getElement();
+      if (resolved != null) {
+        final PyType typingType=PyTypingTypeProvider.getType(resolved,elementTypes);
+        if (typingType != null) {
+          return result.withType(typingType);
         }
-        final List<PyType> elementTypes=third.isEmpty() ? Collections.singletonList(second.getType()) : typesInBrackets;
-        final PyCollectionTypeImpl type=new PyCollectionTypeImpl(((PyClassType)firstType).getPyClass(),false,elementTypes);
+      }
+      if (firstType instanceof PyClassType) {
+        final PyType type=new PyCollectionTypeImpl(((PyClassType)firstType).getPyClass(),false,elementTypes);
         return result.withType(type);
       }
       return EMPTY_RESULT;
