@@ -19,17 +19,23 @@
       }
     }
   }
-  if (satisfies(element,state) && isAccessible(element)) {
-    CompletionElement element1=new CompletionElement(element,state.get(PsiSubstitutor.KEY));
-    if (myResultNames.add(element1.getUniqueId())) {
-      StaticProblem sp=myElement.getParent() instanceof PsiMethodReferenceExpression ? StaticProblem.none : getStaticProblem(element);
-      if (sp != StaticProblem.instanceAfterStatic) {
-        (sp == StaticProblem.staticAfterInstance ? myFilteredResults : myResults).add(element1);
-      }
+  if (element instanceof PsiVariable) {
+    String name=((PsiVariable)element).getName();
+    if (myShadowedNames.contains(name))     return true;
+    if (element instanceof PsiLocalVariable || element instanceof PsiParameter) {
+      myShadowedNames.add(name);
     }
   }
- else   if (element instanceof PsiLocalVariable || element instanceof PsiParameter) {
-    myResultNames.add(CompletionElement.getVariableUniqueId((PsiVariable)element));
+  if (!satisfies(element,state) || !isAccessible(element))   return true;
+  StaticProblem sp=myElement.getParent() instanceof PsiMethodReferenceExpression ? StaticProblem.none : getStaticProblem(element);
+  if (sp == StaticProblem.instanceAfterStatic)   return true;
+  CompletionElement completion=new CompletionElement(element,state.get(PsiSubstitutor.KEY));
+  CompletionElement prev=myResults.get(completion);
+  if (prev == null || completion.isMoreSpecificThan(prev)) {
+    myResults.put(completion,completion);
+    if (sp == StaticProblem.staticAfterInstance) {
+      mySecondRateResults.add(completion);
+    }
   }
   return true;
 }

@@ -1,0 +1,28 @@
+{
+  final List<String> result;
+  final String externalProjectId=ExternalSystemApiUtil.getExternalProjectId(module);
+  if (externalProjectId == null)   return ContainerUtil.emptyList();
+  final String projectPath=ExternalSystemApiUtil.getExternalProjectPath(module);
+  if (projectPath == null)   return ContainerUtil.emptyList();
+  final ExternalProjectInfo externalProjectInfo=ExternalSystemUtil.getExternalProjectInfo(module.getProject(),GradleConstants.SYSTEM_ID,projectPath);
+  if (externalProjectInfo == null)   return ContainerUtil.emptyList();
+  if (StringUtil.endsWith(externalProjectId,":test") || StringUtil.endsWith(externalProjectId,":main")) {
+    result=TEST_SOURCE_SET_TASKS;
+  }
+ else {
+    final DataNode<ModuleData> moduleNode=GradleProjectResolverUtil.findModule(externalProjectInfo.getExternalProjectStructure(),projectPath);
+    if (moduleNode == null)     return ContainerUtil.emptyList();
+    final String sourceSetId=StringUtil.substringAfter(externalProjectId,moduleNode.getData().getExternalName() + ':');
+    if (sourceSetId == null)     return ContainerUtil.emptyList();
+    final DataNode<TaskData> taskNode=ExternalSystemApiUtil.find(moduleNode,ProjectKeys.TASK,new BooleanFunction<DataNode<TaskData>>(){
+      @Override public boolean fun(      DataNode<TaskData> node){
+        return GradleCommonClassNames.GRADLE_API_TASKS_TESTING_TEST.equals(node.getData().getType()) && StringUtil.startsWith(sourceSetId,node.getData().getName());
+      }
+    }
+);
+    if (taskNode == null)     return ContainerUtil.emptyList();
+    final String taskName=taskNode.getData().getName();
+    result=ContainerUtil.list("clean" + StringUtil.capitalize(taskName),taskName);
+  }
+  return result;
+}
