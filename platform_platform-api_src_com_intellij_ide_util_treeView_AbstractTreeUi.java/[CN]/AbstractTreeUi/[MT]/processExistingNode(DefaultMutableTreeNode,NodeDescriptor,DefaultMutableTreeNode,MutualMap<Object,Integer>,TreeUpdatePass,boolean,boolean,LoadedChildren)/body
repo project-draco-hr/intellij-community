@@ -26,14 +26,16 @@
       final AtomicBoolean forceRemapping=new AtomicBoolean();
       final Ref<Object> newElement=new Ref<Object>(getElementFromDescriptor(childDesc.get()));
       final Integer index=newElement.get() == null ? null : elementToIndexMap.getValue(getBuilder().getTreeStructureElement(childDesc.get()));
-      final AsyncResult<Boolean> updateIndexDone=new AsyncResult<Boolean>();
+      Promise<Boolean> promise;
       if (index == null) {
-        updateIndexDone.setDone();
+        promise=Promise.resolve(false);
       }
  else {
         final Object elementFromMap=elementToIndexMap.getKey(index);
         if (elementFromMap != newElement.get() && elementFromMap.equals(newElement.get())) {
           if (isInStructure(elementFromMap) && isInStructure(newElement.get())) {
+            final AsyncPromise<Boolean> updateIndexDone=new AsyncPromise<Boolean>();
+            promise=updateIndexDone;
             if (parentNode.getUserObject() instanceof NodeDescriptor) {
               final NodeDescriptor parentDescriptor=getDescriptorFrom(parentNode);
               childDesc.set(getTreeStructure().createDescriptor(elementFromMap,parentDescriptor));
@@ -47,20 +49,20 @@
               update(childDesc.get(),false).done(new Consumer<Boolean>(){
                 @Override public void consume(                Boolean isChanged){
                   changes.set(isChanged);
-                  updateIndexDone.setDone(isChanged);
+                  updateIndexDone.setResult(isChanged);
                 }
               }
 );
             }
           }
  else {
-            updateIndexDone.setDone(changes.get());
+            promise=Promise.resolve(changes.get());
           }
         }
  else {
-          updateIndexDone.setDone(changes.get());
+          promise=Promise.resolve(changes.get());
         }
-        updateIndexDone.doWhenDone(new TreeRunnable("AbstractTreeUi.processExistingNode: on done index updating after update"){
+        promise.done(new TreeConsumer<Boolean>("AbstractTreeUi.processExistingNode: on done index updating after update"){
           @Override public void perform(){
             if (childDesc.get().getIndex() != index.intValue()) {
               changes.set(true);
@@ -70,7 +72,7 @@
         }
 );
       }
-      updateIndexDone.doWhenDone(new TreeRunnable("AbstractTreeUi.processExistingNode: on done index updating"){
+      promise.done(new TreeConsumer<Boolean>("AbstractTreeUi.processExistingNode: on done index updating"){
         @Override public void perform(){
           if (!oldElement.equals(newElement.get()) || forceRemapping.get()) {
             removeMapping(oldElement,childNode,newElement.get());
