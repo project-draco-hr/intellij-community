@@ -1,19 +1,18 @@
 {
   final List<TreeNode> childNodes=TreeUtil.childrenToArray(node);
   return maybeYeild(new ActiveRunnable(){
-    @NotNull @Override public ActionCallback run(){
-      if (pass.isExpired())       return ActionCallback.REJECTED;
-      if (childNodes.isEmpty())       return ActionCallback.DONE;
-      final ActionCallback result=new ActionCallback(childNodes.size());
+    @NotNull @Override public Promise<?> run(){
+      if (pass.isExpired())       return Promise.REJECTED;
+      if (childNodes.isEmpty())       return Promise.DONE;
+      List<Promise<?>> promises=new SmartList<Promise<?>>();
       for (      TreeNode each : childNodes) {
         final DefaultMutableTreeNode eachChild=(DefaultMutableTreeNode)each;
         if (isLoadingNode(eachChild)) {
-          result.setDone();
           continue;
         }
         final boolean childForceUpdate=isChildNodeForceUpdate(eachChild,forceUpdate,wasExpaned);
-        maybeYeild(new ActiveRunnable(){
-          @NotNull @Override public ActionCallback run(){
+        promises.add(maybeYeild(new ActiveRunnable(){
+          @NotNull @Override public Promise<?> run(){
             NodeDescriptor descriptor=preloaded != null ? preloaded.getDescriptor(getElementFor(eachChild)) : null;
             NodeDescriptor descriptorFromNode=getDescriptorFrom(eachChild);
             if (descriptor != null) {
@@ -28,22 +27,14 @@
             return processExistingNode(eachChild,descriptor,node,elementToIndexMap,pass,canSmartExpand,childForceUpdate,preloaded);
           }
         }
-,pass,node).done(new Consumer<Void>(){
-          @Override public void consume(          Void aVoid){
-            result.setDone();
+,pass,node));
+        for (        Promise<?> promise : promises) {
+          if (promise.getState() == Promise.State.REJECTED) {
+            return Promise.REJECTED;
           }
-        }
-).rejected(new Consumer<Throwable>(){
-          @Override public void consume(          Throwable error){
-            result.reject(error.getMessage());
-          }
-        }
-);
-        if (result.isRejected()) {
-          break;
         }
       }
-      return result;
+      return Promise.all(promises);
     }
   }
 ,pass,node);
