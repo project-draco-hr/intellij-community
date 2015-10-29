@@ -2,14 +2,31 @@
   if (text.isEmpty()) {
     throw new IllegalArgumentException("Cannot search for elements with empty text");
   }
-  ProgressIndicator progress=getOrCreateIndicator();
+  final ProgressIndicator progress=getOrCreateIndicator();
+  final boolean processInjectedPsi=options.contains(Options.PROCESS_INJECTED_PSI);
   if (searchScope instanceof GlobalSearchScope) {
     StringSearcher searcher=new StringSearcher(text,options.contains(Options.CASE_SENSITIVE_SEARCH),true,searchContext == UsageSearchContext.IN_STRINGS,options.contains(Options.PROCESS_ONLY_JAVA_IDENTIFIERS_IF_POSSIBLE));
-    return processElementsWithTextInGlobalScope(processor,(GlobalSearchScope)searchScope,searcher,searchContext,options.contains(Options.CASE_SENSITIVE_SEARCH),containerName,progress,options.contains(Options.PROCESS_INJECTED_PSI));
+    return processElementsWithTextInGlobalScope(processor,(GlobalSearchScope)searchScope,searcher,searchContext,options.contains(Options.CASE_SENSITIVE_SEARCH),containerName,progress,processInjectedPsi);
   }
   LocalSearchScope scope=(LocalSearchScope)searchScope;
   PsiElement[] scopeElements=scope.getScope();
   final StringSearcher searcher=new StringSearcher(text,options.contains(Options.CASE_SENSITIVE_SEARCH),true,searchContext == UsageSearchContext.IN_STRINGS,options.contains(Options.PROCESS_ONLY_JAVA_IDENTIFIERS_IF_POSSIBLE));
-  Processor<PsiElement> localProcessor=localProcessor(processor,progress,options.contains(Options.PROCESS_INJECTED_PSI),searcher);
+  ReadActionProcessor<PsiElement> localProcessor=new ReadActionProcessor<PsiElement>(){
+    @Override public boolean processInReadAction(    PsiElement scopeElement){
+      if (!scopeElement.isValid())       return true;
+      if (!scopeElement.isPhysical()) {
+        scopeElement=scopeElement.getNavigationElement();
+      }
+      if (scopeElement.getTextRange() == null) {
+        LOG.debug("Element " + scopeElement + " of class "+ scopeElement.getClass()+ " has null range");
+        return true;
+      }
+      return LowLevelSearchUtil.processElementsContainingWordInElement(processor,scopeElement,searcher,processInjectedPsi,progress);
+    }
+    @Override public String toString(){
+      return processor.toString();
+    }
+  }
+;
   return JobLauncher.getInstance().invokeConcurrentlyUnderProgress(Arrays.asList(scopeElements),progress,true,true,localProcessor);
 }

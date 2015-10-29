@@ -1,22 +1,31 @@
 {
   final GradleConsoleProperties properties=new GradleConsoleProperties(configuration,executor);
-  myExecutionConsole=(SMTRunnerConsoleView)SMTestRunnerConnectionUtil.createAndAttachConsole(configuration.getSettings().getExternalSystemId().getReadableName(),processHandler,properties);
-  TestTreeRenderer originalRenderer=ObjectUtils.tryCast(myExecutionConsole.getResultsViewer().getTreeView().getCellRenderer(),TestTreeRenderer.class);
-  if (originalRenderer != null) {
-    originalRenderer.setAdditionalRootFormatter(new SMRootTestProxyFormatter(){
-      @Override public void format(      @NotNull SMTestProxy.SMRootTestProxy testProxy,      @NotNull TestTreeRenderer renderer){
-        final TestStateInfo.Magnitude magnitude=testProxy.getMagnitudeInfo();
-        if (magnitude == TestStateInfo.Magnitude.RUNNING_INDEX) {
-          renderer.clear();
-          renderer.append(GradleBundle.message("gradle.test.runner.ui.tests.tree.presentation.labels.waiting.tests"),SimpleTextAttributes.REGULAR_ATTRIBUTES);
-        }
- else         if (!testProxy.isInProgress() && testProxy.isEmptySuite()) {
-          renderer.clear();
-          renderer.append(GradleBundle.message("gradle.test.runner.ui.tests.tree.presentation.labels.no.tests.were.found"),SimpleTextAttributes.REGULAR_ATTRIBUTES);
+  final SMTRunnerConsoleView executionConsole=(SMTRunnerConsoleView)SMTestRunnerConnectionUtil.createAndAttachConsole(configuration.getSettings().getExternalSystemId().getReadableName(),processHandler,properties);
+  final TestTreeView testTreeView=executionConsole.getResultsViewer().getTreeView();
+  if (testTreeView != null) {
+    TestTreeRenderer originalRenderer=ObjectUtils.tryCast(testTreeView.getCellRenderer(),TestTreeRenderer.class);
+    if (originalRenderer != null) {
+      originalRenderer.setAdditionalRootFormatter(new SMRootTestProxyFormatter(){
+        @Override public void format(        @NotNull SMTestProxy.SMRootTestProxy testProxy,        @NotNull TestTreeRenderer renderer){
+          final TestStateInfo.Magnitude magnitude=testProxy.getMagnitudeInfo();
+          if (magnitude == TestStateInfo.Magnitude.RUNNING_INDEX) {
+            renderer.clear();
+            renderer.append(GradleBundle.message("gradle.test.runner.ui.tests.tree.presentation.labels.waiting.tests"),SimpleTextAttributes.REGULAR_ATTRIBUTES);
+          }
+ else           if (!testProxy.isInProgress() && testProxy.isEmptySuite()) {
+            renderer.clear();
+            renderer.append(GradleBundle.message("gradle.test.runner.ui.tests.tree.presentation.labels.no.tests.were.found"),SimpleTextAttributes.REGULAR_ATTRIBUTES);
+          }
         }
       }
-    }
 );
+    }
   }
-  return myExecutionConsole;
+  if (task instanceof ExternalSystemExecuteTaskTask) {
+    final ExternalSystemExecuteTaskTask executeTask=(ExternalSystemExecuteTaskTask)task;
+    if (executeTask.getScriptParameters() == null || !StringUtil.contains(executeTask.getScriptParameters(),"--tests")) {
+      executeTask.appendScriptParameters("--tests *");
+    }
+  }
+  return new GradleTestsExecutionConsole(executionConsole);
 }

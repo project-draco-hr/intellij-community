@@ -1,0 +1,53 @@
+{
+  final StringBuilder consoleBuffer=executionConsole.getBuffer();
+  if (StringUtil.endsWith(text,"<ijLogEol/>\n")) {
+    consoleBuffer.append(StringUtil.trimEnd(text,"<ijLogEol/>\n")).append('\n');
+    return;
+  }
+ else {
+    consoleBuffer.append(text);
+  }
+  String trimmedText=consoleBuffer.toString().trim();
+  consoleBuffer.setLength(0);
+  if (!StringUtil.startsWith(trimmedText,"<ijLog>") || !StringUtil.endsWith(trimmedText,"</ijLog>")) {
+    if (text.trim().isEmpty())     return;
+    executionConsole.print(text,ConsoleViewContentType.getConsoleViewType(processOutputType));
+    return;
+  }
+  try {
+    final XmlXpathHelper xml=new XmlXpathHelper(trimmedText);
+    final TestEventType eventType=TestEventType.fromValue(xml.queryXml("/ijLog/event/@type"));
+    TestEvent testEvent=null;
+switch (eventType) {
+case CONFIGURATION_ERROR:
+      testEvent=new ConfigurationErrorEvent(executionConsole);
+    break;
+case REPORT_LOCATION:
+  testEvent=new ReportLocationEvent(executionConsole);
+break;
+case BEFORE_TEST:
+testEvent=new BeforeTestEvent(executionConsole);
+break;
+case ON_OUTPUT:
+testEvent=new OnOutputEvent(executionConsole);
+break;
+case AFTER_TEST:
+testEvent=new AfterTestEvent(executionConsole);
+break;
+case BEFORE_SUITE:
+testEvent=new BeforeSuiteEvent(executionConsole);
+break;
+case AFTER_SUITE:
+testEvent=new AfterSuiteEvent(executionConsole);
+break;
+case UNKNOWN_EVENT:
+break;
+}
+if (testEvent != null) {
+testEvent.process(xml);
+}
+}
+ catch (XmlXpathHelper.XmlParserException e) {
+LOG.error("Gradle test events parser error",e);
+}
+}
