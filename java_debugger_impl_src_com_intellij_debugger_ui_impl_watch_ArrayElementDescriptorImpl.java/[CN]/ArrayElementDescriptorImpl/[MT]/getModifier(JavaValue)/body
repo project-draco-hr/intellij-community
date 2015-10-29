@@ -1,0 +1,27 @@
+{
+  return new JavaValueModifier(value){
+    @Override protected void setValueImpl(    @NotNull String expression,    @NotNull XModificationCallback callback){
+      final ArrayElementDescriptorImpl elementDescriptor=ArrayElementDescriptorImpl.this;
+      final ArrayReference array=elementDescriptor.getArray();
+      if (array != null) {
+        if (VirtualMachineProxyImpl.isCollected(array)) {
+          Messages.showWarningDialog(getProject(),DebuggerBundle.message("evaluation.error.array.collected") + "\n" + DebuggerBundle.message("warning.recalculate"),DebuggerBundle.message("title.set.value"));
+          return;
+        }
+        final ArrayType arrType=(ArrayType)array.referenceType();
+        final DebuggerContextImpl debuggerContext=DebuggerManagerEx.getInstanceEx(getProject()).getContext();
+        set(expression,callback,debuggerContext,new SetValueRunnable(){
+          public void setValue(          EvaluationContextImpl evaluationContext,          Value newValue) throws ClassNotLoadedException, InvalidTypeException, EvaluateException {
+            array.setValue(elementDescriptor.getIndex(),preprocessValue(evaluationContext,newValue,arrType.componentType()));
+            update(debuggerContext);
+          }
+          public ReferenceType loadClass(          EvaluationContextImpl evaluationContext,          String className) throws InvocationException, ClassNotLoadedException, IncompatibleThreadStateException, InvalidTypeException, EvaluateException {
+            return evaluationContext.getDebugProcess().loadClass(evaluationContext,className,arrType.classLoader());
+          }
+        }
+);
+      }
+    }
+  }
+;
+}
