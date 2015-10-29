@@ -1,56 +1,56 @@
 {
-  final ActionCallback result=new ActionCallback();
   if (isRerunNeeded(pass)) {
     getUpdater().requeue(pass);
-    result.setRejected();
+    return Promise.reject("requeue");
   }
- else {
-    if (isToYieldUpdateFor(node)) {
-      pass.setCurrentNode(node);
-      boolean wasRun=yieldAndRun(new TreeRunnable("AbstractTreeUi.maybeYeild"){
-        @Override public void perform(){
-          if (pass.isExpired()) {
-            result.setRejected();
-            return;
-          }
-          if (isRerunNeeded(pass)) {
-            runDone(new TreeRunnable("AbstractTreeUi.maybeYeild: rerun"){
-              @Override public void perform(){
-                if (!pass.isExpired()) {
-                  getUpdater().requeue(pass);
-                }
+  if (isToYieldUpdateFor(node)) {
+    final AsyncPromise<Void> result=new AsyncPromise<Void>();
+    pass.setCurrentNode(node);
+    boolean wasRun=yieldAndRun(new TreeRunnable("AbstractTreeUi.maybeYeild"){
+      @Override public void perform(){
+        if (pass.isExpired()) {
+          result.setError("expired");
+          return;
+        }
+        if (isRerunNeeded(pass)) {
+          runDone(new TreeRunnable("AbstractTreeUi.maybeYeild: rerun"){
+            @Override public void perform(){
+              if (!pass.isExpired()) {
+                getUpdater().requeue(pass);
               }
             }
-);
-            result.setRejected();
           }
+);
+          result.setError("requeue");
+        }
  else {
-            try {
-              execute(processRunnable).notify(result);
-            }
- catch (            ProcessCanceledException e) {
-              pass.expire();
-              result.setRejected();
-              cancelUpdate();
-            }
+          try {
+            execute(processRunnable).notify(result);
+          }
+ catch (          ProcessCanceledException e) {
+            pass.expire();
+            result.setError("process cancelled");
+            cancelUpdate();
           }
         }
       }
+    }
 ,pass);
-      if (!wasRun) {
-        result.setRejected();
-      }
+    if (!wasRun) {
+      result.setError("rejected");
     }
- else {
-      try {
-        execute(processRunnable).notify(result);
-      }
- catch (      ProcessCanceledException e) {
-        pass.expire();
-        result.setRejected();
-        cancelUpdate();
-      }
-    }
+    return result;
   }
-  return result;
+ else {
+    AsyncPromise<Void> result=new AsyncPromise<Void>();
+    try {
+      execute(processRunnable,result);
+    }
+ catch (    ProcessCanceledException e) {
+      pass.expire();
+      result.setError("process cancelled");
+      cancelUpdate();
+    }
+    return result;
+  }
 }
