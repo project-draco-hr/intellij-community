@@ -1,14 +1,15 @@
 {
-  if (!canInitiateNewActivity())   return ActionCallback.REJECTED;
-  final ActionCallback result=new ActionCallback();
-  final AtomicBoolean fail=new AtomicBoolean();
+  if (!canInitiateNewActivity())   return Promise.REJECTED;
+  final AsyncPromise<Void> result=new AsyncPromise<Void>();
+  final AtomicReference<ProcessCanceledException> fail=new AtomicReference<ProcessCanceledException>();
   final Runnable finalizer=new TreeRunnable("AbstractTreeUi.queueToBackground: finalizer"){
     @Override public void perform(){
-      if (fail.get()) {
-        result.setRejected();
+      ProcessCanceledException exception=fail.get();
+      if (exception == null) {
+        result.setResult(null);
       }
  else {
-        result.setDone();
+        result.setError(exception);
       }
     }
   }
@@ -40,7 +41,7 @@
                       execute(edtPostRunnable);
                     }
  catch (                    ProcessCanceledException e) {
-                      fail.set(true);
+                      fail.set(e);
                       cancelUpdate();
                     }
  finally {
@@ -55,7 +56,7 @@
               }
             }
  catch (            ProcessCanceledException e) {
-              fail.set(true);
+              fail.set(e);
               unregisterWorkerTask(bgBuildAction,finalizer);
               cancelUpdate();
             }
@@ -85,7 +86,7 @@ catch (            Throwable t) {
         }
       }
  catch (      ProcessCanceledException e) {
-        fail.set(true);
+        fail.set(e);
         unregisterWorkerTask(bgBuildAction,finalizer);
         cancelUpdate();
       }
