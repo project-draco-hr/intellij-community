@@ -1,0 +1,54 @@
+{
+  if (isRerunNeeded(pass)) {
+    getUpdater().requeue(pass);
+    return Promise.REJECTED;
+  }
+  if (isToYieldUpdateFor(node)) {
+    final AsyncPromise<?> result=new AsyncPromise<Void>();
+    pass.setCurrentNode(node);
+    boolean wasRun=yieldAndRun(new TreeRunnable("AbstractTreeUi.maybeYeild"){
+      @Override public void perform(){
+        if (pass.isExpired()) {
+          result.setError("expired");
+          return;
+        }
+        if (isRerunNeeded(pass)) {
+          runDone(new TreeRunnable("AbstractTreeUi.maybeYeild: rerun"){
+            @Override public void perform(){
+              if (!pass.isExpired()) {
+                getUpdater().requeue(pass);
+              }
+            }
+          }
+);
+          result.setError("requeue");
+        }
+ else {
+          try {
+            execute(processRunnable).notify((AsyncPromise)result);
+          }
+ catch (          ProcessCanceledException e) {
+            pass.expire();
+            cancelUpdate();
+            result.setError("rejected");
+          }
+        }
+      }
+    }
+,pass);
+    if (!wasRun) {
+      result.setError("rejected");
+    }
+    return result;
+  }
+ else {
+    try {
+      return execute(processRunnable);
+    }
+ catch (    ProcessCanceledException e) {
+      pass.expire();
+      cancelUpdate();
+      return Promise.REJECTED;
+    }
+  }
+}

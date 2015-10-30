@@ -1,9 +1,11 @@
 {
-  final AsyncResult<Boolean> result=new AsyncResult<Boolean>();
+  Promise<Boolean> promise;
   if (now || isPassthroughMode()) {
-    result.setDone(update(nodeDescriptor));
+    promise=Promise.resolve(update(nodeDescriptor));
   }
  else {
+    final AsyncPromise<Boolean> result=new AsyncPromise<Boolean>();
+    promise=result;
     Object element=getElementFromDescriptor(nodeDescriptor);
     boolean bgLoading=getTreeStructure().isToBuildChildrenInBackground(element);
     boolean edt=isEdt();
@@ -17,25 +19,25 @@
         }
 ,new TreeRunnable("AbstractTreeUi.update: post"){
           @Override public void perform(){
-            result.setDone(changes.get());
+            result.setResult(changes.get());
           }
         }
 );
       }
  else {
-        result.setDone(update(nodeDescriptor));
+        result.setResult(update(nodeDescriptor));
       }
     }
  else {
       if (edt || !myWasEverShown) {
-        result.setDone(update(nodeDescriptor));
+        result.setResult(update(nodeDescriptor));
       }
  else {
         invokeLaterIfNeeded(false,new TreeRunnable("AbstractTreeUi.update: later"){
           @Override public void perform(){
             execute(new TreeRunnable("AbstractTreeUi.update: later execute"){
               @Override public void perform(){
-                result.setDone(update(nodeDescriptor));
+                result.setResult(update(nodeDescriptor));
               }
             }
 );
@@ -45,25 +47,26 @@
       }
     }
   }
-  result.doWhenDone(new Consumer<Boolean>(){
+  promise.done(new Consumer<Boolean>(){
     @Override public void consume(    final Boolean changes){
-      if (changes) {
-        invokeLaterIfNeeded(false,new TreeRunnable("AbstractTreeUi.update: on done result"){
-          @Override public void perform(){
-            Object element=nodeDescriptor.getElement();
-            DefaultMutableTreeNode node=getNodeForElement(element,false);
-            if (node != null) {
-              TreePath path=getPathFor(node);
-              if (myTree.isVisible(path)) {
-                updateNodeImageAndPosition(node,false,changes);
-              }
+      if (!changes) {
+        return;
+      }
+      invokeLaterIfNeeded(false,new TreeRunnable("AbstractTreeUi.update: on done result"){
+        @Override public void perform(){
+          Object element=nodeDescriptor.getElement();
+          DefaultMutableTreeNode node=getNodeForElement(element,false);
+          if (node != null) {
+            TreePath path=getPathFor(node);
+            if (myTree.isVisible(path)) {
+              updateNodeImageAndPosition(node,false,true);
             }
           }
         }
-);
       }
+);
     }
   }
 );
-  return result;
+  return promise;
 }
