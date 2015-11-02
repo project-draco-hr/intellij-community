@@ -1,0 +1,28 @@
+{
+  PsiField[] fields=psiClass.getFields();
+  if (fields.length == 0)   return super.checkClass(psiClass,manager,isOnTheFly);
+  final boolean isQuickFix=InheritanceUtil.isInheritor(psiClass,LocalQuickFix.class.getCanonicalName());
+  if (isQuickFix || shouldCheck(psiClass)) {
+    List<ProblemDescriptor> result=ContainerUtil.newArrayList();
+    for (    final PsiField field : fields) {
+      Checker projectChecker=new Checker(Project.class){
+        @Override boolean predicate(){
+          return !field.hasModifierProperty(PsiModifier.FINAL);
+        }
+      }
+;
+      Checker psiChecker=new Checker(PsiElement.class){
+        @NotNull @Override String getMessage(){
+          return "Potential memory leak: don't hold PsiElement, use SmartPsiElementPointer instead of" + (isQuickFix ? "; also see LocalQuickFixOnPsiElement" : "");
+        }
+      }
+;
+      Checker refChecker=new Checker(PsiReference.class);
+      for (      Checker checker : new Checker[]{projectChecker,psiChecker,refChecker}) {
+        checker.check(field,manager,isOnTheFly,result);
+      }
+    }
+    return result.toArray(new ProblemDescriptor[result.size()]);
+  }
+  return super.checkClass(psiClass,manager,isOnTheFly);
+}
