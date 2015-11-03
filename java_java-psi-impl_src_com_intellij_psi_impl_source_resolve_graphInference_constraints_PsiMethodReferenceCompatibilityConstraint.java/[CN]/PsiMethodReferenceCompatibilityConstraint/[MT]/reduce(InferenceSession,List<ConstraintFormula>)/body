@@ -101,14 +101,12 @@
       referencedMethodReturnType=method.getReturnType();
     }
     LOG.assertTrue(referencedMethodReturnType != null,method);
-    if (!PsiTreeUtil.isContextAncestor(containingClass,myExpression,false) || PsiUtil.getEnclosingStaticElement(myExpression,containingClass) != null) {
-      session.initBounds(myExpression,containingClass.getTypeParameters());
-    }
-    session.initBounds(myExpression,method.getTypeParameters());
     if (typeParameters.length == 0 && method.getTypeParameters().length > 0) {
       final PsiClass interfaceClass=classResolveResult.getElement();
       LOG.assertTrue(interfaceClass != null);
       if (PsiPolyExpressionUtil.mentionsTypeParameters(referencedMethodReturnType,ContainerUtil.newHashSet(method.getTypeParameters()))) {
+        session.registerSiteSubstitutor(psiSubstitutor);
+        session.initBounds(myExpression,method.getTypeParameters());
         session.collectApplicabilityConstraints(myExpression,((MethodCandidateInfo)resolve),groundTargetType);
         session.registerReturnTypeConstraints(psiSubstitutor.substitute(referencedMethodReturnType),returnType);
         return true;
@@ -122,6 +120,9 @@
       if (idx < typeParameters.length) {
         psiSubstitutor=psiSubstitutor.put(param,typeParameters[idx++]);
       }
+    }
+    if (myExpression.isConstructor() && PsiUtil.isRawSubstitutor(containingClass,qualifierResolveResult.getSubstitutor())) {
+      session.initBounds(myExpression,containingClass.getTypeParameters());
     }
     final PsiType capturedReturnType=PsiImplUtil.normalizeWildcardTypeByPosition(psiSubstitutor.substitute(referencedMethodReturnType),myExpression);
     constraints.add(new TypeCompatibilityConstraint(returnType,session.substituteWithInferenceVariables(capturedReturnType)));
