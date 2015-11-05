@@ -1,0 +1,38 @@
+{
+  PsiElement parent=typeElement.getParent();
+  if (parent instanceof PsiLocalVariable && ((PsiLocalVariable)parent).getInitializer() != null || parent instanceof PsiParameter && ((PsiParameter)parent).getDeclarationScope() instanceof PsiForeachStatement) {
+    String text=typeElement.getText();
+    if (LOMBOK_VAL_SHORT_NAME.equals(text) || LOMBOK_VAL_FQN.equals(text)) {
+      PsiJavaCodeReferenceElement referenceElement=typeElement.getInnermostComponentReferenceElement();
+      if (referenceElement != null) {
+        PsiElement resolve=referenceElement.resolve();
+        if (resolve instanceof PsiClass) {
+          if (parent instanceof PsiLocalVariable) {
+            PsiExpression initializer=((PsiVariable)parent).getInitializer();
+            assertNotNull(initializer);
+            PsiType initializerType=initializer.getType();
+            if (initializer instanceof PsiNewExpression) {
+              PsiJavaCodeReferenceElement reference=((PsiNewExpression)initializer).getClassOrAnonymousClassReference();
+              if (reference != null) {
+                PsiReferenceParameterList parameterList=reference.getParameterList();
+                if (parameterList != null) {
+                  PsiTypeElement[] elements=parameterList.getTypeParameterElements();
+                  if (elements.length == 1 && elements[0].getType() instanceof PsiDiamondType) {
+                    return TypeConversionUtil.erasure(initializerType);
+                  }
+                }
+              }
+            }
+            return initializerType;
+          }
+          PsiForeachStatement foreachStatement=(PsiForeachStatement)((PsiParameter)parent).getDeclarationScope();
+          PsiExpression iteratedValue=foreachStatement.getIteratedValue();
+          if (iteratedValue != null) {
+            return JavaGenericsUtil.getCollectionItemType(iteratedValue);
+          }
+        }
+      }
+    }
+  }
+  return null;
+}

@@ -6,7 +6,9 @@
     final PsiManager manager=PsiManager.getInstance(project);
     final PsiElementFactory factory=JavaPsiFacade.getInstance(manager.getProject()).getElementFactory();
     final PsiJavaFile javaFile=(PsiJavaFile)psiClass.getContainingFile();
+    final List<PsiElement> convertedElements=new SmartList<PsiElement>();
     for (    PsiMethod method : psiClass.getMethods()) {
+      final PsiMethodCallExpression[] methodCalls=getTestCaseCalls(method);
       if (method.isConstructor()) {
         convertJUnitConstructor(method);
       }
@@ -16,86 +18,56 @@
         }
  else {
           if (TestNGUtil.containsJunitAnnotions(method)) {
-            convertJunitAnnotions(factory,method);
+            convertedElements.addAll(convertJunitAnnotations(factory,method));
           }
  else {
-            addMethodAnnotations(factory,method);
+            convertedElements.add(addMethodAnnotations(factory,method));
           }
         }
       }
-      final PsiMethodCallExpression[] methodCalls=getTestCaseCalls(method);
       for (      PsiMethodCallExpression methodCall : methodCalls) {
         PsiMethod assertMethod=methodCall.resolveMethod();
         if (assertMethod == null) {
           continue;
         }
-        PsiAssertStatement assertStatement=null;
         @NonNls String methodName=assertMethod.getName();
         PsiExpression[] expressions=methodCall.getArgumentList().getExpressions();
         final PsiStatement methodCallStatement=PsiTreeUtil.getParentOfType(methodCall,PsiStatement.class);
         LOG.assertTrue(methodCallStatement != null);
-        if ("assertTrue".equals(methodName) || "assertFalse".equals(methodName)) {
-          if (expressions.length == 1) {
-            assertStatement=createAssert(factory,null,methodCall);
-            final PsiExpression assertCondition=assertStatement.getAssertCondition();
-            LOG.assertTrue(assertCondition != null);
-            assertCondition.replace(expressions[0]);
-          }
- else           if (expressions.length == 2) {
-            assertStatement=createAssert(factory,expressions[0],methodCall);
-            final PsiExpression assertCondition=assertStatement.getAssertCondition();
-            LOG.assertTrue(assertCondition != null);
-            assertCondition.replace(expressions[1]);
-          }
-          if ("assertFalse".equals(methodName) && assertStatement != null) {
-            PsiExpression assertCondition=assertStatement.getAssertCondition();
-            LOG.assertTrue(assertCondition != null);
-            assertCondition.replace(factory.createExpressionFromText("!(" + assertCondition.getText() + ')',PsiTreeUtil.getParentOfType(assertCondition,PsiMethodCallExpression.class)));
-          }
-        }
- else         if ("assertNull".equals(methodName) || "assertNotNull".equals(methodName)) {
-          String operator="assertNull".equals(methodName) ? "==" : "!=";
-          if (expressions.length == 1) {
-            assertStatement=createAssert(factory,null,methodCall);
-            PsiExpression expression=factory.createExpressionFromText(expressions[0].getText() + ' ' + operator+ " null",assertStatement);
-            final PsiExpression assertCondition=assertStatement.getAssertCondition();
-            LOG.assertTrue(assertCondition != null);
-            assertCondition.replace(expression);
-          }
- else           if (expressions.length == 2) {
-            assertStatement=createAssert(factory,expressions[0],methodCall.getParent());
-            PsiExpression expression=factory.createExpressionFromText(expressions[1].getText() + ' ' + operator+ " null",assertStatement);
-            final PsiExpression assertCondition=assertStatement.getAssertCondition();
-            LOG.assertTrue(assertCondition != null);
-            assertCondition.replace(expression);
-          }
+        final String qualifierTemplate=methodCall.getMethodExpression().getQualifierExpression() != null ? "$qualifier$." : "";
+        final String searchTemplate;
+        final String replaceTemplate;
+        if ("assertNull".equals(methodName) || "assertNotNull".equals(methodName) || "assertTrue".equals(methodName)|| "assertFalse".equals(methodName)) {
+          boolean hasMessage=expressions.length == 2;
+          searchTemplate=qualifierTemplate + "$method$($object$ " + (hasMessage ? ",$msg$" : "")+ ")";
+          replaceTemplate="org.testng.Assert.$method$(" + (hasMessage ? "$msg$," : "") + "$object$)";
         }
  else         if ("fail".equals(methodName)) {
-          if (expressions.length == 0) {
-            assertStatement=createAssert(factory,null,methodCall);
-          }
- else           if (expressions.length == 1) {
-            assertStatement=createAssert(factory,expressions[0],methodCall);
-          }
+          boolean hasMessage=expressions.length == 1;
+          searchTemplate=qualifierTemplate + "$method$(" + (hasMessage ? "$msg$" : "")+ ")";
+          replaceTemplate="org.testng.Assert.$method$(" + (hasMessage ? "$msg$" : "") + ")";
+        }
+ else         if ("assertThat".equals(methodName)) {
+          String paramTemplate=(expressions.length == 3 ? "$msg$," : "") + "$actual$, $matcher$";
+          searchTemplate=qualifierTemplate + "assertThat(" + paramTemplate+ ")";
+          replaceTemplate="org.hamcrest.MatcherAssert.assertThat(" + paramTemplate + ")";
         }
  else {
-          PsiElement inserted=null;
-          if (expressions.length == 2) {
-            final PsiExpression qualifierExpression=methodCall.getMethodExpression().getQualifierExpression();
-            final String text="org.testng." + (qualifierExpression == null ? "Assert." : "") + methodCall.getText()+ ";";
-            inserted=methodCallStatement.replace(factory.createStatementFromText(text,methodCall.getParent()));
+          boolean hasMessage=hasMessage(methodCall);
+          if ((hasMessage && expressions.length == 4) || (!hasMessage && expressions.length == 3)) {
+            searchTemplate=qualifierTemplate + "$method$";
+            replaceTemplate="org.testng.AssertJUnit.$method$";
           }
- else           if (expressions.length == 3) {
-            @NonNls String call="org.testng.Assert." + methodName + '('+ expressions[2].getText()+ ", "+ expressions[1].getText()+ ", "+ expressions[0].getText()+ ");";
-            inserted=methodCallStatement.replace(factory.createStatementFromText(call,methodCall.getParent()));
-          }
-          if (inserted != null) {
-            JavaCodeStyleManager.getInstance(project).shortenClassReferences(inserted);
+ else {
+            String replaceMethodWildCard="$method$";
+            if (methodName.equals("assertArrayEquals")) {
+              replaceMethodWildCard="assertEquals";
+            }
+            searchTemplate=qualifierTemplate + "$method$(" + (hasMessage ? "$msg$, " : "")+ "$expected$, $actual$"+ ")";
+            replaceTemplate="org.testng.Assert." + replaceMethodWildCard + "($actual$, $expected$ "+ (hasMessage ? ", $msg$" : "")+ ")";
           }
         }
-        if (assertStatement != null) {
-          methodCallStatement.replace(assertStatement);
-        }
+        convertedElements.add(TypeConversionDescriptor.replaceExpression(methodCall,searchTemplate,replaceTemplate));
       }
     }
     final PsiClass superClass=psiClass.getSuperClass();
@@ -106,7 +78,9 @@
         element.delete();
       }
     }
-    JavaCodeStyleManager.getInstance(project).optimizeImports(javaFile);
+    final JavaCodeStyleManager codeStyleManager=JavaCodeStyleManager.getInstance(project);
+    codeStyleManager.optimizeImports(javaFile);
+    codeStyleManager.shortenClassReferences(javaFile);
   }
  catch (  IncorrectOperationException e) {
     LOG.error("Error converting testcase",e);

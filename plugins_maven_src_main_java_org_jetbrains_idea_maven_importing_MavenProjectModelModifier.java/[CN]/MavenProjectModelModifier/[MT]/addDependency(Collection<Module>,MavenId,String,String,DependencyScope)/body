@@ -1,0 +1,40 @@
+{
+  final List<Pair<MavenDomProjectModel,MavenId>> models=new ArrayList<Pair<MavenDomProjectModel,MavenId>>(fromModules.size());
+  List<XmlFile> files=new ArrayList<XmlFile>(fromModules.size());
+  List<MavenProject> projectToUpdate=new ArrayList<MavenProject>(fromModules.size());
+  for (  Module from : fromModules) {
+    if (!myProjectsManager.isMavenizedModule(from))     return null;
+    MavenProject fromProject=myProjectsManager.findProject(from);
+    if (fromProject == null)     return null;
+    final MavenDomProjectModel model=MavenDomUtil.getMavenDomProjectModel(myProject,fromProject.getFile());
+    if (model == null)     return null;
+    String version=null;
+    if (mavenId.getGroupId() != null && mavenId.getArtifactId() != null) {
+      MavenDomDependency managedDependency=MavenDependencyCompletionUtil.findManagedDependency(model,myProject,mavenId.getGroupId(),mavenId.getArtifactId());
+      if (managedDependency == null || StringUtil.isEmpty(managedDependency.getVersion().getStringValue())) {
+        version=selectVersion(mavenId,minVersion,maxVersion);
+      }
+    }
+    models.add(Pair.create(model,new MavenId(mavenId.getGroupId(),mavenId.getArtifactId(),version)));
+    files.add(DomUtil.getFile(model));
+    projectToUpdate.add(fromProject);
+  }
+  new WriteCommandAction(myProject,"Add Maven Dependency",PsiUtilCore.toPsiFileArray(files)){
+    @Override protected void run(    @NotNull Result result) throws Throwable {
+      for (      Pair<MavenDomProjectModel,MavenId> pair : models) {
+        final MavenDomProjectModel model=pair.first;
+        MavenDomDependency dependency=MavenDomUtil.createDomDependency(model,null,pair.second);
+        String mavenScope=getMavenScope(scope);
+        if (mavenScope != null) {
+          dependency.getScope().setStringValue(mavenScope);
+        }
+        Document document=PsiDocumentManager.getInstance(myProject).getDocument(DomUtil.getFile(model));
+        if (document != null) {
+          FileDocumentManager.getInstance().saveDocument(document);
+        }
+      }
+    }
+  }
+.execute();
+  return myProjectsManager.forceUpdateProjects(projectToUpdate);
+}

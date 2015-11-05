@@ -1,7 +1,28 @@
 {
-  if (!file.isValid())   return false;
+  if (!psiFile.isValid())   return false;
   int offset=editor.getCaretModel().getOffset();
-  PsiElement element=file.findElementAt(offset);
-  boolean inProject=file.getManager().isInProject(file);
-  return isAvailableHere(editor,file,element,inProject,action);
+  PsiElement psiElement=psiFile.findElementAt(offset);
+  boolean inProject=psiFile.getManager().isInProject(psiFile);
+  try {
+    Project project=psiFile.getProject();
+    if (action instanceof SuppressIntentionActionFromFix) {
+      final ThreeState shouldBeAppliedToInjectionHost=((SuppressIntentionActionFromFix)action).isShouldBeAppliedToInjectionHost();
+      if (editor instanceof EditorWindow && shouldBeAppliedToInjectionHost == ThreeState.YES) {
+        return false;
+      }
+      if (!(editor instanceof EditorWindow) && shouldBeAppliedToInjectionHost == ThreeState.NO) {
+        return false;
+      }
+    }
+    if (action instanceof PsiElementBaseIntentionAction) {
+      if (!inProject || psiElement == null || !((PsiElementBaseIntentionAction)action).isAvailable(project,editor,psiElement))       return false;
+    }
+ else     if (!action.isAvailable(project,editor,psiFile)) {
+      return false;
+    }
+  }
+ catch (  IndexNotReadyException e) {
+    return false;
+  }
+  return true;
 }
