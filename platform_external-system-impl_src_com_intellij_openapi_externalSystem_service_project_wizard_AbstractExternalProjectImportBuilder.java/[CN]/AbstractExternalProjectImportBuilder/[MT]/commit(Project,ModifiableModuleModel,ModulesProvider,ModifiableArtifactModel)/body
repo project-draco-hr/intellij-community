@@ -4,7 +4,7 @@
   if (externalProjectNode != null) {
     beforeCommit(externalProjectNode,project);
   }
-  boolean isFromUI=model != null;
+  final boolean isFromUI=model != null;
   final List<Module> modules=ContainerUtil.newSmartList();
   final IdeModifiableModelsProvider modelsProvider=isFromUI ? new IdeUIModifiableModelsProvider(project,model,(ModulesConfigurator)modulesProvider,artifactModel){
     @NotNull @Override public Module newModule(    @NotNull @NonNls String filePath,    String moduleTypeId){
@@ -31,33 +31,12 @@
         dialog.dispose();
       }
     }
-    myProjectDataManager.importData(externalProjectNode,project,modelsProvider,true);
-    myExternalProjectNode=null;
-    final Runnable resolveDependenciesTask=new Runnable(){
+    StartupManager.getInstance(project).runWhenProjectIsInitialized(new Runnable(){
       @Override public void run(){
-        ExternalSystemUtil.refreshProject(project,myExternalSystemId,projectSettings.getExternalProjectPath(),false,ProgressExecutionMode.IN_BACKGROUND_ASYNC);
+        finishImport(project,externalProjectNode,isFromUI,modules,modelsProvider,projectSettings);
       }
     }
-;
-    if (!isFromUI) {
-      resolveDependenciesTask.run();
-    }
- else {
-      ExternalSystemUtil.invokeLater(project,ModalityState.NON_MODAL,new Runnable(){
-        @Override public void run(){
-          final Module[] committedModules=ModuleManager.getInstance(project).getModules();
-          if (ContainerUtil.list(committedModules).containsAll(modules)) {
-            resolveDependenciesTask.run();
-          }
- else {
-            ExternalSystemApiUtil.getLocalSettings(project,myExternalSystemId).forgetExternalProjects(Collections.singleton(projectSettings.getExternalProjectPath()));
-            ExternalSystemApiUtil.getSettings(project,myExternalSystemId).unlinkExternalProject(projectSettings.getExternalProjectPath());
-            ExternalProjectsManager.getInstance(project).forgetExternalProjectData(myExternalSystemId,projectSettings.getExternalProjectPath());
-          }
-        }
-      }
 );
-    }
   }
   return modules;
 }
