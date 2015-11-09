@@ -1,0 +1,30 @@
+{
+  final PsiElement parent=finallyBlock.getParent();
+  if (!(parent instanceof PsiTryStatement)) {
+    return false;
+  }
+  final PsiTryStatement tryStatement=(PsiTryStatement)parent;
+  final PsiCodeBlock[] catchBlocks=tryStatement.getCatchBlocks();
+  if (catchBlocks.length == 0) {
+    return true;
+  }
+  final PsiIfStatement ifStatement=getParentOfType(throwElement,PsiIfStatement.class,finallyBlock);
+  if (ifStatement == null) {
+    return true;
+  }
+  final boolean inThenBranch=PsiTreeUtil.isAncestor(ifStatement.getThenBranch(),throwElement,false);
+  final boolean inElseBranch=PsiTreeUtil.isAncestor(ifStatement.getElseBranch(),throwElement,false);
+  if (!inThenBranch && !inElseBranch) {
+    return true;
+  }
+  final PsiExpression condition=ifStatement.getCondition();
+  final PsiVariable variable=ExpressionUtils.getVariableFromNullComparison(condition,inThenBranch);
+  if (variable == null) {
+    return true;
+  }
+  boolean assigned=true;
+  for (  PsiCodeBlock catchBlock : catchBlocks) {
+    assigned&=VariableAccessUtils.variableIsAssigned(variable,catchBlock);
+  }
+  return !assigned;
+}
