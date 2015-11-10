@@ -11,26 +11,32 @@
     if (decompiler != null) {
       CharSequence text;
       Application app=ApplicationManager.getApplication();
-      if (app != null && app.isDispatchThread() && !app.isWriteAccessAllowed() && !GraphicsEnvironment.isHeadless()) {
+      if (app != null && app.isDispatchThread() && !app.isWriteAccessAllowed() && !ourDecompileProgressStarted) {
         final Ref<CharSequence> result=Ref.create(ArrayUtil.EMPTY_CHAR_SEQUENCE);
         final Ref<Throwable> error=Ref.create();
-        ProgressManager.getInstance().run(new Task.Modal(null,"Decompiling " + file.getName(),true){
-          @Override public void run(          @NotNull ProgressIndicator indicator){
-            indicator.setIndeterminate(true);
-            try {
-              result.set(ApplicationUtil.runWithCheckCanceled(new Callable<CharSequence>(){
-                @Override public CharSequence call(){
-                  return decompiler.decompile(file);
+        ourDecompileProgressStarted=true;
+        try {
+          ProgressManager.getInstance().run(new Task.Modal(null,"Decompiling " + file.getName(),true){
+            @Override public void run(            @NotNull ProgressIndicator indicator){
+              indicator.setIndeterminate(true);
+              try {
+                result.set(ApplicationUtil.runWithCheckCanceled(new Callable<CharSequence>(){
+                  @Override public CharSequence call(){
+                    return decompiler.decompile(file);
+                  }
                 }
-              }
 ,indicator));
-            }
- catch (            Throwable t) {
-              error.set(t);
+              }
+ catch (              Throwable t) {
+                error.set(t);
+              }
             }
           }
-        }
 );
+        }
+  finally {
+          ourDecompileProgressStarted=false;
+        }
         ExceptionUtil.rethrowUnchecked(error.get());
         text=result.get();
       }

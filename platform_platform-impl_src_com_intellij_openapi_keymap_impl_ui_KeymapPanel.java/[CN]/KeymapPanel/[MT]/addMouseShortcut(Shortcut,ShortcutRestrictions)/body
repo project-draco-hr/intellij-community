@@ -3,21 +3,18 @@
   if (actionId == null) {
     return;
   }
-  Keymap keymap=createKeymapCopyIfNeeded();
-  MouseShortcut mouseShortcut=shortcut instanceof MouseShortcut ? (MouseShortcut)shortcut : null;
-  Project project=CommonDataKeys.PROJECT.getData(DataManager.getInstance().getDataContext(this));
-  MouseShortcutDialog dialog=new MouseShortcutDialog(this,mouseShortcut,keymap,actionId,ActionsTreeUtil.createMainGroup(project,keymap,myQuickLists,null,true,null),restrictions);
-  if (!dialog.showAndGet()) {
-    return;
-  }
-  mouseShortcut=dialog.getMouseShortcut();
+  Keymap keymapSelected=myEditor.getModel().getSelected();
+  MouseShortcutDialog dialog=new MouseShortcutDialog(this,restrictions.allowMouseDoubleClick);
+  MouseShortcut mouseShortcut=dialog.showAndGet(shortcut,actionId,keymapSelected,myQuickLists);
   if (mouseShortcut == null) {
     return;
   }
-  String[] actionIds=keymap.getActionIds(mouseShortcut);
-  if (actionIds.length > 1 || (actionIds.length == 1 && !actionId.equals(actionIds[0]))) {
-    int result=Messages.showYesNoCancelDialog(this,KeyMapBundle.message("conflict.shortcut.dialog.message"),KeyMapBundle.message("conflict.shortcut.dialog.title"),KeyMapBundle.message("conflict.shortcut.dialog.remove.button"),KeyMapBundle.message("conflict.shortcut.dialog.leave.button"),KeyMapBundle.message("conflict.shortcut.dialog.cancel.button"),Messages.getWarningIcon());
+  Keymap keymap=null;
+  if (dialog.hasConflicts()) {
+    int result=showConfirmationDialog(this);
     if (result == Messages.YES) {
+      keymap=createKeymapCopyIfNeededAndPossible(this,keymapSelected);
+      String[] actionIds=keymap.getActionIds(mouseShortcut);
       for (      String id : actionIds) {
         keymap.removeShortcut(id,mouseShortcut);
       }
@@ -26,6 +23,7 @@
       return;
     }
   }
+  if (keymap == null)   keymap=createKeymapCopyIfNeededAndPossible(this,keymapSelected);
   Shortcut[] shortcuts=keymap.getShortcuts(actionId);
   for (  Shortcut shortcut1 : shortcuts) {
     if (shortcut1.equals(mouseShortcut)) {
