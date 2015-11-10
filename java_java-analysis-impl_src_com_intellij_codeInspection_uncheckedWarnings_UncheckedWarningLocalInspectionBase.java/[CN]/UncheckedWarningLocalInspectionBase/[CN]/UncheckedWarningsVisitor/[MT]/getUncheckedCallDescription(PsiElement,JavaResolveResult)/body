@@ -3,7 +3,22 @@
   if (!(element instanceof PsiMethod))   return null;
   final PsiMethod method=(PsiMethod)element;
   final PsiSubstitutor substitutor=resolveResult.getSubstitutor();
-  if (!PsiUtil.isRawSubstitutor(method,substitutor))   return null;
+  if (!PsiUtil.isRawSubstitutor(method,substitutor)) {
+    if (JavaVersionService.getInstance().isAtLeast(place,JavaSdkVersion.JDK_1_8)) {
+      for (      PsiTypeParameter parameter : PsiUtil.typeParametersIterable(method)) {
+        final PsiClassType[] extendsListTypes=parameter.getExtendsListTypes();
+        if (extendsListTypes.length > 0) {
+          final PsiType subst=substitutor.substitute(parameter);
+          for (          PsiClassType classType : extendsListTypes) {
+            if (JavaGenericsUtil.isRawToGeneric(substitutor.substitute(classType),subst)) {
+              return JavaErrorMessages.message("generics.unchecked.call",JavaHighlightUtil.formatMethod(method));
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
   final PsiParameter[] parameters=method.getParameterList().getParameters();
   for (  final PsiParameter parameter : parameters) {
     final PsiType parameterType=parameter.getType();
