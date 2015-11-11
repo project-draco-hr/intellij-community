@@ -1,9 +1,12 @@
 {
   List<ClassNode> copy=new ArrayList<ClassNode>(node.nested);
   for (  ClassNode child : copy) {
+    if (child.classStruct.hasModifier(CodeConstants.ACC_SYNTHETIC)) {
+      continue;
+    }
     if ((child.type == ClassNode.CLASS_LOCAL || child.type == ClassNode.CLASS_ANONYMOUS) && child.enclosingMethod == null) {
       Set<String> setEnclosing=child.enclosingClasses;
-      if (setEnclosing.size() == 1) {
+      if (!setEnclosing.isEmpty()) {
         StructEnclosingMethodAttribute attr=(StructEnclosingMethodAttribute)child.classStruct.getAttributes().getWithKey("EnclosingMethod");
         if (attr != null && attr.getMethodName() != null && node.classStruct.qualifiedName.equals(attr.getClassName()) && node.classStruct.getMethod(attr.getMethodName(),attr.getMethodDescriptor()) != null) {
           child.enclosingMethod=InterpreterUtil.makeUniqueKey(attr.getMethodName(),attr.getMethodDescriptor());
@@ -13,16 +16,11 @@
       node.nested.remove(child);
       child.parent=null;
       setEnclosing.remove(node.classStruct.qualifiedName);
-      boolean hasEnclosing=!setEnclosing.isEmpty();
-      if (hasEnclosing) {
-        hasEnclosing=insertNestedClass(root,child);
-      }
+      boolean hasEnclosing=!setEnclosing.isEmpty() && insertNestedClass(root,child);
       if (!hasEnclosing) {
         if (child.type == ClassNode.CLASS_ANONYMOUS) {
-          if (!child.classStruct.hasModifier(CodeConstants.ACC_SYNTHETIC)) {
-            String message="Unreferenced anonymous class " + child.classStruct.qualifiedName + "!";
-            DecompilerContext.getLogger().writeMessage(message,IFernflowerLogger.Severity.WARN);
-          }
+          String message="Unreferenced anonymous class " + child.classStruct.qualifiedName + "!";
+          DecompilerContext.getLogger().writeMessage(message,IFernflowerLogger.Severity.WARN);
         }
  else         if (child.type == ClassNode.CLASS_LOCAL) {
           String message="Unreferenced local class " + child.classStruct.qualifiedName + "!";
