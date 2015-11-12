@@ -2,16 +2,7 @@
   if (!(context instanceof PsiMethodCallExpression)) {
     if ("or".equals(methodName)) {
       PsiMethodCallExpression methodCallExpression=null;
-      if (context instanceof PsiMethodCallExpression) {
-        final PsiClass aClass=getParameterClass(method);
-        if (aClass != null) {
-          final String qName=aClass.getQualifiedName();
-          String pattern=GUAVA_OPTIONAL.equals(qName) ? "java.util.Optional.ofNullable($expr$.get())" : "java.util.Optional.ofNullable($expr$)";
-          return new TypeConversionDescriptor("$expr$",pattern);
-        }
-        return null;
-      }
- else       if (context.getParent() instanceof PsiMethodCallExpression) {
+      if (context.getParent() instanceof PsiMethodCallExpression) {
         methodCallExpression=(PsiMethodCallExpression)context.getParent();
       }
       if (methodCallExpression == null) {
@@ -21,7 +12,13 @@
       if (aClass != null) {
         final String qName=aClass.getQualifiedName();
         if (GUAVA_OPTIONAL.equals(qName)) {
-          TypeConversionDescriptor descriptor=new TypeConversionDescriptor("$val$.or($other$)","java.util.Optional.ofNullable($val$.orElseGet($other$::get))");
+          TypeConversionDescriptor descriptor=new TypeConversionDescriptor(null,"java.util.Optional.ofNullable($val$.orElseGet($o$::get))"){
+            @Override public PsiExpression replace(            PsiExpression expression){
+              setStringToReplace("$val$.or(" + GuavaOptionalConversionUtil.simplifyParameterPattern((PsiMethodCallExpression)expression) + ")");
+              return super.replace(expression);
+            }
+          }
+;
           if (to != null) {
             descriptor.withConversionType(to);
           }
@@ -32,7 +29,7 @@
       return null;
     }
  else     if ("transform".equals(methodName)) {
-      final PsiMethodCallExpression methodCall=(PsiMethodCallExpression)(context instanceof PsiMethodCallExpression ? context : context.getParent());
+      final PsiMethodCallExpression methodCall=(PsiMethodCallExpression)(context.getParent());
       final PsiExpression[] arguments=methodCall.getArgumentList().getExpressions();
       if (arguments.length != 1) {
         return null;
