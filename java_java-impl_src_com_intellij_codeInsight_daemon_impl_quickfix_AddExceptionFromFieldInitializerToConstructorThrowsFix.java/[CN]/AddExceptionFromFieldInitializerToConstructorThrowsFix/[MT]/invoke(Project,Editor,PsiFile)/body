@@ -1,0 +1,26 @@
+{
+  if (!FileModificationService.getInstance().prepareFileForWrite(file))   return;
+  PsiDocumentManager.getInstance(project).commitAllDocuments();
+  final NavigatablePsiElement field=PsiTreeUtil.getParentOfType(myWrongElement,PsiMethod.class,PsiFunctionalExpression.class,PsiField.class);
+  if (field instanceof PsiField) {
+    final PsiClass aClass=((PsiField)field).getContainingClass();
+    if (aClass != null) {
+      PsiMethod[] constructors=aClass.getConstructors();
+      if (constructors.length == 0) {
+        final AddDefaultConstructorFix defaultConstructorFix=new AddDefaultConstructorFix(aClass);
+        ApplicationManager.getApplication().runWriteAction(new Runnable(){
+          @Override public void run(){
+            defaultConstructorFix.invoke(project,null,file);
+          }
+        }
+);
+        constructors=aClass.getConstructors();
+        LOG.assertTrue(constructors.length != 0);
+      }
+      Set<PsiClassType> unhandledExceptions=new THashSet<PsiClassType>(ExceptionUtil.getUnhandledExceptions(field));
+      for (      PsiMethod constructor : constructors) {
+        AddExceptionToThrowsFix.addExceptionsToThrowsList(project,constructor,unhandledExceptions);
+      }
+    }
+  }
+}
