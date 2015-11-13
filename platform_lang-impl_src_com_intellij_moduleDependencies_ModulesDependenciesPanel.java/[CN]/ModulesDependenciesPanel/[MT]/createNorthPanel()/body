@@ -1,30 +1,50 @@
 {
   DefaultActionGroup group=new DefaultActionGroup();
-  group.add(new AnAction(CommonBundle.message("action.close"),AnalysisScopeBundle.message("action.close.modules.dependencies.description"),AllIcons.Actions.Cancel){
+  group.add(new AnAction(CommonBundle.message("action.close"),null,AllIcons.Actions.Cancel){
     @Override public void actionPerformed(    AnActionEvent e){
       DependenciesAnalyzeManager.getInstance(myProject).closeContent(myContent);
     }
   }
 );
-  appendDependenciesAction(group);
-  group.add(new ToggleAction(AnalysisScopeBundle.message("action.module.dependencies.direction"),"",isForwardDirection() ? AllIcons.Actions.SortAsc : AllIcons.Actions.SortDesc){
-    @Override public boolean isSelected(    AnActionEvent e){
-      return isForwardDirection();
+  final AnAction analyzeDepsAction=ActionManager.getInstance().getAction(IdeActions.ACTION_ANALYZE_DEPENDENCIES);
+  group.add(new AnAction(analyzeDepsAction.getTemplatePresentation().getText(),null,AllIcons.Toolwindows.ToolWindowInspection){
+    @Override public void actionPerformed(    AnActionEvent e){
+      analyzeDepsAction.actionPerformed(e);
     }
-    @Override public void setSelected(    AnActionEvent e,    boolean state){
-      PropertiesComponent.getInstance(myProject).setValue(DIRECTION,String.valueOf(state));
-      initLeftTreeModel();
-    }
-    @Override public void update(    final AnActionEvent e){
-      e.getPresentation().setIcon(isForwardDirection() ? AllIcons.Actions.SortAsc : AllIcons.Actions.SortDesc);
+    @Override public void update(    AnActionEvent e){
+      analyzeDepsAction.update(e);
     }
   }
 );
-  group.add(new ContextHelpAction(ourHelpID));
+  group.add(new ToggleAction(AnalysisScopeBundle.message("action.module.dependencies.direction")){
+    @Override public boolean isSelected(    AnActionEvent e){
+      return !myState.forwardDirection;
+    }
+    @Override public void setSelected(    AnActionEvent e,    boolean state){
+      myState.forwardDirection=!state;
+      updateLeftTree();
+    }
+    @Override public void update(    @NotNull AnActionEvent e){
+      e.getPresentation().setIcon(myState.forwardDirection ? AllIcons.Hierarchy.Subtypes : AllIcons.Hierarchy.Supertypes);
+      super.update(e);
+    }
+  }
+);
+  group.add(new ToggleAction(AnalysisScopeBundle.message("action.module.dependencies.tests"),null,AllIcons.Modules.TestSourceFolder){
+    @Override public boolean isSelected(    AnActionEvent e){
+      return myState.includeTests;
+    }
+    @Override public void setSelected(    AnActionEvent e,    boolean state){
+      myState.includeTests=state;
+      updateModuleGraph();
+      updateLeftTree();
+    }
+  }
+);
+  group.add(new ContextHelpAction(HELP_ID));
   ActionToolbar toolbar=ActionManager.getInstance().createActionToolbar(ActionPlaces.UNKNOWN,group,true);
-  final JPanel panel=new JPanel(new BorderLayout());
-  panel.add(toolbar.getComponent(),BorderLayout.NORTH);
-  panel.add(myPathField,BorderLayout.SOUTH);
-  myPathField.setEditable(false);
+  JPanel panel=new JPanel(new BorderLayout());
+  panel.add(toolbar.getComponent(),BorderLayout.WEST);
+  panel.add(myPathField,BorderLayout.CENTER);
   return panel;
 }

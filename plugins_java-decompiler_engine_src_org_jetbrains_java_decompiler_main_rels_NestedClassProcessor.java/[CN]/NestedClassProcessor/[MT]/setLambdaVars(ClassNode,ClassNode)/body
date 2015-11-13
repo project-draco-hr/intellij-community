@@ -2,23 +2,22 @@
   if (child.lambdaInformation.is_method_reference) {
     return;
   }
-  final MethodWrapper meth=parent.getWrapper().getMethods().getWithKey(child.lambdaInformation.content_method_key);
-  final MethodWrapper encmeth=parent.getWrapper().getMethods().getWithKey(child.enclosingMethod);
+  MethodWrapper method=parent.getWrapper().getMethods().getWithKey(child.lambdaInformation.content_method_key);
+  final MethodWrapper enclosingMethod=parent.getWrapper().getMethods().getWithKey(child.enclosingMethod);
   MethodDescriptor md_lambda=MethodDescriptor.parseDescriptor(child.lambdaInformation.method_descriptor);
   final MethodDescriptor md_content=MethodDescriptor.parseDescriptor(child.lambdaInformation.content_method_descriptor);
   final int vars_count=md_content.params.length - md_lambda.params.length;
   final boolean is_static_lambda_content=child.lambdaInformation.is_content_method_static;
-  final String parent_class_name=parent.getWrapper().getClassStruct().qualifiedName;
-  final String lambda_class_name=child.simpleName;
+  String parent_class_name=parent.getWrapper().getClassStruct().qualifiedName;
+  String lambda_class_name=child.simpleName;
   final VarType lambda_class_type=new VarType(lambda_class_name,true);
   if (!is_static_lambda_content && DecompilerContext.getOption(IFernflowerPreferences.LAMBDA_TO_ANONYMOUS_CLASS)) {
-    meth.varproc.getThisVars().put(new VarVersionPair(0,0),parent_class_name);
-    meth.varproc.setVarName(new VarVersionPair(0,0),parent.simpleName + ".this");
+    method.varproc.getThisVars().put(new VarVersionPair(0,0),parent_class_name);
+    method.varproc.setVarName(new VarVersionPair(0,0),parent.simpleName + ".this");
   }
-  DirectGraph graph=encmeth.getOrBuildGraph();
-  final HashMap<VarVersionPair,String> mapNewNames=new HashMap<VarVersionPair,String>();
-  graph.iterateExprents(new DirectGraph.ExprentIterator(){
-    public int processExprent(    Exprent exprent){
+  final Map<VarVersionPair,String> mapNewNames=new HashMap<VarVersionPair,String>();
+  enclosingMethod.getOrBuildGraph().iterateExprents(new DirectGraph.ExprentIterator(){
+    @Override public int processExprent(    Exprent exprent){
       List<Exprent> lst=exprent.getAllExprents(true);
       lst.add(exprent);
       for (      Exprent expr : lst) {
@@ -27,15 +26,15 @@
           if (new_expr.isLambda() && lambda_class_type.equals(new_expr.getNewType())) {
             InvocationExprent inv_dynamic=new_expr.getConstructor();
             int param_index=is_static_lambda_content ? 0 : 1;
-            int varindex=is_static_lambda_content ? 0 : 1;
+            int varIndex=is_static_lambda_content ? 0 : 1;
             for (int i=0; i < vars_count; ++i) {
               Exprent param=inv_dynamic.getLstParameters().get(param_index + i);
               if (param.type == Exprent.EXPRENT_VAR) {
-                VarVersionPair enc_varpaar=new VarVersionPair((VarExprent)param);
-                String enc_varname=encmeth.varproc.getVarName(enc_varpaar);
-                mapNewNames.put(new VarVersionPair(varindex,0),enc_varname);
+                VarVersionPair pair=new VarVersionPair((VarExprent)param);
+                String name=enclosingMethod.varproc.getVarName(pair);
+                mapNewNames.put(new VarVersionPair(varIndex,0),name);
               }
-              varindex+=md_content.params[i].stackSize;
+              varIndex+=md_content.params[i].stackSize;
             }
           }
         }
@@ -44,11 +43,11 @@
     }
   }
 );
-  HashSet<String> setNewOuterNames=new HashSet<String>(mapNewNames.values());
-  setNewOuterNames.removeAll(meth.setOuterVarNames);
-  meth.varproc.refreshVarNames(new VarNamesCollector(setNewOuterNames));
-  meth.setOuterVarNames.addAll(setNewOuterNames);
-  for (  Entry<VarVersionPair,String> entr : mapNewNames.entrySet()) {
-    meth.varproc.setVarName(entr.getKey(),entr.getValue());
+  Set<String> setNewOuterNames=new HashSet<String>(mapNewNames.values());
+  setNewOuterNames.removeAll(method.setOuterVarNames);
+  method.varproc.refreshVarNames(new VarNamesCollector(setNewOuterNames));
+  method.setOuterVarNames.addAll(setNewOuterNames);
+  for (  Entry<VarVersionPair,String> entry : mapNewNames.entrySet()) {
+    method.varproc.setVarName(entry.getKey(),entry.getValue());
   }
 }

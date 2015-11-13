@@ -1,5 +1,5 @@
 {
-  Map<String,Object[]> mapInnerClasses=new HashMap<String,Object[]>();
+  Map<String,Inner> mapInnerClasses=new HashMap<String,Inner>();
   Map<String,Set<String>> mapNestedClassReferences=new HashMap<String,Set<String>>();
   Map<String,Set<String>> mapEnclosingClassReferences=new HashMap<String,Set<String>>();
   Map<String,String> mapNewSimpleNames=new HashMap<String,String>();
@@ -9,13 +9,9 @@
       if (bDecompileInner) {
         StructInnerClassesAttribute inner=(StructInnerClassesAttribute)cl.getAttributes().getWithKey("InnerClasses");
         if (inner != null) {
-          for (int i=0; i < inner.getClassEntries().size(); i++) {
-            int[] entry=inner.getClassEntries().get(i);
-            String[] strEntry=inner.getStringEntries().get(i);
-            Object[] arr=new Object[4];
-            String innerName=strEntry[0];
-            arr[2]=entry[1] == 0 ? (entry[2] == 0 ? ClassNode.CLASS_ANONYMOUS : ClassNode.CLASS_LOCAL) : ClassNode.CLASS_MEMBER;
-            String simpleName=strEntry[2];
+          for (          StructInnerClassesAttribute.Entry entry : inner.getEntries()) {
+            String innerName=entry.innerName;
+            String simpleName=entry.simpleName;
             String savedName=mapNewSimpleNames.get(innerName);
             if (savedName != null) {
               simpleName=savedName;
@@ -27,11 +23,13 @@
                 mapNewSimpleNames.put(innerName,simpleName);
               }
             }
-            arr[1]=simpleName;
-            arr[3]=entry[3];
+            Inner rec=new Inner();
+            rec.simpleName=simpleName;
+            rec.type=entry.outerNameIdx != 0 ? ClassNode.CLASS_MEMBER : entry.simpleNameIdx != 0 ? ClassNode.CLASS_LOCAL : ClassNode.CLASS_ANONYMOUS;
+            rec.accessFlags=entry.accessFlags;
             String enclClassName;
-            if (entry[1] != 0) {
-              enclClassName=strEntry[1];
+            if (entry.outerNameIdx != 0) {
+              enclClassName=entry.enclosingName;
             }
  else {
               enclClassName=cl.qualifiedName;
@@ -39,11 +37,11 @@
             if (!innerName.equals(enclClassName)) {
               StructClass enclosing_class=context.getClasses().get(enclClassName);
               if (enclosing_class != null && enclosing_class.isOwn()) {
-                Object[] arrOld=mapInnerClasses.get(innerName);
-                if (arrOld == null) {
-                  mapInnerClasses.put(innerName,arr);
+                Inner existingRec=mapInnerClasses.get(innerName);
+                if (existingRec == null) {
+                  mapInnerClasses.put(innerName,rec);
                 }
- else                 if (!InterpreterUtil.equalObjectArrays(arrOld,arr)) {
+ else                 if (!Inner.equal(existingRec,rec)) {
                   String message="Inconsistent inner class entries for " + innerName + "!";
                   DecompilerContext.getLogger().writeMessage(message,IFernflowerLogger.Severity.WARN);
                 }
@@ -81,12 +79,12 @@
           if (setNestedClasses != null) {
             StructClass scl=superNode.classStruct;
             StructInnerClassesAttribute inner=(StructInnerClassesAttribute)scl.getAttributes().getWithKey("InnerClasses");
-            if (inner == null || inner.getStringEntries().isEmpty()) {
+            if (inner == null || inner.getEntries().isEmpty()) {
               DecompilerContext.getLogger().writeMessage(superClass + " does not contain inner classes!",IFernflowerLogger.Severity.WARN);
               continue;
             }
-            for (int i=0; i < inner.getStringEntries().size(); i++) {
-              String nestedClass=inner.getStringEntries().get(i)[0];
+            for (            StructInnerClassesAttribute.Entry entry : inner.getEntries()) {
+              String nestedClass=entry.innerName;
               if (!setNestedClasses.contains(nestedClass)) {
                 continue;
               }
@@ -98,10 +96,10 @@
                 DecompilerContext.getLogger().writeMessage("Nested class " + nestedClass + " missing!",IFernflowerLogger.Severity.WARN);
                 continue;
               }
-              Object[] arr=mapInnerClasses.get(nestedClass);
-              nestedNode.type=(Integer)arr[2];
-              nestedNode.simpleName=(String)arr[1];
-              nestedNode.access=(Integer)arr[3];
+              Inner rec=mapInnerClasses.get(nestedClass);
+              nestedNode.simpleName=rec.simpleName;
+              nestedNode.type=rec.type;
+              nestedNode.access=rec.accessFlags;
               if (nestedNode.type == ClassNode.CLASS_ANONYMOUS) {
                 StructClass cl=nestedNode.classStruct;
                 nestedNode.access&=~CodeConstants.ACC_STATIC;
