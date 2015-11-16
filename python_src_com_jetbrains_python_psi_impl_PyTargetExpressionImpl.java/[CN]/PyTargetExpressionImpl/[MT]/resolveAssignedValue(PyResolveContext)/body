@@ -1,0 +1,39 @@
+{
+  final TypeEvalContext context=resolveContext.getTypeEvalContext();
+  if (context.maySwitchToAST(this)) {
+    final PyExpression value=findAssignedValue();
+    if (value != null) {
+      final List<PsiElement> results=PyUtil.multiResolveTopPriority(value,resolveContext);
+      return !results.isEmpty() ? results.get(0) : null;
+    }
+    return null;
+  }
+ else {
+    final QualifiedName qName=getAssignedQName();
+    if (qName != null) {
+      final ScopeOwner owner=ScopeUtil.getScopeOwner(this);
+      if (owner instanceof PyTypedElement) {
+        final List<String> components=qName.getComponents();
+        if (!components.isEmpty()) {
+          PsiElement resolved=owner;
+          for (          String component : components) {
+            if (!(resolved instanceof PyTypedElement)) {
+              return null;
+            }
+            final PyType qualifierType=context.getType((PyTypedElement)resolved);
+            if (qualifierType == null) {
+              return null;
+            }
+            final List<? extends RatedResolveResult> results=qualifierType.resolveMember(component,null,AccessDirection.READ,resolveContext);
+            if (results == null || results.isEmpty()) {
+              return null;
+            }
+            resolved=results.get(0).getElement();
+          }
+          return resolved;
+        }
+      }
+    }
+    return null;
+  }
+}
