@@ -27,11 +27,30 @@
     return new TypeConversionDescriptor("$q$.toArray($type$)",null){
       PsiType myType=parameters[0];
       @Override public PsiExpression replace(      PsiExpression expression) throws IncorrectOperationException {
-        final UniqueNameGenerator nameGenerator=new UniqueNameGenerator();
-        final JavaCodeStyleManager codeStyleManager=JavaCodeStyleManager.getInstance(expression.getProject());
-        final String name=codeStyleManager.suggestUniqueVariableName(codeStyleManager.suggestVariableName(VariableKind.LOCAL_VARIABLE,null,null,PsiType.INT).names[0],expression,false);
-        final String chosenName=nameGenerator.generateUniqueName(name);
-        setReplaceByString("$q$.toArray(" + chosenName + " -> "+ " new "+ myType.getCanonicalText(false)+ "["+ chosenName+ "])");
+        if (!JavaGenericsUtil.isReifiableType(myType)) {
+          final UniqueNameGenerator nameGenerator=new UniqueNameGenerator();
+          final JavaCodeStyleManager codeStyleManager=JavaCodeStyleManager.getInstance(expression.getProject());
+          final String name=codeStyleManager.suggestUniqueVariableName(codeStyleManager.suggestVariableName(VariableKind.LOCAL_VARIABLE,null,null,PsiType.INT).names[0],expression,false);
+          final String chosenName=nameGenerator.generateUniqueName(name);
+          final PsiType arrayType;
+          if (myType instanceof PsiClassType) {
+            final PsiClass resolvedClass=((PsiClassType)myType).resolve();
+            if (resolvedClass == null)             return expression;
+            if (resolvedClass instanceof PsiTypeParameter) {
+              arrayType=PsiType.getJavaLangObject(expression.getManager(),expression.getResolveScope());
+            }
+ else {
+              arrayType=JavaPsiFacade.getElementFactory(expression.getProject()).createType(resolvedClass);
+            }
+          }
+ else {
+            return null;
+          }
+          setReplaceByString("$q$.toArray(" + chosenName + " -> "+ "("+ myType.getCanonicalText(false)+ "[]) new "+ arrayType.getCanonicalText(false)+ "["+ chosenName+ "])");
+        }
+ else {
+          setReplaceByString("$q$.toArray(" + myType.getCanonicalText(false) + "[]::new)");
+        }
         return super.replace(expression);
       }
     }
