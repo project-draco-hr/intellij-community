@@ -1,0 +1,37 @@
+{
+  PsiType targetType=PsiTypesUtil.getExpectedTypeByParent(context);
+  if (targetType != null) {
+    return targetType;
+  }
+  final PsiElement parent=PsiUtil.skipParenthesizedExprUp(context.getParent());
+  if (parent instanceof PsiExpressionList) {
+    PsiElement gParent=parent.getParent();
+    if (gParent instanceof PsiAnonymousClass) {
+      gParent=gParent.getParent();
+    }
+    if (gParent instanceof PsiCall) {
+      final PsiExpressionList argumentList=((PsiCall)gParent).getArgumentList();
+      if (argumentList != null) {
+        final MethodCandidateInfo.CurrentCandidateProperties properties=MethodCandidateInfo.getCurrentMethod(argumentList);
+        if (properties != null && properties.isApplicabilityCheck()) {
+          return getTypeByMethod(context,argumentList,properties.getMethod(),properties.isVarargs(),properties.getSubstitutor());
+        }
+        if (inferParent) {
+          final JavaResolveResult result=((PsiCall)gParent).resolveMethodGenerics();
+          final boolean varargs=result instanceof MethodCandidateInfo && ((MethodCandidateInfo)result).isVarargs();
+          return getTypeByMethod(context,argumentList,result.getElement(),varargs,result.getSubstitutor());
+        }
+      }
+    }
+  }
+ else   if (parent instanceof PsiConditionalExpression) {
+    return getTargetTypeFromParent(parent,inferParent);
+  }
+ else   if (parent instanceof PsiLambdaExpression) {
+    return getTargetTypeFromParentLambda((PsiLambdaExpression)parent,inferParent);
+  }
+ else   if (parent instanceof PsiReturnStatement) {
+    return getTargetTypeFromParentLambda(PsiTreeUtil.getParentOfType(parent,PsiLambdaExpression.class,true,PsiMethod.class),inferParent);
+  }
+  return null;
+}

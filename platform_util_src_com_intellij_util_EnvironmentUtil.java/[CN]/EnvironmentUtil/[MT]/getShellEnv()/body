@@ -11,10 +11,13 @@
   try {
     String[] command={shell,"-l","-i","-c",("'" + reader.getAbsolutePath() + "' '"+ envFile.getAbsolutePath()+ "'")};
     LOG.info("loading shell env: " + StringUtil.join(command," "));
-    Process process=Runtime.getRuntime().exec(command);
+    Process process=new ProcessBuilder(command).redirectErrorStream(true).start();
+    StreamGobbler gobbler=new StreamGobbler(process.getInputStream());
     int rv=waitAndTerminateAfter(process,SHELL_ENV_READING_TIMEOUT);
+    gobbler.stop();
     String lines=FileUtil.loadFile(envFile);
     if (rv != 0 || lines.isEmpty()) {
+      LOG.info("shell process output: " + StringUtil.trimEnd(gobbler.getText(),'\n'));
       throw new Exception("rv:" + rv + " text:"+ lines.length());
     }
     return parseEnv(lines);
