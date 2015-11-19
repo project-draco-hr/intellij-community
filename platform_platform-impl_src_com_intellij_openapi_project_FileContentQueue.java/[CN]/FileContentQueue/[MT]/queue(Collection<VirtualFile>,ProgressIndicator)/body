@@ -1,31 +1,22 @@
 {
-  myFilesToLoadQueue.addAll(files);
-  final Runnable contentLoadingRunnable=new Runnable(){
-    @Override public void run(){
-      try {
-        VirtualFile file=myFilesToLoadQueue.poll();
-        while (file != null) {
-          indicator.checkCanceled();
-          addLast(file,indicator);
-          file=myFilesToLoadQueue.poll();
-        }
+  myContentsToLoad.set(files.size());
+  for (  final VirtualFile file : files) {
+    ourLoadingContentsExecutor.submit(new Runnable(){
+      @Override public void run(){
         try {
-          myLoadedContentsQueue.put(TOMBSTONE);
+          indicator.checkCanceled();
+          myLoadedContents.offer(loadContent(file,indicator));
         }
- catch (        InterruptedException e) {
+ catch (        ProcessCanceledException e) {
+        }
+catch (        InterruptedException e) {
           LOG.error(e);
         }
-      }
- catch (      ProcessCanceledException e) {
-      }
-catch (      InterruptedException e) {
-        LOG.error(e);
-      }
  finally {
-        myContentLoadingThreadTerminated=true;
+          myContentsToLoad.addAndGet(-1);
+        }
       }
     }
+);
   }
-;
-  ApplicationManager.getApplication().executeOnPooledThread(contentLoadingRunnable);
 }
