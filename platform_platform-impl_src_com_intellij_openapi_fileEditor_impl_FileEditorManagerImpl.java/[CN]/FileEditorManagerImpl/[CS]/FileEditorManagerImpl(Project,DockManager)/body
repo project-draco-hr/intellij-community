@@ -1,7 +1,6 @@
 {
   myProject=project;
   myDockManager=dockManager;
-  myEditorHistoryManager=editorHistoryManager;
   myListenerList=new MessageListenerList<FileEditorManagerListener>(myProject.getMessageBus(),FileEditorManagerListener.FILE_EDITOR_MANAGER);
   if (Extensions.getExtensions(FileEditorAssociateFinder.EP_NAME).length > 0) {
     myListenerList.add(new FileEditorManagerAdapter(){
@@ -13,16 +12,30 @@
 );
   }
   myQueue.setTrackUiActivity(true);
-  project.getMessageBus().connect().subscribe(DumbService.DUMB_MODE,new DumbService.DumbModeListener(){
-    public void enteredDumbMode(){
+  final MessageBusConnection connection=project.getMessageBus().connect();
+  connection.subscribe(DumbService.DUMB_MODE,new DumbService.DumbModeListener(){
+    @Override public void enteredDumbMode(){
     }
-    public void exitDumbMode(){
+    @Override public void exitDumbMode(){
       ApplicationManager.getApplication().invokeLater(new Runnable(){
         @Override public void run(){
-          if (!project.isDisposed())           dumbModeFinished(project);
+          if (!myProject.isDisposed())           dumbModeFinished(myProject);
         }
       }
 );
+    }
+  }
+);
+  connection.subscribe(ProjectManager.TOPIC,new ProjectManagerAdapter(){
+    @Override public void projectOpened(    Project project){
+      if (project == myProject) {
+        FileEditorManagerImpl.this.projectOpened(connection);
+      }
+    }
+    @Override public void projectClosed(    Project project){
+      if (project == myProject) {
+        closeAllFiles();
+      }
     }
   }
 );
