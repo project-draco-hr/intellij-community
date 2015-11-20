@@ -1,0 +1,42 @@
+{
+  myProject=project;
+  myDockManager=dockManager;
+  myListenerList=new MessageListenerList<FileEditorManagerListener>(myProject.getMessageBus(),FileEditorManagerListener.FILE_EDITOR_MANAGER);
+  if (Extensions.getExtensions(FileEditorAssociateFinder.EP_NAME).length > 0) {
+    myListenerList.add(new FileEditorManagerAdapter(){
+      @Override public void selectionChanged(      @NotNull FileEditorManagerEvent event){
+        EditorsSplitters splitters=getSplitters();
+        openAssociatedFile(event.getNewFile(),splitters.getCurrentWindow(),splitters);
+      }
+    }
+);
+  }
+  myQueue.setTrackUiActivity(true);
+  final MessageBusConnection connection=project.getMessageBus().connect();
+  connection.subscribe(DumbService.DUMB_MODE,new DumbService.DumbModeListener(){
+    @Override public void enteredDumbMode(){
+    }
+    @Override public void exitDumbMode(){
+      ApplicationManager.getApplication().invokeLater(new Runnable(){
+        @Override public void run(){
+          if (!myProject.isDisposed())           dumbModeFinished(myProject);
+        }
+      }
+);
+    }
+  }
+);
+  connection.subscribe(ProjectManager.TOPIC,new ProjectManagerAdapter(){
+    @Override public void projectOpened(    Project project){
+      if (project == myProject) {
+        FileEditorManagerImpl.this.projectOpened(connection);
+      }
+    }
+    @Override public void projectClosed(    Project project){
+      if (project == myProject) {
+        closeAllFiles();
+      }
+    }
+  }
+);
+}
