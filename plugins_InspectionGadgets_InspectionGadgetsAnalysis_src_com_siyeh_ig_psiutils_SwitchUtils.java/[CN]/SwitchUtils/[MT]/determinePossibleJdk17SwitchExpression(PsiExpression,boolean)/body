@@ -1,0 +1,60 @@
+{
+  if (!(expression instanceof PsiMethodCallExpression)) {
+    return null;
+  }
+  final PsiMethodCallExpression methodCallExpression=(PsiMethodCallExpression)expression;
+  final PsiReferenceExpression methodExpression=methodCallExpression.getMethodExpression();
+  @NonNls final String referenceName=methodExpression.getReferenceName();
+  if (!"equals".equals(referenceName)) {
+    return null;
+  }
+  final PsiExpression qualifierExpression=methodExpression.getQualifierExpression();
+  if (qualifierExpression == null) {
+    return null;
+  }
+  if (ExpressionUtils.hasStringType(qualifierExpression)) {
+    final PsiExpressionList argumentList=methodCallExpression.getArgumentList();
+    final PsiExpression argument=ExpressionUtils.getOnlyExpressionInList(argumentList);
+    if (argument == null) {
+      return null;
+    }
+    final PsiType argumentType=argument.getType();
+    if (argumentType == null || !argumentType.equalsToText(CommonClassNames.JAVA_LANG_STRING)) {
+      return null;
+    }
+    if (PsiUtil.isConstantExpression(qualifierExpression)) {
+      if (nullSafe && !ExpressionUtils.isAnnotatedNotNull(argument)) {
+        return null;
+      }
+      return argument;
+    }
+ else     if (PsiUtil.isConstantExpression(argument)) {
+      return qualifierExpression;
+    }
+  }
+ else   if (qualifierExpression instanceof PsiReferenceExpression && !nullSafe) {
+    final PsiReferenceExpression referenceExpression=(PsiReferenceExpression)qualifierExpression;
+    final PsiElement target=referenceExpression.resolve();
+    if (!(target instanceof PsiClass)) {
+      return null;
+    }
+    final PsiClass aClass=(PsiClass)target;
+    if (!"java.util.Objects".equals(aClass.getQualifiedName())) {
+      return null;
+    }
+    final PsiExpressionList argumentList=methodCallExpression.getArgumentList();
+    final PsiExpression[] arguments=argumentList.getExpressions();
+    if (arguments.length != 2) {
+      return null;
+    }
+    final PsiExpression firstArgument=arguments[0];
+    final PsiExpression secondArgument=arguments[1];
+    if (PsiUtil.isConstantExpression(firstArgument)) {
+      return secondArgument;
+    }
+ else     if (PsiUtil.isConstantExpression(secondArgument)) {
+      return firstArgument;
+    }
+  }
+  return null;
+}
