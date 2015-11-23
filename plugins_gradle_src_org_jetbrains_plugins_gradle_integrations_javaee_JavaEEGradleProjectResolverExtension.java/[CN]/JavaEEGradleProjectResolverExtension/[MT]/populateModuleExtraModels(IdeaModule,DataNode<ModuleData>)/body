@@ -1,29 +1,50 @@
 {
-  final List<War> warModels;
   final WebConfiguration webConfiguration=resolverCtx.getExtraProject(gradleModule,WebConfiguration.class);
+  final NotNullLazyValue<DataNode<? extends ModuleData>> findTargetModuleNode=new NotNullLazyValue<DataNode<? extends ModuleData>>(){
+    @NotNull @Override protected DataNode<? extends ModuleData> compute(){
+      final String mainSourceSetModuleId=ideModule.getData().getId() + ":main";
+      DataNode<? extends ModuleData> targetModuleNode=ExternalSystemApiUtil.find(ideModule,GradleSourceSetData.KEY,new BooleanFunction<DataNode<GradleSourceSetData>>(){
+        @Override public boolean fun(        DataNode<GradleSourceSetData> node){
+          return mainSourceSetModuleId.equals(node.getData().getId());
+        }
+      }
+);
+      if (targetModuleNode == null) {
+        targetModuleNode=ideModule;
+      }
+      return targetModuleNode;
+    }
+  }
+;
   if (webConfiguration != null) {
-    warModels=ContainerUtil.map(webConfiguration.getWarModels(),new Function<WebConfiguration.WarModel,War>(){
+    final List<War> warModels=ContainerUtil.map(webConfiguration.getWarModels(),new Function<WebConfiguration.WarModel,War>(){
       @Override public War fun(      WebConfiguration.WarModel model){
         War war=new War(model.getWarName(),model.getWebAppDirName(),model.getWebAppDir());
         war.setWebXml(model.getWebXml());
-        war.setWebResources(map(model.getWebResources()));
+        war.setWebResources(mapWebResources(model.getWebResources()));
         war.setClasspath(model.getClasspath());
         war.setManifestContent(model.getManifestContent());
         return war;
       }
     }
 );
-    final String mainSourceSetModuleId=ideModule.getData().getId() + ":main";
-    DataNode<? extends ModuleData> targetModuleNode=ExternalSystemApiUtil.find(ideModule,GradleSourceSetData.KEY,new BooleanFunction<DataNode<GradleSourceSetData>>(){
-      @Override public boolean fun(      DataNode<GradleSourceSetData> node){
-        return mainSourceSetModuleId.equals(node.getData().getId());
+    findTargetModuleNode.getValue().createChild(WebConfigurationModelData.KEY,new WebConfigurationModelData(GradleConstants.SYSTEM_ID,warModels));
+  }
+  final EarConfiguration earConfiguration=resolverCtx.getExtraProject(gradleModule,EarConfiguration.class);
+  if (earConfiguration != null) {
+    final List<Ear> warModels=ContainerUtil.map(earConfiguration.getEarModels(),new Function<EarConfiguration.EarModel,Ear>(){
+      @Override public Ear fun(      EarConfiguration.EarModel model){
+        Ear ear=new Ear(model.getEarName(),model.getAppDirName(),model.getLibDirName());
+        ear.setManifestContent(model.getManifestContent());
+        ear.setDeploymentDescriptor(model.getDeploymentDescriptor());
+        ear.setResources(mapEarResources(model.getResources()));
+        return ear;
       }
     }
 );
-    if (targetModuleNode == null) {
-      targetModuleNode=ideModule;
-    }
-    targetModuleNode.createChild(WebConfigurationModelData.KEY,new WebConfigurationModelData(GradleConstants.SYSTEM_ID,warModels));
+    final Collection<DependencyData> deployDependencies=GradleProjectResolverUtil.getIdeDependencies(findTargetModuleNode.getValue(),earConfiguration.getDeployDependencies());
+    final Collection<DependencyData> earlibDependencies=GradleProjectResolverUtil.getIdeDependencies(findTargetModuleNode.getValue(),earConfiguration.getEarlibDependencies());
+    findTargetModuleNode.getValue().createChild(EarConfigurationModelData.KEY,new EarConfigurationModelData(GradleConstants.SYSTEM_ID,warModels,deployDependencies,earlibDependencies));
   }
   nextResolver.populateModuleExtraModels(gradleModule,ideModule);
 }
