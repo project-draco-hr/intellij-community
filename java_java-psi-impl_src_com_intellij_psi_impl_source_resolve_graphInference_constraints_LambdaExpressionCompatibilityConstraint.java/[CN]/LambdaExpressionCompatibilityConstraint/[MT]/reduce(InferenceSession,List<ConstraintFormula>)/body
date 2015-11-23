@@ -7,23 +7,26 @@
   final PsiClassType.ClassResolveResult resolveResult=PsiUtil.resolveGenericsClassInType(groundTargetType);
   final PsiMethod interfaceMethod=LambdaUtil.getFunctionalInterfaceMethod(resolveResult);
   if (interfaceMethod == null) {
+    session.registerIncompatibleErrorMessage("No valid function type can be found for " + myT.getPresentableText());
     return false;
   }
   final PsiSubstitutor substitutor=LambdaUtil.getSubstitutor(interfaceMethod,resolveResult);
   final PsiParameter[] parameters=interfaceMethod.getParameterList().getParameters();
   final PsiParameter[] lambdaParameters=myExpression.getParameterList().getParameters();
   if (lambdaParameters.length != parameters.length) {
+    session.registerIncompatibleErrorMessage("Incompatible parameter types in lambda expression");
     return false;
   }
   if (myExpression.hasFormalParameterTypes()) {
     for (int i=0; i < lambdaParameters.length; i++) {
-      constraints.add(new TypeEqualityConstraint(lambdaParameters[i].getType(),substitutor.substitute(parameters[i].getType())));
+      constraints.add(new TypeEqualityConstraint(lambdaParameters[i].getType(),session.substituteWithInferenceVariables(substitutor.substitute(parameters[i].getType()))));
     }
     constraints.add(new StrictSubtypingConstraint(myT,groundTargetType));
   }
  else {
     for (    PsiParameter parameter : parameters) {
-      if (!session.isProperType(session.substituteWithInferenceVariables(substitutor.substitute(parameter.getType())))) {
+      final PsiType type=session.substituteWithInferenceVariables(substitutor.substitute(parameter.getType()));
+      if (!session.isProperType(type)) {
         return false;
       }
     }
@@ -34,11 +37,13 @@
     final PsiElement lambdaBody=myExpression.getBody();
     if (returnType.equals(PsiType.VOID)) {
       if (!(lambdaBody instanceof PsiCodeBlock && myExpression.isVoidCompatible()) && !LambdaUtil.isExpressionStatementExpression(lambdaBody)) {
+        session.registerIncompatibleErrorMessage("Incompatible types: expected void but the lambda body is neither a statement expression nor a void-compatible block");
         return false;
       }
     }
  else {
       if (lambdaBody instanceof PsiCodeBlock && !myExpression.isValueCompatible()) {
+        session.registerIncompatibleErrorMessage("Incompatible types: expected not void but the lambda body is a block that is not value-compatible");
         return false;
       }
       InferenceSession callsession=session.getInferenceSessionContainer().findNestedCallSession(myExpression,session);
