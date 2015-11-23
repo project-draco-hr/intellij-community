@@ -1,10 +1,12 @@
 {
   passJunk();
   final PsiBuilder.Marker marker=mark();
+  PsiBuilder.Marker endOfNodeMarker=null;
   IElementType nodeType=null;
-  if (getTokenType() == YAMLTokenTypes.TAG) {
+  if (getTokenType() == YAMLTokenTypes.TAG && myBuilder.lookAhead(1) == YAMLTokenTypes.EOL) {
     advanceLexer();
   }
+  int numberOfItems=0;
   while (!eof() && (isJunk() || !eolSeen || myIndent + getIndentBonus(insideSequence) >= indent)) {
     if (isJunk()) {
       advanceLexer();
@@ -14,6 +16,7 @@
       rollBackToEol();
       break;
     }
+    numberOfItems++;
     final IElementType parsedTokenType=parseSingleStatement(eolSeen ? myIndent : indent);
     if (nodeType == null) {
       if (parsedTokenType == YAMLElementTypes.SEQUENCE_ITEM) {
@@ -22,14 +25,26 @@
  else       if (parsedTokenType == YAMLElementTypes.KEY_VALUE_PAIR) {
         nodeType=YAMLElementTypes.MAPPING;
       }
- else {
+ else       if (numberOfItems > 1) {
         nodeType=YAMLElementTypes.COMPOUND_VALUE;
       }
     }
+    if (endOfNodeMarker != null) {
+      endOfNodeMarker.drop();
+    }
+    endOfNodeMarker=mark();
   }
-  rollBackToEol();
-  if (nodeType == null) {
-    nodeType=YAMLElementTypes.COMPOUND_VALUE;
+  if (endOfNodeMarker != null) {
+    dropEolMarker();
+    endOfNodeMarker.rollbackTo();
   }
-  marker.done(nodeType);
+ else {
+    rollBackToEol();
+  }
+  if (nodeType != null) {
+    marker.done(nodeType);
+  }
+ else {
+    marker.drop();
+  }
 }
