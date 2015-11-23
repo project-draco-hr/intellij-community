@@ -3,11 +3,18 @@
   final List<KeyValue<String,String>> extraJvmArgs=new ArrayList<KeyValue<String,String>>();
   final List<String> commandLineArgs=ContainerUtil.newArrayList();
   final Set<Class> toolingExtensionClasses=ContainerUtil.newHashSet();
+  if (resolverCtx.isPreviewMode()) {
+    commandLineArgs.add("-Didea.isPreviewMode=true");
+    final Set<Class> previewLightWeightToolingModels=ContainerUtil.<Class>set(ExternalProjectPreview.class);
+    projectImportAction.addExtraProjectModelClasses(previewLightWeightToolingModels);
+  }
   final GradleImportCustomizer importCustomizer=GradleImportCustomizer.get();
   for (GradleProjectResolverExtension resolverExtension=projectResolverChain; resolverExtension != null; resolverExtension=resolverExtension.getNext()) {
     resolverExtension.setProjectResolverContext(resolverCtx);
     resolverExtension.preImportCheck();
-    projectImportAction.addExtraProjectModelClasses(resolverExtension.getExtraProjectModelClasses());
+    if (!resolverCtx.isPreviewMode()) {
+      projectImportAction.addExtraProjectModelClasses(resolverExtension.getExtraProjectModelClasses());
+    }
     if (importCustomizer == null || importCustomizer.useExtraJvmArgs()) {
       extraJvmArgs.addAll(resolverExtension.getExtraJvmArgs());
     }
@@ -104,7 +111,6 @@ synchronized (myCancellationMap) {
         gradleHomeDir=buildScriptClasspathModel.getGradleHomeDir();
       }
     }
-    projectResolverChain.populateModuleExtraModels(ideaModule,moduleDataNode);
     projectResolverChain.populateModuleContentRoots(ideaModule,moduleDataNode);
     projectResolverChain.populateModuleCompileOutputSettings(ideaModule,moduleDataNode);
     if (!isBuildSrcProject) {
@@ -133,6 +139,7 @@ synchronized (myCancellationMap) {
     final DataNode<ModuleData> moduleDataNode=pair.first;
     final IdeaModule ideaModule=pair.second;
     projectResolverChain.populateModuleDependencies(ideaModule,moduleDataNode,projectDataNode);
+    projectResolverChain.populateModuleExtraModels(ideaModule,moduleDataNode);
   }
   mergeSourceSetContentRoots(moduleMap,resolverCtx);
   mergeLibraryAndModuleDependencyData(projectDataNode,gradleHomeDir,gradleVersion);
