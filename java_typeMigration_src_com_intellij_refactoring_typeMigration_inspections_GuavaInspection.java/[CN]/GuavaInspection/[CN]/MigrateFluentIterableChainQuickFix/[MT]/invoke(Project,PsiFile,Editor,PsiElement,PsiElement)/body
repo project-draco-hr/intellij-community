@@ -8,13 +8,18 @@
     rules.setBoundScope(GlobalSearchScope.fileScope(file));
     final TypeConversionDescriptorBase conversion=rules.findConversion(myInitialType,myTargetType,expr.resolveMethod(),expr,new TypeMigrationLabeler(rules));
     LOG.assertTrue(conversion != null);
-    PsiElement replacedExpression=TypeMigrationReplacementUtil.replaceExpression(expr,project,conversion);
-    if (isIterableAssignment) {
-      final String expressionText=replacedExpression.getText() + ".collect(java.util.stream.Collectors.toList())";
-      replacedExpression=replacedExpression.replace(JavaPsiFacade.getElementFactory(project).createExpressionFromText(expressionText,replacedExpression));
+    ApplicationManager.getApplication().runWriteAction(new Runnable(){
+      @Override public void run(){
+        PsiElement replacedExpression=TypeMigrationReplacementUtil.replaceExpression(expr,project,conversion);
+        if (isIterableAssignment) {
+          final String expressionText=replacedExpression.getText() + ".collect(java.util.stream.Collectors.toList())";
+          replacedExpression=replacedExpression.replace(JavaPsiFacade.getElementFactory(project).createExpressionFromText(expressionText,replacedExpression));
+        }
+        JavaCodeStyleManager.getInstance(project).shortenClassReferences(replacedExpression);
+        UndoUtil.markPsiFileForUndo(file);
+      }
     }
-    JavaCodeStyleManager.getInstance(project).shortenClassReferences(replacedExpression);
-    UndoUtil.markPsiFileForUndo(file);
+);
   }
  catch (  IncorrectOperationException e) {
     LOG.error(e);
