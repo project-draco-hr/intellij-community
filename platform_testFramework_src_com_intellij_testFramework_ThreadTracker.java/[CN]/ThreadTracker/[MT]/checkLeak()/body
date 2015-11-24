@@ -1,4 +1,6 @@
 {
+  BaseOSProcessHandler.awaitQuiescence(100,TimeUnit.SECONDS);
+  NettyUtil.awaitQuiescenceOfGlobalEventExecutor(100,TimeUnit.SECONDS);
   try {
     if (myDefaultProjectInitialized != ((ProjectManagerImpl)ProjectManager.getInstance()).isDefaultProjectInitialized())     return;
     Collection<Thread> after=new THashSet<Thread>(getThreads());
@@ -7,14 +9,25 @@
       if (thread == Thread.currentThread())       continue;
       ThreadGroup group=thread.getThreadGroup();
       if (group != null && "system".equals(group.getName()))       continue;
-      String name=thread.getName();
-      if (name.startsWith("AWT-EventQueue-0"))       continue;
-      if (name.startsWith("JobScheduler pool "))       continue;
-      if (wellKnownOffenders.contains(name))       continue;
-      String trace="Thread leaked: " + thread + ": "+ name+ ";\n ";
+      final String name=thread.getName();
+      if (ContainerUtil.exists(wellKnownOffenders,new Condition<String>(){
+        @Override public boolean value(        String pattern){
+          return name.contains(pattern);
+        }
+      }
+)) {
+        continue;
+      }
+      if (!thread.isAlive())       continue;
+      if (thread.getStackTrace().length == 0) {
+        TimeoutUtil.sleep(10000);
+        if (!thread.isAlive())         continue;
+      }
+      String trace="Thread leaked: " + thread + "; "+ thread.getState()+ " ("+ thread.isAlive()+ ")\n--- its stacktrace:\n";
       for (      final StackTraceElement stackTraceElement : thread.getStackTrace()) {
         trace+=" at " + stackTraceElement + "\n";
       }
+      trace+="---\n";
       Assert.fail(trace);
     }
   }
