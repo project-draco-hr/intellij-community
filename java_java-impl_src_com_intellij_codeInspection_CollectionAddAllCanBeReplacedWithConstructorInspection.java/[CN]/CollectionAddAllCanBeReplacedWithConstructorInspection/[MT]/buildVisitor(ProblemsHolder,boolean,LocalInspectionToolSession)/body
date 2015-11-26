@@ -2,12 +2,16 @@
   return new JavaElementVisitor(){
     @Override public void visitMethodCallExpression(    PsiMethodCallExpression expression){
       final String methodName=expression.getMethodExpression().getReferenceName();
-      if ("addAll".equals(methodName)) {
+      if ("addAll".equals(methodName) || "putAll".equals(methodName)) {
         if (expression.getArgumentList().getExpressions().length != 1) {
           return;
         }
         final PsiExpression qualifierExpression=expression.getMethodExpression().getQualifierExpression();
         if (!(qualifierExpression instanceof PsiReferenceExpression)) {
+          return;
+        }
+        final PsiElement parent=expression.getParent();
+        if (!(parent instanceof PsiExpressionStatement)) {
           return;
         }
         final PsiElement resolvedReference=((PsiReferenceExpression)qualifierExpression).resolve();
@@ -16,11 +20,11 @@
         }
         PsiLocalVariable variable=(PsiLocalVariable)resolvedReference;
         final PsiType variableType=variable.getType();
-        if (!(variableType instanceof PsiClassType)) {
+        if (!(variableType instanceof PsiClassType) || statementHasSubsequentAddAll(parent,variable,methodName)) {
           return;
         }
         final PsiClass variableClass=((PsiClassType)variableType).resolve();
-        if (variableClass == null || !InheritanceUtil.isInheritor(variableClass,CommonClassNames.JAVA_UTIL_COLLECTION)) {
+        if (variableClass == null) {
           return;
         }
         PsiNewExpression assignmentExpression;
@@ -39,12 +43,12 @@
  else {
           return;
         }
-        if (!checkUsages(variable,expression,assignmentExpression)) {
+        if (!isAddAllReplaceable(expression,assignmentExpression) || !checkUsages(variable,expression,assignmentExpression)) {
           return;
         }
         final PsiMethod method=expression.resolveMethod();
         if (method != null) {
-          holder.registerProblem(expression,QuickFixBundle.message("collection.addall.can.be.replaced.with.constructor.fix.description"),new ReplaceAddAllWithConstructorFix(assignmentExpression,expression));
+          holder.registerProblem(expression,QuickFixBundle.message("collection.addall.can.be.replaced.with.constructor.fix.description",methodName),new ReplaceAddAllWithConstructorFix(assignmentExpression,expression));
         }
       }
     }

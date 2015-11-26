@@ -32,29 +32,27 @@
     types2[i]=type2;
   }
   boolean sameBoxing=true;
-  int[] boxingHappened=new int[2];
-  final PsiType[] argTypes1=myActualParameterTypes != null ? myActualParameterTypes : info1.getPertinentArgumentTypes();
-  final PsiType[] argTypes2=myActualParameterTypes != null ? myActualParameterTypes : info2.getPertinentArgumentTypes();
+  boolean[] boxingHappened=new boolean[2];
+  final PsiExpression[] args=myArgumentsList instanceof PsiExpressionList ? ((PsiExpressionList)myArgumentsList).getExpressions() : null;
   for (int i=0; i < types1.length; i++) {
     ProgressManager.checkCanceled();
-    PsiType type1=classSubstitutor1.substitute(types1[i]);
-    PsiType type2=classSubstitutor2.substitute(types2[i]);
-    final PsiType argType1=i < getActualParametersLength() ? argTypes1[i] : null;
-    final PsiType argType2=i < getActualParametersLength() ? argTypes2[i] : null;
+    final PsiExpression arg=args != null && i < args.length ? args[i] : null;
+    final PsiType argType=myActualParameterTypes != null && i < getActualParametersLength() ? myActualParameterTypes[i] : null;
+    if (arg == null && argType == null)     continue;
     boolean boxingInFirst=false;
-    if (isBoxingHappened(argType1,type1,languageLevel)) {
-      boxingHappened[0]+=1;
+    if (isBoxingUsed(classSubstitutor1.substitute(types1[i]),argType,arg)) {
+      boxingHappened[0]|=true;
       boxingInFirst=true;
     }
     boolean boxingInSecond=false;
-    if (isBoxingHappened(argType2,type2,languageLevel)) {
-      boxingHappened[1]+=1;
+    if (isBoxingUsed(classSubstitutor2.substitute(types2[i]),argType,arg)) {
+      boxingHappened[1]|=true;
       boxingInSecond=true;
     }
     sameBoxing&=boxingInFirst == boxingInSecond;
   }
-  if (boxingHappened[0] == 0 && boxingHappened[1] > 0)   return Specifics.FIRST;
-  if (boxingHappened[0] > 0 && boxingHappened[1] == 0)   return Specifics.SECOND;
+  if (!boxingHappened[0] && boxingHappened[1])   return Specifics.FIRST;
+  if (boxingHappened[0] && !boxingHappened[1])   return Specifics.SECOND;
   if (sameBoxing) {
     final PsiSubstitutor siteSubstitutor1=info1.getSiteSubstitutor();
     final PsiSubstitutor siteSubstitutor2=info2.getSiteSubstitutor();

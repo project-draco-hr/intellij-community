@@ -3,33 +3,10 @@
   myModule=module;
   myOptions=options;
   myProjectFileIndex=ProjectRootManager.getInstance(module.getProject()).getFileIndex();
-  OrderEnumerator en=ModuleRootManager.getInstance(module).orderEntries();
-  en.recursively();
-  if (hasOption(COMPILE)) {
-    en.exportedOnly().compileOnly();
-  }
-  if (hasOption(RUNTIME)) {
-    en.runtimeOnly();
-  }
-  if (!hasOption(LIBRARIES))   en.withoutLibraries().withoutSdk();
-  if (!hasOption(MODULES))   en.withoutDepModules();
-  if (!hasOption(TESTS))   en.productionOnly();
-  final LinkedHashSet<Module> modules=ContainerUtil.newLinkedHashSet();
-  en.forEach(new Processor<OrderEntry>(){
-    @Override public boolean process(    OrderEntry each){
-      if (each instanceof ModuleOrderEntry) {
-        ContainerUtil.addIfNotNull(modules,((ModuleOrderEntry)each).getModule());
-      }
- else       if (each instanceof ModuleSourceOrderEntry) {
-        ContainerUtil.addIfNotNull(modules,each.getOwnerModule());
-      }
-      return true;
-    }
-  }
-);
-  myModules=new THashSet<Module>(modules);
   final LinkedHashSet<VirtualFile> roots=ContainerUtil.newLinkedHashSet();
   if (hasOption(CONTENT)) {
+    Set<Module> modules=calcModules();
+    myModules=ContainerUtil.newTroveSet(modules);
     for (    Module m : modules) {
       for (      ContentEntry entry : ModuleRootManager.getInstance(m).getContentEntries()) {
         ContainerUtil.addIfNotNull(entry.getFile(),roots);
@@ -37,6 +14,7 @@
     }
   }
  else {
+    OrderEnumerator en=getOrderEnumeratorForOptions();
     Collections.addAll(roots,en.roots(new NotNullFunction<OrderEntry,OrderRootType>(){
       @NotNull @Override public OrderRootType fun(      OrderEntry entry){
         if (entry instanceof ModuleOrderEntry || entry instanceof ModuleSourceOrderEntry)         return OrderRootType.SOURCES;

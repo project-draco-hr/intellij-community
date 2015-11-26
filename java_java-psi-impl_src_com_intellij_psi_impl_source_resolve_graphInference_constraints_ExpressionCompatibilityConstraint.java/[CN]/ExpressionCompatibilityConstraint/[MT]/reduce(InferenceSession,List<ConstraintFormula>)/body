@@ -1,7 +1,12 @@
 {
   if (!PsiPolyExpressionUtil.isPolyExpression(myExpression)) {
     if (session.isProperType(myT)) {
-      return TypeConversionUtil.areTypesAssignmentCompatible(myT,myExpression);
+      final boolean assignmentCompatible=TypeConversionUtil.areTypesAssignmentCompatible(myT,myExpression);
+      if (!assignmentCompatible) {
+        final PsiType type=myExpression.getType();
+        session.registerIncompatibleErrorMessage((type != null ? type.getPresentableText() : myExpression.getText()) + " is not compatible with " + myT.getPresentableText());
+      }
+      return assignmentCompatible;
     }
     final PsiType exprType=myExpression.getType();
     if (exprType instanceof PsiLambdaParameterType) {
@@ -34,56 +39,13 @@
     return true;
   }
   if (myExpression instanceof PsiCall) {
-    final PsiExpressionList argumentList=((PsiCall)myExpression).getArgumentList();
-    if (argumentList != null) {
-      final MethodCandidateInfo.CurrentCandidateProperties candidateProperties=MethodCandidateInfo.getCurrentMethod(argumentList);
-      PsiType returnType=null;
-      PsiTypeParameter[] typeParams=null;
-      final JavaResolveResult resolveResult=candidateProperties != null ? null : InferenceSession.getResolveResult((PsiCall)myExpression);
-      PsiMethod method=null;
-      if (candidateProperties != null) {
-        method=candidateProperties.getMethod();
-      }
- else {
-        final PsiElement element=resolveResult.getElement();
-        if (element instanceof PsiMethod) {
-          method=(PsiMethod)element;
-        }
-      }
-      if (method != null && !method.isConstructor()) {
-        returnType=method.getReturnType();
-        if (returnType != null) {
-          typeParams=method.getTypeParameters();
-        }
-      }
- else       if (resolveResult != null) {
-        final PsiClass psiClass=method != null ? method.getContainingClass() : (PsiClass)resolveResult.getElement();
-        if (psiClass != null) {
-          returnType=JavaPsiFacade.getElementFactory(argumentList.getProject()).createType(psiClass,PsiSubstitutor.EMPTY);
-          typeParams=psiClass.getTypeParameters();
-        }
-      }
-      if (typeParams != null) {
-        PsiSubstitutor siteSubstitutor=InferenceSession.chooseSiteSubstitutor(candidateProperties,resolveResult,method);
-        final InferenceSession callSession=new InferenceSession(typeParams,siteSubstitutor,myExpression.getManager(),myExpression);
-        callSession.propagateVariables(session.getInferenceVariables());
-        if (method != null) {
-          final PsiExpression[] args=argumentList.getExpressions();
-          final PsiParameter[] parameters=method.getParameterList().getParameters();
-          callSession.initExpressionConstraints(parameters,args,myExpression,method,InferenceSession.chooseVarargsMode(candidateProperties,resolveResult));
-        }
-        final boolean accepted=callSession.repeatInferencePhases(true);
-        if (!accepted) {
-          return false;
-        }
-        callSession.registerReturnTypeConstraints(siteSubstitutor.substitute(returnType),myT);
-        if (callSession.repeatInferencePhases(true)) {
-          session.getInferenceSessionContainer().registerNestedSession(session,callSession);
-        }
- else {
-          return false;
-        }
-      }
+    final InferenceSession callSession=reduceExpressionCompatibilityConstraint(session,myExpression,myT);
+    if (callSession == null) {
+      return false;
+    }
+    if (callSession != session) {
+      session.getInferenceSessionContainer().registerNestedSession(callSession);
+      session.propagateVariables(callSession.getInferenceVariables());
     }
     return true;
   }
