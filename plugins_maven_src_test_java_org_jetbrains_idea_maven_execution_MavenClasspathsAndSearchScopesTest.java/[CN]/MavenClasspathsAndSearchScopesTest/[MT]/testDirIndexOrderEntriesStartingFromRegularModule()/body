@@ -1,0 +1,45 @@
+{
+  final List<Module> modules=setupDirIndexTestModulesWithScope("compile");
+  assertEquals(6,modules.size());
+  final Module nonMavenM1=createModule("nonMavenM1");
+  final Module nonMavenM2=createModule("nonMavenM2");
+  new WriteCommandAction.Simple(myProject){
+    @Override protected void run() throws Throwable {
+      ModuleRootModificationUtil.addDependency(nonMavenM1,nonMavenM2,DependencyScope.COMPILE,true);
+      ModuleRootModificationUtil.addDependency(nonMavenM2,modules.get(0),DependencyScope.COMPILE,true);
+      createProjectSubDirs("nonMavenM1/src/main/java","nonMavenM1/src/test/java","nonMavenM2/src/main/java","nonMavenM2/src/test/java");
+      VirtualFile nonMavenM1JavaDir=VfsUtil.findFileByIoFile(new File(getProjectPath(),"nonMavenM1/src/main/java"),true);
+      assertNotNull(nonMavenM1JavaDir);
+      PsiTestUtil.addSourceContentToRoots(nonMavenM1,nonMavenM1JavaDir);
+      VirtualFile nonMavenM2JavaDir=VfsUtil.findFileByIoFile(new File(getProjectPath(),"nonMavenM2/src/main/java"),true);
+      assertNotNull(nonMavenM2JavaDir);
+      PsiTestUtil.addSourceContentToRoots(nonMavenM2,nonMavenM2JavaDir);
+    }
+  }
+.execute().throwException();
+  assertModuleModuleDeps("nonMavenM1","nonMavenM2");
+  assertModuleModuleDeps("nonMavenM2","m1");
+  assertModuleModuleDeps("m1","m2","m3","m5","m6");
+  DirectoryIndex index=DirectoryIndex.getInstance(myProject);
+  VirtualFile m3JavaDir=VfsUtil.findFileByIoFile(new File(getProjectPath(),"m3/src/main/java"),true);
+  assertNotNull(m3JavaDir);
+  List<OrderEntry> orderEntries=index.getOrderEntries(index.getInfoForFile(m3JavaDir));
+  List<Module> ownerModules=orderEntriesToOwnerModules(orderEntries);
+  List<Module> depModules=orderEntriesToDepModules(orderEntries);
+  assertOrderedElementsAreEqual(ownerModules,Arrays.asList(modules.get(0),modules.get(1),modules.get(2),modules.get(3)));
+  assertOrderedElementsAreEqual(depModules,Arrays.asList(modules.get(2),modules.get(2),null,modules.get(2)));
+  VirtualFile m6javaDir=VfsUtil.findFileByIoFile(new File(getProjectPath(),"m6/src/main/java"),true);
+  assertNotNull(m6javaDir);
+  List<OrderEntry> m6OrderEntries=index.getOrderEntries(index.getInfoForFile(m6javaDir));
+  List<Module> m6OwnerModules=orderEntriesToOwnerModules(m6OrderEntries);
+  List<Module> m6DepModules=orderEntriesToDepModules(m6OrderEntries);
+  assertOrderedElementsAreEqual(m6OwnerModules,Arrays.asList(modules.get(0),modules.get(1),modules.get(4),modules.get(5)));
+  assertOrderedElementsAreEqual(m6DepModules,Arrays.asList(modules.get(5),modules.get(5),modules.get(5),null));
+  VirtualFile nonMavenM2JavaDir=VfsUtil.findFileByIoFile(new File(getProjectPath(),"nonMavenM2/src/main/java"),true);
+  assertNotNull(nonMavenM2JavaDir);
+  List<OrderEntry> nonMavenM2JavaOrderEntries=index.getOrderEntries(index.getInfoForFile(nonMavenM2JavaDir));
+  List<Module> nonMavenM2OwnerModules=orderEntriesToOwnerModules(nonMavenM2JavaOrderEntries);
+  List<Module> nonMavenM2DepModules=orderEntriesToDepModules(nonMavenM2JavaOrderEntries);
+  assertOrderedElementsAreEqual(nonMavenM2OwnerModules,Arrays.asList(nonMavenM1,nonMavenM2));
+  assertOrderedElementsAreEqual(nonMavenM2DepModules,Arrays.asList(nonMavenM2,null));
+}
