@@ -11,6 +11,7 @@
   try {
     checkIfDisposed();
     final DataHolder dataHolder;
+    ProgressIndicator indicator=createProgressIndicator();
 synchronized (myDataLock) {
       dataHolder=new DataHolder((FileHolderComposite)myComposite.copy(),myWorker.copy(),wasEverythingDirty);
       myModifier.enterUpdate();
@@ -18,6 +19,7 @@ synchronized (myDataLock) {
         myUpdateException=null;
         myAdditionalInfo=null;
       }
+      myUpdateChangesProgressIndicator=indicator;
     }
     final String scopeInString=!LOG.isDebugEnabled() ? "" : StringUtil.join(scopes,new Function<VcsDirtyScope,String>(){
       @Override public String fun(      VcsDirtyScope scope){
@@ -28,8 +30,12 @@ synchronized (myDataLock) {
     LOG.debug("refresh procedure started, everything = " + wasEverythingDirty + " dirty scope: "+ scopeInString);
     dataHolder.notifyStart();
     myChangesViewManager.scheduleRefresh();
-    myUpdateChangesProgressIndicator=createProgressIndicator();
-    iterateScopes(dataHolder,scopes,wasEverythingDirty);
+    ProgressManager.getInstance().runProcess(new Runnable(){
+      @Override public void run(){
+        iterateScopes(dataHolder,scopes,wasEverythingDirty);
+      }
+    }
+,indicator);
     final boolean takeChanges=myUpdateException == null;
     if (takeChanges) {
       updateIgnoredFiles(dataHolder.getComposite());
