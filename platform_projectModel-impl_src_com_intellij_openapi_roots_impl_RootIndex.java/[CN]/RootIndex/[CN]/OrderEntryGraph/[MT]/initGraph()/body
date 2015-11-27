@@ -1,0 +1,40 @@
+{
+  Graph graph=new Graph();
+  MultiMap<VirtualFile,Node> roots=MultiMap.createSmart();
+  Map<Module,List<OrderEnumerationHandler>> handlersMap=ContainerUtil.newHashMap();
+  for (  final Module module : ModuleManager.getInstance(myProject).getModules()) {
+    final ModuleRootManager moduleRootManager=ModuleRootManager.getInstance(module);
+    for (    OrderEntry orderEntry : moduleRootManager.getOrderEntries()) {
+      if (orderEntry instanceof ModuleOrderEntry) {
+        ModuleOrderEntry moduleOrderEntry=(ModuleOrderEntry)orderEntry;
+        final Module depModule=moduleOrderEntry.getModule();
+        if (depModule != null) {
+          Node node=graph.myNodes.get(depModule);
+          OrderEnumerator en=OrderEnumerator.orderEntries(depModule).exportedOnly();
+          if (node == null) {
+            node=new Node();
+            node.myKey=depModule;
+            graph.myNodes.put(depModule,node);
+            VirtualFile[] importedClassRoots=en.classes().usingCache().getRoots();
+            for (            VirtualFile importedClassRoot : importedClassRoots) {
+              roots.putValue(importedClassRoot,node);
+            }
+            VirtualFile[] importedSourceRoots=en.sources().usingCache().getRoots();
+            for (            VirtualFile sourceRoot : importedSourceRoots) {
+              roots.putValue(sourceRoot,node);
+            }
+          }
+          List<OrderEnumerationHandler> handlers=handlersMap.get(depModule);
+          if (handlers == null) {
+            handlers=en.getCustomHandlers(depModule);
+            handlersMap.put(depModule,handlers);
+          }
+          boolean shouldRecurse=en.shouldRecurse(moduleOrderEntry,handlers);
+          node.myEdges.add(new Edge(module,orderEntry,shouldRecurse));
+        }
+      }
+    }
+  }
+  myGraph=graph;
+  myRoots=roots;
+}
