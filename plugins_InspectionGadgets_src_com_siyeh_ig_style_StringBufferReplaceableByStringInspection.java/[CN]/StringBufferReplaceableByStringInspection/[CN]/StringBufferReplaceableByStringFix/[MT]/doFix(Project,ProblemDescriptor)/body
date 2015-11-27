@@ -4,14 +4,21 @@
   if (!(parent instanceof PsiVariable)) {
     if (parent instanceof PsiNewExpression) {
       final PsiExpression stringBuilderExpression=getCompleteExpression(parent);
+      collectComments(stringBuilderExpression);
       final StringBuilder stringExpression=buildStringExpression(stringBuilderExpression,new StringBuilder());
       if (stringExpression != null && stringBuilderExpression != null) {
+        addLeadingCommentsBefore(stringBuilderExpression);
+        addTrailingCommentsAfter(stringBuilderExpression);
         PsiReplacementUtil.replaceExpression(stringBuilderExpression,stringExpression.toString());
       }
     }
     return;
   }
   final PsiVariable variable=(PsiVariable)parent;
+  final String variableName=variable.getName();
+  if (variableName == null) {
+    return;
+  }
   final PsiTypeElement originalTypeElement=variable.getTypeElement();
   if (originalTypeElement == null) {
     return;
@@ -22,6 +29,7 @@
   }
   final StringBuilder builder;
   if (isAppendCall(initializer)) {
+    collectComments(parent);
     builder=buildStringExpression(initializer,new StringBuilder());
     if (builder == null) {
       return;
@@ -54,9 +62,9 @@
     return;
   }
   final List<PsiMethodCallExpression> expressions=visitor.getExpressions();
-  final String expression=builder.toString().trim();
+  final String expressionText=builder.toString().trim();
   final PsiMethodCallExpression lastExpression=expressions.get(expressions.size() - 1);
-  final boolean useVariable=expression.contains("\n") && !isVariableInitializer(lastExpression);
+  final boolean useVariable=expressionText.contains("\n") && !isVariableInitializer(lastExpression);
   if (useVariable) {
     final PsiStatement statement=PsiTreeUtil.getParentOfType(variable,PsiStatement.class);
     if (statement == null) {
@@ -64,17 +72,31 @@
     }
     final String modifier=CodeStyleSettingsManager.getSettings(project).GENERATE_FINAL_LOCALS ? "final " : "";
     final PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
-    final PsiStatement newStatement=factory.createStatementFromText(modifier + CommonClassNames.JAVA_LANG_STRING + ' '+ variable.getName()+ '='+ expression+ ';',variable);
+    final StringBuilder statementText=new StringBuilder(modifier).append(CommonClassNames.JAVA_LANG_STRING).append(' ').append(variableName).append("=");
+    for (    PsiComment comment : leadingComments) {
+      statementText.append(comment.getText());
+      final PsiElement sibling=comment.getNextSibling();
+      if (sibling instanceof PsiWhiteSpace) {
+        statementText.append(sibling.getText());
+      }
+    }
+    statementText.append(expressionText).append(';');
+    final PsiStatement newStatement=factory.createStatementFromText(statementText.toString(),variable);
     codeBlock.addBefore(newStatement,statement);
+    addTrailingCommentsAfter(lastExpression);
+    PsiReplacementUtil.replaceExpression(lastExpression,variableName);
+  }
+ else {
+    final PsiStatement statement=PsiTreeUtil.getParentOfType(lastExpression,PsiStatement.class);
+    if (statement == null) {
+      return;
+    }
+    addLeadingCommentsBefore(statement);
+    addTrailingCommentsAfter(statement);
+    PsiReplacementUtil.replaceExpression(lastExpression,expressionText);
   }
   variable.delete();
   for (int i=0, size=expressions.size() - 1; i < size; i++) {
     expressions.get(i).getParent().delete();
-  }
-  if (useVariable) {
-    PsiReplacementUtil.replaceExpression(lastExpression,variable.getName());
-  }
- else {
-    PsiReplacementUtil.replaceExpression(lastExpression,expression);
   }
 }

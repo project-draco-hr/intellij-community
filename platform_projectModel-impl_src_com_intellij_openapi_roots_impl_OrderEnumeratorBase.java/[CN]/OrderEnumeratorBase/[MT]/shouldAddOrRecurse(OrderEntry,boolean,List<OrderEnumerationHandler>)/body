@@ -1,0 +1,49 @@
+{
+  if (myCondition != null && !myCondition.value(entry))   return ProcessEntryAction.SKIP;
+  if (entry instanceof JdkOrderEntry && (myWithoutJdk || !firstLevel))   return ProcessEntryAction.SKIP;
+  if (myWithoutLibraries && entry instanceof LibraryOrderEntry)   return ProcessEntryAction.SKIP;
+  if (myWithoutDepModules) {
+    if (!myRecursively && entry instanceof ModuleOrderEntry)     return ProcessEntryAction.SKIP;
+    if (entry instanceof ModuleSourceOrderEntry && !isRootModuleModel(((ModuleSourceOrderEntry)entry).getRootModel())) {
+      return ProcessEntryAction.SKIP;
+    }
+  }
+  if (myWithoutModuleSourceEntries && entry instanceof ModuleSourceOrderEntry)   return ProcessEntryAction.SKIP;
+  OrderEnumerationHandler.AddDependencyType shouldAdd=OrderEnumerationHandler.AddDependencyType.DEFAULT;
+  for (  OrderEnumerationHandler handler : customHandlers) {
+    shouldAdd=handler.shouldAddDependency(entry,this);
+    if (shouldAdd != OrderEnumerationHandler.AddDependencyType.DEFAULT)     break;
+  }
+  if (shouldAdd == OrderEnumerationHandler.AddDependencyType.DO_NOT_ADD) {
+    return ProcessEntryAction.SKIP;
+  }
+  boolean exported=!(entry instanceof JdkOrderEntry);
+  if (entry instanceof ExportableOrderEntry) {
+    ExportableOrderEntry exportableEntry=(ExportableOrderEntry)entry;
+    if (shouldAdd == OrderEnumerationHandler.AddDependencyType.DEFAULT) {
+      final DependencyScope scope=exportableEntry.getScope();
+      boolean forTestCompile=scope.isForTestCompile() || scope == DependencyScope.RUNTIME && shouldAddRuntimeDependenciesToTestCompilationClasspath(customHandlers);
+      if (myCompileOnly && !scope.isForProductionCompile() && !forTestCompile)       return ProcessEntryAction.SKIP;
+      if (myRuntimeOnly && !scope.isForProductionRuntime() && !scope.isForTestRuntime())       return ProcessEntryAction.SKIP;
+      if (myProductionOnly) {
+        if (!scope.isForProductionCompile() && !scope.isForProductionRuntime() || myCompileOnly && !scope.isForProductionCompile() || myRuntimeOnly && !scope.isForProductionRuntime()) {
+          return ProcessEntryAction.SKIP;
+        }
+      }
+    }
+    exported=exportableEntry.isExported();
+  }
+  if (!exported) {
+    if (myExportedOnly)     return ProcessEntryAction.SKIP;
+    if (myRecursivelyExportedOnly && !firstLevel)     return ProcessEntryAction.SKIP;
+  }
+  if (myRecursively && entry instanceof ModuleOrderEntry) {
+    ModuleOrderEntry moduleOrderEntry=(ModuleOrderEntry)entry;
+    final Module depModule=moduleOrderEntry.getModule();
+    if (depModule != null && shouldProcessRecursively(customHandlers)) {
+      return ProcessEntryAction.RECURSE(depModule);
+    }
+  }
+  if (myWithoutDepModules && entry instanceof ModuleOrderEntry)   return ProcessEntryAction.SKIP;
+  return ProcessEntryAction.PROCESS;
+}
