@@ -1,6 +1,5 @@
 {
   final String base=project.getBasePath();
-  final List<String> missing=new LinkedList<String>();
   final ApplyPatchContext patchContext=new ApplyPatchContext(project.getBaseDir(),0,false,false);
   final PatchesPreloader preloader=new PatchesPreloader(project);
   for (  final ShelvedChange shelvedChange : changesFromFirstList) {
@@ -13,7 +12,16 @@
       if (!isNewFile && (file == null || !file.exists()))       throw new FileNotFoundException(beforePath);
     }
  catch (    IOException e) {
-      if (beforePath != null)       missing.add(beforePath);
+      diffRequestProducers.add(new MyDiffRequestProducer(shelvedChange){
+        @NotNull @Override public FilePath getFilePath(){
+          File file=new File(base,shelvedChange.getAfterPath() == null ? shelvedChange.getBeforePath() : shelvedChange.getAfterPath());
+          return VcsUtil.getFilePath(file);
+        }
+        @NotNull @Override public DiffRequest process(        @NotNull UserDataHolder context,        @NotNull ProgressIndicator indicator) throws DiffRequestProducerException, ProcessCanceledException {
+          throw new DiffRequestProducerException("Cannot find base for '" + (beforePath != null ? beforePath : afterPath) + "'");
+        }
+      }
+);
       continue;
     }
     diffRequestProducers.add(new MyDiffRequestProducer(shelvedChange){
@@ -57,8 +65,5 @@
       }
     }
 );
-  }
-  if (!missing.isEmpty()) {
-    VcsBalloonProblemNotifier.showOverChangesView(project,"Show Diff: Cannot find base for: " + StringUtil.join(missing,",\n"),MessageType.WARNING);
   }
 }
