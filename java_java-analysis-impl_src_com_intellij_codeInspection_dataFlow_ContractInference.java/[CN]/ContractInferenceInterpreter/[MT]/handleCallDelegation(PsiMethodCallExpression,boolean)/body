@@ -1,7 +1,10 @@
 {
-  final PsiMethod targetMethod=expression.resolveMethod();
+  JavaResolveResult result=expression.resolveMethodGenerics();
+  final PsiMethod targetMethod=(PsiMethod)result.getElement();
   if (targetMethod == null)   return Collections.emptyList();
+  final PsiParameter[] parameters=targetMethod.getParameterList().getParameters();
   final PsiExpression[] arguments=expression.getArgumentList().getExpressions();
+  final boolean varArgCall=MethodCallInstruction.isVarArgCall(targetMethod,result.getSubstitutor(),arguments,parameters);
   final boolean notNull=NullableNotNullManager.isNotNull(targetMethod);
   List<MethodContract> fromDelegate=ContainerUtil.mapNotNull(ControlFlowAnalyzer.getMethodContracts(targetMethod),new NullableFunction<MethodContract,MethodContract>(){
     @Nullable @Override public MethodContract fun(    MethodContract delegateContract){
@@ -10,6 +13,12 @@
         if (i >= arguments.length)         return null;
         ValueConstraint argConstraint=delegateContract.arguments[i];
         if (argConstraint != ANY_VALUE) {
+          if (varArgCall && i >= parameters.length - 1) {
+            if (argConstraint == NULL_VALUE) {
+              return null;
+            }
+            break;
+          }
           int paramIndex=resolveParameter(arguments[i]);
           if (paramIndex < 0) {
             if (argConstraint != getLiteralConstraint(arguments[i])) {
