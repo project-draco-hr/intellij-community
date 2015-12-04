@@ -1,0 +1,80 @@
+{
+  myProject=project;
+  final ColumnInfo[] COLUMNS=new ColumnInfo[]{new TreeColumnInfo("name"),new ColumnInfo("time elapsed"){
+    @Nullable @Override public Object valueOf(    Object o){
+      if (o instanceof DefaultMutableTreeNode) {
+        final Object userObject=((DefaultMutableTreeNode)o).getUserObject();
+        if (userObject instanceof ExecutionNode) {
+          return ((ExecutionNode)userObject).getDuration();
+        }
+      }
+      return null;
+    }
+  }
+,new ColumnInfo(""){
+    @Nullable @Override public Object valueOf(    Object o){
+      return "";
+    }
+  }
+};
+  myRoot=new ExecutionNode(project);
+  myRoot.setInfo(new ExecutionInfo(null,"Run build"));
+  final ListTreeTableModelOnColumns model=new ListTreeTableModelOnColumns(new DefaultMutableTreeNode(myRoot),COLUMNS);
+  myTreeTable=new TreeTable(model){
+    @Override public TableCellRenderer getCellRenderer(    int row,    int column){
+      if (column == 1) {
+        return new DefaultTableCellRenderer(){
+          @Override public Component getTableCellRendererComponent(          JTable table,          Object value,          boolean isSelected,          boolean hasFocus,          int row,          int column){
+            super.getTableCellRendererComponent(table,value,isSelected,hasFocus,row,column);
+            setHorizontalAlignment(SwingConstants.RIGHT);
+            return this;
+          }
+        }
+;
+      }
+      return super.getCellRenderer(row,column);
+    }
+  }
+;
+  final TreeCellRenderer treeCellRenderer=myTreeTable.getTree().getCellRenderer();
+  myTreeTable.getTree().setCellRenderer(new TreeCellRenderer(){
+    @Override public Component getTreeCellRendererComponent(    JTree tree,    Object value,    boolean selected,    boolean expanded,    boolean leaf,    int row,    boolean hasFocus){
+      final Component rendererComponent=treeCellRenderer.getTreeCellRendererComponent(tree,value,selected,expanded,leaf,row,hasFocus);
+      if (rendererComponent instanceof SimpleColoredComponent) {
+        final Color bg=selected ? UIUtil.getTreeSelectionBackground() : UIUtil.getTreeTextBackground();
+        final Color fg=selected ? UIUtil.getTreeSelectionForeground() : UIUtil.getTreeForeground();
+        if (selected) {
+          for (SimpleColoredComponent.ColoredIterator it=((SimpleColoredComponent)rendererComponent).iterator(); it.hasNext(); ) {
+            it.next();
+            int offset=it.getOffset();
+            int endOffset=it.getEndOffset();
+            SimpleTextAttributes currentAttributes=it.getTextAttributes();
+            SimpleTextAttributes newAttributes=new SimpleTextAttributes(bg,fg,currentAttributes.getWaveColor(),currentAttributes.getStyle());
+            it.split(endOffset - offset,newAttributes);
+          }
+        }
+        SpeedSearchUtil.applySpeedSearchHighlighting(myTreeTable,(SimpleColoredComponent)rendererComponent,true,selected);
+      }
+      return rendererComponent;
+    }
+  }
+);
+  new TreeTableSpeedSearch(myTreeTable).setComparator(new SpeedSearchComparator(false));
+  myTreeTable.setTableHeader(null);
+  final TableColumn treeColumn=myTreeTable.getColumnModel().getColumn(0);
+  treeColumn.setMinWidth(300);
+  final TableColumn timeColumn=myTreeTable.getColumnModel().getColumn(1);
+  timeColumn.setMaxWidth(TIME_COLUMN_WIDTH);
+  timeColumn.setMinWidth(TIME_COLUMN_WIDTH);
+  TreeTableTree tree=myTreeTable.getTree();
+  final SimpleTreeStructure treeStructure=new SimpleTreeStructure.Impl(myRoot);
+  myBuilder=new SimpleTreeBuilder(tree,model,treeStructure,null);
+  Disposer.register(this,myBuilder);
+  myBuilder.expand(treeStructure.getRootElement(),null);
+  myBuilder.initRoot();
+  myBuilder.expand(myRoot,null);
+  myProgressAnimator=new NodeProgressAnimator(myBuilder);
+  myProgressAnimator.setCurrentNode(myRoot);
+  myBuilder.queueUpdateFrom(myRoot,false,true);
+  myPane=ScrollPaneFactory.createScrollPane(myTreeTable,ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+}
