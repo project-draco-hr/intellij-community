@@ -1,0 +1,41 @@
+{
+  final PsiMethodCallExpression methodCall=(PsiMethodCallExpression)descriptor.getPsiElement();
+  final PsiMethod method=methodCall.resolveMethod();
+  if (method == null) {
+    return;
+  }
+  final String methodName=method.getName();
+  Pair<String,String> templatePair=null;
+  if ("assertFalse".equals(methodName) || "assertTrue".equals(methodName)) {
+    final PsiExpression[] expressions=methodCall.getArgumentList().getExpressions();
+    final PsiExpression conditionExpression=expressions[expressions.length - 1];
+    final boolean negate=methodName.contains("False");
+    if (conditionExpression instanceof PsiBinaryExpression) {
+      templatePair=getSuitableMatcherForBinaryExpressionInsideBooleanAssert((PsiBinaryExpression)conditionExpression,negate);
+    }
+ else     if (conditionExpression instanceof PsiMethodCallExpression) {
+      templatePair=getSuitableMatcherForMethodCallInsideBooleanAssert((PsiMethodCallExpression)conditionExpression,negate);
+    }
+  }
+  if (templatePair == null) {
+    templatePair=ASSERT_METHODS.get(methodName);
+  }
+  LOG.assertTrue(templatePair != null);
+  templatePair=buildFullTemplate(templatePair,method);
+  final PsiExpression replaced=TypeConversionDescriptor.replaceExpression(methodCall,templatePair.getFirst(),templatePair.getSecond());
+  if (myStaticallyImportMatchers) {
+    for (    PsiJavaCodeReferenceElement ref : ContainerUtil.reverse(new ArrayList<PsiJavaCodeReferenceElement>(PsiTreeUtil.findChildrenOfType(replaced,PsiJavaCodeReferenceElement.class)))) {
+      if (!ref.isValid())       continue;
+      final PsiElement resolvedElement=ref.resolve();
+      if (resolvedElement instanceof PsiClass) {
+        final String qName=((PsiClass)resolvedElement).getQualifiedName();
+        if (qName != null && qName.startsWith("org.hamcrest")) {
+          final PsiIdentifier identifier=PsiTreeUtil.getChildOfType(ref,PsiIdentifier.class);
+          if (identifier != null) {
+            AddOnDemandStaticImportAction.invoke(project,replaced.getContainingFile(),null,identifier);
+          }
+        }
+      }
+    }
+  }
+}
