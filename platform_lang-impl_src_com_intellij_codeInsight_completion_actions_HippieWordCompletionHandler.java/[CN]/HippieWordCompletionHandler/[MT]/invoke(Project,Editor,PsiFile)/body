@@ -9,19 +9,22 @@
   LookupManager.getInstance(project).hideActiveLookup();
   final CharSequence charsSequence=editor.getDocument().getCharsSequence();
   final CompletionData data=computeData(editor,charsSequence);
-  String currentPrefix=data.myPrefix;
   final CompletionState completionState=getCompletionState(editor);
   String oldPrefix=completionState.oldPrefix;
   CompletionVariant lastProposedVariant=completionState.lastProposedVariant;
   boolean fromOtherFiles=completionState.fromOtherFiles;
-  if (lastProposedVariant == null || oldPrefix == null || !new CamelHumpMatcher(oldPrefix).isStartMatch(currentPrefix) || !currentPrefix.equals(lastProposedVariant.variant)) {
-    oldPrefix=currentPrefix;
+  if (lastProposedVariant == null || oldPrefix == null || !completionState.caretOffsets.equals(getCaretOffsets(editor)) || completionState.lastModCount != editor.getDocument().getModificationStamp()) {
+    oldPrefix=data.myPrefix;
     completionState.oldPrefix=oldPrefix;
     lastProposedVariant=null;
     fromOtherFiles=false;
   }
+ else {
+    data.startOffset=completionState.lastStartOffset;
+  }
   CompletionVariant nextVariant=computeNextVariant(editor,oldPrefix,lastProposedVariant,data,file,fromOtherFiles,false);
   if (nextVariant == null)   return;
+  RangeMarker start=editor.getDocument().createRangeMarker(data.startOffset,data.startOffset);
   nextVariant.fastenBelts();
   try {
     insertStringForEachCaret(editor,nextVariant.variant,caretOffset - data.startOffset);
@@ -29,7 +32,15 @@
   finally {
     nextVariant.unfastenBelts();
   }
+  if (!start.isValid()) {
+    editor.putUserData(KEY_STATE,null);
+    return;
+  }
   completionState.lastProposedVariant=nextVariant;
+  completionState.lastStartOffset=start.getStartOffset();
+  completionState.lastModCount=editor.getDocument().getModificationStamp();
+  completionState.caretOffsets=getCaretOffsets(editor);
   completionState.fromOtherFiles=nextVariant.editor != editor;
   if (nextVariant.editor == editor)   highlightWord(nextVariant,project);
+  start.dispose();
 }

@@ -5,7 +5,7 @@
     final PsiSubstitutor substitutor=resolveSubset(Collections.singletonList(inferenceVariable),mySiteSubstitutor);
     final PsiType substitutedReturnType=substitutor.substitute(inferenceVariable.getParameter());
     if (substitutedReturnType != null) {
-      addConstraint(new TypeCompatibilityConstraint(targetType,PsiImplUtil.normalizeWildcardTypeByPosition(substitutedReturnType,(PsiExpression)myContext)));
+      addConstraint(new TypeCompatibilityConstraint(targetType,PsiUtil.captureToplevelWildcards(substitutedReturnType,myContext)));
     }
   }
  else {
@@ -14,10 +14,20 @@
       final PsiClass psiClass=resolveResult.getElement();
       if (psiClass != null) {
         LOG.assertTrue(returnType instanceof PsiClassType);
+        PsiClassType substitutedCapture=(PsiClassType)PsiUtil.captureToplevelWildcards(returnType,myContext);
         final PsiTypeParameter[] typeParameters=psiClass.getTypeParameters();
-        InferenceVariable[] copy=initBounds(null,typeParameters);
-        final PsiType substitutedCapture=PsiImplUtil.normalizeWildcardTypeByPosition(returnType,(PsiExpression)myContext);
-        myIncorporationPhase.addCapture(copy,(PsiClassType)substituteWithInferenceVariables(returnType));
+        final InferenceVariable[] copy=initBounds(null,typeParameters);
+        final PsiType[] parameters=substitutedCapture.getParameters();
+        final PsiType[] newParameters=new PsiType[parameters.length];
+        final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(myManager.getProject());
+        for (int i=0; i < parameters.length; i++) {
+          newParameters[i]=parameters[i];
+          if (parameters[i] instanceof PsiCapturedWildcardType) {
+            newParameters[i]=elementFactory.createType(copy[i]);
+          }
+        }
+        substitutedCapture=elementFactory.createType(psiClass,newParameters);
+        myIncorporationPhase.addCapture(copy,substitutedCapture);
         addConstraint(new TypeCompatibilityConstraint(targetType,substitutedCapture));
       }
     }
