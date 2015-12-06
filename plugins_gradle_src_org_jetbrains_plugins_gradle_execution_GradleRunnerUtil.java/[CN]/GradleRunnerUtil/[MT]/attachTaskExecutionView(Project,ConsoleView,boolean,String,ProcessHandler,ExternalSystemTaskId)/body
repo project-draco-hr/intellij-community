@@ -1,0 +1,55 @@
+{
+  if (stateStorageKey != null && isTaskConsoleEnabledByDefault && !PropertiesComponent.getInstance().isValueSet(stateStorageKey)) {
+    PropertiesComponent.getInstance().setValue(stateStorageKey,true);
+  }
+  ;
+  final TaskExecutionView gradleExecutionConsole=new TaskExecutionView(project);
+  final Ref<DuplexConsoleView> duplexConsoleViewRef=Ref.create();
+  final DuplexConsoleView duplexConsoleView=new DuplexConsoleView<ConsoleView,ConsoleView>(gradleExecutionConsole,consoleView,stateStorageKey){
+    @NotNull @Override public AnAction[] createConsoleActions(){
+      final DefaultActionGroup textActionGroup=new DefaultActionGroup(){
+        @Override public void update(        AnActionEvent e){
+          super.update(e);
+          if (duplexConsoleViewRef.get() != null) {
+            e.getPresentation().setVisible(!duplexConsoleViewRef.get().isPrimaryConsoleEnabled());
+          }
+        }
+      }
+;
+      final AnAction[] consoleActions=consoleView.createConsoleActions();
+      for (      AnAction anAction : consoleActions) {
+        textActionGroup.add(anAction);
+      }
+      final List<AnAction> anActions=ContainerUtil.newArrayList(super.createConsoleActions());
+      anActions.add(textActionGroup);
+      return ArrayUtil.toObjectArray(anActions,AnAction.class);
+    }
+  }
+;
+  duplexConsoleViewRef.set(duplexConsoleView);
+  duplexConsoleView.setDisableSwitchConsoleActionOnProcessEnd(false);
+  duplexConsoleView.getSwitchConsoleActionPresentation().setIcon(AllIcons.Actions.ChangeView);
+  duplexConsoleView.getSwitchConsoleActionPresentation().setText(GradleBundle.message("gradle.runner.toggle.tree.text.action.name"));
+  final ExternalSystemProgressNotificationManager progressManager=ServiceManager.getService(ExternalSystemProgressNotificationManager.class);
+  final ExternalSystemTaskNotificationListenerAdapter taskListener=new ExternalSystemTaskNotificationListenerAdapter(){
+    @Override public void onStatusChange(    @NotNull final ExternalSystemTaskNotificationEvent event){
+      if (event instanceof ExternalSystemTaskExecutionEvent) {
+        UIUtil.invokeLaterIfNeeded(new Runnable(){
+          @Override public void run(){
+            gradleExecutionConsole.onStatusChange((ExternalSystemTaskExecutionEvent)event);
+          }
+        }
+);
+      }
+    }
+  }
+;
+  progressManager.addNotificationListener(taskId,taskListener);
+  processHandler.addProcessListener(new ProcessAdapter(){
+    @Override public void processTerminated(    ProcessEvent event){
+      progressManager.removeNotificationListener(taskListener);
+    }
+  }
+);
+  return duplexConsoleView;
+}

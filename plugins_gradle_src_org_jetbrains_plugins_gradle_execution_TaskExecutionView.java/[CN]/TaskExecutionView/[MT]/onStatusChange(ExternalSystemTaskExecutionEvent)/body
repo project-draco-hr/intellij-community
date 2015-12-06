@@ -1,0 +1,40 @@
+{
+  final ExternalSystemProgressEvent progressEvent=event.getProgressEvent();
+  final String parentEventId=progressEvent.getParentEventId();
+  if (progressEvent instanceof ExternalSystemStartEvent) {
+    final ExecutionInfo executionInfo=new ExecutionInfo(progressEvent.getEventId(),progressEvent.getDescription());
+    executionInfo.setStartTime(progressEvent.getEventTime());
+    final ExecutionNode currentNode=parentEventId == null ? myRoot : new ExecutionNode(myProject);
+    if (parentEventId != null) {
+      final ExecutionNode parentNode=nodeMap.get(parentEventId);
+      if (parentNode != null) {
+        parentNode.add(currentNode);
+      }
+    }
+    currentNode.setInfo(executionInfo);
+    nodeMap.put(progressEvent.getEventId(),currentNode);
+    myProgressAnimator.setCurrentNode(currentNode);
+    myBuilder.queueUpdateFrom(currentNode,false,true);
+  }
+ else   if (progressEvent instanceof ExternalSystemFinishEvent) {
+    final ExecutionInfo executionInfo;
+    final ExecutionNode node=nodeMap.get(progressEvent.getEventId());
+    executionInfo=node.getInfo();
+    executionInfo.setDisplayName(progressEvent.getDescription());
+    executionInfo.setEndTime(progressEvent.getEventTime());
+    final OperationResult operationResult=((ExternalSystemFinishEvent)progressEvent).getOperationResult();
+    if (operationResult instanceof FailureResult) {
+      executionInfo.setFailed(true);
+    }
+ else     if (operationResult instanceof SkippedResult) {
+      executionInfo.setSkipped(true);
+    }
+ else     if (operationResult instanceof SuccessResult) {
+      executionInfo.setUpToDate(((SuccessResult)operationResult).isUpToDate());
+    }
+    if (parentEventId == null) {
+      myProgressAnimator.stopMovie();
+    }
+    myBuilder.queueUpdateFrom(node,false,false);
+  }
+}
