@@ -5,24 +5,27 @@
   }
   final ProgressIndicator progress=ProgressManager.getInstance().getProgressIndicator();
   final ConcurrentLinkedQueue<Runnable> tasksQueue=new ConcurrentLinkedQueue<Runnable>(tasks);
-  Future<?> result=null;
+  List<Future<?>> results=ContainerUtil.newArrayList();
   if (tasks.size() > 1) {
-    result=ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
-      @Override public void run(){
-        ProgressManager.getInstance().runProcess(new Runnable(){
-          @Override public void run(){
-            Runnable runnable;
-            while ((runnable=tasksQueue.poll()) != null)             runnable.run();
+    int numThreads=Math.max(Math.min(CacheUpdateRunner.indexingThreadCount() - 1,tasks.size() - 1),1);
+    for (int i=0; i < numThreads; ++i) {
+      results.add(ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+        @Override public void run(){
+          ProgressManager.getInstance().runProcess(new Runnable(){
+            @Override public void run(){
+              Runnable runnable;
+              while ((runnable=tasksQueue.poll()) != null)               runnable.run();
+            }
           }
-        }
 ,ProgressWrapper.wrap(progress));
+        }
       }
+));
     }
-);
   }
   Runnable runnable;
   while ((runnable=tasksQueue.poll()) != null)   runnable.run();
-  if (result != null) {
+  for (  Future<?> result : results) {
     try {
       result.get();
     }

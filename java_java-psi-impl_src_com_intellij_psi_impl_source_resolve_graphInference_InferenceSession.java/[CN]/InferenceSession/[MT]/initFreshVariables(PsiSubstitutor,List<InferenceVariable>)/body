@@ -1,0 +1,30 @@
+{
+  final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(getManager().getProject());
+  PsiSubstitutor ySubstitutor=PsiSubstitutor.EMPTY;
+  final PsiTypeParameter[] yVars=new PsiTypeParameter[vars.size()];
+  for (int i=0; i < vars.size(); i++) {
+    InferenceVariable var=vars.get(i);
+    final PsiTypeParameter parameter=var.getParameter();
+    yVars[i]=elementFactory.createTypeParameterFromText(getFreshVariableName(var),parameter);
+    ySubstitutor=ySubstitutor.put(var,elementFactory.createType(yVars[i]));
+  }
+  for (int i=0; i < yVars.length; i++) {
+    PsiTypeParameter parameter=yVars[i];
+    final InferenceVariable var=vars.get(i);
+    final PsiType lub=getLowerBound(var,substitutor);
+    if (lub != PsiType.NULL) {
+      for (      PsiClassType upperBoundType : parameter.getExtendsListTypes()) {
+        if (!TypeConversionUtil.isAssignable(upperBoundType,lub)) {
+          return false;
+        }
+      }
+      parameter.putUserData(LOWER_BOUND,lub);
+    }
+    parameter.putUserData(UPPER_BOUND,composeBound(var,InferenceBound.UPPER,UPPER_BOUND_FUNCTION,ySubstitutor.putAll(substitutor),true));
+    parameter.putUserData(ORIGINAL_CONTEXT,myContext);
+    if (!var.addBound(elementFactory.createType(parameter),InferenceBound.EQ)) {
+      return false;
+    }
+  }
+  return true;
+}
