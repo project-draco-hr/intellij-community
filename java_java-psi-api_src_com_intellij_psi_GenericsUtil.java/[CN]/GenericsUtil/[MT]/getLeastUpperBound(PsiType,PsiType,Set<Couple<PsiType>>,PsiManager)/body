@@ -47,23 +47,36 @@
     if (supers.length == 0) {
       return PsiType.getJavaLangObject(manager,aClass.getResolveScope());
     }
+    final PsiElementFactory elementFactory=JavaPsiFacade.getInstance(manager.getProject()).getElementFactory();
     PsiClassType[] conjuncts=new PsiClassType[supers.length];
     for (int i=0; i < supers.length; i++) {
       PsiClass aSuper=supers[i];
       PsiSubstitutor subst1=TypeConversionUtil.getSuperClassSubstitutor(aSuper,aClass,classResolveResult1.getSubstitutor());
       PsiSubstitutor subst2=TypeConversionUtil.getSuperClassSubstitutor(aSuper,bClass,classResolveResult2.getSubstitutor());
       PsiSubstitutor substitutor=PsiSubstitutor.EMPTY;
+      final Couple<PsiType> types=Couple.<PsiType>of(elementFactory.createType(aSuper,subst1),elementFactory.createType(aSuper,subst2));
       for (      PsiTypeParameter parameter : PsiUtil.typeParametersIterable(aSuper)) {
         PsiType mapping1=subst1.substitute(parameter);
         PsiType mapping2=subst2.substitute(parameter);
         if (mapping1 != null && mapping2 != null) {
-          substitutor=substitutor.put(parameter,getLeastContainingTypeArgument(mapping1,mapping2,compared,manager,type1.equals(mapping1) && type2.equals(mapping2) ? aSuper : null,parameter));
+          if (compared.contains(types)) {
+            substitutor=substitutor.put(parameter,PsiWildcardType.createUnbounded(manager));
+          }
+ else {
+            compared.add(types);
+            try {
+              substitutor=substitutor.put(parameter,getLeastContainingTypeArgument(mapping1,mapping2,compared,manager));
+            }
+  finally {
+              compared.remove(types);
+            }
+          }
         }
  else {
           substitutor=substitutor.put(parameter,null);
         }
       }
-      conjuncts[i]=JavaPsiFacade.getInstance(manager.getProject()).getElementFactory().createType(aSuper,substitutor);
+      conjuncts[i]=elementFactory.createType(aSuper,substitutor);
     }
     return PsiIntersectionType.createIntersection(conjuncts);
   }
