@@ -1,0 +1,150 @@
+{
+  final ProjectImportAction projectImportAction=new ProjectImportAction(resolverCtx.isPreviewMode());
+  final List<KeyValue<String,String>> extraJvmArgs=new ArrayList<KeyValue<String,String>>();
+  final List<String> commandLineArgs=ContainerUtil.newArrayList();
+  final Set<Class> toolingExtensionClasses=ContainerUtil.newHashSet();
+  if (resolverCtx.isPreviewMode()) {
+    commandLineArgs.add("-Didea.isPreviewMode=true");
+    final Set<Class> previewLightWeightToolingModels=ContainerUtil.<Class>set(ExternalProjectPreview.class);
+    projectImportAction.addExtraProjectModelClasses(previewLightWeightToolingModels);
+  }
+  final GradleImportCustomizer importCustomizer=GradleImportCustomizer.get();
+  for (GradleProjectResolverExtension resolverExtension=projectResolverChain; resolverExtension != null; resolverExtension=resolverExtension.getNext()) {
+    resolverExtension.setProjectResolverContext(resolverCtx);
+    resolverExtension.preImportCheck();
+    if (!resolverCtx.isPreviewMode()) {
+      projectImportAction.addExtraProjectModelClasses(resolverExtension.getExtraProjectModelClasses());
+    }
+    if (importCustomizer == null || importCustomizer.useExtraJvmArgs()) {
+      extraJvmArgs.addAll(resolverExtension.getExtraJvmArgs());
+    }
+    commandLineArgs.addAll(resolverExtension.getExtraCommandLineArgs());
+    toolingExtensionClasses.addAll(resolverExtension.getToolingExtensionsClasses());
+  }
+  final ParametersList parametersList=new ParametersList();
+  for (  KeyValue<String,String> jvmArg : extraJvmArgs) {
+    parametersList.addProperty(jvmArg.getKey(),jvmArg.getValue());
+  }
+  final BuildEnvironment buildEnvironment=GradleExecutionHelper.getBuildEnvironment(resolverCtx.getConnection());
+  GradleVersion gradleVersion=null;
+  if (buildEnvironment != null) {
+    gradleVersion=GradleVersion.version(buildEnvironment.getGradle().getGradleVersion());
+  }
+  BuildActionExecuter<ProjectImportAction.AllModels> buildActionExecutor=resolverCtx.getConnection().action(projectImportAction);
+  File initScript=GradleExecutionHelper.generateInitScript(isBuildSrcProject,toolingExtensionClasses);
+  if (initScript != null) {
+    ContainerUtil.addAll(commandLineArgs,GradleConstants.INIT_SCRIPT_CMD_OPTION,initScript.getAbsolutePath());
+  }
+  GradleExecutionHelper.prepare(buildActionExecutor,resolverCtx.getExternalSystemTaskId(),resolverCtx.getSettings(),resolverCtx.getListener(),parametersList.getParameters(),commandLineArgs,resolverCtx.getConnection());
+  resolverCtx.checkCancelled();
+  ProjectImportAction.AllModels allModels;
+  final CancellationTokenSource cancellationTokenSource=GradleConnector.newCancellationTokenSource();
+  try {
+    resolverCtx.setCancellationTokenSource(cancellationTokenSource);
+    buildActionExecutor.withCancellationToken(cancellationTokenSource.token());
+synchronized (myCancellationMap) {
+      myCancellationMap.putValue(resolverCtx.getExternalSystemTaskId(),cancellationTokenSource);
+      if (gradleVersion != null && gradleVersion.compareTo(GradleVersion.version("2.1")) < 0) {
+        myCancellationMap.putValue(resolverCtx.getExternalSystemTaskId(),new UnsupportedCancellationToken());
+      }
+    }
+    allModels=buildActionExecutor.run();
+    if (allModels == null) {
+      throw new IllegalStateException("Unable to get project model for the project: " + resolverCtx.getProjectPath());
+    }
+  }
+ catch (  UnsupportedVersionException unsupportedVersionException) {
+    resolverCtx.checkCancelled();
+    Class<? extends IdeaProject> aClass=resolverCtx.isPreviewMode() ? BasicIdeaProject.class : IdeaProject.class;
+    ModelBuilder<? extends IdeaProject> modelBuilder=myHelper.getModelBuilder(aClass,resolverCtx.getExternalSystemTaskId(),resolverCtx.getSettings(),resolverCtx.getConnection(),resolverCtx.getListener(),parametersList.getParameters());
+    final IdeaProject ideaProject=modelBuilder.get();
+    allModels=new ProjectImportAction.AllModels(ideaProject);
+  }
+ finally {
+synchronized (myCancellationMap) {
+      myCancellationMap.remove(resolverCtx.getExternalSystemTaskId(),cancellationTokenSource);
+    }
+  }
+  resolverCtx.checkCancelled();
+  allModels.setBuildEnvironment(buildEnvironment);
+  extractExternalProjectModels(allModels,resolverCtx.isPreviewMode());
+  resolverCtx.setModels(allModels);
+  ProjectData projectData=projectResolverChain.createProject();
+  DataNode<ProjectData> projectDataNode=new DataNode<ProjectData>(ProjectKeys.PROJECT,projectData,null);
+  JavaProjectData javaProjectData=projectResolverChain.createJavaProjectData();
+  projectDataNode.createChild(JavaProjectData.KEY,javaProjectData);
+  IdeaProject ideaProject=resolverCtx.getModels().getIdeaProject();
+  projectResolverChain.populateProjectExtraModels(ideaProject,projectDataNode);
+  DomainObjectSet<? extends IdeaModule> gradleModules=ideaProject.getModules();
+  if (gradleModules == null || gradleModules.isEmpty()) {
+    throw new IllegalStateException("No modules found for the target project: " + ideaProject);
+  }
+  final Map<String,Pair<DataNode<ModuleData>,IdeaModule>> moduleMap=ContainerUtilRt.newHashMap();
+  final Map<String,Pair<DataNode<GradleSourceSetData>,ExternalSourceSet>> sourceSetsMap=ContainerUtil.newHashMap();
+  projectDataNode.putUserData(RESOLVED_SOURCE_SETS,sourceSetsMap);
+  final Map<String,Pair<String,ExternalSystemSourceType>> moduleOutputsMap=ContainerUtil.newTroveMap(FileUtil.PATH_HASHING_STRATEGY);
+  projectDataNode.putUserData(MODULES_OUTPUTS,moduleOutputsMap);
+  final Map<String,String> artifactsMap=ContainerUtil.newTroveMap(FileUtil.PATH_HASHING_STRATEGY);
+  projectDataNode.putUserData(CONFIGURATION_ARTIFACTS,artifactsMap);
+  for (  IdeaModule gradleModule : gradleModules) {
+    if (gradleModule == null) {
+      continue;
+    }
+    resolverCtx.checkCancelled();
+    if (ExternalSystemDebugEnvironment.DEBUG_ORPHAN_MODULES_PROCESSING) {
+      LOG.info(String.format("Importing module data: %s",gradleModule));
+    }
+    final String moduleName=gradleModule.getName();
+    if (moduleName == null) {
+      throw new IllegalStateException("Module with undefined name detected: " + gradleModule);
+    }
+    DataNode<ModuleData> moduleDataNode=projectResolverChain.createModule(gradleModule,projectDataNode);
+    String mainModuleId=getModuleId(gradleModule);
+    moduleMap.put(mainModuleId,Pair.create(moduleDataNode,gradleModule));
+  }
+  File gradleHomeDir=null;
+  for (  final Pair<DataNode<ModuleData>,IdeaModule> pair : moduleMap.values()) {
+    final DataNode<ModuleData> moduleDataNode=pair.first;
+    final IdeaModule ideaModule=pair.second;
+    if (gradleHomeDir == null) {
+      final BuildScriptClasspathModel buildScriptClasspathModel=resolverCtx.getExtraProject(ideaModule,BuildScriptClasspathModel.class);
+      if (buildScriptClasspathModel != null) {
+        gradleHomeDir=buildScriptClasspathModel.getGradleHomeDir();
+      }
+    }
+    projectResolverChain.populateModuleContentRoots(ideaModule,moduleDataNode);
+    projectResolverChain.populateModuleCompileOutputSettings(ideaModule,moduleDataNode);
+    if (!isBuildSrcProject) {
+      projectResolverChain.populateModuleTasks(ideaModule,moduleDataNode,projectDataNode);
+    }
+    final List<DataNode<? extends ModuleData>> modules=ContainerUtil.newSmartList();
+    modules.add(moduleDataNode);
+    modules.addAll(ExternalSystemApiUtil.findAll(moduleDataNode,GradleSourceSetData.KEY));
+    final ExternalSystemSourceType[] sourceTypes=new ExternalSystemSourceType[]{ExternalSystemSourceType.SOURCE,ExternalSystemSourceType.RESOURCE,ExternalSystemSourceType.TEST,ExternalSystemSourceType.TEST_RESOURCE};
+    for (    DataNode<? extends ModuleData> module : modules) {
+      final ModuleData moduleData=module.getData();
+      for (      ExternalSystemSourceType sourceType : sourceTypes) {
+        final String path=moduleData.getCompileOutputPath(sourceType);
+        if (path != null) {
+          moduleOutputsMap.put(path,Pair.create(moduleData.getId(),sourceType));
+        }
+      }
+      if (moduleData instanceof GradleSourceSetData) {
+        for (        File artifactFile : moduleData.getArtifacts()) {
+          artifactsMap.put(ExternalSystemApiUtil.toCanonicalPath(artifactFile.getAbsolutePath()),moduleData.getId());
+        }
+      }
+    }
+  }
+  for (  final Pair<DataNode<ModuleData>,IdeaModule> pair : moduleMap.values()) {
+    final DataNode<ModuleData> moduleDataNode=pair.first;
+    final IdeaModule ideaModule=pair.second;
+    projectResolverChain.populateModuleDependencies(ideaModule,moduleDataNode,projectDataNode);
+    projectResolverChain.populateModuleExtraModels(ideaModule,moduleDataNode);
+  }
+  mergeSourceSetContentRoots(moduleMap,resolverCtx);
+  mergeLibraryAndModuleDependencyData(projectDataNode,gradleHomeDir,gradleVersion);
+  Collection<DataNode<LibraryData>> libraries=ExternalSystemApiUtil.getChildren(projectDataNode,ProjectKeys.LIBRARY);
+  myLibraryNamesMixer.mixNames(libraries);
+  return projectDataNode;
+}

@@ -1,15 +1,21 @@
 {
   if (InheritanceImplUtil.hasObjectQualifiedName(superClass))   return PsiSubstitutor.EMPTY;
-  if (superClass instanceof InferenceVariable && !(derivedClass instanceof PsiTypeParameter)) {
-    for (    PsiType lowerBound : ((InferenceVariable)superClass).getBounds(InferenceBound.LOWER)) {
-      if (lowerBound instanceof PsiClassType) {
-        final PsiClassType.ClassResolveResult result=((PsiClassType)lowerBound).resolveGenerics();
-        final PsiClass boundClass=result.getElement();
-        if (boundClass != null && boundClass.equals(derivedClass)) {
-          final PsiSubstitutor substitutor=getSuperSubstitutorWithCaching(boundClass,derivedClass,scope,result.getSubstitutor());
-          if (substitutor != null) {
-            return composeSubstitutors(derivedSubstitutor,substitutor,boundClass);
-          }
+  if (!(derivedClass instanceof PsiTypeParameter)) {
+    List<PsiType> bounds=null;
+    if (superClass instanceof InferenceVariable) {
+      bounds=((InferenceVariable)superClass).getBounds(InferenceBound.LOWER);
+    }
+ else     if (superClass instanceof PsiTypeParameter) {
+      final PsiType lowerBound=superClass.getUserData(InferenceSession.LOWER_BOUND);
+      if (lowerBound != null) {
+        bounds=Collections.singletonList(lowerBound);
+      }
+    }
+    if (bounds != null) {
+      for (      PsiType lowerBound : bounds) {
+        final PsiSubstitutor substitutor=processLowerBound(lowerBound,derivedClass,scope,derivedSubstitutor);
+        if (substitutor != null) {
+          return substitutor;
         }
       }
     }

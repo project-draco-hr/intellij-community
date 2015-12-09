@@ -12,24 +12,16 @@
       CharSequence text;
       Application app=ApplicationManager.getApplication();
       if (app != null && app.isDispatchThread() && !app.isWriteAccessAllowed() && !ourDecompileProgressStarted) {
-        final Ref<CharSequence> result=Ref.create(ArrayUtil.EMPTY_CHAR_SEQUENCE);
-        final Ref<Throwable> error=Ref.create();
         ourDecompileProgressStarted=true;
         try {
-          ProgressManager.getInstance().run(new Task.Modal(null,"Decompiling " + file.getName(),true){
-            @Override public void run(            @NotNull ProgressIndicator indicator){
-              indicator.setIndeterminate(true);
-              try {
-                result.set(ApplicationUtil.runWithCheckCanceled(new Callable<CharSequence>(){
-                  @Override public CharSequence call(){
-                    return decompiler.decompile(file);
-                  }
+          text=ProgressManager.getInstance().run(new Task.WithResult<CharSequence,RuntimeException>(null,"Decompiling " + file.getName(),true){
+            @Override protected CharSequence compute(            @NotNull ProgressIndicator indicator){
+              return ApplicationUtil.runWithCheckCanceled(new Computable<CharSequence>(){
+                @Override public CharSequence compute(){
+                  return decompiler.decompile(file);
                 }
-,indicator));
               }
- catch (              Throwable t) {
-                error.set(t);
-              }
+,indicator);
             }
           }
 );
@@ -37,8 +29,6 @@
   finally {
           ourDecompileProgressStarted=false;
         }
-        ExceptionUtil.rethrowUnchecked(error.get());
-        text=result.get();
       }
  else {
         text=decompiler.decompile(file);
