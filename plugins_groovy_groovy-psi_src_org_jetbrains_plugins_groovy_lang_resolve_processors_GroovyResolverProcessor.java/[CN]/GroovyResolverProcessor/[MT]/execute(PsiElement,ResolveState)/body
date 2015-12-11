@@ -4,20 +4,43 @@
   final PsiElement resolveContext=state.get(ClassHint.RESOLVE_CONTEXT);
   final GroovyResolveKind kind=computeKindAndCheckName(namedElement,resolveContext);
   if (!myAcceptableKinds.contains(kind))   return true;
-  if (kind != GroovyResolveKind.PROPERTY && kind != GroovyResolveKind.METHOD) {
+  if (kind == GroovyResolveKind.METHOD && myStopExecutingMethods) {
+    return true;
+  }
+ else   if (kind != GroovyResolveKind.PROPERTY && kind != GroovyResolveKind.METHOD) {
     if (!myCandidates.get(kind).isEmpty())     return true;
   }
   final GroovyResolveResultImpl candidate;
 {
-    PsiSubstitutor substitutor=state.get(PsiSubstitutor.KEY);
-    if (substitutor == null)     substitutor=PsiSubstitutor.EMPTY;
-    if (kind == GroovyResolveKind.PROPERTY && mySubstitutorComputer.getValue() != null) {
-      substitutor=mySubstitutorComputer.getValue().obtainSubstitutor(substitutor,(PsiMethod)element,resolveContext);
-    }
+    final PsiSubstitutor substitutor=getSubstitutor(state);
     final SpreadState spreadState=state.get(SpreadState.SPREAD_STATE);
     final boolean isAccessible=isAccessible(myRef,namedElement);
     final boolean isStaticsOK=isStaticsOK(myRef,namedElement,resolveContext,false);
-    candidate=new GroovyResolveResultImpl(namedElement,resolveContext,spreadState,substitutor,isAccessible,isStaticsOK,kind == GroovyResolveKind.PROPERTY,true);
+    if (kind == GroovyResolveKind.METHOD || kind == GroovyResolveKind.PROPERTY) {
+      final PsiMethod method=(PsiMethod)namedElement;
+      final boolean isApplicable=kind == GroovyResolveKind.PROPERTY || isApplicable(myArgumentTypes,method,null,myRef,true);
+      final NotNullComputable<PsiSubstitutor> substitutorComputer;
+      if (kind == GroovyResolveKind.METHOD) {
+        substitutorComputer=new NotNullCachedComputableWrapper<PsiSubstitutor>(new NotNullComputable<PsiSubstitutor>(){
+          @NotNull @Override public PsiSubstitutor compute(){
+            return myMethodSubstitutorComputer.getValue().obtainSubstitutor(substitutor,method,resolveContext);
+          }
+        }
+);
+      }
+ else {
+        substitutorComputer=new NotNullCachedComputableWrapper<PsiSubstitutor>(new NotNullComputable<PsiSubstitutor>(){
+          @NotNull @Override public PsiSubstitutor compute(){
+            return myPropertySubstitutorComputer.getValue().obtainSubstitutor(substitutor,method,resolveContext);
+          }
+        }
+);
+      }
+      candidate=new GroovyMethodResult(method,resolveContext,spreadState,substitutor,substitutorComputer,kind == GroovyResolveKind.PROPERTY,isAccessible,isStaticsOK,isApplicable);
+    }
+ else {
+      candidate=new GroovyResolveResultImpl(namedElement,resolveContext,spreadState,substitutor,isAccessible,isStaticsOK,false,true);
+    }
   }
   (candidate.isValidResult() ? myCandidates : myInapplicableCandidates).putValue(kind,candidate);
   return true;
