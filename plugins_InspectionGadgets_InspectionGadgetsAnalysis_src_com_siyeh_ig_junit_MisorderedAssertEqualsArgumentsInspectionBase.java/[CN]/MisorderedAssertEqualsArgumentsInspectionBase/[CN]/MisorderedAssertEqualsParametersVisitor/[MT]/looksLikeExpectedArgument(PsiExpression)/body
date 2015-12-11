@@ -1,5 +1,10 @@
 {
-  if (ExpressionUtils.computeConstantExpression(expression) != null || PsiType.NULL.equals(expression.getType())) {
+  expression=ParenthesesUtils.stripParentheses(expression);
+  if (expression == null) {
+    return false;
+  }
+  final PsiType type=expression.getType();
+  if (ExpressionUtils.computeConstantExpression(expression) != null || PsiType.NULL.equals(type)) {
     return true;
   }
   if (expression instanceof PsiReferenceExpression) {
@@ -8,11 +13,25 @@
     if (target instanceof PsiEnumConstant) {
       return true;
     }
-    if ((target instanceof PsiField)) {
+ else     if ((target instanceof PsiField)) {
       final PsiField field=(PsiField)target;
       if (field.hasModifierProperty(PsiModifier.STATIC) && field.hasModifierProperty(PsiModifier.FINAL)) {
         return true;
       }
+    }
+ else     if (target instanceof PsiLocalVariable) {
+      final PsiVariable variable=(PsiLocalVariable)target;
+      final PsiExpression definition=VariableSearchUtils.findDefinition(referenceExpression,variable);
+      if (LibraryUtil.isUsesOnlyLibraryCode(definition)) {
+        return true;
+      }
+    }
+  }
+  if (expression instanceof PsiCallExpression && type instanceof PsiClassType) {
+    final PsiClassType classType=(PsiClassType)type;
+    final PsiClass aClass=classType.resolve();
+    if (aClass instanceof PsiCompiledElement) {
+      return LibraryUtil.isUsesOnlyLibraryCode(expression);
     }
   }
   return false;
