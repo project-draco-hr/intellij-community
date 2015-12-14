@@ -1,28 +1,47 @@
 {
   ExtensionPoint<LineMarkerProvider> point=Extensions.getRootArea().getExtensionPoint(LineMarkerProviders.EP_NAME);
-  LanguageExtensionPoint<LineMarkerProvider>[] extensions=(LanguageExtensionPoint<LineMarkerProvider>[])point.getExtensions();
-  List<LineMarkerProviderDescriptor> descriptors=ContainerUtil.mapNotNull(extensions,new NullableFunction<LanguageExtensionPoint<LineMarkerProvider>,LineMarkerProviderDescriptor>(){
-    @Nullable @Override public LineMarkerProviderDescriptor fun(    LanguageExtensionPoint<LineMarkerProvider> point){
+  @SuppressWarnings("unchecked") LanguageExtensionPoint<LineMarkerProvider>[] extensions=(LanguageExtensionPoint<LineMarkerProvider>[])point.getExtensions();
+  NullableFunction<LanguageExtensionPoint<LineMarkerProvider>,PluginDescriptor> function=new NullableFunction<LanguageExtensionPoint<LineMarkerProvider>,PluginDescriptor>(){
+    @Nullable @Override public PluginDescriptor fun(    LanguageExtensionPoint<LineMarkerProvider> point){
       LineMarkerProvider instance=point.getInstance();
-      if (instance instanceof LineMarkerProviderDescriptor) {
-        LineMarkerProviderDescriptor descriptor=(LineMarkerProviderDescriptor)instance;
-        return descriptor.getName() == null ? null : descriptor;
+      return instance instanceof LineMarkerProviderDescriptor && ((LineMarkerProviderDescriptor)instance).getName() != null ? point.getPluginDescriptor() : null;
+    }
+  }
+;
+  MultiMap<PluginDescriptor,LanguageExtensionPoint<LineMarkerProvider>> map=ContainerUtil.groupBy(Arrays.asList(extensions),function);
+  myDescriptors=new ArrayList<GutterIconDescriptor>();
+  for (  final PluginDescriptor descriptor : map.keySet()) {
+    Collection<LanguageExtensionPoint<LineMarkerProvider>> points=map.get(descriptor);
+    final AtomicBoolean first=new AtomicBoolean(true);
+    for (    LanguageExtensionPoint<LineMarkerProvider> extensionPoint : points) {
+      GutterIconDescriptor instance=(GutterIconDescriptor)extensionPoint.getInstance();
+      if (instance.getOptions().length > 0) {
+        for (        GutterIconDescriptor option : instance.getOptions()) {
+          if (first.getAndSet(false)) {
+            myFirstDescriptors.put(instance,descriptor);
+          }
+          myDescriptors.add(option);
+        }
       }
-      return null;
+ else {
+        if (first.getAndSet(false)) {
+          myFirstDescriptors.put(instance,descriptor);
+        }
+        myDescriptors.add(instance);
+      }
     }
   }
-);
-  myDescriptors=new ArrayList<LineMarkerProviderDescriptor>(new THashSet<LineMarkerProviderDescriptor>(descriptors,new TObjectHashingStrategy<LineMarkerProviderDescriptor>(){
-    @Override public int computeHashCode(    LineMarkerProviderDescriptor object){
-      return object.getClass().hashCode();
-    }
-    @Override public boolean equals(    LineMarkerProviderDescriptor o1,    LineMarkerProviderDescriptor o2){
-      return o1.getClass().equals(o2.getClass());
+  List<GutterIconDescriptor> options=new ArrayList<GutterIconDescriptor>();
+  for (Iterator<GutterIconDescriptor> iterator=myDescriptors.iterator(); iterator.hasNext(); ) {
+    GutterIconDescriptor descriptor=iterator.next();
+    if (descriptor.getOptions().length > 0) {
+      options.addAll(Arrays.asList(descriptor.getOptions()));
+      iterator.remove();
     }
   }
-));
-  myList.setItems(myDescriptors,new Function<LineMarkerProviderDescriptor,String>(){
-    @Override public String fun(    LineMarkerProviderDescriptor descriptor){
+  myDescriptors.addAll(options);
+  myList.setItems(myDescriptors,new Function<GutterIconDescriptor,String>(){
+    @Override public String fun(    GutterIconDescriptor descriptor){
       return descriptor.getName();
     }
   }
