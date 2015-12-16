@@ -18,28 +18,18 @@
   int line1=e.getDocument().getLineNumber(e.getOffset());
   int line2=e.getDocument().getLineNumber(e.getOffset() + e.getOldLength()) + 1;
   int shift=DiffUtil.countLinesShift(e);
-  final List<Pair<TextMergeChange,TextMergeChange.State>> corruptedStates=ContainerUtil.newArrayList();
-  for (  TextMergeChange change : myAllMergeChanges) {
+  final List<TextMergeChange.State> corruptedStates=ContainerUtil.newSmartList();
+  for (int index=0; index < myAllMergeChanges.size(); index++) {
+    TextMergeChange change=myAllMergeChanges.get(index);
     TextMergeChange.State oldState=change.processBaseChange(line1,line2,shift);
     if (oldState != null) {
       if (myCurrentMergeCommand == null) {
-        corruptedStates.add(Pair.create(change,oldState));
+        corruptedStates.add(oldState);
       }
       reinstallHighlighter(change);
     }
   }
   if (!corruptedStates.isEmpty() && myUndoManager != null) {
-    myUndoManager.undoableActionPerformed(new BasicUndoableAction(getEditor().getDocument()){
-      @Override public void undo() throws UnexpectedUndoException {
-        enterBulkChangeUpdateBlock();
-        for (        Pair<TextMergeChange,TextMergeChange.State> pair : corruptedStates) {
-          restoreChangeState(pair.first,pair.second);
-        }
-        exitBulkChangeUpdateBlock();
-      }
-      @Override public void redo() throws UnexpectedUndoException {
-      }
-    }
-);
+    myUndoManager.undoableActionPerformed(new MyUndoableAction(TextMergeViewer.this,corruptedStates,true));
   }
 }
