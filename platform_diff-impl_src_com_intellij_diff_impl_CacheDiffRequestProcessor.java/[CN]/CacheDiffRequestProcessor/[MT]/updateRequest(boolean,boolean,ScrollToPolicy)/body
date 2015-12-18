@@ -1,0 +1,31 @@
+{
+  if (isDisposed())   return;
+  final T requestProvider=getCurrentRequestProvider();
+  if (requestProvider == null) {
+    applyRequest(NoDiffRequest.INSTANCE,force,scrollToChangePolicy);
+    return;
+  }
+  DiffRequest cachedRequest=useCache ? loadRequestFast(requestProvider) : null;
+  if (cachedRequest != null) {
+    applyRequest(cachedRequest,force,scrollToChangePolicy);
+    return;
+  }
+  myQueue.executeAndTryWait(new Function<ProgressIndicator,Runnable>(){
+    @Override public Runnable fun(    ProgressIndicator indicator){
+      final DiffRequest request=doLoadRequest(requestProvider,indicator);
+      return new Runnable(){
+        @CalledInAwt @Override public void run(){
+          myRequestCache.put(requestProvider,request);
+          applyRequest(request,force,scrollToChangePolicy);
+        }
+      }
+;
+    }
+  }
+,new Runnable(){
+    @Override public void run(){
+      applyRequest(new LoadingDiffRequest(getRequestName(requestProvider)),force,scrollToChangePolicy);
+    }
+  }
+,ProgressWindow.DEFAULT_PROGRESS_DIALOG_POSTPONE_TIME_MILLIS);
+}
