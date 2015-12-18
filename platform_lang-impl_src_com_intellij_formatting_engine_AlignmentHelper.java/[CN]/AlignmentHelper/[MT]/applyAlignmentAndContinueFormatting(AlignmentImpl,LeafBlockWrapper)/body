@@ -1,0 +1,40 @@
+{
+  BlockAlignmentProcessor alignmentProcessor=ALIGNMENT_PROCESSORS.get(alignment.getAnchor());
+  if (alignmentProcessor == null) {
+    LOG.error(String.format("Can't find alignment processor for alignment anchor %s",alignment.getAnchor()));
+    return currentBlock;
+  }
+  BlockAlignmentProcessor.Context context=new BlockAlignmentProcessor.Context(myDocument,alignment,currentBlock,myAlignmentMappings,myBackwardShiftedAlignedBlocks,myBlockIndentOptions.getIndentOptions(currentBlock));
+  BlockAlignmentProcessor.Result result=alignmentProcessor.applyAlignment(context);
+  final LeafBlockWrapper offsetResponsibleBlock=alignment.getOffsetRespBlockBefore(currentBlock);
+switch (result) {
+case TARGET_BLOCK_PROCESSED_NOT_ALIGNED:
+    return currentBlock;
+case TARGET_BLOCK_ALIGNED:
+  storeAlignmentMapping(currentBlock);
+return currentBlock;
+case BACKWARD_BLOCK_ALIGNED:
+if (offsetResponsibleBlock == null) {
+return currentBlock;
+}
+Set<LeafBlockWrapper> blocksCausedRealignment=new HashSet<LeafBlockWrapper>();
+myBackwardShiftedAlignedBlocks.clear();
+myBackwardShiftedAlignedBlocks.put(offsetResponsibleBlock,blocksCausedRealignment);
+blocksCausedRealignment.add(currentBlock);
+storeAlignmentMapping(currentBlock,offsetResponsibleBlock);
+if (myBlockRollbacks > myTotalBlocksWithAlignments) {
+reportAlignmentProcessingError(context);
+return currentBlock;
+}
+myBlockRollbacks++;
+return offsetResponsibleBlock.getNextBlock();
+case RECURSION_DETECTED:
+myAlignmentsToSkip.add(alignment);
+return offsetResponsibleBlock;
+case UNABLE_TO_ALIGN_BACKWARD_BLOCK:
+myAlignmentsToSkip.add(alignment);
+return null;
+default :
+return currentBlock;
+}
+}
