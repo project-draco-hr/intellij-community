@@ -1,35 +1,9 @@
 {
   int attemptCount=0;
   if (bootstrap.group() instanceof NioEventLoopGroup) {
-    while (true) {
-      ChannelFuture future=bootstrap.connect(remoteAddress).awaitUninterruptibly();
-      if (future.isSuccess()) {
-        return future.channel();
-      }
- else       if (stopCondition.value(null) || (promise != null && promise.getState() == Promise.State.REJECTED)) {
-        return null;
-      }
- else       if (maxAttemptCount == -1) {
-        Thread.sleep(300);
-        attemptCount++;
-      }
- else       if (++attemptCount < maxAttemptCount) {
-        Thread.sleep(attemptCount * MIN_START_TIME);
-      }
- else {
-        @SuppressWarnings("ThrowableResultOfMethodCallIgnored") Throwable cause=future.cause();
-        if (promise != null) {
-          if (cause == null) {
-            promise.setError("Cannot connect: unknown error");
-          }
- else {
-            promise.setError(cause);
-          }
-        }
-        return null;
-      }
-    }
+    return connectNio(bootstrap,remoteAddress,promise,maxAttemptCount,stopCondition,attemptCount);
   }
+  bootstrap.validate();
   Socket socket;
   while (true) {
     try {
@@ -41,11 +15,15 @@
         return null;
       }
  else       if (maxAttemptCount == -1) {
-        Thread.sleep(300);
+        if (sleep(promise,300)) {
+          return null;
+        }
         attemptCount++;
       }
  else       if (++attemptCount < maxAttemptCount) {
-        Thread.sleep(attemptCount * MIN_START_TIME);
+        if (sleep(promise,attemptCount * MIN_START_TIME)) {
+          return null;
+        }
       }
  else {
         if (promise != null) {
