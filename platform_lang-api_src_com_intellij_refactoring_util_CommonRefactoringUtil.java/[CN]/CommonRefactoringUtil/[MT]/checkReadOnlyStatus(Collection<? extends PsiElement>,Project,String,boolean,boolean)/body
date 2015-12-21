@@ -6,16 +6,14 @@
     if (element instanceof PsiDirectory) {
       final PsiDirectory dir=(PsiDirectory)element;
       final VirtualFile vFile=dir.getVirtualFile();
-      if (vFile.getFileSystem() instanceof JarFileSystem) {
+      if (vFile.getFileSystem().isReadOnly()) {
         failed.add(vFile);
       }
+ else       if (recursively) {
+        collectReadOnlyFiles(vFile,readonly);
+      }
  else {
-        if (recursively) {
-          collectReadOnlyFiles(vFile,readonly);
-        }
- else {
-          readonly.add(vFile);
-        }
+        readonly.add(vFile);
       }
     }
  else     if (element instanceof PsiDirectoryContainer) {
@@ -23,20 +21,18 @@
       for (      PsiDirectory directory : directories) {
         VirtualFile virtualFile=directory.getVirtualFile();
         if (recursively) {
-          if (virtualFile.getFileSystem() instanceof JarFileSystem) {
+          if (virtualFile.getFileSystem().isReadOnly()) {
             failed.add(virtualFile);
           }
  else {
             collectReadOnlyFiles(virtualFile,readonly);
           }
         }
+ else         if (virtualFile.getFileSystem().isReadOnly()) {
+          failed.add(virtualFile);
+        }
  else {
-          if (virtualFile.getFileSystem() instanceof JarFileSystem) {
-            failed.add(virtualFile);
-          }
- else {
-            readonly.add(virtualFile);
-          }
+          readonly.add(virtualFile);
         }
       }
     }
@@ -52,29 +48,24 @@
         if (vFile != null) {
           readonly.add(vFile);
         }
- else {
-          if (!element.isWritable()) {
-            seenNonWritablePsiFilesWithoutVirtualFile=true;
-          }
+ else         if (!element.isWritable()) {
+          seenNonWritablePsiFilesWithoutVirtualFile=true;
         }
       }
     }
   }
-  final VirtualFile[] files=VfsUtilCore.toVirtualFileArray(readonly);
-  final ReadonlyStatusHandler.OperationStatus status=ReadonlyStatusHandler.getInstance(project).ensureFilesWritable(files);
+  ReadonlyStatusHandler.OperationStatus status=ReadonlyStatusHandler.getInstance(project).ensureFilesWritable(readonly);
   ContainerUtil.addAll(failed,status.getReadonlyFiles());
   if (notifyOnFail && (!failed.isEmpty() || seenNonWritablePsiFilesWithoutVirtualFile && readonly.isEmpty())) {
-    StringBuilder message=new StringBuilder(messagePrefix);
-    message.append('\n');
+    StringBuilder message=new StringBuilder(messagePrefix).append('\n');
     int i=0;
     for (    VirtualFile virtualFile : failed) {
-      final String presentableUrl=virtualFile.getPresentableUrl();
-      final String subj=virtualFile.isDirectory() ? RefactoringBundle.message("directory.description",presentableUrl) : RefactoringBundle.message("file.description",presentableUrl);
-      if (virtualFile.getFileSystem() instanceof JarFileSystem) {
-        message.append(RefactoringBundle.message("0.is.located.in.a.jar.file",subj));
+      String subj=RefactoringBundle.message(virtualFile.isDirectory() ? "directory.description" : "file.description",virtualFile.getPresentableUrl());
+      if (virtualFile.getFileSystem().isReadOnly()) {
+        message.append(RefactoringBundle.message("0.is.located.in.a.jar.file",subj)).append('\n');
       }
  else {
-        message.append(RefactoringBundle.message("0.is.read.only",subj));
+        message.append(RefactoringBundle.message("0.is.read.only",subj)).append('\n');
       }
       if (i++ > 20) {
         message.append("...\n");

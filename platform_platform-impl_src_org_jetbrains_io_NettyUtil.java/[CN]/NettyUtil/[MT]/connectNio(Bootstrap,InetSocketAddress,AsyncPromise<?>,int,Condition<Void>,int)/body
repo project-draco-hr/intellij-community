@@ -1,0 +1,37 @@
+{
+  while (true) {
+    ChannelFuture future=bootstrap.connect(remoteAddress).awaitUninterruptibly();
+    if (future.isSuccess()) {
+      if (!future.channel().isOpen()) {
+        continue;
+      }
+      return future.channel();
+    }
+ else     if (stopCondition.value(null) || (promise != null && promise.getState() == Promise.State.REJECTED)) {
+      return null;
+    }
+ else     if (maxAttemptCount == -1) {
+      if (sleep(promise,300)) {
+        return null;
+      }
+      attemptCount++;
+    }
+ else     if (++attemptCount < maxAttemptCount) {
+      if (sleep(promise,attemptCount * MIN_START_TIME)) {
+        return null;
+      }
+    }
+ else {
+      @SuppressWarnings("ThrowableResultOfMethodCallIgnored") Throwable cause=future.cause();
+      if (promise != null) {
+        if (cause == null) {
+          promise.setError("Cannot connect: unknown error");
+        }
+ else {
+          promise.setError(cause);
+        }
+      }
+      return null;
+    }
+  }
+}

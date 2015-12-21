@@ -3,16 +3,22 @@
     return false;
   }
   if (element instanceof PsiMethod) {
-    PsiMethod method=(PsiMethod)element;
+    final PsiMethod method=(PsiMethod)element;
     if (method.isConstructor() != myIsConstructor)     return true;
-    PsiSubstitutor substitutor=inferSubstitutor(method,state);
-    PsiElement resolveContext=state.get(RESOLVE_CONTEXT);
+    final PsiElement resolveContext=state.get(RESOLVE_CONTEXT);
     final SpreadState spreadState=state.get(SpreadState.SPREAD_STATE);
+    final PsiSubstitutor partialSubstitutor=getSubstitutor(state);
+    final NotNullComputable<PsiSubstitutor> substitutorComputer=new NotNullCachedComputableWrapper<PsiSubstitutor>(new NotNullComputable<PsiSubstitutor>(){
+      @NotNull @Override public PsiSubstitutor compute(){
+        return mySubstitutorComputer.obtainSubstitutor(partialSubstitutor,method,resolveContext);
+      }
+    }
+);
     boolean isAccessible=isAccessible(method);
     boolean isStaticsOK=isStaticsOK(method,resolveContext,false);
-    boolean isApplicable=PsiUtil.isApplicable(myArgumentTypes,method,substitutor,myPlace,myByShape);
+    boolean isApplicable=PsiUtil.isApplicable(myArgumentTypes,method,null,myPlace,true);
     boolean isValidResult=isStaticsOK && isAccessible && isApplicable;
-    GroovyResolveResultImpl candidate=new GroovyResolveResultImpl(method,resolveContext,spreadState,substitutor,isAccessible,isStaticsOK,false,isValidResult);
+    GroovyMethodResult candidate=new GroovyMethodResult(method,resolveContext,spreadState,partialSubstitutor,substitutorComputer,isAccessible,isStaticsOK,isValidResult);
     if (!myAllVariants && isValidResult) {
       addCandidate(candidate);
     }

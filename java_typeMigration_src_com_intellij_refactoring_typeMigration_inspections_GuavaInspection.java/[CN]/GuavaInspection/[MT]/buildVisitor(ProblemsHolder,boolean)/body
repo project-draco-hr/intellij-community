@@ -27,7 +27,7 @@
       final PsiType type=variable.getType();
       PsiType targetType=getConversionClassType(type);
       if (targetType != null) {
-        holder.registerProblem(variable,PROBLEM_DESCRIPTION_FOR_VARIABLE,TypeMigrationVariableTypeFixProvider.createTypeMigrationFix(variable,targetType,true));
+        holder.registerProblem(variable.getNameIdentifier(),PROBLEM_DESCRIPTION_FOR_VARIABLE,new MigrateGuavaTypeFix(variable,targetType,null));
       }
     }
     @Override public void visitMethod(    PsiMethod method){
@@ -37,11 +37,30 @@
       if (targetType != null) {
         final PsiTypeElement typeElement=method.getReturnTypeElement();
         if (typeElement != null) {
-          holder.registerProblem(typeElement,PROBLEM_DESCRIPTION_FOR_VARIABLE,new MigrateMethodReturnTypeFix(method,targetType));
+          holder.registerProblem(typeElement,PROBLEM_DESCRIPTION_FOR_VARIABLE,new MigrateGuavaTypeFix(method,targetType,null));
         }
       }
     }
     @Override public void visitMethodCallExpression(    PsiMethodCallExpression expression){
+      checkFluentIterableGenerationMethod(expression);
+      checkPredicatesUtilityMethod(expression);
+    }
+    private void checkPredicatesUtilityMethod(    PsiMethodCallExpression expression){
+      final PsiElement parent=expression.getParent();
+      if (parent instanceof PsiAssignmentExpression || parent instanceof PsiVariable) {
+        return;
+      }
+      if (FunctionalInterfaceTypeConversionDescriptor.isPredicates(expression)) {
+        final PsiMethod method=expression.resolveMethod();
+        if (GuavaPredicateConversionRule.isConvertablePredicatesMethod(method)) {
+          final PsiClassType initialType=(PsiClassType)expression.getType();
+          PsiClassType targetType=createTargetType(initialType);
+          if (targetType == null)           return;
+          holder.registerProblem(expression.getMethodExpression().getReferenceNameElement(),PROBLEM_DESCRIPTION_FOR_VARIABLE,new MigrateGuavaTypeFix(expression,targetType,initialType));
+        }
+      }
+    }
+    private void checkFluentIterableGenerationMethod(    PsiMethodCallExpression expression){
       if (!checkChains)       return;
       if (!isFluentIterableFromCall(expression))       return;
       final PsiMethodCallExpression chain=findGuavaMethodChain(expression);
@@ -57,13 +76,17 @@
       }
       PsiClassType initialType=(PsiClassType)expression.getType();
       LOG.assertTrue(initialType != null);
+      PsiClassType targetType=createTargetType(initialType);
+      if (targetType == null)       return;
+      holder.registerProblem(chain,PROBLEM_DESCRIPTION_FOR_METHOD_CHAIN,new MigrateGuavaTypeFix(chain,targetType,initialType));
+    }
+    @Nullable private PsiClassType createTargetType(    PsiClassType initialType){
       PsiClass resolvedClass=initialType.resolve();
       PsiClass target;
       if (resolvedClass == null || (target=myGuavaClassConversions.getValue().get(resolvedClass.getQualifiedName())) == null) {
-        return;
+        return null;
       }
-      PsiClassType targetType=addTypeParameters(initialType,initialType.resolveGenerics(),target);
-      holder.registerProblem(chain,PROBLEM_DESCRIPTION_FOR_METHOD_CHAIN,new MigrateFluentIterableChainQuickFix(chain,initialType,targetType));
+      return addTypeParameters(initialType,initialType.resolveGenerics(),target);
     }
     private PsiType getConversionClassType(    PsiType initialType){
       if (initialType == null)       return null;
