@@ -1,5 +1,23 @@
 {
-  RefsModel refsModel=new RefsModel(refs,hashMap);
-  PermanentGraph<Integer> graph=buildPermanentGraph(commits,refsModel,hashMap,providers);
-  return new DataPack(refsModel,graph,providers,full);
+  RefsModel refsModel;
+  PermanentGraph<Integer> permanentGraph;
+  if (commits.isEmpty()) {
+    refsModel=new RefsModel(refs,ContainerUtil.<Integer>newHashSet(),hashMap);
+    permanentGraph=EmptyPermanentGraph.getInstance();
+  }
+ else {
+    refsModel=new RefsModel(refs,getHeads(commits),hashMap);
+    NotNullFunction<Integer,Hash> hashGetter=new NotNullFunction<Integer,Hash>(){
+      @NotNull @Override public Hash fun(      Integer commitIndex){
+        return hashMap.getCommitId(commitIndex).getHash();
+      }
+    }
+;
+    GraphColorManagerImpl colorManager=new GraphColorManagerImpl(refsModel,hashGetter,getRefManagerMap(providers));
+    Set<Integer> branches=getBranchCommitHashIndexes(refsModel.getBranches(),hashMap);
+    StopWatch sw=StopWatch.start("building graph");
+    permanentGraph=PermanentGraphImpl.newInstance(commits,colorManager,branches);
+    sw.report();
+  }
+  return new DataPack(refsModel,permanentGraph,providers,full);
 }
