@@ -1,0 +1,17 @@
+{
+  final JavaPsiFacade facade=JavaPsiFacade.getInstance(expression.getProject());
+  final PsiClass javaUtilCollection=facade.findClass(CommonClassNames.JAVA_UTIL_COLLECTION,expression.getResolveScope());
+  LOG.assertTrue(javaUtilCollection != null);
+  final PsiClassType assignableCollection=facade.getElementFactory().createType(javaUtilCollection,getQualifierElementType((PsiMethodCallExpression)expression));
+  final PsiType actualType=((PsiMethodCallExpression)expression).getArgumentList().getExpressions()[0].getType();
+  final String replaceTemplate;
+  if (actualType == null || TypeConversionUtil.isAssignable(assignableCollection,actualType)) {
+    replaceTemplate="$it$.collect(java.util.stream.Collectors.toCollection(() -> $c$))";
+  }
+ else {
+    String varName=chooseName(expression,assignableCollection);
+    replaceTemplate="$it$.collect(java.util.stream.Collectors.collectingAndThen(java.util.stream.Collectors.toList(), " + varName + " -> {\n"+ "            $c$.addAll("+ varName+ ");\n"+ "            return $c$;\n"+ "        }))";
+  }
+  setReplaceByString(replaceTemplate);
+  return super.replace(expression,evaluator);
+}
