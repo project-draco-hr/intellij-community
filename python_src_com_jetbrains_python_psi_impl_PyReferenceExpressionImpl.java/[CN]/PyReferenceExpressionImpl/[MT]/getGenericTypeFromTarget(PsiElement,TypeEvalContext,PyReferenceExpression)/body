@@ -1,0 +1,71 @@
+{
+  if (!(target instanceof PyTargetExpression)) {
+    final PyType pyType=getReferenceTypeFromProviders(target,context,anchor);
+    if (pyType != null) {
+      return pyType;
+    }
+  }
+  if (target instanceof PyTargetExpression) {
+    final String name=((PyTargetExpression)target).getName();
+    if (PyNames.NONE.equals(name)) {
+      return PyNoneType.INSTANCE;
+    }
+    if (PyNames.TRUE.equals(name) || PyNames.FALSE.equals(name)) {
+      return PyBuiltinCache.getInstance(target).getBoolType();
+    }
+  }
+  if (target instanceof PyFile) {
+    return new PyModuleType((PyFile)target);
+  }
+  if (target instanceof PyImportedModule) {
+    return new PyImportedModuleType((PyImportedModule)target);
+  }
+  if ((target instanceof PyTargetExpression || target instanceof PyNamedParameter) && anchor != null && context.allowDataFlow(anchor)) {
+    final ScopeOwner scopeOwner=PsiTreeUtil.getStubOrPsiParentOfType(anchor,ScopeOwner.class);
+    if (scopeOwner != null && scopeOwner == PsiTreeUtil.getStubOrPsiParentOfType(target,ScopeOwner.class)) {
+      final String name=((PyElement)target).getName();
+      if (name != null) {
+        final PyType type=getTypeByControlFlow(name,context,anchor,scopeOwner);
+        if (type != null) {
+          return type;
+        }
+      }
+    }
+  }
+  if (target instanceof PyFunction) {
+    final PyDecoratorList decoratorList=((PyFunction)target).getDecoratorList();
+    if (decoratorList != null) {
+      final PyDecorator propertyDecorator=decoratorList.findDecorator(PyNames.PROPERTY);
+      if (propertyDecorator != null) {
+        return PyBuiltinCache.getInstance(target).getObjectType(PyNames.PROPERTY);
+      }
+      for (      PyDecorator decorator : decoratorList.getDecorators()) {
+        final QualifiedName qName=decorator.getQualifiedName();
+        if (qName != null && (qName.endsWith(PyNames.SETTER) || qName.endsWith(PyNames.DELETER) || qName.endsWith(PyNames.GETTER))) {
+          return PyBuiltinCache.getInstance(target).getObjectType(PyNames.PROPERTY);
+        }
+      }
+    }
+  }
+  if (target instanceof PyTypedElement) {
+    return context.getType((PyTypedElement)target);
+  }
+  if (target instanceof PsiDirectory) {
+    final PsiDirectory dir=(PsiDirectory)target;
+    PsiFile file=dir.findFile(PyNames.INIT_DOT_PY);
+    if (file != null) {
+      return getTypeFromTarget(file,context,anchor);
+    }
+    if (PyUtil.isPackage(dir,anchor)) {
+      final PsiFile containingFile=anchor.getContainingFile();
+      if (containingFile instanceof PyFile) {
+        final QualifiedName qualifiedName=QualifiedNameFinder.findShortestImportableQName(dir);
+        if (qualifiedName != null) {
+          final PyImportedModule module=new PyImportedModule(null,(PyFile)containingFile,qualifiedName);
+          return new PyImportedModuleType(module);
+        }
+      }
+    }
+  }
+  return null;
+}
