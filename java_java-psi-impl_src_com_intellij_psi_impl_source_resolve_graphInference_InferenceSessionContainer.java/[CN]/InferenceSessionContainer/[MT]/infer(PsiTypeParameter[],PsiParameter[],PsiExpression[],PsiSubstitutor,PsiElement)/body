@@ -3,16 +3,25 @@
     final PsiExpressionList argumentList=((PsiCall)parent).getArgumentList();
     final MethodCandidateInfo.CurrentCandidateProperties properties=MethodCandidateInfo.getCurrentMethod(argumentList);
     if (properties != null && !properties.isApplicabilityCheck()) {
-      final Pair<PsiSubstitutor,Map<PsiElement,InitialInferenceState>> session=PsiResolveHelper.ourGraphGuard.doPreventingRecursion(parent,false,new Computable<Pair<PsiSubstitutor,Map<PsiElement,InitialInferenceState>>>(){
-        @Override public Pair<PsiSubstitutor,Map<PsiElement,InitialInferenceState>> compute(){
-          return createValue(parent);
+      final InferenceSession session=PsiResolveHelper.ourGraphGuard.doPreventingRecursion(parent,false,new Computable<InferenceSession>(){
+        @Override public InferenceSession compute(){
+          if (MethodCandidateInfo.isOverloadCheck()) {
+            return startTopLevelInference(parent);
+          }
+          return CachedValuesManager.getCachedValue(parent,new CachedValueProvider<InferenceSession>(){
+            @Nullable @Override public Result<InferenceSession> compute(){
+              return new Result<InferenceSession>(startTopLevelInference(parent),PsiModificationTracker.MODIFICATION_COUNT);
+            }
+          }
+);
         }
       }
 );
       if (session != null) {
-        final InitialInferenceState initialInferenceState=session.second.get(PsiTreeUtil.getParentOfType(argumentList,PsiCall.class));
+        final CompoundInitialState compoundInitialState=createState(session);
+        final InitialInferenceState initialInferenceState=compoundInitialState.getInitialState(PsiTreeUtil.getParentOfType(argumentList,PsiCall.class));
         if (initialInferenceState != null) {
-          return new InferenceSession(initialInferenceState).collectAdditionalAndInfer(parameters,arguments,properties,session.first);
+          return new InferenceSession(initialInferenceState).collectAdditionalAndInfer(parameters,arguments,properties,compoundInitialState.getInitialSubstitutor());
         }
       }
     }
