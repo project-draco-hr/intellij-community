@@ -1,20 +1,22 @@
 {
   PsiMethod method1=result1.getElement();
-  PsiSubstitutor substitutor1=result1.getSubstitutor(false);
-  PsiElement resolveContext1=result1.getCurrentFileResolveContext();
+  final PsiSubstitutor substitutor1=result1.getSubstitutor(false);
+  final PsiElement resolveContext1=result1.getCurrentFileResolveContext();
   PsiMethod method2=result2.getElement();
-  PsiSubstitutor substitutor2=result2.getSubstitutor(false);
-  PsiElement resolveContext2=result2.getCurrentFileResolveContext();
-  final Boolean custom=GrMethodComparator.checkDominated(method1,substitutor1,method2,substitutor2,this);
-  if (custom != null)   return custom;
-  PsiType[] argTypes=myArgumentTypes;
+  final PsiSubstitutor substitutor2=result2.getSubstitutor(false);
+  final PsiElement resolveContext2=result2.getCurrentFileResolveContext();
+  final PsiType[] argTypes;
   if (method1 instanceof GrGdkMethod && method2 instanceof GrGdkMethod) {
     method1=((GrGdkMethod)method1).getStaticMethod();
     method2=((GrGdkMethod)method2).getStaticMethod();
-    if (myArgumentTypes != null) {
-      argTypes=PsiType.createArray(argTypes.length + 1);
-      System.arraycopy(myArgumentTypes,0,argTypes,1,myArgumentTypes.length);
-      argTypes[0]=myThisType;
+    final PsiType[] contextArgumentTypes=context.getArgumentTypes();
+    if (contextArgumentTypes == null) {
+      argTypes=null;
+    }
+ else {
+      argTypes=PsiType.createArray(contextArgumentTypes.length + 1);
+      System.arraycopy(contextArgumentTypes,0,argTypes,1,contextArgumentTypes.length);
+      argTypes[0]=context.getThisType();
     }
   }
  else   if (method1 instanceof GrGdkMethod) {
@@ -23,7 +25,10 @@
  else   if (method2 instanceof GrGdkMethod) {
     return false;
   }
-  if (myIsConstructor && argTypes != null && argTypes.length == 1) {
+ else {
+    argTypes=context.getArgumentTypes();
+  }
+  if (context.isConstructor() && argTypes != null && argTypes.length == 1) {
     if (method1.getParameterList().getParametersCount() == 0)     return true;
     if (method2.getParameterList().getParametersCount() == 0)     return false;
   }
@@ -35,11 +40,12 @@
     final PsiType lastType=params1[params1.length - 1].getType();
     return lastType instanceof PsiArrayType;
   }
+  final PsiElement myPlace=context.getPlace();
   for (int i=0; i < params2.length; i++) {
-    final PsiType ptype1=params1[i].getType();
-    final PsiType ptype2=params2[i].getType();
-    PsiType type1=substitutor1.substitute(ptype1);
-    PsiType type2=substitutor2.substitute(ptype2);
+    final PsiType pType1=params1[i].getType();
+    final PsiType pType2=params2[i].getType();
+    PsiType type1=substitutor1.substitute(pType1);
+    PsiType type2=substitutor2.substitute(pType2);
     if (argTypes != null && argTypes.length > i) {
       PsiType argType=argTypes[i];
       if (argType != null) {
@@ -53,7 +59,7 @@
         }
       }
     }
-    if (!typesAgree(TypeConversionUtil.erasure(ptype1),TypeConversionUtil.erasure(ptype2)))     return false;
+    if (!typesAgree(TypeConversionUtil.erasure(pType1),TypeConversionUtil.erasure(pType2),context))     return false;
     if (resolveContext1 != null && resolveContext2 == null) {
       return !(TypesUtil.resolvesTo(type1,CommonClassNames.JAVA_LANG_OBJECT) && TypesUtil.resolvesTo(type2,CommonClassNames.JAVA_LANG_OBJECT));
     }
