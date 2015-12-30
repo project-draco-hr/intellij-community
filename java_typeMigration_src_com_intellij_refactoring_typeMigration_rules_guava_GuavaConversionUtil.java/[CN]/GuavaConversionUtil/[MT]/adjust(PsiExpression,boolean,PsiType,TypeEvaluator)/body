@@ -1,0 +1,34 @@
+{
+  if (expression instanceof PsiNewExpression) {
+    final PsiAnonymousClass anonymousClass=((PsiNewExpression)expression).getAnonymousClass();
+    if (anonymousClass != null) {
+      if (AnonymousCanBeLambdaInspection.canBeConvertedToLambda(anonymousClass,true)) {
+        return AnonymousCanBeLambdaInspection.replacePsiElementWithLambda(expression,true,true);
+      }
+    }
+ else {
+      return addApplyReference(expression,evaluator);
+    }
+  }
+  if (expression instanceof PsiMethodReferenceExpression) {
+    final PsiExpression qualifier=((PsiMethodReferenceExpression)expression).getQualifierExpression();
+    final PsiType evaluatedType=evaluator.evaluateType(qualifier);
+    final GuavaLambda lambda=GuavaLambda.findJavaAnalogueFor(evaluatedType);
+    if (lambda != null) {
+      return adjust((PsiExpression)expression.replace(qualifier),insertTypeCase,targetType,evaluator);
+    }
+  }
+  if (expression instanceof PsiFunctionalExpression) {
+    if (insertTypeCase) {
+      return JavaPsiFacade.getElementFactory(expression.getProject()).createExpressionFromText("((" + targetType.getCanonicalText() + ")"+ expression.getText()+ ")",expression);
+    }
+  }
+ else   if (expression instanceof PsiMethodCallExpression || expression instanceof PsiReferenceExpression) {
+    final GuavaLambda lambda=GuavaLambda.findFor(evaluator.evaluateType(expression));
+    if (lambda != null) {
+      expression=(PsiExpression)expression.replace(JavaPsiFacade.getElementFactory(expression.getProject()).createExpressionFromText(expression.getText() + "::" + lambda.getSamName(),expression));
+      return adjust(expression,insertTypeCase,targetType,evaluator);
+    }
+  }
+  return expression;
+}
