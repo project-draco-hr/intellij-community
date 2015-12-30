@@ -3,29 +3,33 @@
     throw new AssertionError("You must not run search from within updating PSI activity. Please consider invokeLatering it instead.");
   }
   progress.pushState();
-  progress.setText(PsiBundle.message("psi.scanning.files.progress"));
-  String text=searcher.getPattern();
-  Set<VirtualFile> fileSet=new THashSet<VirtualFile>();
-  getFilesWithText(scope,searchContext,caseSensitively,text,progress,fileSet);
-  progress.setText(PsiBundle.message("psi.search.for.word.progress",text));
-  final Processor<PsiElement> localProcessor=localProcessor(processor,progress,processInjectedPsi,searcher);
-  if (containerName != null) {
-    List<VirtualFile> intersectionWithContainerFiles=new ArrayList<VirtualFile>();
-    getFilesWithText(scope,searchContext,caseSensitively,text + " " + containerName,progress,intersectionWithContainerFiles);
-    if (!intersectionWithContainerFiles.isEmpty()) {
-      int totalSize=fileSet.size();
-      boolean result=processPsiFileRoots(intersectionWithContainerFiles,totalSize,0,progress,localProcessor);
-      if (result) {
-        fileSet.removeAll(intersectionWithContainerFiles);
-        if (!fileSet.isEmpty()) {
-          result=processPsiFileRoots(new ArrayList<VirtualFile>(fileSet),totalSize,intersectionWithContainerFiles.size(),progress,localProcessor);
+  boolean result;
+  try {
+    progress.setText(PsiBundle.message("psi.scanning.files.progress"));
+    String text=searcher.getPattern();
+    Set<VirtualFile> fileSet=new THashSet<VirtualFile>();
+    getFilesWithText(scope,searchContext,caseSensitively,text,progress,fileSet);
+    progress.setText(PsiBundle.message("psi.search.for.word.progress",text));
+    final Processor<PsiElement> localProcessor=localProcessor(processor,progress,processInjectedPsi,searcher);
+    if (containerName != null) {
+      List<VirtualFile> intersectionWithContainerFiles=new ArrayList<VirtualFile>();
+      getFilesWithText(scope,searchContext,caseSensitively,text + " " + containerName,progress,intersectionWithContainerFiles);
+      if (!intersectionWithContainerFiles.isEmpty()) {
+        int totalSize=fileSet.size();
+        result=processPsiFileRoots(intersectionWithContainerFiles,totalSize,0,progress,localProcessor);
+        if (result) {
+          fileSet.removeAll(intersectionWithContainerFiles);
+          if (!fileSet.isEmpty()) {
+            result=processPsiFileRoots(new ArrayList<VirtualFile>(fileSet),totalSize,intersectionWithContainerFiles.size(),progress,localProcessor);
+          }
         }
+        return result;
       }
-      progress.popState();
-      return result;
     }
+    result=fileSet.isEmpty() || processPsiFileRoots(new ArrayList<VirtualFile>(fileSet),fileSet.size(),0,progress,localProcessor);
   }
-  boolean result=fileSet.isEmpty() || processPsiFileRoots(new ArrayList<VirtualFile>(fileSet),fileSet.size(),0,progress,localProcessor);
-  progress.popState();
+  finally {
+    progress.popState();
+  }
   return result;
 }
