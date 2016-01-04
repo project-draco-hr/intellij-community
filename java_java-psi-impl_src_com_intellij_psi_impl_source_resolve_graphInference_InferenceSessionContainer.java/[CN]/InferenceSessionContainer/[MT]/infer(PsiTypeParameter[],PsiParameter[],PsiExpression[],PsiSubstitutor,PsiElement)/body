@@ -3,25 +3,31 @@
     final PsiExpressionList argumentList=((PsiCall)parent).getArgumentList();
     final MethodCandidateInfo.CurrentCandidateProperties properties=MethodCandidateInfo.getCurrentMethod(argumentList);
     if (properties != null && !properties.isApplicabilityCheck()) {
-      final InferenceSession session=PsiResolveHelper.ourGraphGuard.doPreventingRecursion(parent,false,new Computable<InferenceSession>(){
-        @Override public InferenceSession compute(){
-          if (MethodCandidateInfo.isOverloadCheck()) {
-            return startTopLevelInference(parent);
-          }
-          return CachedValuesManager.getCachedValue(parent,new CachedValueProvider<InferenceSession>(){
+      final PsiCall topLevelCall=PsiResolveHelper.ourGraphGuard.doPreventingRecursion(parent,false,new Computable<PsiCall>(){
+        @Override public PsiCall compute(){
+          return treeWalkUp(parent);
+        }
+      }
+);
+      if (topLevelCall != null) {
+        final InferenceSession session;
+        if (MethodCandidateInfo.isOverloadCheck() || !PsiDiamondType.ourDiamondGuard.currentStack().isEmpty()) {
+          session=startTopLevelInference(topLevelCall);
+        }
+ else {
+          session=CachedValuesManager.getCachedValue(topLevelCall,new CachedValueProvider<InferenceSession>(){
             @Nullable @Override public Result<InferenceSession> compute(){
-              return new Result<InferenceSession>(startTopLevelInference(parent),PsiModificationTracker.MODIFICATION_COUNT);
+              return new Result<InferenceSession>(startTopLevelInference(topLevelCall),PsiModificationTracker.MODIFICATION_COUNT);
             }
           }
 );
         }
-      }
-);
-      if (session != null) {
-        final CompoundInitialState compoundInitialState=createState(session);
-        final InitialInferenceState initialInferenceState=compoundInitialState.getInitialState(PsiTreeUtil.getParentOfType(argumentList,PsiCall.class));
-        if (initialInferenceState != null) {
-          return new InferenceSession(initialInferenceState).collectAdditionalAndInfer(parameters,arguments,properties,compoundInitialState.getInitialSubstitutor());
+        if (session != null) {
+          final CompoundInitialState compoundInitialState=createState(session);
+          final InitialInferenceState initialInferenceState=compoundInitialState.getInitialState(PsiTreeUtil.getParentOfType(argumentList,PsiCall.class));
+          if (initialInferenceState != null) {
+            return new InferenceSession(initialInferenceState).collectAdditionalAndInfer(parameters,arguments,properties,compoundInitialState.getInitialSubstitutor());
+          }
         }
       }
     }

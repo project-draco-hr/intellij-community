@@ -1,0 +1,60 @@
+{
+  while (!moving.isEmpty()) {
+    HKey key=moving.pop();
+    Set<HEffectQuantum> effects=solved.get(key);
+    HKey[] propagateKeys;
+    Set[] propagateEffects;
+    if (key.stable) {
+      propagateKeys=new HKey[]{key,key.mkUnstable()};
+      propagateEffects=new Set[]{effects,effects};
+    }
+ else {
+      propagateKeys=new HKey[]{key.mkStable(),key};
+      propagateEffects=new Set[]{effects,mkUnstableEffects(key,effects)};
+    }
+    for (int i=0; i < propagateKeys.length; i++) {
+      HKey pKey=propagateKeys[i];
+      Set<HEffectQuantum> pEffects=propagateEffects[i];
+      Set<HKey> dKeys=dependencies.remove(pKey);
+      if (dKeys != null) {
+        for (        HKey dKey : dKeys) {
+          Set<HEffectQuantum> dEffects=pending.remove(dKey);
+          if (dEffects == null) {
+            continue;
+          }
+          Set<HKey> callKeys=new HashSet<HKey>();
+          Set<HEffectQuantum> newEffects=new HashSet<HEffectQuantum>();
+          Set<HEffectQuantum> delta=null;
+          for (          HEffectQuantum dEffect : dEffects) {
+            if (dEffect instanceof HEffectQuantum.CallQuantum) {
+              HEffectQuantum.CallQuantum call=((HEffectQuantum.CallQuantum)dEffect);
+              if (call.key.equals(pKey)) {
+                delta=substitute(pEffects,call.data,call.isStatic);
+                newEffects.addAll(delta);
+              }
+ else {
+                callKeys.add(call.key);
+                newEffects.add(call);
+              }
+            }
+ else {
+              newEffects.add(dEffect);
+            }
+          }
+          if (PurityAnalysis.topHEffect.equals(delta)) {
+            solved.put(dKey,PurityAnalysis.topHEffect);
+            moving.push(dKey);
+          }
+ else           if (callKeys.isEmpty()) {
+            solved.put(dKey,newEffects);
+            moving.push(dKey);
+          }
+ else {
+            pending.put(dKey,newEffects);
+          }
+        }
+      }
+    }
+  }
+  return solved;
+}
