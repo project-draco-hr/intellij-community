@@ -1,27 +1,46 @@
 {
-  InvalidateRequest invalidateRequest=ContainerUtil.findLastInstance(requests,InvalidateRequest.class);
+  int invalidateRequest=ContainerUtil.lastIndexOf(requests,new Condition<Request>(){
+    @Override public boolean value(    Request request){
+      return request instanceof InvalidateRequest;
+    }
+  }
+);
+  int refreshRequest=ContainerUtil.lastIndexOf(requests,new Condition<Request>(){
+    @Override public boolean value(    Request request){
+      return request instanceof RefreshRequest;
+    }
+  }
+);
   FilterRequest filterRequest=ContainerUtil.findLastInstance(requests,FilterRequest.class);
   SortTypeRequest sortTypeRequest=ContainerUtil.findLastInstance(requests,SortTypeRequest.class);
   List<MoreCommitsRequest> moreCommitsRequests=ContainerUtil.findAll(requests,MoreCommitsRequest.class);
   myRequestsToRun.addAll(moreCommitsRequests);
-  DataPack dataPack=myDataManager.getDataPack();
   if (filterRequest != null) {
     myFilters=filterRequest.filters;
   }
   if (sortTypeRequest != null) {
     mySortType=sortTypeRequest.sortType;
   }
-  if (dataPack == DataPack.EMPTY) {
-    return visiblePack;
+  if (myIsInvalid) {
+    if (refreshRequest > invalidateRequest) {
+      myIsInvalid=false;
+      return refresh(visiblePack,filterRequest,moreCommitsRequests);
+    }
+ else {
+      return visiblePack;
+    }
   }
-  if (filterRequest != null) {
-    myCommitCount=CommitCountStage.INITIAL;
+ else {
+    if (refreshRequest >= invalidateRequest) {
+      return refresh(visiblePack,filterRequest,moreCommitsRequests);
+    }
+ else {
+      myIsInvalid=true;
+      VisiblePack frozenVisiblePack=visiblePack == null ? myVisiblePack : visiblePack;
+      if (filterRequest != null) {
+        frozenVisiblePack=refresh(visiblePack,filterRequest,moreCommitsRequests);
+      }
+      return new FakeVisiblePackBuilder(myDataManager.getHashMap()).build(frozenVisiblePack);
+    }
   }
- else   if (!moreCommitsRequests.isEmpty()) {
-    myCommitCount=myCommitCount.next();
-  }
-  Pair<VisiblePack,CommitCountStage> pair=myVisiblePackBuilder.build(dataPack,mySortType,myFilters,myCommitCount);
-  visiblePack=pair.first;
-  myCommitCount=pair.second;
-  return visiblePack;
 }
