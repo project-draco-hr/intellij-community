@@ -20,7 +20,7 @@
     }
   }
 );
-  List<AttachItem> result=new ArrayList<AttachItem>();
+  List<AttachItem> currentItems=new ArrayList<AttachItem>();
   for (  final XLocalAttachGroup eachGroup : sortedGroups) {
     List<Pair<ProcessInfo,ArrayList<XLocalAttachDebugger>>> sortedItems=new ArrayList<Pair<ProcessInfo,ArrayList<XLocalAttachDebugger>>>(groupWithItems.get(eachGroup));
     Collections.sort(sortedItems,new Comparator<Pair<ProcessInfo,ArrayList<XLocalAttachDebugger>>>(){
@@ -31,9 +31,30 @@
 );
     boolean first=true;
     for (    Pair<ProcessInfo,ArrayList<XLocalAttachDebugger>> eachItem : sortedItems) {
-      result.add(new AttachItem(eachGroup,first,eachItem.first,eachItem.second));
+      currentItems.add(new AttachItem(eachGroup,first,eachItem.first,eachItem.second));
       first=false;
     }
   }
-  return result;
+  List<AttachItem> currentHistoryItems=new ArrayList<AttachItem>();
+  List<HistoryItem> history=getHistory(project);
+  for (int i=history.size() - 1; i >= 0; i--) {
+    HistoryItem eachHistoryItem=history.get(i);
+    for (    AttachItem eachCurrentItem : currentItems) {
+      boolean isSuitableItem=eachHistoryItem.getGroup().equals(eachCurrentItem.getGroup()) && eachHistoryItem.getProcessInfo().getCommandLine().equals(eachCurrentItem.getProcessInfo().getCommandLine());
+      if (!isSuitableItem)       continue;
+      List<XLocalAttachDebugger> debuggers=eachCurrentItem.getDebuggers();
+      int selectedDebugger=-1;
+      for (int j=0; j < debuggers.size(); j++) {
+        XLocalAttachDebugger eachDebugger=debuggers.get(j);
+        if (eachDebugger.getDebuggerDisplayName().equals(eachHistoryItem.getDebuggerName())) {
+          selectedDebugger=j;
+          break;
+        }
+      }
+      if (selectedDebugger == -1)       continue;
+      currentHistoryItems.add(new AttachItem(eachCurrentItem.getGroup(),currentHistoryItems.isEmpty(),XDebuggerBundle.message("xdebugger.attach.toLocal.popup.recent"),eachCurrentItem.getProcessInfo(),debuggers,selectedDebugger));
+    }
+  }
+  currentHistoryItems.addAll(currentItems);
+  return currentHistoryItems;
 }
