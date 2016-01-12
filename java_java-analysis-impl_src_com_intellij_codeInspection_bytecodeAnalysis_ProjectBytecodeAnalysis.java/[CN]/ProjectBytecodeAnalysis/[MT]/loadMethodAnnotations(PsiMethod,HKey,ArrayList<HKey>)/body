@@ -2,10 +2,14 @@
   MethodAnnotations result=new MethodAnnotations();
   Map<Bytes,List<HEquations>> equationsCache=new HashMap<Bytes,List<HEquations>>();
   final Solver outSolver=new Solver(new ELattice<Value>(Value.Bot,Value.Top),Value.Top);
+  final PuritySolver puritySolver=new PuritySolver();
   collectEquations(allKeys,outSolver,equationsCache);
-  HashMap<HKey,Value> solutions=outSolver.solve();
+  collectPurityEquations(key.updateDirection(BytecodeAnalysisConverter.mkDirectionKey(Pure)),puritySolver,equationsCache);
+  Map<HKey,Value> solutions=outSolver.solve();
+  Map<HKey,Set<HEffectQuantum>> puritySolutions=puritySolver.solve();
   int arity=owner.getParameterList().getParameters().length;
   BytecodeAnalysisConverter.addMethodAnnotations(solutions,result,key,arity);
+  BytecodeAnalysisConverter.addEffectAnnotations(puritySolutions,result,key,arity);
   if (nullableMethod) {
     final Solver nullableMethodSolver=new Solver(new ELattice<Value>(Value.Bot,Value.Null),Value.Bot);
     HKey nullableKey=key.updateDirection(BytecodeAnalysisConverter.mkDirectionKey(NullableOut));
@@ -15,7 +19,7 @@
  else {
       collectSingleEquation(nullableKey,nullableMethodSolver,equationsCache);
     }
-    HashMap<HKey,Value> nullableSolutions=nullableMethodSolver.solve();
+    Map<HKey,Value> nullableSolutions=nullableMethodSolver.solve();
     if (nullableSolutions.get(nullableKey) == Value.Null || nullableSolutions.get(nullableKey.invertStability()) == Value.Null) {
       result.nullables.add(key);
     }

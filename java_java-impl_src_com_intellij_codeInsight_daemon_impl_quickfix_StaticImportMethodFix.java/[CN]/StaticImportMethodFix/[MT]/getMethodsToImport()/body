@@ -1,5 +1,6 @@
 {
-  PsiShortNamesCache cache=PsiShortNamesCache.getInstance(myMethodCall.getProject());
+  final Project project=myMethodCall.getProject();
+  PsiShortNamesCache cache=PsiShortNamesCache.getInstance(project);
   final PsiMethodCallExpression element=myMethodCall.getElement();
   PsiReferenceExpression reference=element.getMethodExpression();
   final PsiExpressionList argumentList=element.getArgumentList();
@@ -10,7 +11,7 @@
   final Map<PsiClass,Boolean> possibleClasses=new HashMap<PsiClass,Boolean>();
   final PsiType expectedType=getExpectedType();
   final List<PsiMethod> applicableList=new ArrayList<PsiMethod>();
-  final PsiResolveHelper resolveHelper=JavaPsiFacade.getInstance(element.getProject()).getResolveHelper();
+  final PsiResolveHelper resolveHelper=JavaPsiFacade.getInstance(project).getResolveHelper();
   final MultiMap<PsiClass,PsiMethod> deprecated=new LinkedMultiMap<PsiClass,PsiMethod>();
   final MultiMap<PsiClass,PsiMethod> suggestions=new LinkedMultiMap<PsiClass,PsiMethod>();
 class RegisterMethodsProcessor {
@@ -22,6 +23,9 @@ class RegisterMethodsProcessor {
         possibleClasses.put(containingClass,false);
       }
       for (      PsiMethod method : methods) {
+        if (!PsiUtil.isAccessible(project,method,element,containingClass)) {
+          continue;
+        }
         PsiSubstitutor substitutorForMethod=resolveHelper.inferTypeArguments(method.getTypeParameters(),method.getParameterList().getParameters(),argumentList.getExpressions(),PsiSubstitutor.EMPTY,element.getParent(),DefaultParameterTypeInferencePolicy.INSTANCE);
         if (PsiUtil.isApplicable(method,substitutorForMethod,argumentList)) {
           final PsiType returnType=substitutorForMethod.substitute(method.getReturnType());
@@ -41,7 +45,7 @@ class RegisterMethodsProcessor {
       if (JavaCompletionUtil.isInExcludedPackage(method,false) || !method.hasModifierProperty(PsiModifier.STATIC))       return true;
       PsiFile file=method.getContainingFile();
       final PsiClass containingClass=method.getContainingClass();
-      if (file instanceof PsiJavaFile && !((PsiJavaFile)file).getPackageName().isEmpty() && PsiUtil.isAccessible(file.getProject(),method,element,containingClass)) {
+      if (file instanceof PsiJavaFile && !((PsiJavaFile)file).getPackageName().isEmpty()) {
         if (isEffectivelyDeprecated(method)) {
           deprecated.putValue(containingClass,method);
           return processCondition();
