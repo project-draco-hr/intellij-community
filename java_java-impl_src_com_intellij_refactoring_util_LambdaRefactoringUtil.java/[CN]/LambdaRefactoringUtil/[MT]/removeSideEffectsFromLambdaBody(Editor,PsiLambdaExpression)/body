@@ -1,0 +1,23 @@
+{
+  if (lambdaExpression != null && lambdaExpression.isValid()) {
+    final PsiElement body=lambdaExpression.getBody();
+    PsiExpression methodCall=LambdaUtil.extractSingleExpressionFromBody(body);
+    PsiExpression qualifierExpression=null;
+    if (methodCall instanceof PsiMethodCallExpression) {
+      qualifierExpression=((PsiMethodCallExpression)methodCall).getMethodExpression().getQualifierExpression();
+    }
+ else     if (methodCall instanceof PsiNewExpression) {
+      qualifierExpression=((PsiNewExpression)methodCall).getQualifier();
+    }
+    if (qualifierExpression != null) {
+      final List<PsiElement> sideEffects=new ArrayList<PsiElement>();
+      SideEffectChecker.checkSideEffects(qualifierExpression,sideEffects);
+      if (!sideEffects.isEmpty()) {
+        if (ApplicationManager.getApplication().isUnitTestMode() || Messages.showYesNoDialog(lambdaExpression.getProject(),"There are possible side effects found in method reference qualifier." + "\nIntroduce local variable?","Side Effects Detected",Messages.getQuestionIcon()) == Messages.YES) {
+          qualifierExpression.putUserData(ElementToWorkOn.PARENT,lambdaExpression);
+          new IntroduceVariableHandler().invoke(qualifierExpression.getProject(),editor,qualifierExpression);
+        }
+      }
+    }
+  }
+}
