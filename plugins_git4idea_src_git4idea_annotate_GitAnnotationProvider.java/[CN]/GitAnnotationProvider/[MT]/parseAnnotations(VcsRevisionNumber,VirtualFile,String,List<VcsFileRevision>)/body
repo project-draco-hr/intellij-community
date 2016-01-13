@@ -1,11 +1,12 @@
 {
-  GitFileAnnotation annotation=new GitFileAnnotation(myProject,file,revision == null ? null : revision);
 class CommitInfo {
     Date date;
     String author;
     GitRevisionNumber revision;
   }
   try {
+    StringBuilder content=new StringBuilder();
+    List<LineInfo> lines=new ArrayList<LineInfo>();
     HashMap<String,CommitInfo> commits=new HashMap<String,CommitInfo>();
     for (StringScanner s=new StringScanner(output); s.hasMoreData(); ) {
       String commitHash=s.spaceToken();
@@ -41,12 +42,17 @@ class CommitInfo {
         continue;
       }
       s.skipChars(1);
-      String line=s.line(true);
-      annotation.appendLineInfo(commit.date,commit.revision,commit.author,line,lineNum);
+      int expectedLineNum=lines.size() + 1;
+      if (lineNum != expectedLineNum) {
+        throw new VcsException("Adding for info for line " + lineNum + " but we are expecting it to be for "+ expectedLineNum);
+      }
+      content.append(s.line(true));
+      lines.add(new LineInfo(commit.date,commit.revision,commit.author));
     }
+    return new GitFileAnnotation(myProject,file,revision,content.toString(),lines,revisions);
   }
  catch (  Exception e) {
     LOG.error("Couldn't parse annotation: " + e,new Attachment("output.txt",output));
+    throw new VcsException(e);
   }
-  return annotation;
 }
