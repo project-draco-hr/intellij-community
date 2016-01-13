@@ -1,0 +1,43 @@
+{
+  if (mavenProjects.isEmpty())   return;
+  MavenEmbedderWrapper embedder=embeddersManager.getEmbedder(MavenEmbeddersManager.FOR_DEPENDENCIES_RESOLVE);
+  embedder.customizeForResolve(getWorkspaceMap(),console,process,generalSettings.isAlwaysUpdateSnapshots());
+  try {
+    process.checkCanceled();
+    final List<String> names=ContainerUtil.mapNotNull(mavenProjects,new Function<MavenProject,String>(){
+      @Override public String fun(      MavenProject project){
+        return project.getDisplayName();
+      }
+    }
+);
+    final String text=StringUtil.shortenPathWithEllipsis(StringUtil.join(names,", "),200);
+    process.setText(ProjectBundle.message("maven.resolving.pom",text));
+    process.setText2("");
+    final MavenExplicitProfiles explicitProfiles=new MavenExplicitProfiles(new LinkedHashSet<String>(),new LinkedHashSet<String>());
+    Collection<VirtualFile> files=ContainerUtil.map(mavenProjects,new Function<MavenProject,VirtualFile>(){
+      @Override public VirtualFile fun(      MavenProject project){
+        explicitProfiles.getEnabledProfiles().addAll(project.getActivatedProfilesIds().getEnabledProfiles());
+        explicitProfiles.getDisabledProfiles().addAll(project.getActivatedProfilesIds().getDisabledProfiles());
+        return project.getFile();
+      }
+    }
+);
+    Collection<MavenProjectReaderResult> results=new MavenProjectReader().resolveProject(generalSettings,embedder,files,explicitProfiles,myProjectLocator);
+    for (    MavenProjectReaderResult result : results) {
+      for (      MavenProject mavenProject : mavenProjects) {
+        if (mavenProject.getMavenId().equals(result.mavenModel.getMavenId())) {
+          MavenProjectChanges changes=mavenProject.set(result,generalSettings,false,result.readingProblems.isEmpty(),false);
+          if (result.nativeMavenProject != null) {
+            for (            MavenImporter eachImporter : mavenProject.getSuitableImporters()) {
+              eachImporter.resolve(project,mavenProject,result.nativeMavenProject,embedder,context);
+            }
+          }
+          fireProjectResolved(Pair.create(mavenProject,changes),result.nativeMavenProject);
+        }
+      }
+    }
+  }
+  finally {
+    embeddersManager.release(embedder);
+  }
+}

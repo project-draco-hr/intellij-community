@@ -15,17 +15,18 @@
   myBreakpointHandlers=handlers.toArray(new XBreakpointHandler[handlers.size()]);
   myJavaSession.getContextManager().addListener(new DebuggerContextListener(){
     @Override public void changeEvent(    @NotNull final DebuggerContextImpl newContext,    DebuggerSession.Event event){
-      if (event == DebuggerSession.Event.PAUSE || event == DebuggerSession.Event.CONTEXT || event == DebuggerSession.Event.REFRESH && myJavaSession.isPaused()) {
+      if (event == DebuggerSession.Event.PAUSE || event == DebuggerSession.Event.CONTEXT || event == DebuggerSession.Event.REFRESH || event == DebuggerSession.Event.REFRESH_WITH_STACK && myJavaSession.isPaused()) {
         final SuspendContextImpl newSuspendContext=newContext.getSuspendContext();
-        if (newSuspendContext != null && shouldApplyContext(newContext)) {
+        if (newSuspendContext != null && (shouldApplyContext(newContext) || event == DebuggerSession.Event.REFRESH_WITH_STACK)) {
           process.getManagerThread().schedule(new SuspendContextCommandImpl(newSuspendContext){
             @Override public void contextAction() throws Exception {
-              newSuspendContext.initExecutionStacks(newContext.getThreadProxy());
-              List<Pair<Breakpoint,Event>> descriptors=DebuggerUtilsEx.getEventDescriptors(newSuspendContext);
-              if (!descriptors.isEmpty()) {
-                Breakpoint breakpoint=descriptors.get(0).getFirst();
-                XBreakpoint xBreakpoint=breakpoint.getXBreakpoint();
-                if (xBreakpoint != null) {
+              ThreadReferenceProxyImpl threadProxy=newContext.getThreadProxy();
+              newSuspendContext.initExecutionStacks(threadProxy);
+              Pair<Breakpoint,Event> item=ContainerUtil.getFirstItem(DebuggerUtilsEx.getEventDescriptors(newSuspendContext));
+              if (item != null) {
+                XBreakpoint xBreakpoint=item.getFirst().getXBreakpoint();
+                Event second=item.getSecond();
+                if (xBreakpoint != null && second instanceof BreakpointEvent && threadProxy != null && ((BreakpointEvent)second).thread() == threadProxy.getThreadReference()) {
                   ((XDebugSessionImpl)getSession()).breakpointReachedNoProcessing(xBreakpoint,newSuspendContext);
                   unsetPausedIfNeeded(newContext);
                   return;

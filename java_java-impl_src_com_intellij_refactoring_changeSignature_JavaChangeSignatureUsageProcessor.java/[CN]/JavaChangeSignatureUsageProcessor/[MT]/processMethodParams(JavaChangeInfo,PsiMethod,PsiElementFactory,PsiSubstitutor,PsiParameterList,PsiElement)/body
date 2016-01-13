@@ -1,0 +1,35 @@
+{
+  PsiParameter[] parameters=list.getParameters();
+  final JavaParameterInfo[] parameterInfos=changeInfo.getNewParameters();
+  final int delta=baseMethod != null ? baseMethod.getParameterList().getParametersCount() - list.getParametersCount() : 0;
+  PsiParameter[] newParms=new PsiParameter[Math.max(parameterInfos.length - delta,0)];
+  final String[] oldParameterNames=changeInfo.getOldParameterNames();
+  final String[] oldParameterTypes=changeInfo.getOldParameterTypes();
+  for (int i=0; i < newParms.length; i++) {
+    JavaParameterInfo info=parameterInfos[i];
+    int index=info.getOldIndex();
+    if (index >= 0) {
+      PsiParameter parameter=parameters[index];
+      newParms[i]=parameter;
+      String oldName=oldParameterNames[index];
+      if (!oldName.equals(info.getName()) && oldName.equals(parameter.getName())) {
+        PsiIdentifier newIdentifier=factory.createIdentifier(info.getName());
+        parameter.getNameIdentifier().replace(newIdentifier);
+      }
+      final PsiTypeElement typeElement=parameter.getTypeElement();
+      if (typeElement != null) {
+        String oldType=oldParameterTypes[index];
+        if (!oldType.equals(info.getTypeText())) {
+          parameter.normalizeDeclaration();
+          PsiType newType=substitutor.substitute(info.createType(changeInfo.getMethod().getParameterList(),changeInfo.getMethod().getManager()));
+          typeElement.replace(factory.createTypeElement(newType));
+        }
+      }
+    }
+ else {
+      newParms[i]=createNewParameter(changeInfo,info,substitutor);
+    }
+  }
+  resolveParameterVsFieldsConflicts(newParms,list,changeInfo.toRemoveParm(),methodBody);
+  return newParms.length;
+}

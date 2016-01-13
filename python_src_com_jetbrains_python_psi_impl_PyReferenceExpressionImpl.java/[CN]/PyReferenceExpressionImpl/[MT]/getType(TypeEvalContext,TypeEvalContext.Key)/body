@@ -10,23 +10,27 @@
         return PyNoneType.INSTANCE;
       }
     }
-    PyType type=getTypeFromProviders(context);
-    if (type != null) {
-      return type;
+    final PyType providedType=getTypeFromProviders(context);
+    if (providedType != null) {
+      return providedType;
     }
     if (qualified) {
+      if (!context.maySwitchToAST(this)) {
+        return null;
+      }
       PyType maybe_type=PyUtil.getSpecialAttributeType(this,context);
       if (maybe_type != null)       return maybe_type;
       Ref<PyType> typeOfProperty=getTypeOfProperty(context);
       if (typeOfProperty != null) {
         return typeOfProperty.get();
       }
+      final PyType typeByControlFlow=getQualifiedReferenceTypeByControlFlow(context);
+      if (typeByControlFlow != null) {
+        return typeByControlFlow;
+      }
     }
     final PsiPolyVariantReference reference=getReference(PyResolveContext.noImplicits().withTypeEvalContext(context));
     final List<PsiElement> targets=PyUtil.multiResolveTopPriority(reference);
-    if (targets.isEmpty()) {
-      return getQualifiedReferenceTypeByControlFlow(context);
-    }
     final List<PyType> members=new ArrayList<PyType>();
     for (    PsiElement target : targets) {
       if (target == this || target == null) {
@@ -38,7 +42,11 @@
       }
       members.add(getTypeFromTarget(target,context,this));
     }
-    return PyUnionType.union(members);
+    final PyType type=PyUnionType.union(members);
+    if (qualified && type instanceof PyNoneType) {
+      return null;
+    }
+    return type;
   }
   finally {
     TypeEvalStack.evaluated(this);
