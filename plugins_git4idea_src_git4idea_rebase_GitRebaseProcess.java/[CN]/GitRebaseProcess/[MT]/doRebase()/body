@@ -1,80 +1,43 @@
 {
-  LOG.debug("Started rebase.");
-  Map<GitRepository,SuccessType> successfulWithTypes=ContainerUtil.newLinkedHashMap(mySuccessfulRepositories);
-  List<GitRepository> repositories=ContainerUtil.newArrayList(myAllRepositories);
-  repositories.removeAll(successfulWithTypes.keySet());
-  ListIterator<GitRepository> iterator=repositories.listIterator();
+  LOG.info("Started rebase");
+  LOG.debug("Started rebase with the following spec: " + myRebaseSpec);
+  Map<GitRepository,GitRebaseStatus> statuses=newLinkedHashMap(myRebaseSpec.getStatuses());
+  Collection<GitRepository> toRefresh=newLinkedHashSet();
+  List<GitRepository> repositoriesToRebase=myRebaseSpec.getIncompleteRepositories();
   AccessToken token=DvcsUtil.workingTreeChangeStarted(myProject);
   try {
-    if (!saveDirtyRootsInitially(repositories))     return;
-    GitRepository facedDirtyError=null;
-    Map<GitRepository,GitRebaseParams.Mode> customModes=ContainerUtil.newLinkedHashMap();
-    while (iterator.hasNext()) {
-      GitRepository repository=iterator.next();
-      VirtualFile root=repository.getRoot();
-      String repoName=getShortRepositoryName(repository);
-      LOG.debug("Rebase iteration. Root: " + repoName);
-      Collection<GitRepository> successful=successfulWithTypes.keySet();
-      GitRebaseProblemDetector rebaseDetector=new GitRebaseProblemDetector();
-      GitUntrackedFilesOverwrittenByOperationDetector untrackedDetector=new GitUntrackedFilesOverwrittenByOperationDetector(root);
-      GitRebaseLineListener progressListener=new GitRebaseLineListener();
-      GitRebaseParams.Mode customMode=customModes.get(repository);
-      GitRebaseParams rebaseParams=customMode != null ? myParams.withMode(customMode) : myParams;
-      GitCommandResult result=myGit.rebase(repository,rebaseParams,rebaseDetector,untrackedDetector,progressListener);
-      boolean nonStandardMode=rebaseParams.getMode() != GitRebaseParams.Mode.STANDARD;
-      boolean somethingRebased=nonStandardMode || progressListener.getResult().current > 1;
-      if (result.success()) {
-        LOG.debug("Successfully rebased " + repoName);
-        successfulWithTypes.put(repository,SuccessType.fromOutput(result.getOutput()));
+    if (!saveDirtyRootsInitially(repositoriesToRebase))     return;
+    GitRepository failed=null;
+    for (    GitRepository repository : repositoriesToRebase) {
+      GitRebaseResumeMode customMode=null;
+      if (repository == myRebaseSpec.getOngoingRebase()) {
+        customMode=myCustomMode == null ? GitRebaseResumeMode.CONTINUE : myCustomMode;
       }
- else       if (rebaseDetector.isDirtyTree() && !nonStandardMode && repository != facedDirtyError) {
-        LOG.debug("Dirty tree detected in " + repoName);
-        String saveError=saveLocalChanges(singleton(repository.getRoot()));
-        if (saveError == null) {
-          iterator.previous();
-          facedDirtyError=repository;
-        }
- else {
-          LOG.warn("Couldn't " + mySaver.getOperationName() + " root "+ repository.getRoot()+ ": "+ saveError);
-          showFatalError(saveError,repository,somethingRebased,successful);
-          return;
-        }
+      GitRebaseStatus rebaseStatus=rebaseSingleRoot(repository,customMode,getSuccessfulRepositories(statuses));
+      statuses.put(repository,rebaseStatus);
+      if (shouldBeRefreshed(rebaseStatus)) {
+        toRefresh.add(repository);
       }
- else       if (rebaseDetector.isMergeConflict()) {
-        LOG.debug("Merge conflict in " + repoName);
-        boolean allResolved=showConflictResolver(repository,false);
-        if (allResolved) {
-          iterator.previous();
-          customModes.put(repository,GitRebaseParams.Mode.CONTINUE);
-        }
- else {
-          notifyNotAllConflictsResolved(repository,successful);
-          return;
-        }
-      }
- else       if (rebaseDetector.isNoChangeError()) {
-        LOG.info("'No changes' situation detected in " + repoName);
-        mySkippedCommits.putValue(repository,GitRebaseUtils.getCurrentRebaseCommit(root));
-        iterator.previous();
-        customModes.put(repository,GitRebaseParams.Mode.SKIP);
-      }
- else       if (untrackedDetector.wasMessageDetected()) {
-        LOG.debug("Untracked files detected in " + repoName);
-        showUntrackedFilesError(untrackedDetector.getRelativeFilePaths(),repository,somethingRebased,successful);
-        return;
-      }
- else {
-        LOG.info("Error rebasing root " + repoName + ": "+ result.getErrorOutputAsJoinedString());
-        showFatalError(result.getErrorOutputAsHtmlString(),repository,somethingRebased,successful);
-        return;
+      if (rebaseStatus.getType() != GitRebaseStatus.Type.SUCCESS) {
+        failed=repository;
+        break;
       }
     }
-    LOG.debug("Rebase completed successfully.");
-    mySaver.load();
+    if (failed == null) {
+      LOG.debug("Rebase completed successfully.");
+      mySaver.load();
+    }
+    refresh(toRefresh);
+    if (failed == null) {
+      notifySuccess(getSuccessfulRepositories(statuses),getSkippedCommits(statuses));
+    }
+    saveUpdatedSpec(statuses);
   }
-  finally {
-    refresh(getRepositoriesToRefresh(successfulWithTypes,iterator.previous()));
+ catch (  Throwable e) {
+    myRepositoryManager.setOngoingRebaseSpec(null);
+    ExceptionUtil.rethrowUnchecked(e);
+  }
+ finally {
     DvcsUtil.workingTreeChangeFinished(myProject,token);
   }
-  notifySuccess(successfulWithTypes);
 }

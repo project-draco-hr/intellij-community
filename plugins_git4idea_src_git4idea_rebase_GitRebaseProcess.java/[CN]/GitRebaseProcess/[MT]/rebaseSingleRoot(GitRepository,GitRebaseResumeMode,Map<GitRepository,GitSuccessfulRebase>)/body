@@ -1,0 +1,67 @@
+{
+  VirtualFile root=repository.getRoot();
+  String repoName=getShortRepositoryName(repository);
+  LOG.info("Rebasing root " + repoName + ", mode: "+ notNull(customMode,"standard"));
+  Collection<GitRebaseUtils.CommitInfo> skippedCommits=newArrayList();
+  MultiMap<GitRepository,GitRebaseUtils.CommitInfo> allSkippedCommits=getSkippedCommits(alreadyRebased);
+  boolean retryWhenDirty=false;
+  while (true) {
+    GitRebaseProblemDetector rebaseDetector=new GitRebaseProblemDetector();
+    GitUntrackedFilesOverwrittenByOperationDetector untrackedDetector=new GitUntrackedFilesOverwrittenByOperationDetector(root);
+    GitRebaseLineListener progressListener=new GitRebaseLineListener();
+    GitCommandResult result=callRebase(repository,customMode,rebaseDetector,untrackedDetector,progressListener);
+    boolean somethingRebased=customMode != null || progressListener.getResult().current > 1;
+    if (result.success()) {
+      LOG.debug("Successfully rebased " + repoName);
+      return GitSuccessfulRebase.parseFromOutput(result.getOutput(),skippedCommits);
+    }
+ else     if (rebaseDetector.isDirtyTree() && customMode == null && !retryWhenDirty) {
+      LOG.debug("Dirty tree detected in " + repoName);
+      String saveError=saveLocalChanges(singleton(repository.getRoot()));
+      if (saveError == null) {
+        retryWhenDirty=true;
+      }
+ else {
+        LOG.warn("Couldn't " + mySaver.getOperationName() + " root "+ repository.getRoot()+ ": "+ saveError);
+        showFatalError(saveError,repository,somethingRebased,alreadyRebased.keySet(),allSkippedCommits);
+        GitRebaseStatus.Type type=somethingRebased ? GitRebaseStatus.Type.SUSPENDED : GitRebaseStatus.Type.ERROR;
+        return new GitRebaseStatus(type,skippedCommits);
+      }
+    }
+ else     if (untrackedDetector.wasMessageDetected()) {
+      LOG.info("Untracked files detected in " + repoName);
+      showUntrackedFilesError(untrackedDetector.getRelativeFilePaths(),repository,somethingRebased,alreadyRebased.keySet(),allSkippedCommits);
+      GitRebaseStatus.Type type=somethingRebased ? GitRebaseStatus.Type.SUSPENDED : GitRebaseStatus.Type.ERROR;
+      return new GitRebaseStatus(type,skippedCommits);
+    }
+ else     if (rebaseDetector.isNoChangeError()) {
+      LOG.info("'No changes' situation detected in " + repoName);
+      GitRebaseUtils.CommitInfo currentRebaseCommit=GitRebaseUtils.getCurrentRebaseCommit(root);
+      if (currentRebaseCommit != null)       skippedCommits.add(currentRebaseCommit);
+      customMode=GitRebaseResumeMode.SKIP;
+    }
+ else     if (rebaseDetector.isMergeConflict()) {
+      LOG.info("Merge conflict in " + repoName);
+      ResolveConflictResult resolveResult=showConflictResolver(repository,false);
+      if (resolveResult == ResolveConflictResult.ALL_RESOLVED) {
+        customMode=GitRebaseResumeMode.CONTINUE;
+      }
+ else       if (resolveResult == ResolveConflictResult.NOTHING_TO_MERGE) {
+        LOG.info("Unmerged changes while rebasing root " + repoName + ": "+ result.getErrorOutputAsJoinedString());
+        showFatalError(result.getErrorOutputAsHtmlString(),repository,somethingRebased,alreadyRebased.keySet(),allSkippedCommits);
+        GitRebaseStatus.Type type=somethingRebased ? GitRebaseStatus.Type.SUSPENDED : GitRebaseStatus.Type.ERROR;
+        return new GitRebaseStatus(type,skippedCommits);
+      }
+ else {
+        notifyNotAllConflictsResolved(repository,allSkippedCommits);
+        return new GitRebaseStatus(GitRebaseStatus.Type.SUSPENDED,skippedCommits);
+      }
+    }
+ else {
+      LOG.info("Error rebasing root " + repoName + ": "+ result.getErrorOutputAsJoinedString());
+      showFatalError(result.getErrorOutputAsHtmlString(),repository,somethingRebased,alreadyRebased.keySet(),allSkippedCommits);
+      GitRebaseStatus.Type type=somethingRebased ? GitRebaseStatus.Type.SUSPENDED : GitRebaseStatus.Type.ERROR;
+      return new GitRebaseStatus(type,skippedCommits);
+    }
+  }
+}
