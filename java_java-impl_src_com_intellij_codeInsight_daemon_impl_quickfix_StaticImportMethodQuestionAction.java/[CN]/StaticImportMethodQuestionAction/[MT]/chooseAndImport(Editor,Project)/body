@@ -1,0 +1,81 @@
+{
+  if (ApplicationManager.getApplication().isUnitTestMode()) {
+    doImport(myCandidates.get(0));
+    return;
+  }
+  final BaseListPopupStep<T> step=new BaseListPopupStep<T>(getPopupTitle(),myCandidates){
+    @Override public PopupStep onChosen(    T selectedValue,    boolean finalChoice){
+      if (selectedValue == null) {
+        return FINAL_CHOICE;
+      }
+      if (finalChoice) {
+        PsiDocumentManager.getInstance(project).commitAllDocuments();
+        LOG.assertTrue(selectedValue.isValid());
+        doImport(selectedValue);
+        return FINAL_CHOICE;
+      }
+      return AddImportAction.getExcludesStep(PsiUtil.getMemberQualifiedName(selectedValue),project);
+    }
+    @Override public boolean hasSubstep(    T selectedValue){
+      return true;
+    }
+    @NotNull @Override public String getTextFor(    T value){
+      return ObjectUtils.assertNotNull(value.getName());
+    }
+    @Override public Icon getIconFor(    T aValue){
+      return aValue.getIcon(0);
+    }
+  }
+;
+  final ListPopupImpl popup=new ListPopupImpl(step){
+    final PopupListElementRenderer rightArrow=new PopupListElementRenderer(this);
+    @Override protected ListCellRenderer getListElementRenderer(){
+      return new PsiElementListCellRenderer<T>(){
+        public String getElementText(        T element){
+          final PsiClass aClass=element.getContainingClass();
+          LOG.assertTrue(aClass != null);
+          return ClassPresentationUtil.getNameForClass(aClass,false) + "." + element.getName();
+        }
+        public String getContainerText(        final T element,        final String name){
+          return PsiClassListCellRenderer.getContainerTextStatic(element);
+        }
+        public int getIconFlags(){
+          return 0;
+        }
+        @Nullable @Override protected TextAttributes getNavigationItemAttributes(        Object value){
+          TextAttributes attrs=super.getNavigationItemAttributes(value);
+          if (value instanceof PsiDocCommentOwner && !((PsiDocCommentOwner)value).isDeprecated()) {
+            PsiClass psiClass=((T)value).getContainingClass();
+            if (psiClass != null && psiClass.isDeprecated()) {
+              return TextAttributes.merge(attrs,super.getNavigationItemAttributes(psiClass));
+            }
+          }
+          return attrs;
+        }
+        @Override protected DefaultListCellRenderer getRightCellRenderer(        final Object value){
+          final DefaultListCellRenderer moduleRenderer=super.getRightCellRenderer(value);
+          return new DefaultListCellRenderer(){
+            @Override public Component getListCellRendererComponent(            JList list,            Object value,            int index,            boolean isSelected,            boolean cellHasFocus){
+              JPanel panel=new JPanel(new BorderLayout());
+              if (moduleRenderer != null) {
+                Component moduleComponent=moduleRenderer.getListCellRendererComponent(list,value,index,isSelected,cellHasFocus);
+                if (!isSelected) {
+                  moduleComponent.setBackground(getBackgroundColor(value));
+                }
+                panel.add(moduleComponent,BorderLayout.CENTER);
+              }
+              rightArrow.getListCellRendererComponent(list,value,index,isSelected,cellHasFocus);
+              Component rightArrowComponent=rightArrow.getNextStepLabel();
+              panel.add(rightArrowComponent,BorderLayout.EAST);
+              return panel;
+            }
+          }
+;
+        }
+      }
+;
+    }
+  }
+;
+  popup.showInBestPositionFor(editor);
+}

@@ -5,6 +5,9 @@
     if (properties != null && !properties.isApplicabilityCheck()) {
       final PsiCall topLevelCall=PsiResolveHelper.ourGraphGuard.doPreventingRecursion(parent,false,new Computable<PsiCall>(){
         @Override public PsiCall compute(){
+          if (parent instanceof PsiExpression && !PsiPolyExpressionUtil.isPolyExpression((PsiExpression)parent)) {
+            return null;
+          }
           return treeWalkUp(parent);
         }
       }
@@ -26,7 +29,13 @@
           final CompoundInitialState compoundInitialState=createState(session);
           final InitialInferenceState initialInferenceState=compoundInitialState.getInitialState(PsiTreeUtil.getParentOfType(argumentList,PsiCall.class));
           if (initialInferenceState != null) {
-            return new InferenceSession(initialInferenceState).collectAdditionalAndInfer(parameters,arguments,properties,compoundInitialState.getInitialSubstitutor());
+            InferenceSession childSession=new InferenceSession(initialInferenceState);
+            final List<String> errorMessages=session.getIncompatibleErrorMessages();
+            if (errorMessages != null) {
+              properties.getInfo().setInferenceError(StringUtil.join(errorMessages,"\n"));
+              return childSession.prepareSubstitution();
+            }
+            return childSession.collectAdditionalAndInfer(parameters,arguments,properties,compoundInitialState.getInitialSubstitutor());
           }
         }
       }

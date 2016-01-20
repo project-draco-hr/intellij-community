@@ -1,0 +1,50 @@
+{
+  passJunk();
+  final PsiBuilder.Marker marker=mark();
+  PsiBuilder.Marker endOfNodeMarker=null;
+  IElementType nodeType=null;
+  if (getTokenType() == YAMLTokenTypes.TAG && myBuilder.lookAhead(1) == YAMLTokenTypes.EOL) {
+    advanceLexer();
+  }
+  int numberOfItems=0;
+  while (!eof() && (isJunk() || !eolSeen || myIndent + getIndentBonus(insideSequence) >= indent)) {
+    if (isJunk()) {
+      advanceLexer();
+      continue;
+    }
+    if (!myStopTokensStack.isEmpty() && myStopTokensStack.peek().contains(getTokenType())) {
+      rollBackToEol();
+      break;
+    }
+    numberOfItems++;
+    final IElementType parsedTokenType=parseSingleStatement(eolSeen ? myIndent : indent);
+    if (nodeType == null) {
+      if (parsedTokenType == YAMLElementTypes.SEQUENCE_ITEM) {
+        nodeType=YAMLElementTypes.SEQUENCE;
+      }
+ else       if (parsedTokenType == YAMLElementTypes.KEY_VALUE_PAIR) {
+        nodeType=YAMLElementTypes.MAPPING;
+      }
+ else       if (numberOfItems > 1) {
+        nodeType=YAMLElementTypes.COMPOUND_VALUE;
+      }
+    }
+    if (endOfNodeMarker != null) {
+      endOfNodeMarker.drop();
+    }
+    endOfNodeMarker=mark();
+  }
+  if (endOfNodeMarker != null) {
+    dropEolMarker();
+    endOfNodeMarker.rollbackTo();
+  }
+ else {
+    rollBackToEol();
+  }
+  if (nodeType != null) {
+    marker.done(nodeType);
+  }
+ else {
+    marker.drop();
+  }
+}
