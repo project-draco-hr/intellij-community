@@ -1,9 +1,29 @@
 {
-  Assert.assertThat("No 26 used from tox.ini",all,Matchers.containsString("py26"));
-  Assert.assertThat("No 27 used from tox.ini",all,Matchers.containsString("py27"));
-  Assert.assertThat("No test passed, should 2 at least",runner.getPassedTestsCount(),Matchers.greaterThanOrEqualTo(2));
-  if (stderr.isEmpty()) {
-    return;
+  for (  final String interpreterName : myInterpreters.keySet()) {
+    Assert.assertThat(String.format("No %s used from tox.ini",interpreterName),all,Matchers.containsString(interpreterName));
   }
-  Logger.getInstance(PyToxTest.class).warn(stderr);
+  if (!stderr.isEmpty()) {
+    Logger.getInstance(PyToxTest.class).warn(stderr);
+  }
+  final Set<String> checkedInterpreters=new HashSet<>();
+  final Set<String> existingInterpreters=new HashSet<>();
+  for (  final SMTestProxy interpreterSuite : runner.getTestProxy().getChildren()) {
+    final String interpreterName=interpreterSuite.getName();
+    checkedInterpreters.add(interpreterName);
+    if (interpreterSuite.getChildren().size() == 1 && interpreterSuite.getChildren().get(0).getName().endsWith("ERROR")) {
+      final String testOutput=getTestOutput(interpreterSuite.getChildren().get(0));
+      if (testOutput.contains("InterpreterNotFound")) {
+        Logger.getInstance(PyToxTest.class).warn(String.format("Interpreter %s does not exit",interpreterName));
+        continue;
+      }
+      existingInterpreters.add(interpreterName);
+      final InterpreterExpectations expectations=myInterpreters.get(interpreterName);
+      Assert.assertFalse(String.format("Interpreter %s should not fail, but failed: %s",interpreterName,getTestOutput(interpreterSuite)),expectations.myExpectedSuccess);
+      continue;
+    }
+    Assert.assertThat(String.format("No test passed, should %s at least",myMinimumSuccessTestCount),new SMRootTestsCounter(interpreterSuite.getRoot()).getPassedTestsCount(),Matchers.greaterThanOrEqualTo(myMinimumSuccessTestCount));
+    Assert.assertThat(String.format("Interpreter %s does not have expected string in output",interpreterName),getTestOutput(interpreterSuite),Matchers.containsString(myInterpreters.get(interpreterName).myExpectedOutput));
+  }
+  Assert.assertThat("No all interpreters from tox.ini used",checkedInterpreters,Matchers.equalTo(myInterpreters.keySet()));
+  Assert.assertFalse("No interpreter found. At least one should exist",existingInterpreters.isEmpty());
 }
