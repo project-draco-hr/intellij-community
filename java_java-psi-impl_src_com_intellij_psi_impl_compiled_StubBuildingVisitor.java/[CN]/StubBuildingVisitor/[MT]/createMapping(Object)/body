@@ -1,0 +1,39 @@
+{
+  if (classSource instanceof VirtualFile) {
+    final Map<String,Pair<String,String>> mapping=ContainerUtil.newHashMap();
+    try {
+      byte[] bytes=((VirtualFile)classSource).contentsToByteArray(false);
+      new ClassReader(bytes).accept(new ClassVisitor(ASM_API){
+        @Override public void visitInnerClass(        String name,        String outerName,        String innerName,        int access){
+          if (outerName != null && innerName != null) {
+            mapping.put(name,pair(outerName,innerName));
+          }
+        }
+      }
+,EMPTY_ATTRIBUTES,ClassReader.SKIP_DEBUG | ClassReader.SKIP_CODE | ClassReader.SKIP_FRAMES);
+    }
+ catch (    Exception ignored) {
+    }
+    if (!mapping.isEmpty()) {
+      return new Function<String,String>(){
+        @Override public String fun(        String internalName){
+          String className=internalName;
+          if (className.indexOf('$') >= 0) {
+            Pair<String,String> p=mapping.get(className);
+            if (p == null) {
+              return GUESSING_MAPPER.fun(className);
+            }
+            className=p.first;
+            if (p.second != null) {
+              className=fun(p.first) + '.' + p.second;
+              mapping.put(className,pair(className,(String)null));
+            }
+          }
+          return className.replace('/','.');
+        }
+      }
+;
+    }
+  }
+  return GUESSING_MAPPER;
+}
