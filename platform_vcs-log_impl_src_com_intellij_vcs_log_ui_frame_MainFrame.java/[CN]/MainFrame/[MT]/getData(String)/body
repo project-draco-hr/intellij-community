@@ -1,0 +1,55 @@
+{
+  if (VcsLogDataKeys.VCS_LOG.is(dataId)) {
+    return myLog;
+  }
+ else   if (VcsLogDataKeys.VCS_LOG_UI.is(dataId)) {
+    return myUI;
+  }
+ else   if (VcsLogDataKeys.VCS_LOG_DATA_PROVIDER.is(dataId)) {
+    return myLogDataHolder;
+  }
+ else   if (VcsDataKeys.CHANGES.is(dataId) || VcsDataKeys.SELECTED_CHANGES.is(dataId)) {
+    return ArrayUtil.toObjectArray(myChangesBrowser.getCurrentDisplayedChanges(),Change.class);
+  }
+ else   if (VcsDataKeys.CHANGE_LISTS.is(dataId)) {
+    List<VcsFullCommitDetails> details=myUI.getVcsLog().getSelectedDetails();
+    if (details.size() > VcsLogUtil.MAX_SELECTED_COMMITS)     return null;
+    return ContainerUtil.map2Array(details,CommittedChangeListForRevision.class,new Function<VcsFullCommitDetails,CommittedChangeListForRevision>(){
+      @Override public CommittedChangeListForRevision fun(      @NotNull VcsFullCommitDetails details){
+        return new CommittedChangeListForRevision(details.getSubject(),details.getFullMessage(),details.getCommitter().getName(),new Date(details.getCommitTime()),details.getChanges(),convertToRevisionNumber(details.getId()));
+      }
+    }
+);
+  }
+ else   if (VcsDataKeys.VCS_REVISION_NUMBERS.is(dataId)) {
+    List<CommitId> hashes=myUI.getVcsLog().getSelectedCommits();
+    if (hashes.size() > VcsLogUtil.MAX_SELECTED_COMMITS)     return null;
+    return ArrayUtil.toObjectArray(ContainerUtil.map(hashes,new Function<CommitId,VcsRevisionNumber>(){
+      @Override public VcsRevisionNumber fun(      CommitId commitId){
+        return convertToRevisionNumber(commitId.getHash());
+      }
+    }
+),VcsRevisionNumber.class);
+  }
+ else   if (VcsDataKeys.VCS.is(dataId)) {
+    List<CommitId> commits=myUI.getVcsLog().getSelectedCommits();
+    Collection<VcsLogProvider> logProviders=myUI.getVcsLog().getLogProviders();
+    if (logProviders.size() == 1) {
+      if (!commits.isEmpty()) {
+        return myLogDataHolder.getLogProvider(assertNotNull(getFirstItem(commits)).getRoot()).getSupportedVcs();
+      }
+      return null;
+    }
+    if (commits.size() > VcsLogUtil.MAX_SELECTED_COMMITS)     return null;
+    Set<VirtualFile> roots=ContainerUtil.map2Set(commits,new Function<CommitId,VirtualFile>(){
+      @Override public VirtualFile fun(      CommitId commitId){
+        return commitId.getRoot();
+      }
+    }
+);
+    if (roots.size() == 1) {
+      return myLogDataHolder.getLogProvider(assertNotNull(getFirstItem(roots))).getSupportedVcs();
+    }
+  }
+  return null;
+}

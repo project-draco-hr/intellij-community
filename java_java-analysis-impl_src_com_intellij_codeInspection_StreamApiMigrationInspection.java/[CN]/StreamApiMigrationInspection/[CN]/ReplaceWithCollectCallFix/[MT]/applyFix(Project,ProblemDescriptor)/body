@@ -2,20 +2,30 @@
   final PsiForeachStatement foreachStatement=PsiTreeUtil.getParentOfType(descriptor.getPsiElement(),PsiForeachStatement.class);
   if (foreachStatement != null) {
     if (!FileModificationService.getInstance().preparePsiElementForWrite(foreachStatement))     return;
+    final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
     PsiStatement body=foreachStatement.getBody();
     final PsiExpression iteratedValue=foreachStatement.getIteratedValue();
     if (body != null && iteratedValue != null) {
       final PsiParameter parameter=foreachStatement.getIterationParameter();
-      final StringBuilder builder=new StringBuilder(getIteratedValueText(iteratedValue) + ".stream()");
       final PsiIfStatement ifStatement=extractIfStatement(body);
       final PsiMethodCallExpression methodCallExpression=extractAddCall(body,ifStatement);
+      if (methodCallExpression == null)       return;
+      if (isAddAllCall(foreachStatement,body)) {
+        restoreComments(foreachStatement,body);
+        final PsiExpression qualifierExpression=methodCallExpression.getMethodExpression().getQualifierExpression();
+        final String qualifierText=qualifierExpression != null ? qualifierExpression.getText() : "";
+        final String callText=StringUtil.getQualifiedName(qualifierText,"addAll(" + getIteratedValueText(iteratedValue) + ");");
+        PsiElement result=foreachStatement.replace(elementFactory.createStatementFromText(callText,foreachStatement));
+        reformatWhenNeeded(project,result);
+        return;
+      }
+      final StringBuilder builder=new StringBuilder(getIteratedValueText(iteratedValue) + ".stream()");
       builder.append(createFiltersChainText(body,parameter,ifStatement));
       builder.append(createMapperFunctionalExpressionText(project,parameter,methodCallExpression.getArgumentList().getExpressions()[0]));
       builder.append(".collect(java.util.stream.Collectors.");
       PsiElement result=null;
       try {
         final PsiExpression qualifierExpression=methodCallExpression.getMethodExpression().getQualifierExpression();
-        final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
         if (qualifierExpression instanceof PsiReferenceExpression) {
           final PsiElement resolve=((PsiReferenceExpression)qualifierExpression).resolve();
           if (resolve instanceof PsiVariable) {
@@ -42,9 +52,7 @@
         simplifyRedundantCast(result);
       }
   finally {
-        if (result != null) {
-          CodeStyleManager.getInstance(project).reformat(JavaCodeStyleManager.getInstance(project).shortenClassReferences(result));
-        }
+        reformatWhenNeeded(project,result);
       }
     }
   }

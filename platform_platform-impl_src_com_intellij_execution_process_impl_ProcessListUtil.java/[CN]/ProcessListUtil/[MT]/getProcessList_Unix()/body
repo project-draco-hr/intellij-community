@@ -1,8 +1,27 @@
 {
-  return parseCommandOutput(Arrays.asList("/bin/ps","-a","-x","-o","pid,state,user,command"),new NullableFunction<String,List<ProcessInfo>>(){
-    @Nullable @Override public List<ProcessInfo> fun(    String output){
-      return parseUnixOutput(output);
+  File proc=new File("/proc");
+  File[] processes=proc.listFiles();
+  if (processes == null)   return null;
+  List<ProcessInfo> result=new ArrayList<ProcessInfo>();
+  for (  File each : processes) {
+    int pid=StringUtil.parseInt(each.getName(),-1);
+    if (pid == -1)     continue;
+    List<String> cmdline;
+    try {
+      FileInputStream stream=new FileInputStream(new File(each,"cmdline"));
+      try {
+        String cmdlineString=new String(FileUtil.loadBytes(stream));
+        cmdline=StringUtil.split(cmdlineString,"\0");
+      }
+  finally {
+        stream.close();
+      }
     }
+ catch (    IOException e) {
+      continue;
+    }
+    if (cmdline.isEmpty())     continue;
+    result.add(new ProcessInfo(pid,StringUtil.join(cmdline," "),PathUtil.getFileName(cmdline.get(0)),StringUtil.join(cmdline.subList(1,cmdline.size())," ")));
   }
-);
+  return result;
 }

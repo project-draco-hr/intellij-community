@@ -1,21 +1,31 @@
 {
-  if (myIsInLoading)   return;
-  if (myChangesOnlyCheckBox.isSelected()) {
-    loadContentsFor(myRevisions.toArray(new VcsFileRevision[myRevisions.size()]));
-    try {
-      ((ListTableModel)myList.getModel()).setItems(filteredRevisions());
+  if (myIsDuringUpdate)   return;
+  try {
+    myIsDuringUpdate=true;
+    List<VcsFileRevision> newItems;
+    if (myChangesOnlyCheckBox.isSelected()) {
+      try {
+        loadContentsFor(myRevisions.toArray(new VcsFileRevision[myRevisions.size()]));
+        newItems=filteredRevisions();
+      }
+ catch (      final VcsException e) {
+        canNotLoadRevisionMessage(e);
+        return;
+      }
     }
- catch (    FilesTooBigForDiffException e) {
-      myChangesOnlyCheckBox.setEnabled(false);
-      myChangesOnlyCheckBox.setSelected(false);
-      setErrorText(e.getMessage());
-      ((ListTableModel)myList.getModel()).setItems(myRevisions);
-    }
-    ((ListTableModel)myList.getModel()).fireTableDataChanged();
-    updateDiff(0,0);
-  }
  else {
-    ((ListTableModel)myList.getModel()).setItems(myRevisions);
-    ((ListTableModel)myList.getModel()).fireTableDataChanged();
+      newItems=myRevisions;
+    }
+    List<VcsFileRevision> oldSelection=getSelectedRevisions();
+    myListModel.setItems(newItems);
+    myList.setSelection(oldSelection);
+    if (myList.getSelectedRowCount() == 0) {
+      int index=getNearestVisibleRevision(ContainerUtil.getFirstItem(oldSelection));
+      myList.getSelectionModel().setSelectionInterval(index,index);
+    }
   }
+  finally {
+    myIsDuringUpdate=false;
+  }
+  updateDiff();
 }
