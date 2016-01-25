@@ -1,0 +1,32 @@
+{
+  LOG.assertTrue(PsiTypesUtil.getExpectedTypeByParent(functionalExpression) == null);
+  PsiElement parent=functionalExpression.getParent();
+  PsiElement expr=functionalExpression;
+  while (parent instanceof PsiParenthesizedExpression || parent instanceof PsiConditionalExpression) {
+    if (parent instanceof PsiConditionalExpression && ((PsiConditionalExpression)parent).getThenExpression() != expr && ((PsiConditionalExpression)parent).getElseExpression() != expr)     break;
+    expr=parent;
+    parent=parent.getParent();
+  }
+  if (parent instanceof PsiExpressionList) {
+    final PsiExpressionList expressionList=(PsiExpressionList)parent;
+    final int lambdaIdx=getLambdaIdx(expressionList,functionalExpression);
+    if (lambdaIdx > -1) {
+      PsiElement gParent=expressionList.getParent();
+      if (gParent instanceof PsiAnonymousClass) {
+        gParent=gParent.getParent();
+      }
+      if (gParent instanceof PsiMethodCallExpression) {
+        final Set<PsiType> types=new HashSet<PsiType>();
+        final JavaResolveResult[] results=((PsiMethodCallExpression)gParent).getMethodExpression().multiResolve(true);
+        for (        JavaResolveResult result : results) {
+          final PsiType functionalExpressionType=getSubstitutedType(functionalExpression,true,lambdaIdx,result);
+          if (functionalExpressionType != null && types.add(functionalExpressionType)) {
+            overloadProcessor.consume(functionalExpressionType);
+          }
+        }
+        return true;
+      }
+    }
+  }
+  return false;
+}

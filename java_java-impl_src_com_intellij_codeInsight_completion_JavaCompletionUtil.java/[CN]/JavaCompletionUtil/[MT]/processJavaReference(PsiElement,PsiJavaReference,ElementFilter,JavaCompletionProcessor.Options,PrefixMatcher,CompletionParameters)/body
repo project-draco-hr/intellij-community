@@ -1,62 +1,27 @@
 {
-  final Set<LookupElement> set=new LinkedHashSet<LookupElement>();
-  final Condition<String> nameCondition=new Condition<String>(){
-    @Override public boolean value(    String s){
-      return matcher.prefixMatches(s);
-    }
-  }
-;
-  PsiMethodCallExpression call=PsiTreeUtil.getParentOfType(element,PsiMethodCallExpression.class);
-  boolean checkInitialized=parameters.getInvocationCount() <= 1 && call != null && PsiKeyword.SUPER.equals(call.getMethodExpression().getText());
-  final JavaCompletionProcessor processor=new JavaCompletionProcessor(element,elementFilter,options.withInitialized(checkInitialized),nameCondition);
-  final PsiType plainQualifier=processor.getQualifierType();
-  PsiType qualifierType=plainQualifier;
-  PsiType runtimeQualifier=getQualifierCastType(javaReference,parameters);
-  if (runtimeQualifier != null) {
-    PsiType composite=qualifierType == null ? runtimeQualifier : PsiIntersectionType.createIntersection(qualifierType,runtimeQualifier);
-    PsiElement ctx=createContextWithXxxVariable(element,composite);
-    javaReference=createReference("xxx.xxx",ctx);
-    qualifierType=runtimeQualifier;
-    processor.setQualifierType(qualifierType);
-  }
-  javaReference.processVariants(processor);
-  final PsiTypeLookupItem castItem=runtimeQualifier == null ? null : PsiTypeLookupItem.createLookupItem(runtimeQualifier,(PsiReferenceExpression)javaReference);
-  final boolean pkgContext=inSomePackage(element);
-  PsiClass qualifierClass=PsiUtil.resolveClassInClassTypeOnly(qualifierType);
-  final boolean honorExcludes=qualifierClass == null || !isInExcludedPackage(qualifierClass,false);
-  final Set<PsiMember> mentioned=new THashSet<PsiMember>();
-  for (  CompletionElement completionElement : processor.getResults()) {
-    for (    LookupElement item : createLookupElements(completionElement,javaReference)) {
-      item.putUserData(QUALIFIER_TYPE_ATTR,qualifierType);
-      final Object o=item.getObject();
-      if (o instanceof PsiClass && !isSourceLevelAccessible(element,(PsiClass)o,pkgContext)) {
-        continue;
-      }
-      if (o instanceof PsiMember) {
-        if (honorExcludes && isInExcludedPackage((PsiMember)o,true)) {
-          continue;
-        }
-        mentioned.add(CompletionUtil.getOriginalOrSelf((PsiMember)o));
-      }
-      set.add(highlightIfNeeded(qualifierType,castQualifier(item,castItem,plainQualifier,processor),o,element));
-    }
-  }
-  if (javaReference instanceof PsiJavaCodeReferenceElement) {
-    PsiElement refQualifier=((PsiJavaCodeReferenceElement)javaReference).getQualifier();
-    if (refQualifier == null) {
-      final StaticMemberProcessor memberProcessor=new JavaStaticMemberProcessor(parameters);
-      memberProcessor.processMembersOfRegisteredClasses(matcher,new PairConsumer<PsiMember,PsiClass>(){
-        @Override public void consume(        PsiMember member,        PsiClass psiClass){
-          if (!mentioned.contains(member) && processor.satisfies(member,ResolveState.initial())) {
-            set.add(memberProcessor.createLookupElement(member,psiClass,true));
+  PsiElement elementParent=element.getContext();
+  if (elementParent instanceof PsiReferenceExpression) {
+    final PsiExpression qualifierExpression=((PsiReferenceExpression)elementParent).getQualifierExpression();
+    if (qualifierExpression instanceof PsiReferenceExpression) {
+      final PsiElement resolve=((PsiReferenceExpression)qualifierExpression).resolve();
+      if (resolve instanceof PsiParameter) {
+        final PsiElement declarationScope=((PsiParameter)resolve).getDeclarationScope();
+        if (((PsiParameter)resolve).getType() instanceof PsiLambdaParameterType) {
+          final PsiLambdaExpression lambdaExpression=(PsiLambdaExpression)declarationScope;
+          final int parameterIndex=lambdaExpression.getParameterList().getParameterIndex((PsiParameter)resolve);
+          final Set<LookupElement> set=new LinkedHashSet<LookupElement>();
+          final boolean overloadsFound=LambdaUtil.processParentOverloads(lambdaExpression,new Consumer<PsiType>(){
+            @Override public void consume(            PsiType functionalInterfaceType){
+              PsiType qualifierType=LambdaUtil.getLambdaParameterFromType(functionalInterfaceType,parameterIndex);
+              PsiReferenceExpression fakeRef=createReference("xxx.xxx",createContextWithXxxVariable(element,qualifierType));
+              set.addAll(processJavaQualifiedReference(fakeRef.getReferenceNameElement(),fakeRef,elementFilter,options,matcher,parameters));
+            }
           }
+);
+          if (overloadsFound)           return set;
         }
       }
-);
-    }
- else     if (refQualifier instanceof PsiSuperExpression && ((PsiSuperExpression)refQualifier).getQualifier() == null) {
-      set.addAll(SuperCalls.suggestQualifyingSuperCalls(element,javaReference,elementFilter,options,nameCondition));
     }
   }
-  return set;
+  return processJavaQualifiedReference(element,javaReference,elementFilter,options,matcher,parameters);
 }
