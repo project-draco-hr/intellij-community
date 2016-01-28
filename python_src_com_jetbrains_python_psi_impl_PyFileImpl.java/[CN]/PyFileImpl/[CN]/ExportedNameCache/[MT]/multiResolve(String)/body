@@ -1,0 +1,46 @@
+{
+synchronized (myNameDefinerNegativeCache) {
+    final long modCount=myModificationTracker.getOutOfCodeBlockModificationCount();
+    if (modCount != myNameDefinerOOCBModCount) {
+      myNameDefinerNegativeCache.clear();
+      myNameDefinerOOCBModCount=modCount;
+    }
+ else {
+      if (myNameDefinerNegativeCache.contains(name)) {
+        return Collections.emptyList();
+      }
+    }
+  }
+  final PyResolveProcessor processor=new PyResolveProcessor(name);
+  boolean stopped=false;
+  if (myNamedElements.containsKey(name)) {
+    for (    PsiNamedElement element : myNamedElements.get(name)) {
+      if (!processor.execute(element,ResolveState.initial())) {
+        stopped=true;
+        break;
+      }
+    }
+  }
+  if (!stopped) {
+    for (    PyImportedNameDefiner definer : myImportedNameDefiners) {
+      if (!processor.execute(definer,ResolveState.initial())) {
+        break;
+      }
+    }
+  }
+  final Collection<PsiElement> elements=processor.getElements();
+  if (!elements.isEmpty()) {
+    final ResolveResultList resultList=new ResolveResultList();
+    final TypeEvalContext typeEvalContext=TypeEvalContext.codeInsightFallback(getProject());
+    for (    PsiElement element : elements) {
+      if (element != null) {
+        resultList.poke(element,PyReferenceImpl.getRate(element,typeEvalContext));
+      }
+    }
+    return resultList;
+  }
+synchronized (myNameDefinerNegativeCache) {
+    myNameDefinerNegativeCache.add(name);
+  }
+  return Collections.emptyList();
+}
