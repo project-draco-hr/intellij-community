@@ -1,7 +1,6 @@
 {
   final BalloonLayoutData layoutData=new BalloonLayoutData();
   layoutDataRef.set(layoutData);
-  boolean isTitle=!StringUtil.isEmpty(notification.getTitle()) || !StringUtil.isEmpty(notification.getSubtitle());
   final Color foreground=new JBColor(Gray._0,Gray._191);
   final JBColor fillColor=new JBColor(Gray._242,new Color(78,80,82));
   final JEditorPane text=new JEditorPane(){
@@ -15,6 +14,11 @@
         }
       }
     }
+    @Override public void paint(    Graphics g){
+      super.paint(g);
+      g.setColor(Color.magenta);
+      drawRect(g,0,0,getWidth(),getHeight());
+    }
   }
 ;
   text.setEditorKit(UIUtil.getHTMLEditorKit());
@@ -23,9 +27,9 @@
   if (listener != null) {
     text.addHyperlinkListener(listener);
   }
-  JLabel label=new JLabel(NotificationsUtil.buildHtml(notification,null,true,null));
-  int maxSize=JBUI.scale(350);
-  String style=label.getPreferredSize().width > maxSize ? "width:" + maxSize + "px;" : null;
+  int prefSize=new JLabel(NotificationsUtil.buildHtml(notification,null,true,null)).getPreferredSize().width;
+  int maxSize=BalloonLayoutConfiguration.MaxWidth;
+  String style=prefSize > maxSize ? "width:" + maxSize + "px;" : null;
   text.setText(NotificationsUtil.buildHtml(notification,style,true,foreground));
   text.setEditable(false);
   text.setOpaque(false);
@@ -33,8 +37,7 @@
     text.setBackground(UIUtil.TRANSPARENT_COLOR);
   }
   text.setBorder(null);
-  int gap=(int)(label.getIconTextGap() * 1.5);
-  final JPanel content=new NonOpaquePanel(new BorderLayout(gap,gap));
+  final JPanel content=new NonOpaquePanel(new BorderLayout());
   if (text.getCaret() != null) {
     text.setCaretPosition(0);
   }
@@ -54,7 +57,7 @@
   List<AnAction> actions=notification.getActions();
   LinkLabel<Void> expandAction=null;
   int lines=3;
-  if (isTitle) {
+  if (notification.isTitle()) {
     lines--;
   }
   if (!actions.isEmpty()) {
@@ -63,6 +66,7 @@
   layoutData.fullHeight=text.getPreferredSize().height;
   layoutData.twoLineHeight=calculateContentHeight(lines);
   layoutData.maxScrollHeight=Math.min(layoutData.fullHeight,calculateContentHeight(10));
+  layoutData.configuration=BalloonLayoutConfiguration.create(notification,layoutData);
   if (layoutData.maxScrollHeight != layoutData.fullHeight) {
     pane.setViewport(new GradientViewport(text,JBUI.insets(10,0),true){
       @Nullable @Override protected Color getViewColor(){
@@ -123,20 +127,24 @@
 );
     expandAction.setHoveringIcon(icon(AllIcons.Ide.Notification.ExpandHover));
   }
-  final CenteredLayoutWithActions layout=new CenteredLayoutWithActions(gap,text,layoutData);
+  final CenteredLayoutWithActions layout=new CenteredLayoutWithActions(text,layoutData);
   JPanel centerPanel=new NonOpaquePanel(layout){
+    @Override public void paint(    Graphics g){
+      super.paint(g);
+      g.setColor(Color.red);
+      drawRect(g,0,0,getWidth(),getHeight());
+    }
     @Override protected void paintChildren(    Graphics g){
       super.paintChildren(g);
       Component title=layout.getTitle();
       if (title != null && layoutData.showActions != null && layoutData.showActions.compute()) {
-        Insets insets=getInsets();
-        int width=NotificationBalloonActionProvider.getAllActionsOffset();
-        int x=getWidth() - insets.right - width;
-        int y=insets.top;
+        int width=layoutData.configuration.allActionsOffset;
+        int x=getWidth() - width - 5;
+        int y=layoutData.configuration.topSpaceHeight;
         int height=title instanceof JEditorPane ? getFirstLineHeight((JEditorPane)title) : title.getHeight();
         g.setColor(fillColor);
         g.fillRect(x,y,width,height);
-        width=15;
+        width=layoutData.configuration.beforeGearSpace;
         x-=width;
         ((Graphics2D)g).setPaint(new GradientPaint(x,y,ColorUtil.withAlpha(fillColor,0.2),x + width,y,fillColor));
         g.fillRect(x,y,width,height);
@@ -145,8 +153,15 @@
   }
 ;
   content.add(centerPanel,BorderLayout.CENTER);
-  if (isTitle) {
-    JLabel title=new JLabel(NotificationsUtil.buildHtml(notification,"white-space: nowrap;",false,foreground));
+  if (notification.isTitle()) {
+    JLabel title=new JLabel(NotificationsUtil.buildHtml(notification,"white-space: nowrap;",false,foreground)){
+      @Override public void paint(      Graphics g){
+        super.paint(g);
+        g.setColor(Color.blue);
+        drawRect(g,0,0,getWidth(),getHeight());
+      }
+    }
+;
     title.setOpaque(false);
     if (UIUtil.isUnderNimbusLookAndFeel()) {
       title.setBackground(UIUtil.TRANSPARENT_COLOR);
@@ -157,16 +172,25 @@
   if (expandAction != null) {
     centerPanel.add(expandAction,BorderLayout.EAST);
   }
-  if (!StringUtil.isEmptyOrSpaces(notification.getContent())) {
+  if (notification.isContent()) {
     centerPanel.add(pane,BorderLayout.CENTER);
   }
-  final NonOpaquePanel iconPanel=new NonOpaquePanel(new BorderLayout());
-  iconPanel.add(new JLabel(NotificationsUtil.getIcon(notification)),BorderLayout.NORTH);
-  content.add(iconPanel,BorderLayout.WEST);
-  content.setBorder(new EmptyBorder(2,4,2,4));
+  final Icon icon=icon(NotificationsUtil.getIcon(notification));
+  JComponent iconComponent=new JComponent(){
+    @Override protected void paintComponent(    Graphics g){
+      super.paintComponent(g);
+      icon.paintIcon(this,g,layoutData.configuration.iconOffset.width,layoutData.configuration.iconOffset.height);
+      g.setColor(Color.black);
+      drawRect(g,0,0,getWidth(),getHeight());
+    }
+  }
+;
+  iconComponent.setOpaque(false);
+  iconComponent.setPreferredSize(new Dimension(layoutData.configuration.iconPanelWidth,2 * layoutData.configuration.iconOffset.height + icon.getIconHeight()));
+  content.add(iconComponent,BorderLayout.WEST);
   JPanel buttons=createButtons(notification,content,listener);
   if (buttons == null && !actions.isEmpty()) {
-    createActionPanel(notification,centerPanel);
+    createActionPanel(notification,centerPanel,layoutData.configuration.actionGap);
   }
   text.setSize(text.getPreferredSize());
   Dimension paneSize=new Dimension(text.getPreferredSize());
@@ -177,12 +201,13 @@
   if (paneSize.width > maxWidth) {
     pane.setPreferredSize(new Dimension(maxWidth,paneSize.height + UIUtil.getScrollBarWidth()));
   }
+  JBColor borderColor=new JBColor(Gray._178.withAlpha(205),new Color(86,90,92,205));
   final BalloonBuilder builder=JBPopupFactory.getInstance().createBalloonBuilder(content);
-  builder.setFillColor(fillColor).setCloseButtonEnabled(buttons == null).setShowCallout(showCallout).setShadow(false).setHideOnClickOutside(hideOnClickOutside).setHideOnAction(hideOnClickOutside).setHideOnKeyOutside(hideOnClickOutside).setHideOnFrameResize(false).setBorderColor(new JBColor(Gray._178.withAlpha(205),new Color(86,90,92,205))).setBorderInsets(new Insets(0,0,0,0));
+  builder.setFillColor(fillColor).setCloseButtonEnabled(buttons == null).setShowCallout(showCallout).setShadow(false).setHideOnClickOutside(hideOnClickOutside).setHideOnAction(hideOnClickOutside).setHideOnKeyOutside(hideOnClickOutside).setHideOnFrameResize(false).setBorderColor(borderColor).setBorderInsets(new Insets(0,0,0,0));
   final BalloonImpl balloon=(BalloonImpl)builder.createBalloon();
   balloon.setAnimationEnabled(false);
   notification.setBalloon(balloon);
-  balloon.setShadowBorderProvider(new NotificationBalloonShadowBorderProvider());
+  balloon.setShadowBorderProvider(new NotificationBalloonShadowBorderProvider(fillColor,borderColor));
   if (buttons == null) {
     balloon.setActionProvider(new NotificationBalloonActionProvider(balloon,layout.getTitle(),layoutData,notification.getGroupId()));
   }
