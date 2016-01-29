@@ -2,35 +2,25 @@
   final PsiTypeParameter[] parameters=myClass.getTypeParameters();
   final Map<String,TypeParameterInfo> infos=new HashMap<String,TypeParameterInfo>();
   for (  final TypeParameterInfo info : myTypeParameterInfos) {
-    if (!info.isForExistingParameter() && !PsiNameHelper.getInstance(myClass.getProject()).isIdentifier(info.getNewName())) {
-      return RefactoringBundle.message("error.wrong.name.input",info.getNewName());
+    if (info instanceof TypeParameterInfo.New && !PsiNameHelper.getInstance(myClass.getProject()).isIdentifier(info.getName(parameters))) {
+      return RefactoringBundle.message("error.wrong.name.input",info.getName(parameters));
     }
-    final String newName=info.isForExistingParameter() ? parameters[info.getOldParameterIndex()].getName() : info.getNewName();
+    final String newName=info.getName(parameters);
     TypeParameterInfo existing=infos.get(newName);
     if (existing != null) {
       return myClass.getName() + " already contains type parameter " + newName;
     }
     infos.put(newName,info);
   }
-  LOG.assertTrue(myTypeCodeFragments.size() == myTypeParameterInfos.size());
-  for (int i=0; i < myTypeCodeFragments.size(); i++) {
-    final PsiTypeCodeFragment codeFragment=myTypeCodeFragments.get(i);
+  LOG.assertTrue(myDefaultValueTypeCodeFragments.size() == myTypeParameterInfos.size());
+  LOG.assertTrue(myBoundValueTypeCodeFragments.size() == myTypeParameterInfos.size());
+  for (int i=0; i < myDefaultValueTypeCodeFragments.size(); i++) {
     TypeParameterInfo info=myTypeParameterInfos.get(i);
-    if (info.getOldParameterIndex() >= 0)     continue;
-    PsiType type;
-    try {
-      type=codeFragment.getType();
-      if (type instanceof PsiPrimitiveType) {
-        return "Type parameter can't be primitive";
-      }
-    }
- catch (    PsiTypeCodeFragment.TypeSyntaxException e) {
-      return RefactoringBundle.message("changeClassSignature.bad.default.value",codeFragment.getText(),info.getNewName());
-    }
-catch (    PsiTypeCodeFragment.NoTypeException e) {
-      return RefactoringBundle.message("changeSignature.no.type.for.parameter",info.getNewName());
-    }
-    info.setDefaultValue(type);
+    if (info instanceof TypeParameterInfo.Existing)     continue;
+    String message=updateInfo(myDefaultValueTypeCodeFragments.get(i),(TypeParameterInfo.New)info,InfoUpdater.DEFAULT_VALUE);
+    if (message != null)     return message;
+    message=updateInfo(myBoundValueTypeCodeFragments.get(i),(TypeParameterInfo.New)info,InfoUpdater.BOUND_VALUE);
+    if (message != null)     return message;
   }
   return null;
 }

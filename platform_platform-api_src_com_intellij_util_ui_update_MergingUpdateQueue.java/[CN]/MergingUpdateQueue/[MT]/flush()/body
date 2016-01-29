@@ -5,5 +5,39 @@ synchronized (myScheduledUpdates) {
       return;
     }
   }
-  flush(true);
+  if (myFlushing) {
+    return;
+  }
+  if (!isModalityStateCorrect()) {
+    return;
+  }
+  myFlushing=true;
+  final Runnable toRun=new Runnable(){
+    @Override public void run(){
+      try {
+        final List<Update> all;
+synchronized (myScheduledUpdates) {
+          all=getAllScheduledUpdates();
+          myScheduledUpdates.clear();
+        }
+        for (        Update each : all) {
+          each.setProcessed();
+        }
+        execute(all.toArray(new Update[all.size()]));
+      }
+  finally {
+        myFlushing=false;
+        if (isEmpty()) {
+          finishActivity();
+        }
+      }
+    }
+  }
+;
+  if (myExecuteInDispatchThread) {
+    UIUtil.invokeLaterIfNeeded(toRun);
+  }
+ else {
+    toRun.run();
+  }
 }

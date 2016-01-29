@@ -1,0 +1,56 @@
+{
+  myOnSelectedHash=onSelectedHash;
+  myOnSelectedRef=onSelectedRef;
+  myTextField=new TextFieldWithProgress<VcsRef>(project,new VcsRefCompletionProvider(project,variants,roots,colorManager,comparator)){
+    @Override public void onOk(){
+      if (myFuture == null) {
+        final Future future=((mySelectedRef == null || (!mySelectedRef.getName().equals(getText().trim()))) ? myOnSelectedHash.fun(getText().trim()) : myOnSelectedRef.fun(mySelectedRef));
+        myFuture=future;
+        showProgress();
+        ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+          @Override public void run(){
+            try {
+              future.get();
+              okPopup();
+            }
+ catch (            CancellationException ex) {
+              cancelPopup();
+            }
+catch (            InterruptedException ex) {
+              cancelPopup();
+            }
+catch (            ExecutionException ex) {
+              LOG.error(ex);
+              cancelPopup();
+            }
+          }
+        }
+);
+      }
+    }
+  }
+;
+  myTextField.setAlignmentX(Component.LEFT_ALIGNMENT);
+  JBLabel label=new JBLabel("Enter hash or branch/tag name:");
+  label.setFont(UIUtil.getLabelFont().deriveFont(Font.BOLD));
+  label.setAlignmentX(Component.LEFT_ALIGNMENT);
+  JPanel panel=new JPanel();
+  BoxLayout layout=new BoxLayout(panel,BoxLayout.PAGE_AXIS);
+  panel.setLayout(layout);
+  panel.add(label);
+  panel.add(myTextField);
+  panel.setBorder(new EmptyBorder(2,2,2,2));
+  myPopup=JBPopupFactory.getInstance().createComponentPopupBuilder(panel,myTextField.getPreferableFocusComponent()).setCancelOnClickOutside(true).setCancelOnWindowDeactivation(true).setCancelKeyEnabled(true).setRequestFocus(true).createPopup();
+  myPopup.addListener(new JBPopupListener.Adapter(){
+    @Override public void onClosed(    LightweightWindowEvent event){
+      if (!event.isOk()) {
+        if (myFuture != null) {
+          myFuture.cancel(true);
+        }
+      }
+      myFuture=null;
+      myTextField.hideProgress();
+    }
+  }
+);
+}

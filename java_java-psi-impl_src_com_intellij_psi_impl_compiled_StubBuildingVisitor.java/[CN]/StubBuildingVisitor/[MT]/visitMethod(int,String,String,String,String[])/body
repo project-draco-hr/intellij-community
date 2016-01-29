@@ -1,2 +1,61 @@
 {
+  if ((access & Opcodes.ACC_SYNTHETIC) != 0)   return null;
+  if (name == null)   return null;
+  if (SYNTHETIC_CLASS_INIT_METHOD.equals(name))   return null;
+  boolean isEnum=myResult.isEnum();
+  if (isEnum) {
+    if ("values".equals(name) && desc.startsWith("()"))     return null;
+    if ("valueOf".equals(name) && desc.startsWith("(Ljava/lang/String;)"))     return null;
+  }
+  boolean isConstructor=SYNTHETIC_INIT_METHOD.equals(name);
+  boolean isDeprecated=(access & Opcodes.ACC_DEPRECATED) != 0;
+  boolean isVarargs=(access & Opcodes.ACC_VARARGS) != 0;
+  boolean isStatic=(access & Opcodes.ACC_STATIC) != 0;
+  boolean isAnnotationMethod=myResult.isAnnotationType();
+  byte flags=PsiMethodStubImpl.packFlags(isConstructor,isAnnotationMethod,isVarargs,isDeprecated,false,false);
+  String canonicalMethodName=isConstructor ? myResult.getName() : name;
+  MethodInfo info=null;
+  boolean generic=false;
+  if (signature != null) {
+    try {
+      info=parseMethodSignature(signature,exceptions);
+      generic=true;
+    }
+ catch (    ClsFormatException e) {
+      if (LOG.isDebugEnabled())       LOG.debug("source=" + mySource + " signature="+ signature,e);
+    }
+  }
+  if (info == null) {
+    info=parseMethodDescription(desc,exceptions);
+  }
+  PsiMethodStubImpl stub=new PsiMethodStubImpl(myResult,canonicalMethodName,TypeInfo.fromString(info.returnType,false),flags,null);
+  PsiModifierListStub modList=new PsiModifierListStubImpl(stub,packMethodFlags(access,myResult.isInterface()));
+  PsiTypeParameterListStub list=new PsiTypeParameterListStubImpl(stub);
+  for (  Pair<String,String[]> parameter : info.typeParameters) {
+    PsiTypeParameterStub parameterStub=new PsiTypeParameterStubImpl(list,StringRef.fromString(parameter.first));
+    newReferenceList(JavaStubElementTypes.EXTENDS_BOUND_LIST,parameterStub,parameter.second);
+  }
+  boolean isEnumConstructor=isEnum && isConstructor;
+  boolean isInnerClassConstructor=isConstructor && !(myParent instanceof PsiFileStub) && (myModList.getModifiersMask() & Opcodes.ACC_STATIC) == 0;
+  List<String> args=info.argTypes;
+  if (!generic && isEnumConstructor && args.size() >= 2 && JAVA_LANG_STRING.equals(args.get(0)) && "int".equals(args.get(1))) {
+    args=args.subList(2,args.size());
+  }
+  PsiParameterListStubImpl parameterList=new PsiParameterListStubImpl(stub);
+  int paramCount=args.size();
+  PsiParameterStubImpl[] paramStubs=new PsiParameterStubImpl[paramCount];
+  for (int i=0; i < paramCount; i++) {
+    if (i == 0 && !generic && isInnerClassConstructor)     continue;
+    String arg=args.get(i);
+    boolean isEllipsisParam=isVarargs && i == paramCount - 1;
+    TypeInfo typeInfo=TypeInfo.fromString(arg,isEllipsisParam);
+    String paramName=i < parameterNames.length ? parameterNames[i] : "p" + (i + 1);
+    PsiParameterStubImpl parameterStub=new PsiParameterStubImpl(parameterList,paramName,typeInfo,isEllipsisParam);
+    paramStubs[i]=parameterStub;
+    new PsiModifierListStubImpl(parameterStub,0);
+  }
+  newReferenceList(JavaStubElementTypes.THROWS_LIST,stub,ArrayUtil.toStringArray(info.throwTypes));
+  int localVarIgnoreCount=isStatic ? 0 : isEnumConstructor ? 3 : 1;
+  int paramIgnoreCount=isEnumConstructor ? 2 : isInnerClassConstructor ? 1 : 0;
+  return new AnnotationParamCollectingVisitor(stub,modList,localVarIgnoreCount,paramIgnoreCount,paramCount,paramStubs,myMapping);
 }
