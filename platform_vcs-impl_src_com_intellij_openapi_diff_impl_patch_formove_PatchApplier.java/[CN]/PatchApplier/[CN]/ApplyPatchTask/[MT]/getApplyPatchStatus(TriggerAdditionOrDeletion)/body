@@ -1,16 +1,15 @@
 {
-  final Ref<ApplyPatchStatus> refStatus=Ref.create(ApplyPatchStatus.FAILURE);
+  final Ref<ApplyPatchStatus> refStatus=Ref.create(null);
   try {
     setConfirmationToDefault();
     CommandProcessor.getInstance().executeCommand(myProject,new Runnable(){
       @Override public void run(){
-        if (!createFiles()) {
-          refStatus.set(ApplyPatchStatus.FAILURE);
-          return;
+        if (createFiles() != ApplyPatchStatus.SUCCESS) {
+          refStatus.set(createFiles());
         }
         addSkippedItems(trigger);
         trigger.prepare();
-        refStatus.set(executeWritable());
+        refStatus.set(ApplyPatchStatus.and(refStatus.get(),executeWritable()));
       }
     }
 ,VcsBundle.message("patch.apply.command"),null);
@@ -19,5 +18,6 @@
     returnConfirmationBack();
     VcsFileListenerContextHelper.getInstance(myProject).clearContext();
   }
-  return refStatus.get();
+  final ApplyPatchStatus status=refStatus.get();
+  return status == null ? ApplyPatchStatus.ALREADY_APPLIED : status;
 }

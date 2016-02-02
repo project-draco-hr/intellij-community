@@ -1,0 +1,31 @@
+{
+  final PsiExpression expression=(PsiExpression)aClass.getParent();
+  final PsiType psiType=PsiTypesUtil.getExpectedTypeByParent(expression);
+  if (psiType != null) {
+    return psiType;
+  }
+  PsiExpression topExpr=expression;
+  while (topExpr.getParent() instanceof PsiParenthesizedExpression) {
+    topExpr=(PsiExpression)topExpr.getParent();
+  }
+  final PsiElement parent=topExpr.getParent();
+  if (parent instanceof PsiExpressionList) {
+    PsiExpressionList expressionList=(PsiExpressionList)parent;
+    final PsiElement callExpr=expressionList.getParent();
+    if (callExpr instanceof PsiCallExpression) {
+      PsiExpression[] expressions=expressionList.getExpressions();
+      int i=ArrayUtilRt.find(expressions,topExpr);
+      if (i < 0)       return null;
+      final PsiCallExpression copy=(PsiCallExpression)callExpr.copy();
+      final PsiExpressionList argumentList=copy.getArgumentList();
+      if (argumentList != null) {
+        final PsiExpression classArg=argumentList.getExpressions()[i];
+        PsiExpression lambda=JavaPsiFacade.getElementFactory(aClass.getProject()).createExpressionFromText(ReplaceWithLambdaFix.composeLambdaText(method),expression);
+        lambda=(PsiExpression)classArg.replace(lambda);
+        ((PsiLambdaExpression)lambda).getBody().replace(method.getBody());
+        return LambdaUtil.getFunctionalInterfaceType(lambda,true);
+      }
+    }
+  }
+  return null;
+}

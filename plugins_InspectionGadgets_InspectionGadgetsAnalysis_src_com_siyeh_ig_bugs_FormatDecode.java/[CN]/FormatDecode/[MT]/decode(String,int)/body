@@ -17,32 +17,47 @@
     final String width=matcher.group(3);
     final String precision=matcher.group(4);
     final String dateSpec=matcher.group(5);
-    final String spec=matcher.group(6);
+    final String conversion=matcher.group(6);
     int flagBits=0;
     for (int j=0; j < flags.length(); j++) {
-      final int bit=flag(flags.charAt(j));
-      if ((flagBits | bit) == flagBits)       throw new IllegalFormatException(specifier);
+      final char flag=flags.charAt(j);
+      final int bit=flag(flag);
+      if (bit == -1) {
+        throw new IllegalFormatException("unexpected character '" + flag + "' in '"+ specifier+ '\'');
+      }
+      if ((flagBits | bit) == flagBits) {
+        throw new IllegalFormatException("duplicate flag '" + flag + "' in '"+ specifier+ '\'');
+      }
       flagBits|=bit;
     }
-    if (isAllBitsSet(flagBits,LEADING_SPACE | PLUS) || isAllBitsSet(flagBits,LEFT_JUSTIFY | ZERO_PAD)) {
-      throw new IllegalFormatException(specifier);
-    }
-    if ("n".equals(spec)) {
-      if (flagBits != 0 || !StringUtil.isEmpty(width) || !StringUtil.isEmpty(precision))       throw new IllegalFormatException(specifier);
+    if ("n".equals(conversion)) {
+      checkFlags(flagBits,0,specifier);
+      if (!StringUtil.isEmpty(width)) {
+        throw new IllegalFormatException("width ('" + width + "') not allowed in '"+ specifier+ '\'');
+      }
+      checkNoPrecision(precision,specifier);
       continue;
     }
- else     if ("%".equals(spec)) {
-      if (isAnyBitSet(flagBits,~LEFT_JUSTIFY) || !StringUtil.isEmpty(precision))       throw new IllegalFormatException(specifier);
+ else     if ("%".equals(conversion)) {
+      checkFlags(flagBits,LEFT_JUSTIFY,specifier);
+      checkNoPrecision(precision,specifier);
       continue;
     }
     if (posSpec != null) {
-      if (isAnyBitSet(flagBits,PREVIOUS))       throw new IllegalFormatException(specifier);
+      if (isAllBitsSet(flagBits,PREVIOUS)) {
+        throw new IllegalFormatException("unnecessary argument position specifier '" + posSpec + "' in '"+ specifier+ '\'');
+      }
       final String num=posSpec.substring(0,posSpec.length() - 1);
       pos=Integer.parseInt(num) - 1;
+      if (pos < 0) {
+        throw new IllegalFormatException("illegal position specifier '" + posSpec + "' in '"+ specifier+ '\'');
+      }
       previousAllowed=true;
     }
- else     if (isAnyBitSet(flagBits,PREVIOUS)) {
-      if (!previousAllowed)       throw new IllegalFormatException(specifier);
+ else     if (isAllBitsSet(flagBits,PREVIOUS)) {
+      if (!previousAllowed) {
+        throw new IllegalFormatException("previous flag '<' used but no previous format specifier found for '" + specifier + '\'');
+      }
     }
  else {
       previousAllowed=true;
@@ -50,60 +65,78 @@
     }
     final Validator allowed;
     if (dateSpec != null) {
-      if (isAnyBitSet(flagBits,~(LEFT_JUSTIFY | PREVIOUS)) || !StringUtil.isEmpty(precision))       throw new IllegalFormatException(specifier);
+      checkFlags(flagBits,LEFT_JUSTIFY | PREVIOUS,specifier);
+      checkNoPrecision(precision,specifier);
       allowed=new DateValidator(specifier);
     }
  else {
-switch (spec.charAt(0)) {
+switch (conversion.charAt(0)) {
 case 'b':
 case 'B':
 case 'h':
 case 'H':
-        if (isAnyBitSet(flagBits,~(LEFT_JUSTIFY | PREVIOUS)))         throw new IllegalFormatException(specifier);
+        checkFlags(flagBits,LEFT_JUSTIFY | PREVIOUS,specifier);
       allowed=ALL_VALIDATOR;
     break;
 case 's':
 case 'S':
-  if (isAnyBitSet(flagBits,~(LEFT_JUSTIFY | ALTERNATE | PREVIOUS)))   throw new IllegalFormatException(specifier);
+  checkFlags(flagBits,LEFT_JUSTIFY | ALTERNATE | PREVIOUS,specifier);
 allowed=ALL_VALIDATOR;
 break;
 case 'c':
 case 'C':
-if (isAnyBitSet(flagBits,~(LEFT_JUSTIFY | PREVIOUS)) || !StringUtil.isEmpty(precision)) throw new IllegalFormatException(specifier);
+checkFlags(flagBits,LEFT_JUSTIFY | PREVIOUS,specifier);
+checkNoPrecision(precision,specifier);
 allowed=new CharValidator(specifier);
 break;
 case 'd':
-if (isAnyBitSet(flagBits,ALTERNATE)) throw new IllegalFormatException(specifier);
+checkFlags(flagBits,~ALTERNATE,specifier);
 allowed=new IntValidator(specifier);
 break;
 case 'o':
 case 'x':
 case 'X':
-if (isAnyBitSet(flagBits,PLUS | LEADING_SPACE | GROUP) || !StringUtil.isEmpty(precision)) {
-throw new IllegalFormatException(specifier);
-}
+checkFlags(flagBits,~(PLUS | LEADING_SPACE | GROUP),specifier);
+checkNoPrecision(precision,specifier);
 allowed=new IntValidator(specifier);
 break;
 case 'a':
 case 'A':
-if (isAnyBitSet(flagBits,PARENTHESES | GROUP)) throw new IllegalFormatException(specifier);
+checkFlags(flagBits,~(PARENTHESES | GROUP),specifier);
 allowed=new FloatValidator(specifier);
 break;
 case 'e':
 case 'E':
-if (isAnyBitSet(flagBits,GROUP)) throw new IllegalFormatException(specifier);
+checkFlags(flagBits,~GROUP,specifier);
 allowed=new FloatValidator(specifier);
 break;
 case 'g':
 case 'G':
-if (isAnyBitSet(flagBits,ALTERNATE)) throw new IllegalFormatException(specifier);
+checkFlags(flagBits,~ALTERNATE,specifier);
 allowed=new FloatValidator(specifier);
 break;
 case 'f':
 allowed=new FloatValidator(specifier);
 break;
 default :
-throw new IllegalFormatException(specifier);
+throw new IllegalFormatException("unknown conversion in '" + specifier + '\'');
+}
+}
+if (precision != null && precision.length() < 2) {
+throw new IllegalFormatException("invalid precision specified in '" + specifier + '\'');
+}
+if (isAllBitsSet(flagBits,LEADING_SPACE | PLUS)) {
+throw new IllegalFormatException("illegal flag combination ' ' and '+' in '" + specifier + '\'');
+}
+if (isAllBitsSet(flagBits,LEFT_JUSTIFY | ZERO_PAD)) {
+throw new IllegalFormatException("illegal flag combination '-' and '0' in '" + specifier + '\'');
+}
+if (StringUtil.isEmpty(width)) {
+if (isAllBitsSet(flagBits,LEFT_JUSTIFY)) {
+throw new IllegalFormatException("left justify flag '-' used but width not specified in '" + specifier + '\'');
+}
+if (isAllBitsSet(flagBits,ZERO_PAD)) {
+throw new IllegalFormatException("zero padding flag '0' used but width not specified in '" + specifier + '\'');
 }
 }
 storeValidator(allowed,pos,parameters,argumentCount);
