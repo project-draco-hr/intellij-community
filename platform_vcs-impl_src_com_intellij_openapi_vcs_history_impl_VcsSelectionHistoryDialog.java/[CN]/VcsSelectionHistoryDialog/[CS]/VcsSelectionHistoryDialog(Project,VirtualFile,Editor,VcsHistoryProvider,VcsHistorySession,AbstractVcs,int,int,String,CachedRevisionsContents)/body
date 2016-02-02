@@ -1,0 +1,73 @@
+{
+  super(project);
+  myProject=project;
+  myFile=file;
+  myEditor=editor;
+  myActiveVcs=vcs;
+  myCachedContents=cachedContents;
+  mySelectionStart=selectionStart;
+  mySelectionEnd=selectionEnd;
+  myHelpId=notNull(vcsHistoryProvider.getHelpId(),"reference.dialogs.vcs.selection.history");
+  JRootPane rootPane=((RootPaneContainer)getFrame()).getRootPane();
+  final VcsDependentHistoryComponents components=vcsHistoryProvider.getUICustomization(session,rootPane);
+  ColumnInfo[] additionalColumns=notNull(components.getColumns(),ColumnInfo.EMPTY_ARRAY);
+  myListModel=new ListTableModel<VcsFileRevision>(ArrayUtil.mergeArrays(COLUMNS,additionalColumns));
+  myListModel.setSortable(false);
+  myList=new TableView<VcsFileRevision>(myListModel);
+  myList.getEmptyText().setText(VcsBundle.message("history.empty"));
+  myDiffPanel=DiffManager.getInstance().createRequestPanel(myProject,this,getFrame());
+  myRevisions.add(new CurrentRevision(file,LOCAL_REVISION_NUMBER));
+  myRevisions.addAll(session.getRevisionList());
+  myBlocks.addAll(Collections.<Block>nCopies(myRevisions.size(),null));
+  mySplitter=new JBSplitter(true,DIFF_SPLITTER_PROPORTION_KEY,DIFF_SPLITTER_PROPORTION);
+  mySplitter.setFirstComponent(myDiffPanel.getComponent());
+  mySplitter.setSecondComponent(createBottomPanel(components.getDetailsComponent()));
+  final ListSelectionListener selectionListener=new ListSelectionListener(){
+    @Override public void valueChanged(    ListSelectionEvent e){
+      final VcsFileRevision revision;
+      if (myList.getSelectedRowCount() == 1 && !myList.isEmpty()) {
+        revision=myList.getItems().get(myList.getSelectedRow());
+        myComments.setText(revision.getCommitMessage());
+        myComments.setCaretPosition(0);
+      }
+ else {
+        revision=null;
+        myComments.setText("");
+      }
+      if (components.getRevisionListener() != null) {
+        components.getRevisionListener().consume(revision);
+      }
+      updateDiff();
+    }
+  }
+;
+  myList.getSelectionModel().addListSelectionListener(selectionListener);
+  final VcsConfiguration configuration=VcsConfiguration.getInstance(myProject);
+  myChangesOnlyCheckBox.setSelected(configuration.SHOW_ONLY_CHANGED_IN_SELECTION_DIFF);
+  myChangesOnlyCheckBox.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      configuration.SHOW_ONLY_CHANGED_IN_SELECTION_DIFF=myChangesOnlyCheckBox.isSelected();
+      updateRevisionsList();
+    }
+  }
+);
+  updateRevisionsList();
+  myList.getSelectionModel().setSelectionInterval(0,0);
+  final DefaultActionGroup popupActions=new DefaultActionGroup();
+  popupActions.add(new MyDiffAction());
+  popupActions.add(new MyDiffLocalAction());
+  popupActions.add(ShowAllAffectedGenericAction.getInstance());
+  popupActions.add(ActionManager.getInstance().getAction(VcsActions.ACTION_COPY_REVISION_NUMBER));
+  myList.addMouseListener(new PopupHandler(){
+    public void invokePopup(    Component comp,    int x,    int y){
+      ActionPopupMenu popupMenu=ActionManager.getInstance().createActionPopupMenu(ActionPlaces.UPDATE_POPUP,popupActions);
+      popupMenu.getComponent().show(comp,x,y);
+    }
+  }
+);
+  setTitle(title);
+  setComponent(mySplitter);
+  setPreferredFocusedComponent(myList);
+  setDimensionKey("VCS.FileHistoryDialog");
+  closeOnEsc();
+}

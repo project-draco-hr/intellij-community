@@ -1,2 +1,36 @@
 {
+  Map<String,EntryInfo> map=ContainerUtil.newHashMap();
+  map.put(StringUtilRt.EMPTY_STRING,createRootEntry());
+  Path root=getFileSystem().getPath("/modules");
+  if (!Files.exists(root))   throw new FileNotFoundException("JRT root missing");
+  Files.walkFileTree(root,new SimpleFileVisitor<Path>(){
+    @Override public FileVisitResult preVisitDirectory(    Path dir,    BasicFileAttributes attrs) throws IOException {
+      process(dir,attrs);
+      return FileVisitResult.CONTINUE;
+    }
+    @Override public FileVisitResult visitFile(    Path file,    BasicFileAttributes attrs) throws IOException {
+      process(file,attrs);
+      return FileVisitResult.CONTINUE;
+    }
+    private void process(    Path entry,    BasicFileAttributes attrs) throws IOException {
+      int pathLength=entry.getNameCount();
+      if (pathLength > 2) {
+        Path relativePath=entry.subpath(2,pathLength);
+        EntryInfo parent=map.get(pathLength > 3 ? relativePath.getParent().toString() : StringUtilRt.EMPTY_STRING);
+        if (parent == null)         throw new IOException("Out of order: " + entry);
+        String path=relativePath.toString(), shortName=entry.getFileName().toString();
+        long length=attrs.size();
+        long modified=attrs.lastModifiedTime().toMillis();
+        if (attrs.isDirectory()) {
+          map.put(path,new EntryInfo(shortName,true,length,modified,parent));
+        }
+ else {
+          String module=myInterner.intern(entry.getName(1).toString());
+          map.put(path,new JrtEntryInfo(shortName,module,length,modified,parent));
+        }
+      }
+    }
+  }
+);
+  return map;
 }
