@@ -20,7 +20,6 @@
     if (!keymapGroupMap.containsKey(systemId)) {
       final Icon projectIcon=ExternalSystemUiUtil.getUiAware(systemId).getProjectIcon();
       KeymapGroup group=KeymapGroupFactory.getInstance().createGroup(systemId.getReadableName(),projectIcon);
-      result.addGroup(group);
       keymapGroupMap.put(systemId,group);
     }
   }
@@ -28,6 +27,7 @@
     Collection<String> tasks=each.getValue();
     final ProjectSystemId systemId=each.getKey();
     final KeymapGroup systemGroup=keymapGroupMap.get(systemId);
+    if (systemGroup == null)     continue;
     for (    String actionId : tasks) {
       systemGroup.addActionId(actionId);
     }
@@ -53,11 +53,25 @@
 );
     }
   }
-  for (  ActionsProvider extension : ActionsProvider.EP_NAME.getExtensions()) {
-    KeymapGroup group=extension.createGroup(condition,project);
-    if (group != null) {
-      result.addGroup(group);
+  final EmptyAction emptyAction=new EmptyAction();
+  for (  KeymapGroup keymapGroup : keymapGroupMap.values()) {
+    if (condition != null && !condition.value(emptyAction) && keymapGroup instanceof Group) {
+      final Group group=(Group)keymapGroup;
+      if (group.getSize() <= 1 && !condition.value(new EmptyAction(group.getName(),null,null))) {
+        continue;
+      }
     }
+    result.addGroup(keymapGroup);
+  }
+  for (  ActionsProvider extension : ActionsProvider.EP_NAME.getExtensions()) {
+    KeymapGroup keymapGroup=extension.createGroup(condition,project);
+    if (condition != null && !condition.value(emptyAction) && keymapGroup instanceof Group) {
+      final Group group=(Group)keymapGroup;
+      if (group.getSize() <= 1 && !condition.value(new EmptyAction(group.getName(),null,null))) {
+        continue;
+      }
+    }
+    result.addGroup(keymapGroup);
   }
   return result;
 }
