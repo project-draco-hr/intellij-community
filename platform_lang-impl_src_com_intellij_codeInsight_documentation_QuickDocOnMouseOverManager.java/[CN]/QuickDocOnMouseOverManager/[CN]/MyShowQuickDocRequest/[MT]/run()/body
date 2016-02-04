@@ -1,22 +1,38 @@
 {
-  myAlarm.cancelAllRequests();
-  DelayedQuickDocInfo info=myDelayedQuickDocInfo;
-  if (info == null || !info.targetElement.equals(myActiveElements.get(info.editor))) {
-    return;
+  Ref<PsiElement> targetElementRef=new Ref<>();
+  ProgressIndicatorUtils.runInReadActionWithWriteActionPriority(new Runnable(){
+    @Override public void run(){
+      targetElementRef.set(docManager.findTargetElement(editor,offset,originalElement.getContainingFile(),originalElement));
+    }
   }
-  if (info.docManager.getDocInfoHint() != null && !info.docManager.isCloseOnSneeze()) {
-    return;
-  }
-  if (!info.docManager.hasActiveDockedDocWindow() && myHintManager.hasShownHintsThatWillHideByOtherHint(false)) {
-    myAlarm.addRequest(this,EditorSettingsExternalizable.getInstance().getQuickDocOnMouseOverElementDelayMillis());
-    return;
-  }
-  info.editor.putUserData(PopupFactoryImpl.ANCHOR_POPUP_POSITION,info.editor.offsetToVisualPosition(info.originalElement.getTextRange().getStartOffset()));
-  try {
-    info.docManager.showJavaDocInfo(info.editor,info.targetElement,info.originalElement,myHintCloseCallback,true);
-    myDocumentationManager=new WeakReference<DocumentationManager>(info.docManager);
-  }
+);
+  ApplicationManager.getApplication().invokeLater(new Runnable(){
+    @Override public void run(){
+      PsiElement targetElement=targetElementRef.get();
+      if (targetElement == null) {
+        closeQuickDocIfPossible();
+        return;
+      }
+      myAlarm.cancelAllRequests();
+      if (!originalElement.equals(myActiveElements.get(editor))) {
+        return;
+      }
+      if (docManager.getDocInfoHint() != null && !docManager.isCloseOnSneeze()) {
+        return;
+      }
+      if (!docManager.hasActiveDockedDocWindow() && myHintManager.hasShownHintsThatWillHideByOtherHint(false)) {
+        myAlarm.addRequest(this,EditorSettingsExternalizable.getInstance().getQuickDocOnMouseOverElementDelayMillis());
+        return;
+      }
+      editor.putUserData(PopupFactoryImpl.ANCHOR_POPUP_POSITION,editor.offsetToVisualPosition(originalElement.getTextRange().getStartOffset()));
+      try {
+        docManager.showJavaDocInfo(editor,targetElement,originalElement,myHintCloseCallback,true);
+        myDocumentationManager=new WeakReference<DocumentationManager>(docManager);
+      }
   finally {
-    info.editor.putUserData(PopupFactoryImpl.ANCHOR_POPUP_POSITION,null);
+        editor.putUserData(PopupFactoryImpl.ANCHOR_POPUP_POSITION,null);
+      }
+    }
   }
+,ApplicationManager.getApplication().getNoneModalityState());
 }
