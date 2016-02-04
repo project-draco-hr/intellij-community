@@ -1,21 +1,22 @@
 {
-  final List<String> stack=myFindExportedNameStack.get();
-  if (stack.contains(name)) {
-    return null;
-  }
-  stack.add(name);
-  try {
-    PsiElement result=getExportedNameCache().resolve(name);
-    if (result != null) {
-      return result;
+  final List<RatedResolveResult> results=multiResolveName(name);
+  final List<PsiElement> elements=Lists.newArrayList();
+  for (  RatedResolveResult result : results) {
+    final PsiElement element=result.getElement();
+    final ImportedResolveResult importedResult=PyUtil.as(result,ImportedResolveResult.class);
+    if (importedResult != null) {
+      final PyImportedNameDefiner definer=importedResult.getDefiner();
+      if (definer != null) {
+        elements.add(definer);
+      }
     }
-    List<String> allNames=getDunderAll();
-    if (allNames != null && allNames.contains(name)) {
-      return findExportedName(PyNames.ALL);
+ else     if (element != null && element.getContainingFile() == this) {
+      elements.add(element);
     }
-    return null;
   }
-  finally {
-    stack.remove(name);
+  final PsiElement element=elements.isEmpty() ? null : elements.get(elements.size() - 1);
+  if (element != null && !element.isValid()) {
+    throw new PsiInvalidElementAccessException(element);
   }
+  return element;
 }
