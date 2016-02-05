@@ -36,25 +36,20 @@
     myFileStatusManager.fileStatusChanged(file);
   }
   VcsDirtyScopeManager.getInstance(myProject).filesDirty(allProcessedFiles,null);
-  if (!list.isDefault()) {
+  final Ref<List<Change>> foundChanges=Ref.create();
+  final boolean moveRequired=!list.isDefault();
+  boolean syncUpdateRequired=changesConsumer != null;
+  if (moveRequired || syncUpdateRequired) {
+    InvokeAfterUpdateMode updateMode=syncUpdateRequired ? InvokeAfterUpdateMode.SYNCHRONOUS_CANCELLABLE : InvokeAfterUpdateMode.BACKGROUND_NOT_CANCELLABLE_NOT_AWT;
     invokeAfterUpdate(new Runnable(){
       @Override public void run(){
         ApplicationManager.getApplication().runReadAction(new Runnable(){
           @Override public void run(){
 synchronized (myDataLock) {
-              List<Change> changesToMove=new ArrayList<Change>();
-              final LocalChangeList defaultList=getDefaultChangeList();
-              for (              Change change : defaultList.getChanges()) {
-                final ContentRevision afterRevision=change.getAfterRevision();
-                if (afterRevision != null) {
-                  VirtualFile vFile=afterRevision.getFile().getVirtualFile();
-                  if (allProcessedFiles.contains(vFile)) {
-                    changesToMove.add(change);
-                  }
-                }
-              }
-              if (!changesToMove.isEmpty()) {
-                moveChangesTo(list,changesToMove.toArray(new Change[changesToMove.size()]));
+              List<Change> newChanges=findChanges(allProcessedFiles);
+              foundChanges.set(newChanges);
+              if (moveRequired && !newChanges.isEmpty()) {
+                moveChangesTo(list,newChanges.toArray(new Change[newChanges.size()]));
               }
             }
           }
@@ -63,9 +58,13 @@ synchronized (myDataLock) {
         myChangesViewManager.scheduleRefresh();
       }
     }
-,InvokeAfterUpdateMode.BACKGROUND_NOT_CANCELLABLE_NOT_AWT,VcsBundle.message("change.lists.manager.add.unversioned"),null);
+,updateMode,VcsBundle.message("change.lists.manager.add.unversioned"),null);
+    if (changesConsumer != null) {
+      changesConsumer.consume(foundChanges.get());
+    }
   }
  else {
     myChangesViewManager.scheduleRefresh();
   }
+  return exceptions;
 }
