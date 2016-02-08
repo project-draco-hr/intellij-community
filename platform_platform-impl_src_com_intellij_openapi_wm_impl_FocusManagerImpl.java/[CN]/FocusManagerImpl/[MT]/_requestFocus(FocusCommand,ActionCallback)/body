@@ -1,0 +1,56 @@
+{
+  result.doWhenProcessed(new Runnable(){
+    @Override public void run(){
+      maybeRemoveFocusActivity();
+    }
+  }
+);
+  if (checkForRejectOrByPass(command,result))   return;
+  setCommand(command);
+  command.setCallback(result);
+  myForcedFocusRequestsAlarm.cancelAllRequests();
+  setLastEffectiveForcedRequest(command);
+  if (checkForRejectOrByPass(command,result))   return;
+  if (myRequestFocusCmd == command) {
+    final TimedOutCallback focusTimeout=new TimedOutCallback(Registry.intValue("actionSystem.commandProcessingTimeout"),"Focus command timed out, cmd=" + command,command.getAllocation(),true){
+      @Override protected void onTimeout(){
+        forceFinishFocusSettleDown(command,result);
+      }
+    }
+;
+    if (command.invalidatesRequestors()) {
+      myCmdTimestamp++;
+    }
+    revalidateFurtherRequestors();
+    if (command.invalidatesRequestors()) {
+      myForcedCmdTimestamp++;
+    }
+    revalidateFurtherRequestors();
+    command.run().doWhenDone(new Runnable(){
+      @Override public void run(){
+        UIUtil.invokeLaterIfNeeded(new Runnable(){
+          @Override public void run(){
+            resetCommand(command,false);
+            result.setDone();
+          }
+        }
+);
+      }
+    }
+).doWhenRejected(new Runnable(){
+      @Override public void run(){
+        result.setRejected();
+        resetCommand(command,true);
+      }
+    }
+).doWhenProcessed(new Runnable(){
+      @Override public void run(){
+        myForcedFocusRequestsAlarm.addRequest(new SetLastEffectiveRunnable(),250);
+      }
+    }
+).notify(focusTimeout);
+  }
+ else {
+    rejectCommand(command,result);
+  }
+}
