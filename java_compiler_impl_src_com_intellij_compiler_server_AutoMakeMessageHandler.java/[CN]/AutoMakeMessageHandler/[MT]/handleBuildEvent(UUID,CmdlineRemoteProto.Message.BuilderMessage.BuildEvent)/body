@@ -4,10 +4,27 @@
   }
 switch (event.getEventType()) {
 case BUILD_COMPLETED:
-    if (event.hasCompletionStatus()) {
-      myBuildStatus=event.getCompletionStatus();
+    myContext.getProgressIndicator().stop();
+  if (event.hasCompletionStatus()) {
+    final CmdlineRemoteProto.Message.BuilderMessage.BuildEvent.Status status=event.getCompletionStatus();
+    myBuildStatus=status;
+    if (status == CmdlineRemoteProto.Message.BuilderMessage.BuildEvent.Status.CANCELED) {
+      myContext.getProgressIndicator().cancel();
     }
+  }
+final int errors=myContext.getMessageCount(CompilerMessageCategory.ERROR);
+final int warnings=myContext.getMessageCount(CompilerMessageCategory.WARNING);
+SwingUtilities.invokeLater(new Runnable(){
+@Override public void run(){
+if (myProject.isDisposed()) {
   return;
+}
+final CompilationStatusListener publisher=myProject.getMessageBus().syncPublisher(CompilerTopics.COMPILATION_STATUS);
+publisher.automakeCompilationFinished(errors,warnings,myContext);
+}
+}
+);
+return;
 case FILES_GENERATED:
 final CompilationStatusListener publisher=myProject.getMessageBus().syncPublisher(CompilerTopics.COMPILATION_STATUS);
 for (CmdlineRemoteProto.Message.BuilderMessage.BuildEvent.GeneratedFile generatedFile : event.getGeneratedFilesList()) {

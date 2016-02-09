@@ -1,6 +1,7 @@
 {
   int size=in.readUnsignedShort();
-  int[] pass=new int[size];
+  pool=new ArrayList<PooledConstant>(size);
+  BitSet[] nextPass={new BitSet(size),new BitSet(size),new BitSet(size)};
   pool.add(null);
   for (int i=1; i < size; i++) {
     byte tag=(byte)in.readUnsignedByte();
@@ -28,32 +29,29 @@ case CodeConstants.CONSTANT_Class:
 case CodeConstants.CONSTANT_String:
 case CodeConstants.CONSTANT_MethodType:
 pool.add(new PrimitiveConstant(tag,in.readUnsignedShort()));
-pass[i]=1;
+nextPass[0].set(i);
+break;
+case CodeConstants.CONSTANT_NameAndType:
+pool.add(new LinkConstant(tag,in.readUnsignedShort(),in.readUnsignedShort()));
+nextPass[0].set(i);
 break;
 case CodeConstants.CONSTANT_Fieldref:
 case CodeConstants.CONSTANT_Methodref:
 case CodeConstants.CONSTANT_InterfaceMethodref:
-case CodeConstants.CONSTANT_NameAndType:
 case CodeConstants.CONSTANT_InvokeDynamic:
 pool.add(new LinkConstant(tag,in.readUnsignedShort(),in.readUnsignedShort()));
-if (tag == CodeConstants.CONSTANT_NameAndType) {
-pass[i]=1;
-}
- else {
-pass[i]=2;
-}
+nextPass[1].set(i);
 break;
 case CodeConstants.CONSTANT_MethodHandle:
 pool.add(new LinkConstant(tag,in.readUnsignedByte(),in.readUnsignedShort()));
-pass[i]=3;
+nextPass[2].set(i);
 break;
 }
 }
-for (int passIndex=1; passIndex <= 3; passIndex++) {
-for (int i=1; i < size; i++) {
-if (pass[i] == passIndex) {
-pool.get(i).resolveConstant(this);
-}
+for (BitSet pass : nextPass) {
+int idx=0;
+while ((idx=pass.nextSetBit(idx + 1)) > 0) {
+pool.get(idx).resolveConstant(this);
 }
 }
 interceptor=DecompilerContext.getPoolInterceptor();

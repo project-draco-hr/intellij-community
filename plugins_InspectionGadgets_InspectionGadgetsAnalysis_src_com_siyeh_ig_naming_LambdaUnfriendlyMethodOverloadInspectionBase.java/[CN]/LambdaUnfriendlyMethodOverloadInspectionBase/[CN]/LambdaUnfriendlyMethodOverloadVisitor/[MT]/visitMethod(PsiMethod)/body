@@ -1,0 +1,47 @@
+{
+  super.visitMethod(method);
+  if (method.isConstructor()) {
+    return;
+  }
+  final PsiParameterList parameterList=method.getParameterList();
+  final int parametersCount=parameterList.getParametersCount();
+  if (parametersCount == 0) {
+    return;
+  }
+  final PsiParameter[] parameters=parameterList.getParameters();
+  int functionalIndex=-1;
+  for (int i=0; i < parameters.length; i++) {
+    final PsiParameter parameter=parameters[i];
+    if (LambdaUtil.isFunctionalType(parameter.getType())) {
+      functionalIndex=i;
+      break;
+    }
+  }
+  if (functionalIndex < 0) {
+    return;
+  }
+  final PsiClass containingClass=method.getContainingClass();
+  if (containingClass == null) {
+    return;
+  }
+  final String name=method.getName();
+  for (  PsiMethod sameNameMethod : containingClass.findMethodsByName(name,true)) {
+    if (method.equals(sameNameMethod) || PsiSuperMethodUtil.isSuperMethod(method,sameNameMethod)) {
+      continue;
+    }
+    final PsiParameterList otherParameterList=sameNameMethod.getParameterList();
+    if (parametersCount != otherParameterList.getParametersCount()) {
+      continue;
+    }
+    final PsiParameter[] otherParameters=otherParameterList.getParameters();
+    final PsiType otherFunctionalType=otherParameters[functionalIndex].getType();
+    if (!areOtherParameterTypesConvertible(parameters,otherParameters,functionalIndex) || !LambdaUtil.isFunctionalType(otherFunctionalType)) {
+      continue;
+    }
+    final PsiType functionalType=parameters[functionalIndex].getType();
+    if (areSameShapeFunctionalTypes(functionalType,otherFunctionalType)) {
+      registerMethodError(method);
+      return;
+    }
+  }
+}

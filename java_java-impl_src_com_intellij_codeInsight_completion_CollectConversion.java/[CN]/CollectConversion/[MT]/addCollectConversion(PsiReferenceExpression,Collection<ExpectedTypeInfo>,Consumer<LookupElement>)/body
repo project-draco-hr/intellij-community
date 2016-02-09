@@ -3,24 +3,39 @@
   PsiType component=qualifier == null ? null : PsiUtil.substituteTypeParameter(qualifier.getType(),JAVA_UTIL_STREAM_STREAM,0,true);
   if (component == null)   return;
   JavaPsiFacade facade=JavaPsiFacade.getInstance(ref.getProject());
+  PsiElementFactory factory=facade.getElementFactory();
   GlobalSearchScope scope=ref.getResolveScope();
   PsiClass list=facade.findClass(JAVA_UTIL_LIST,scope);
   PsiClass set=facade.findClass(JAVA_UTIL_SET,scope);
-  if (facade.findClass(JAVA_UTIL_STREAM_COLLECTORS,scope) == null || list == null || set == null)   return;
-  boolean hasList=false;
-  boolean hasSet=false;
+  PsiClass collection=facade.findClass(JAVA_UTIL_COLLECTION,scope);
+  if (facade.findClass(JAVA_UTIL_STREAM_COLLECTORS,scope) == null || list == null || set == null || collection == null)   return;
+  PsiType listType=null;
+  PsiType setType=null;
+  boolean hasIterable=false;
   for (  ExpectedTypeInfo info : expectedTypes) {
     PsiType type=info.getDefaultType();
     PsiClass expectedClass=PsiUtil.resolveClassInClassTypeOnly(type);
     PsiType expectedComponent=PsiUtil.extractIterableTypeParameter(type,true);
     if (expectedClass == null || expectedComponent == null || !TypeConversionUtil.isAssignable(expectedComponent,component))     continue;
-    if (!hasList && InheritanceUtil.isInheritorOrSelf(list,expectedClass,true)) {
-      hasList=true;
-      consumer.consume(new MyLookupElement("toList",type));
+    hasIterable=true;
+    if (InheritanceUtil.isInheritorOrSelf(list,expectedClass,true)) {
+      listType=type;
     }
-    if (!hasSet && InheritanceUtil.isInheritorOrSelf(set,expectedClass,true)) {
-      hasSet=true;
-      consumer.consume(new MyLookupElement("toSet",type));
+    if (InheritanceUtil.isInheritorOrSelf(set,expectedClass,true)) {
+      setType=type;
     }
+  }
+  if (expectedTypes.isEmpty()) {
+    listType=factory.createType(list,component);
+    setType=factory.createType(set,component);
+  }
+  if (listType != null) {
+    consumer.consume(new MyLookupElement("toList",listType));
+  }
+  if (setType != null) {
+    consumer.consume(new MyLookupElement("toSet",setType));
+  }
+  if (expectedTypes.isEmpty() || hasIterable) {
+    consumer.consume(new MyLookupElement("toCollection",factory.createType(collection,component)));
   }
 }
