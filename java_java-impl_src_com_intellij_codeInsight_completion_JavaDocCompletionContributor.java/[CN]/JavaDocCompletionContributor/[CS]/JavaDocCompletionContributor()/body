@@ -9,18 +9,13 @@
       final PsiReference ref=position.getContainingFile().findReferenceAt(parameters.getOffset());
       if (ref instanceof PsiJavaReference) {
         result.stopHere();
-        final JavaCompletionProcessor processor=new JavaCompletionProcessor(position,TrueFilter.INSTANCE,JavaCompletionProcessor.Options.CHECK_NOTHING,Conditions.<String>alwaysTrue());
-        ((PsiJavaReference)ref).processVariants(processor);
-        for (        final CompletionElement _item : processor.getResults()) {
-          final Object element=_item.getElement();
-          LookupElement item=createLookupItem(element);
+        for (        LookupElement item : completeJavadocReference(position,(PsiJavaReference)ref)) {
           if (onlyConstants) {
             Object o=item.getObject();
             if (!(o instanceof PsiField))             continue;
             PsiField field=(PsiField)o;
             if (!(field.hasModifierProperty(PsiModifier.STATIC) && field.getInitializer() != null && JavaConstantExpressionEvaluator.computeConstantExpression(field.getInitializer(),false) != null))             continue;
           }
-          item.putUserData(JavaCompletionUtil.FORCE_SHOW_SIGNATURE_ATTR,Boolean.TRUE);
           if (isArg) {
             item=AutoCompletionPolicy.NEVER_AUTOCOMPLETE.applyPolicy(item);
           }
@@ -32,28 +27,12 @@
         result.addElement(LookupElementBuilder.create(SystemProperties.getUserName()));
       }
     }
-    private LookupElement createLookupItem(    final Object element){
-      if (element instanceof PsiMethod) {
-        return new JavaMethodCallElement((PsiMethod)element){
-          @Override public void handleInsert(          InsertionContext context){
-            new MethodSignatureInsertHandler().handleInsert(context,this);
-          }
-        }
-;
-      }
-      if (element instanceof PsiClass) {
-        JavaPsiClassReferenceElement classElement=new JavaPsiClassReferenceElement((PsiClass)element);
-        classElement.setInsertHandler(JavaClassNameInsertHandler.JAVA_CLASS_INSERT_HANDLER);
-        return classElement;
-      }
-      return LookupItemUtil.objectToLookupItem(element);
-    }
   }
 );
   extend(CompletionType.SMART,psiElement().inside(psiElement(PsiDocTag.class).withName(string().oneOf(PsiKeyword.THROWS,"exception"))),new CompletionProvider<CompletionParameters>(){
     @Override public void addCompletions(    @NotNull final CompletionParameters parameters,    final ProcessingContext context,    @NotNull final CompletionResultSet result){
       final PsiElement element=parameters.getPosition();
-      final Set<PsiClass> throwsSet=new HashSet<PsiClass>();
+      final Set<PsiClass> throwsSet=new HashSet<>();
       final PsiMethod method=PsiTreeUtil.getContextOfType(element,PsiMethod.class,true);
       if (method != null) {
         for (        PsiClassType ref : method.getThrowsList().getReferencedTypes()) {
