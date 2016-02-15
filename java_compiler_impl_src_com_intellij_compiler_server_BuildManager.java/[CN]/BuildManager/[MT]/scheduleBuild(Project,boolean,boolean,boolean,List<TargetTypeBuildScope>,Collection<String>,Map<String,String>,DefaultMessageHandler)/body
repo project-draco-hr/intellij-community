@@ -11,7 +11,7 @@
     handler.sessionTerminated(sessionId);
     return null;
   }
-  final DelegateFuture<?> _future=new DelegateFuture<>();
+  final DelegateFuture<BuilderMessageHandler> _future=new DelegateFuture<>();
   runCommand(new Runnable(){
     @Override public void run(){
       final Pair<RequestFuture<PreloadedProcessMessageHandler>,OSProcessHandler> preloaded=takePreloadedProcess(projectPath);
@@ -26,7 +26,8 @@
  else {
         sessionId=UUID.randomUUID();
       }
-      final RequestFuture<? extends BuilderMessageHandler> future=usingPreloadedProcess ? preloadedFuture : new RequestFuture<BuilderMessageHandler>(handler,sessionId,new CancelBuildSessionAction<BuilderMessageHandler>());
+      final RequestFuture<? extends BuilderMessageHandler> future=usingPreloadedProcess ? preloadedFuture : new RequestFuture<>(handler,sessionId,new CancelBuildSessionAction<BuilderMessageHandler>());
+      _future.setDelegate(future);
       if (!usingPreloadedProcess && (future.isCancelled() || project.isDisposed())) {
         handler.sessionTerminated(sessionId);
         ((BasicFuture)future).setDone();
@@ -62,7 +63,7 @@ synchronized (myProjectDataMap) {
         myMessageDispatcher.registerBuildMessageHandler(future,params);
       }
       try {
-        Future<?> buildFuture=projectTaskQueue.submit(new Runnable(){
+        projectTaskQueue.submit(new Runnable(){
           @Override public void run(){
             Throwable execFailure=null;
             try {
@@ -154,9 +155,6 @@ synchronized (myProjectDataMap) {
           }
         }
 );
-        TaskFutureAdapter adapter=new TaskFutureAdapter<>(buildFuture);
-        boolean set=_future.setDelegate(adapter);
-        assert set;
       }
  catch (      Throwable e) {
         handleProcessExecutionFailure(sessionId,e);
