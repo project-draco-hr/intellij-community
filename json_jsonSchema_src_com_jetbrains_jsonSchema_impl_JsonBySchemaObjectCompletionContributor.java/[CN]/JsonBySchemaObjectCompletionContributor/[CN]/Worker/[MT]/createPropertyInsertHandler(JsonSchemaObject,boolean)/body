@@ -1,0 +1,65 @@
+{
+  final JsonSchemaType type=jsonSchemaObject.getType();
+  final List<Object> values=jsonSchemaObject.getEnum();
+  final Object defaultValue=jsonSchemaObject.getDefault();
+  final String defaultValueAsString=defaultValue == null ? null : String.valueOf(defaultValue);
+  return new InsertHandler<LookupElement>(){
+    @Override public void handleInsert(    InsertionContext context,    LookupElement item){
+      ApplicationManager.getApplication().assertWriteAccessAllowed();
+      Editor editor=context.getEditor();
+      Project project=context.getProject();
+      String stringToInsert;
+      if (myInsideStringLiteral) {
+        int offset=editor.getCaretModel().getOffset();
+        PsiElement element=context.getFile().findElementAt(offset);
+        int tailOffset=context.getTailOffset();
+        int guessEndOffset=tailOffset + 1;
+        if (element != null) {
+          int endOffset=element.getTextRange().getEndOffset();
+          if (endOffset > tailOffset) {
+            context.getDocument().deleteString(tailOffset,endOffset - 1);
+          }
+        }
+        if (hasValue) {
+          return;
+        }
+        editor.getCaretModel().moveToOffset(guessEndOffset);
+      }
+      if (type != null) {
+switch (type) {
+case _object:
+          stringToInsert=":{}";
+        EditorModificationUtil.insertStringAtCaret(editor,stringToInsert,false,true,2);
+      PsiDocumentManager.getInstance(project).commitDocument(editor.getDocument());
+    formatInsertedString(context,project,stringToInsert.length());
+  EditorActionHandler handler=EditorActionManager.getInstance().getActionHandler(IdeActions.ACTION_EDITOR_ENTER);
+handler.execute(editor,editor.getCaretModel().getCurrentCaret(),DataManager.getInstance().getDataContext(editor.getContentComponent()));
+break;
+case _boolean:
+String value=String.valueOf(Boolean.TRUE.toString().equals(defaultValueAsString));
+stringToInsert=":" + value;
+SelectionModel model=editor.getSelectionModel();
+EditorModificationUtil.insertStringAtCaret(editor,stringToInsert,false,true,stringToInsert.length());
+formatInsertedString(context,context.getProject(),stringToInsert.length());
+int start=editor.getSelectionModel().getSelectionStart();
+model.setSelection(start - value.length(),start);
+AutoPopupController.getInstance(context.getProject()).autoPopupMemberLookup(context.getEditor(),null);
+break;
+case _array:
+stringToInsert=":[]";
+EditorModificationUtil.insertStringAtCaret(editor,stringToInsert,false,true,2);
+formatInsertedString(context,project,stringToInsert.length());
+break;
+case _string:
+insertStringPropertyWithEnum(context,editor,defaultValueAsString,values);
+break;
+default :
+}
+}
+ else {
+insertStringPropertyWithEnum(context,editor,defaultValueAsString,values);
+}
+}
+}
+;
+}

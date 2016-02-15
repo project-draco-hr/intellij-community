@@ -1,0 +1,40 @@
+{
+  final PsiFile psiFile=element.getContainingFile();
+  if (!(psiFile instanceof JsonFile))   return;
+  final JsonProperty firstProp=PsiTreeUtil.getParentOfType(element,JsonProperty.class,false);
+  if (firstProp == null) {
+    checkRootObject(holder,element);
+    return;
+  }
+  if (checkIfAlreadyProcessed(holder,firstProp))   return;
+  final List<BySchemaChecker> checkers=new ArrayList<BySchemaChecker>();
+  JsonSchemaWalker.findSchemasForAnnotation(firstProp,new JsonSchemaWalker.CompletionSchemesConsumer(){
+    @Override public void consume(    boolean isName,    @NotNull JsonSchemaObject schema){
+      final BySchemaChecker checker=new BySchemaChecker();
+      final Set<String> validatedProperties=new HashSet<String>();
+      checker.checkByScheme(firstProp.getValue(),schema,validatedProperties);
+      checkers.add(checker);
+    }
+  }
+,myRootSchema);
+  if (checkers.isEmpty())   return;
+  BySchemaChecker checker=null;
+  if (checkers.size() == 1) {
+    checker=checkers.get(0);
+  }
+ else {
+    for (    BySchemaChecker schemaChecker : checkers) {
+      if (!schemaChecker.isHadTypeError()) {
+        checker=schemaChecker;
+        break;
+      }
+    }
+    if (checker == null) {
+      checker=checkers.get(0);
+    }
+  }
+  if (processCheckerResults(holder,checker))   return;
+  if (firstProp.getParent() instanceof JsonObject && firstProp.getParent().getParent() instanceof PsiFile) {
+    checkRootObject(holder,element);
+  }
+}
