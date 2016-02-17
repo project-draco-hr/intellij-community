@@ -2,7 +2,7 @@
   final TreePath[] treePaths=tree.getSelectionPaths();
   if (treePaths == null)   return QuickFixAction.EMPTY;
   final List<RefEntity> selectedElements=new ArrayList<RefEntity>();
-  final Map<RefEntity,Set<QuickFix>> actions=new HashMap<RefEntity,Set<QuickFix>>();
+  final Map<RefEntity,CommonProblemDescriptor[]> actions=new HashMap<>();
   for (  TreePath selectionPath : treePaths) {
     TreeUtil.traverseDepth((TreeNode)selectionPath.getLastPathComponent(),new TreeUtil.Traverse(){
       @Override public boolean accept(      final Object node){
@@ -11,18 +11,8 @@
           final OfflineProblemDescriptorNode descriptorNode=(OfflineProblemDescriptorNode)node;
           final RefEntity element=descriptorNode.getElement();
           selectedElements.add(element);
-          Set<QuickFix> quickFixes=actions.get(element);
-          if (quickFixes == null) {
-            quickFixes=new HashSet<QuickFix>();
-            actions.put(element,quickFixes);
-          }
-          final CommonProblemDescriptor descriptor=descriptorNode.getDescriptor();
-          if (descriptor != null) {
-            final QuickFix[] fixes=descriptor.getFixes();
-            if (fixes != null) {
-              ContainerUtil.addAll(quickFixes,fixes);
-            }
-          }
+          CommonProblemDescriptor[] quickFixes=actions.get(element);
+          actions.put(element,quickFixes == null ? new CommonProblemDescriptor[]{descriptorNode.getDescriptor()} : DefaultInspectionToolPresentation.mergeDescriptors(quickFixes,new CommonProblemDescriptor[]{descriptorNode.getDescriptor()}));
         }
  else         if (node instanceof RefElementNode) {
           selectedElements.add(((RefElementNode)node).getElement());
@@ -36,5 +26,5 @@
   final RefEntity[] selectedRefElements=selectedElements.toArray(new RefEntity[selectedElements.size()]);
   GlobalInspectionContextImpl context=tree.getContext();
   InspectionToolPresentation presentation=context.getPresentation(toolWrapper);
-  return presentation.extractActiveFixes(selectedRefElements,actions);
+  return presentation.extractActiveFixes(selectedRefElements,actions,tree.getSelectedDescriptors());
 }
