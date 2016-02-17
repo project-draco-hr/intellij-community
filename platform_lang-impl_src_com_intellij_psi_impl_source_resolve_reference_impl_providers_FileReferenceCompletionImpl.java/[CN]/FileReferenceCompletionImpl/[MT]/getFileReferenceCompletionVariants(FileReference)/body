@@ -10,16 +10,20 @@
     }
   }
 ;
+  List<Object> additionalItems=ContainerUtil.newArrayList();
   for (  PsiFileSystemItem context : reference.getContexts()) {
     for (    final PsiElement child : context.getChildren()) {
       if (child instanceof PsiFileSystemItem) {
         processor.execute((PsiFileSystemItem)child);
       }
     }
+    if (context instanceof FileReferenceResolver) {
+      additionalItems.addAll(((FileReferenceResolver)context).getVariants(reference));
+    }
   }
   final THashSet<PsiElement> set=new THashSet<PsiElement>(collector.getResults(),VARIANTS_HASHING_STRATEGY);
   final PsiElement[] candidates=PsiUtilCore.toPsiElementArray(set);
-  final Object[] variants=new Object[candidates.length];
+  final Object[] variants=new Object[candidates.length + additionalItems.size()];
   for (int i=0; i < candidates.length; i++) {
     PsiElement candidate=candidates[i];
     Object item=reference.createLookupItem(candidate);
@@ -28,10 +32,13 @@
     }
     variants[i]=item;
   }
+  for (int i=0; i < additionalItems.size(); i++) {
+    variants[i + candidates.length]=additionalItems.get(i);
+  }
   if (!reference.getFileReferenceSet().isUrlEncoded()) {
     return variants;
   }
-  List<Object> encodedVariants=new ArrayList<Object>(variants.length);
+  List<Object> encodedVariants=new ArrayList<Object>(variants.length + additionalItems.size());
   for (int i=0; i < candidates.length; i++) {
     final PsiElement element=candidates[i];
     if (element instanceof PsiNamedElement) {
@@ -49,5 +56,6 @@
       }
     }
   }
+  encodedVariants.addAll(additionalItems);
   return ArrayUtil.toObjectArray(encodedVariants);
 }

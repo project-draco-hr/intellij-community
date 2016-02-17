@@ -1,0 +1,55 @@
+{
+  final Map<String,JsonSchemaObject> properties=schema.getProperties();
+  final JsonObject object=ObjectUtils.tryCast(value,JsonObject.class);
+  final List<JsonProperty> propertyList=object.getPropertyList();
+  final Map<String,JsonProperty> map=new HashMap<String,JsonProperty>();
+  for (  JsonProperty property : propertyList) {
+    map.put(property.getName(),property);
+    final JsonSchemaObject propertySchema=properties.get(property.getName());
+    if (propertySchema != null) {
+      checkByScheme(property.getValue(),propertySchema,new HashSet<String>());
+    }
+ else     if (schema.getAdditionalPropertiesSchema() != null) {
+      checkByScheme(property.getValue(),schema.getAdditionalPropertiesSchema(),new HashSet<String>());
+    }
+ else     if (!Boolean.TRUE.equals(schema.getAdditionalPropertiesAllowed()) && !validatedProperties.contains(property.getName())) {
+      error("Property '" + property.getName() + "' is not allowed",property);
+    }
+    validatedProperties.add(property.getName());
+  }
+  final List<String> required=schema.getRequired();
+  if (required != null) {
+    for (    String req : required) {
+      if (!map.containsKey(req)) {
+        error("Missing required property '" + req + "'",value);
+      }
+    }
+  }
+  if (schema.getMinProperties() != null && map.size() < schema.getMinProperties()) {
+    error("Number of properties is less than " + schema.getMinProperties(),value);
+  }
+  if (schema.getMaxProperties() != null && map.size() > schema.getMaxProperties()) {
+    error("Number of properties is greater than " + schema.getMaxProperties(),value);
+  }
+  final Map<String,List<String>> dependencies=schema.getPropertyDependencies();
+  if (dependencies != null) {
+    for (    Map.Entry<String,List<String>> entry : dependencies.entrySet()) {
+      if (map.containsKey(entry.getKey())) {
+        final List<String> list=entry.getValue();
+        for (        String s : list) {
+          if (!map.containsKey(s)) {
+            error("Dependency is violated: '" + s + "' must be specified, since '"+ entry.getKey()+ "' is specified",value);
+          }
+        }
+      }
+    }
+  }
+  final Map<String,JsonSchemaObject> schemaDependencies=schema.getSchemaDependencies();
+  if (schemaDependencies != null) {
+    for (    Map.Entry<String,JsonSchemaObject> entry : schemaDependencies.entrySet()) {
+      if (map.containsKey(entry.getKey())) {
+        checkByScheme(value,entry.getValue(),new HashSet<String>());
+      }
+    }
+  }
+}

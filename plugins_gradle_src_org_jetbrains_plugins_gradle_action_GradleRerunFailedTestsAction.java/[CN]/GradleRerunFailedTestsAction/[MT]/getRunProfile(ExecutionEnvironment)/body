@@ -1,0 +1,50 @@
+{
+  ExternalSystemRunConfiguration configuration=(ExternalSystemRunConfiguration)myConsoleProperties.getConfiguration();
+  final List<AbstractTestProxy> failedTests=getFailedTests(configuration.getProject());
+  return new MyRunProfile(configuration){
+    @NotNull @Override public Module[] getModules(){
+      return new Module[0];
+    }
+    @Nullable @Override public RunProfileState getState(    @NotNull Executor executor,    @NotNull ExecutionEnvironment environment) throws ExecutionException {
+      ExternalSystemRunConfiguration runProfile=((ExternalSystemRunConfiguration)getPeer()).clone();
+      Project project=runProfile.getProject();
+      Set<String> scriptParameters=ContainerUtil.newLinkedHashSet();
+      Set<String> tasksToRun=ContainerUtil.newLinkedHashSet();
+      boolean useResolvedTasks=true;
+      for (      AbstractTestProxy test : failedTests) {
+        if (test instanceof GradleSMTestProxy) {
+          String testName=test.getName();
+          String className=((GradleSMTestProxy)test).getClassName();
+          scriptParameters.add(TestMethodGradleConfigurationProducer.createTestFilter(className,testName));
+          if (!useResolvedTasks)           continue;
+          if (className == null) {
+            useResolvedTasks=false;
+            continue;
+          }
+          final PsiClass psiClass=JavaPsiFacade.getInstance(project).findClass(className,GlobalSearchScope.projectScope(project));
+          if (psiClass == null) {
+            useResolvedTasks=false;
+            continue;
+          }
+          final PsiFile psiFile=psiClass.getContainingFile();
+          if (psiFile == null) {
+            useResolvedTasks=false;
+            continue;
+          }
+          final Module moduleForFile=ProjectFileIndex.SERVICE.getInstance(project).getModuleForFile(psiFile.getVirtualFile());
+          if (moduleForFile == null) {
+            useResolvedTasks=false;
+            continue;
+          }
+          ContainerUtil.addAllNotNull(tasksToRun,GradleTestRunConfigurationProducer.getTasksToRun(moduleForFile));
+        }
+      }
+      runProfile.getSettings().setScriptParameters(StringUtil.join(scriptParameters," "));
+      if (useResolvedTasks && !tasksToRun.isEmpty()) {
+        runProfile.getSettings().setTaskNames(ContainerUtil.newArrayList(tasksToRun));
+      }
+      return runProfile.getState(executor,environment);
+    }
+  }
+;
+}
