@@ -1,0 +1,68 @@
+{
+  myWrappers=wrappers;
+  myContributor=new CompletionContributor(){
+    @Override public void fillCompletionVariants(    @NotNull CompletionParameters parameters,    @NotNull CompletionResultSet result){
+      for (      JsonSchemaObjectCodeInsightWrapper wrapper : myWrappers) {
+        wrapper.getContributor().fillCompletionVariants(parameters,result);
+      }
+    }
+  }
+;
+  myAnnotator=new Annotator(){
+    private String message;
+{
+      boolean haveSystemSchemas=false;
+      for (      JsonSchemaObjectCodeInsightWrapper wrapper : myWrappers) {
+        haveSystemSchemas|=!wrapper.isUserSchema();
+      }
+      boolean withTypes=haveSystemSchemas;
+      final List<String> names=new ArrayList<>();
+      for (      JsonSchemaObjectCodeInsightWrapper wrapper : myWrappers) {
+        if (withTypes) {
+          names.add((wrapper.isUserSchema() ? "user" : "system") + " schema '" + wrapper.getName()+ "'");
+        }
+ else {
+          names.add(wrapper.getName());
+        }
+      }
+      message="<html>There are several JSON Schemas mapped to this file: " + StringUtil.join(names,"; ") + "</html>";
+    }
+    @Override public void annotate(    @NotNull PsiElement element,    @NotNull AnnotationHolder holder){
+      if (element instanceof PsiFile) {
+        addFileLevelWarning(element,holder);
+      }
+      for (      JsonSchemaObjectCodeInsightWrapper wrapper : myWrappers) {
+        wrapper.getAnnotator().annotate(element,holder);
+      }
+    }
+    private void addFileLevelWarning(    @NotNull PsiElement element,    @NotNull AnnotationHolder holder){
+      final Annotation annotation=holder.createErrorAnnotation(element,message);
+      annotation.setFileLevelAnnotation(true);
+      annotation.registerFix(new IntentionAction(){
+        @Nls @NotNull @Override public String getText(){
+          return "Edit JSON Schema Mappings";
+        }
+        @Nls @NotNull @Override public String getFamilyName(){
+          return "JSON Schema";
+        }
+        @Override public boolean isAvailable(        @NotNull Project project,        Editor editor,        PsiFile file){
+          return true;
+        }
+        @Override public void invoke(        @NotNull Project project,        Editor editor,        PsiFile file) throws IncorrectOperationException {
+          ShowSettingsUtil.getInstance().editConfigurable(project,new JsonSchemaMappingsConfigurable(project));
+          DaemonCodeAnalyzer.getInstance(project).restart(file);
+        }
+        @Override public boolean startInWriteAction(){
+          return false;
+        }
+      }
+);
+    }
+  }
+;
+  final List<DocumentationProvider> list=new ArrayList<>();
+  for (  JsonSchemaObjectCodeInsightWrapper wrapper : myWrappers) {
+    list.add(wrapper.getDocumentationProvider());
+  }
+  myDocumentationProvider=CompositeDocumentationProvider.wrapProviders(list);
+}
