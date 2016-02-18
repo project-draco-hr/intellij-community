@@ -5,19 +5,34 @@
       public void run(){
         try {
           ServerSocket socket=new ServerSocket(portNumber);
-          Socket client=socket.accept();
-          BufferedReader reader=new BufferedReader(new InputStreamReader(client.getInputStream()));
-          while (true) {
-            String msg=reader.readLine();
-            if ("TERM".equals(msg)) {
-              return;
+          try {
+            Socket client=socket.accept();
+            try {
+              BufferedReader reader=new BufferedReader(new InputStreamReader(client.getInputStream()));
+              try {
+                while (true) {
+                  String msg=reader.readLine();
+                  if ("TERM".equals(msg)) {
+                    return;
+                  }
+ else                   if ("BREAK".equals(msg)) {
+                    triggerControlBreak();
+                  }
+ else                   if ("STOP".equals(msg)) {
+                    System.exit(1);
+                  }
+                }
+              }
+  finally {
+                reader.close();
+              }
             }
- else             if ("BREAK".equals(msg)) {
-              triggerControlBreak();
+  finally {
+              client.close();
             }
- else             if ("STOP".equals(msg)) {
-              System.exit(1);
-            }
+          }
+  finally {
+            socket.close();
           }
         }
  catch (        IOException ignored) {
@@ -37,17 +52,15 @@ catch (        SecurityException ignored) {
     }
   }
   String mainClass=args[0];
-  String[] parms=new String[args.length - 1];
-  for (int j=1; j < args.length; j++) {
-    parms[j - 1]=args[j];
-  }
-  final Class appClass=Class.forName(mainClass);
+  String[] params=new String[args.length - 1];
+  System.arraycopy(args,1,params,0,args.length - 1);
+  Class appClass=Class.forName(mainClass);
   Method m;
   try {
-    m=appClass.getMethod("main",new Class[]{parms.getClass()});
+    m=appClass.getMethod("main",new Class[]{params.getClass()});
   }
  catch (  NoSuchMethodException e) {
-    if (!startJavaFXApplication(parms,appClass)) {
+    if (!startJavaFXApplication(params,appClass)) {
       throw e;
     }
     return;
@@ -61,8 +74,8 @@ catch (        SecurityException ignored) {
     return;
   }
   try {
-    ensureAccess(m);
-    m.invoke(null,new Object[]{parms});
+    m.setAccessible(true);
+    m.invoke(null,new Object[]{params});
   }
  catch (  InvocationTargetException ite) {
     throw ite.getTargetException();
