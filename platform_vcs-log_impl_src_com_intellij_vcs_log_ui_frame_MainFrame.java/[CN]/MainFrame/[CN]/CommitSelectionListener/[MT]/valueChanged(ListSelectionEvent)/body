@@ -1,21 +1,34 @@
 {
   if (event != null && event.getValueIsAdjusting())   return;
+  if (myLastRequest != null)   myLastRequest.cancel();
+  myLastRequest=null;
   int rows=getGraphTable().getSelectedRowCount();
-  if (rows < 1 || rows > MAX_SELECTED_COMMITS) {
+  if (rows < 1) {
     myChangesLoadingPane.stopLoading();
-    myChangesBrowser.getViewer().setEmptyText(rows < 1 ? "" : "Too many commits selected.");
+    myChangesBrowser.getViewer().setEmptyText("No commits selected");
     myChangesBrowser.setChangesToDisplay(Collections.<Change>emptyList());
   }
  else {
-    List<Change> selectedChanges=getSelectedChanges();
-    if (selectedChanges != null) {
-      myChangesLoadingPane.stopLoading();
-      myChangesBrowser.setChangesToDisplay(selectedChanges);
+    myChangesBrowser.setChangesToDisplay(Collections.<Change>emptyList());
+    setDefaultEmptyText(myChangesBrowser);
+    myChangesLoadingPane.startLoading();
+    final EmptyProgressIndicator indicator=new EmptyProgressIndicator();
+    myLastRequest=indicator;
+    myLog.requestSelectedDetails(new Consumer<List<VcsFullCommitDetails>>(){
+      @Override public void consume(      List<VcsFullCommitDetails> detailsList){
+        if (myLastRequest == indicator && !(indicator.isCanceled())) {
+          myLastRequest=null;
+          List<Change> changes=ContainerUtil.newArrayList();
+          List<VcsFullCommitDetails> detailsListReversed=ContainerUtil.reverse(detailsList);
+          for (          VcsFullCommitDetails details : detailsListReversed) {
+            changes.addAll(details.getChanges());
+          }
+          changes=CommittedChangesTreeBrowser.zipChanges(changes);
+          myChangesLoadingPane.stopLoading();
+          myChangesBrowser.setChangesToDisplay(changes);
+        }
+      }
     }
- else {
-      myChangesBrowser.setChangesToDisplay(Collections.<Change>emptyList());
-      setDefaultEmptyText(myChangesBrowser);
-      myChangesLoadingPane.startLoading();
-    }
+,indicator);
   }
 }

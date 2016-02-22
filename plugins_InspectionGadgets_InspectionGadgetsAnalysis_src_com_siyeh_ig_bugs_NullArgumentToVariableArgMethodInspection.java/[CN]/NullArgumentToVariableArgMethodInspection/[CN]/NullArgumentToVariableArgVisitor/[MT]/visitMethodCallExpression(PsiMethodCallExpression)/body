@@ -1,12 +1,20 @@
 {
   super.visitMethodCallExpression(call);
   final PsiExpressionList argumentList=call.getArgumentList();
-  final PsiExpression[] args=argumentList.getExpressions();
-  if (args.length == 0) {
+  final PsiExpression[] arguments=argumentList.getExpressions();
+  if (arguments.length == 0) {
     return;
   }
-  final PsiExpression lastArg=args[args.length - 1];
-  if (!ExpressionUtils.isNullLiteral(lastArg)) {
+  final PsiExpression lastArgument=arguments[arguments.length - 1];
+  final PsiType type=lastArgument.getType();
+  final boolean checkArray;
+  if (PsiType.NULL.equals(type)) {
+    checkArray=false;
+  }
+ else   if (type instanceof PsiArrayType) {
+    checkArray=true;
+  }
+ else {
     return;
   }
   final PsiMethod method=call.resolveMethod();
@@ -14,7 +22,7 @@
     return;
   }
   final PsiParameterList parameterList=method.getParameterList();
-  if (parameterList.getParametersCount() != args.length) {
+  if (parameterList.getParametersCount() != arguments.length) {
     return;
   }
   final PsiParameter[] parameters=parameterList.getParameters();
@@ -22,5 +30,16 @@
   if (!lastParameter.isVarArgs()) {
     return;
   }
-  registerError(lastArg);
+  final PsiType type1=lastParameter.getType();
+  if (!(type1 instanceof PsiEllipsisType)) {
+    return;
+  }
+  final PsiEllipsisType ellipsisType=(PsiEllipsisType)type1;
+  final PsiType arrayType=ellipsisType.toArrayType();
+  if (checkArray) {
+    if (arrayType.equals(type) || !arrayType.isAssignableFrom(type)) {
+      return;
+    }
+  }
+  registerError(lastArgument,lastArgument,ellipsisType.getComponentType(),arrayType);
 }

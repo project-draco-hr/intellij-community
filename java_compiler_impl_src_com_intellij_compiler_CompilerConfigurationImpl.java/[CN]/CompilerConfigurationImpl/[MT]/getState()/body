@@ -1,8 +1,9 @@
 {
+  final boolean savingStateInNewFormatAllowed=Registry.is("saving.state.in.new.format.is.allowed",false);
   Element state=new Element("state");
   XmlSerializer.serializeInto(myState,state,new SkipDefaultValuesSerializationFilters(){
     @Override public boolean accepts(    @NotNull Accessor accessor,    @NotNull Object bean){
-      if (myState.compilerWasSpecified && "DEFAULT_COMPILER".equals(accessor.getName())) {
+      if (!savingStateInNewFormatAllowed && myState.compilerWasSpecified && "DEFAULT_COMPILER".equals(accessor.getName())) {
         return true;
       }
       return super.accepts(accessor,bean);
@@ -15,22 +16,36 @@
   if (myExcludesConfiguration.getExcludeEntryDescriptions().length > 0) {
     myExcludesConfiguration.getDelegate().writeExternal(addChild(state,JpsJavaCompilerConfigurationSerializer.EXCLUDE_FROM_COMPILE));
   }
-  final Element newChild=addChild(state,JpsJavaCompilerConfigurationSerializer.RESOURCE_EXTENSIONS);
-  for (  final String pattern : getRegexpPatterns()) {
-    addChild(newChild,JpsJavaCompilerConfigurationSerializer.ENTRY).setAttribute(JpsJavaCompilerConfigurationSerializer.NAME,pattern);
+  Element resourceExtensions=new Element(JpsJavaCompilerConfigurationSerializer.RESOURCE_EXTENSIONS);
+  for (  String pattern : getRegexpPatterns()) {
+    addChild(resourceExtensions,JpsJavaCompilerConfigurationSerializer.ENTRY).setAttribute(JpsJavaCompilerConfigurationSerializer.NAME,pattern);
   }
-  if (myWildcardPatternsInitialized || !myWildcardPatterns.isEmpty()) {
+  if (!savingStateInNewFormatAllowed || !JDOMUtil.isEmpty(resourceExtensions)) {
+    state.addContent(resourceExtensions);
+  }
+  if ((myWildcardPatternsInitialized || !myWildcardPatterns.isEmpty()) && (!savingStateInNewFormatAllowed || !DEFAULT_WILDCARD_PATTERNS.equals(myWildcardPatterns))) {
     final Element wildcardPatterns=addChild(state,JpsJavaCompilerConfigurationSerializer.WILDCARD_RESOURCE_PATTERNS);
     for (    final String wildcardPattern : myWildcardPatterns) {
       addChild(wildcardPatterns,JpsJavaCompilerConfigurationSerializer.ENTRY).setAttribute(JpsJavaCompilerConfigurationSerializer.NAME,wildcardPattern);
     }
   }
-  final Element annotationProcessingSettings=addChild(state,JpsJavaCompilerConfigurationSerializer.ANNOTATION_PROCESSING);
-  final Element defaultProfileElem=addChild(annotationProcessingSettings,"profile").setAttribute("default","true");
-  AnnotationProcessorProfileSerializer.writeExternal(myDefaultProcessorsProfile,defaultProfileElem);
+  Element annotationProcessingSettings=new Element(JpsJavaCompilerConfigurationSerializer.ANNOTATION_PROCESSING);
+  Element profileElement=new Element("profile");
+  profileElement.setAttribute("default","true");
+  AnnotationProcessorProfileSerializer.writeExternal(myDefaultProcessorsProfile,profileElement);
+  if (!savingStateInNewFormatAllowed || !JDOMUtil.isEmpty(profileElement,2)) {
+    annotationProcessingSettings.addContent(profileElement);
+  }
   for (  ProcessorConfigProfile profile : myModuleProcessorProfiles) {
-    final Element profileElem=addChild(annotationProcessingSettings,"profile").setAttribute("default","false");
-    AnnotationProcessorProfileSerializer.writeExternal(profile,profileElem);
+    Element element=new Element("profile");
+    if (!savingStateInNewFormatAllowed) {
+      element.setAttribute("default","false");
+    }
+    AnnotationProcessorProfileSerializer.writeExternal(profile,element);
+    annotationProcessingSettings.addContent(element);
+  }
+  if (!savingStateInNewFormatAllowed || !JDOMUtil.isEmpty(annotationProcessingSettings)) {
+    state.addContent(annotationProcessingSettings);
   }
   if (!StringUtil.isEmpty(myBytecodeTargetLevel) || !myModuleBytecodeTarget.isEmpty()) {
     final Element bytecodeTarget=addChild(state,JpsJavaCompilerConfigurationSerializer.BYTECODE_TARGET_LEVEL);

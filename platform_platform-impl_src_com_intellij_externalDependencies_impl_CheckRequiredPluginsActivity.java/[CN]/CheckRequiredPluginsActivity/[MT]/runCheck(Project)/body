@@ -1,11 +1,19 @@
 {
   List<DependencyOnPlugin> dependencies=ExternalDependenciesManager.getInstance(project).getDependencies(DependencyOnPlugin.class);
   if (dependencies.isEmpty())   return;
+  List<String> customRepositories=UpdateSettings.getInstance().getStoredPluginHosts();
   final List<String> errorMessages=new ArrayList<String>();
+  final List<String> missingCustomRepositories=new ArrayList<String>();
   final List<IdeaPluginDescriptor> disabled=new ArrayList<IdeaPluginDescriptor>();
   final List<PluginId> notInstalled=new ArrayList<PluginId>();
   for (  DependencyOnPlugin dependency : dependencies) {
     PluginId pluginId=PluginId.getId(dependency.getPluginId());
+    String channel=dependency.getChannel();
+    String customRepository=getCustomRepository(pluginId,channel);
+    if (!StringUtil.isEmpty(channel) && customRepositoryNotSpecified(customRepositories,customRepository)) {
+      errorMessages.add("Custom repository '" + customRepository + "' required for '"+ project.getName()+ "' project isn't installed.");
+      missingCustomRepositories.add(customRepository);
+    }
     IdeaPluginDescriptor plugin=PluginManager.getPlugin(pluginId);
     if (plugin == null) {
       errorMessages.add("Plugin '" + dependency.getPluginId() + "' required for '"+ project.getName()+ "' project isn't installed.");
@@ -27,7 +35,10 @@
     }
   }
   if (!errorMessages.isEmpty()) {
-    if (!disabled.isEmpty() && notInstalled.isEmpty()) {
+    if (!missingCustomRepositories.isEmpty()) {
+      errorMessages.add("<a href=\"addRepositories\">Add custom repositories and install required plugins</a>");
+    }
+ else     if (!disabled.isEmpty() && notInstalled.isEmpty()) {
       String plugins=disabled.size() == 1 ? disabled.get(0).getName() : "required plugins";
       errorMessages.add("<a href=\"enable\">Enable " + plugins + "</a>");
     }
@@ -37,6 +48,9 @@
     NOTIFICATION_GROUP.createNotification("Required plugins weren't loaded",StringUtil.join(errorMessages,"<br>"),NotificationType.ERROR,new NotificationListener(){
       @Override public void hyperlinkUpdate(      @NotNull final Notification notification,      @NotNull HyperlinkEvent event){
         if (event.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
+          if ("addRepositories".equals(event.getDescription())) {
+            UpdateSettings.getInstance().getStoredPluginHosts().addAll(missingCustomRepositories);
+          }
           if ("enable".equals(event.getDescription())) {
             notification.expire();
             for (            IdeaPluginDescriptor descriptor : disabled) {
@@ -44,7 +58,7 @@
             }
             PluginManagerMain.notifyPluginsUpdated(project);
           }
- else {
+ else           if ("install".equals(event.getDescription()) || "addRepositories".equals(event.getDescription())) {
             Set<String> pluginIds=new HashSet<String>();
             for (            IdeaPluginDescriptor descriptor : disabled) {
               pluginIds.add(descriptor.getPluginId().getIdString());

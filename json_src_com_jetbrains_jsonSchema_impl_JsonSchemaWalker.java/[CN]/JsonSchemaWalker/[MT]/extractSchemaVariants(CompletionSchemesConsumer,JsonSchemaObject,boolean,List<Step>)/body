@@ -1,0 +1,49 @@
+{
+  final ArrayDeque<Pair<JsonSchemaObject,Integer>> queue=new ArrayDeque<Pair<JsonSchemaObject,Integer>>();
+  queue.add(Pair.create(rootSchema,0));
+  while (!queue.isEmpty()) {
+    final Pair<JsonSchemaObject,Integer> pair=queue.removeFirst();
+    final JsonSchemaObject schema=pair.getFirst();
+    final Step step=position.get(pair.getSecond());
+    if (step.getTransition() == null || (pair.getSecond() == (position.size() - 1))) {
+      consumer.consume(isName,schema);
+      continue;
+    }
+    if (step.getTransition() != null && !step.getTransition().possibleFromState(step.getType()))     continue;
+    final Condition<JsonSchemaObject> byTypeFilter=new Condition<JsonSchemaObject>(){
+      @Override public boolean value(      JsonSchemaObject object){
+        return byStateType(step.getType(),object);
+      }
+    }
+;
+    if (schema.getAllOf() != null) {
+      List<JsonSchemaObject> andList=ContainerUtil.filter(schema.getAllOf(),byTypeFilter);
+      final TransitionResultConsumer transitionResultConsumer=new TransitionResultConsumer();
+      JsonSchemaObject selectedSchema=null;
+      for (      JsonSchemaObject object : andList) {
+        step.getTransition().step(object,transitionResultConsumer);
+        if (transitionResultConsumer.isNothing())         continue;
+        if (selectedSchema == null) {
+          selectedSchema=transitionResultConsumer.getSchema();
+        }
+      }
+      if (selectedSchema != null) {
+        queue.add(Pair.create(selectedSchema,pair.getSecond() + 1));
+      }
+    }
+ else {
+      List<JsonSchemaObject> list=new ArrayList<JsonSchemaObject>();
+      list.add(schema);
+      if (schema.getAnyOf() != null)       list.addAll(schema.getAnyOf());
+      if (schema.getOneOf() != null)       list.addAll(schema.getOneOf());
+      list=ContainerUtil.filter(list,byTypeFilter);
+      for (      JsonSchemaObject object : list) {
+        final TransitionResultConsumer transitionResultConsumer=new TransitionResultConsumer();
+        step.getTransition().step(object,transitionResultConsumer);
+        if (transitionResultConsumer.getSchema() != null) {
+          queue.add(Pair.create(transitionResultConsumer.getSchema(),pair.getSecond() + 1));
+        }
+      }
+    }
+  }
+}

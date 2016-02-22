@@ -7,7 +7,6 @@
     endOffset=myDocument.getLineEndOffset(endLine);
   }
   boolean rounded=attributes.getEffectType() == EffectType.ROUNDED_BOX;
-  int lineHeight=myView.getLineHeight() - 1;
   g.setColor(attributes.getEffectColor());
   VisualPosition startPosition=myView.offsetToVisualPosition(startOffset,true,false);
   VisualPosition endPosition=myView.offsetToVisualPosition(endOffset,false,true);
@@ -17,27 +16,24 @@
     for (int i=0; i < ranges.size() - 1; i+=2) {
       int startX=(int)ranges.get(i);
       int endX=(int)ranges.get(i + 1);
-      if (rounded) {
-        UIUtil.drawRectPickedOut(g,startX,y,endX - startX,lineHeight);
-      }
- else {
-        g.drawRect(startX,y,endX - startX,lineHeight);
-      }
+      drawSimpleBorder(g,startX,endX,y,rounded);
     }
   }
  else {
     TFloatArrayList leadingRanges=adjustedLogicalRangeToVisualRanges(startOffset,myView.visualPositionToOffset(new VisualPosition(startPosition.line,Integer.MAX_VALUE,true)));
     TFloatArrayList trailingRanges=adjustedLogicalRangeToVisualRanges(myView.visualPositionToOffset(new VisualPosition(endPosition.line,0)),endOffset);
     if (!leadingRanges.isEmpty() && !trailingRanges.isEmpty()) {
-      int maxWidth=Math.max(myView.getMaxWidthInLineRange(startPosition.line,endPosition.line - 1) - 1,(int)trailingRanges.get(trailingRanges.size() - 1));
+      int minX=getMinX();
+      int maxX=Math.max(minX + myView.getMaxWidthInLineRange(startPosition.line,endPosition.line - 1) - 1,(int)trailingRanges.get(trailingRanges.size() - 1));
       boolean containsInnerLines=endPosition.line > startPosition.line + 1;
+      int lineHeight=myView.getLineHeight() - 1;
       int leadingTopY=myView.visualLineToY(startPosition.line);
       int leadingBottomY=leadingTopY + lineHeight;
       int trailingTopY=myView.visualLineToY(endPosition.line);
       int trailingBottomY=trailingTopY + lineHeight;
       float start=0;
       float end=0;
-      float leftGap=leadingRanges.get(0) - (containsInnerLines ? 0 : trailingRanges.get(0));
+      float leftGap=leadingRanges.get(0) - (containsInnerLines ? minX : trailingRanges.get(0));
       int adjustY=leftGap == 0 ? 2 : leftGap > 0 ? 1 : 0;
       for (int i=0; i < leadingRanges.size() - 1; i+=2) {
         start=leadingRanges.get(i);
@@ -51,7 +47,7 @@
           drawLine(g,end,leadingTopY,end,leadingBottomY,rounded);
         }
       }
-      end=Math.max(end,maxWidth);
+      end=Math.max(end,maxX);
       drawLine(g,start,leadingTopY,end,leadingTopY,rounded);
       drawLine(g,end,leadingTopY,end,trailingTopY - 1,rounded);
       float targetX=trailingRanges.get(trailingRanges.size() - 1);
@@ -69,15 +65,15 @@
       }
       float lastX=start;
       if (containsInnerLines) {
-        if (start > 0) {
+        if (start > minX) {
           drawLine(g,start,trailingTopY,start,trailingTopY - 1,rounded);
-          drawLine(g,start,trailingTopY - 1,0,trailingTopY - 1,rounded);
-          drawLine(g,0,trailingTopY - 1,0,leadingBottomY + 1,rounded);
+          drawLine(g,start,trailingTopY - 1,minX,trailingTopY - 1,rounded);
+          drawLine(g,minX,trailingTopY - 1,minX,leadingBottomY + 1,rounded);
         }
  else {
-          drawLine(g,start,trailingTopY,0,leadingBottomY + 1,rounded);
+          drawLine(g,minX,trailingTopY,minX,leadingBottomY + 1,rounded);
         }
-        lastX=0;
+        lastX=minX;
       }
       targetX=leadingRanges.get(0);
       if (lastX < targetX) {

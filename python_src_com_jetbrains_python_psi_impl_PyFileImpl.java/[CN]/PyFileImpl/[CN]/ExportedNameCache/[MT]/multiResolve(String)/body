@@ -1,0 +1,54 @@
+{
+synchronized (myNameDefinerNegativeCache) {
+    final long modCount=myModificationTracker.getOutOfCodeBlockModificationCount();
+    if (modCount != myNameDefinerOOCBModCount) {
+      myNameDefinerNegativeCache.clear();
+      myNameDefinerOOCBModCount=modCount;
+    }
+ else {
+      if (myNameDefinerNegativeCache.contains(name)) {
+        return Collections.emptyList();
+      }
+    }
+  }
+  final PyResolveProcessor processor=new PyResolveProcessor(name);
+  boolean stopped=false;
+  if (myNamedElements.containsKey(name)) {
+    for (    PsiNamedElement element : myNamedElements.get(name)) {
+      if (!processor.execute(element,ResolveState.initial())) {
+        stopped=true;
+        break;
+      }
+    }
+  }
+  if (!stopped) {
+    for (    PyImportedNameDefiner definer : myImportedNameDefiners) {
+      if (!processor.execute(definer,ResolveState.initial())) {
+        break;
+      }
+    }
+  }
+  final Map<PsiElement,PyImportedNameDefiner> results=processor.getResults();
+  if (!results.isEmpty()) {
+    final ResolveResultList resultList=new ResolveResultList();
+    final TypeEvalContext typeEvalContext=TypeEvalContext.codeInsightFallback(getProject());
+    for (    Map.Entry<PsiElement,PyImportedNameDefiner> entry : results.entrySet()) {
+      final PsiElement element=entry.getKey();
+      final PyImportedNameDefiner definer=entry.getValue();
+      if (element != null) {
+        final int elementRate=PyReferenceImpl.getRate(element,typeEvalContext);
+        if (definer != null) {
+          resultList.add(new ImportedResolveResult(element,elementRate,definer));
+        }
+ else {
+          resultList.poke(element,elementRate);
+        }
+      }
+    }
+    return resultList;
+  }
+synchronized (myNameDefinerNegativeCache) {
+    myNameDefinerNegativeCache.add(name);
+  }
+  return Collections.emptyList();
+}

@@ -9,15 +9,10 @@
       }
     }
   }
-  CompilerConfigurationImpl compilerConfiguration=(CompilerConfigurationImpl)CompilerConfiguration.getInstance(project);
-  ProcessorConfigProfile currentProfile=compilerConfiguration.getAnnotationProcessingConfiguration(module);
-  String moduleProfileName=PROFILE_PREFIX + module.getName();
-  if (currentProfile != compilerConfiguration.getDefaultProcessorProfile() && !MAVEN_DEFAULT_ANNOTATION_PROFILE.equals(currentProfile.getName()) && !moduleProfileName.equals(currentProfile.getName())) {
-    return;
-  }
-  ProcessorConfigProfile moduleProfile=compilerConfiguration.findModuleProcessorProfile(moduleProfileName);
-  ProcessorConfigProfile defaultMavenProfile=compilerConfiguration.findModuleProcessorProfile(MAVEN_DEFAULT_ANNOTATION_PROFILE);
+  final CompilerConfigurationImpl compilerConfiguration=(CompilerConfigurationImpl)CompilerConfiguration.getInstance(project);
+  final MavenProject rootProject=ObjectUtils.notNull(MavenProjectsManager.getInstance(project).findRootProject(mavenProject),mavenProject);
   if (shouldEnableAnnotationProcessors(mavenProject)) {
+    final String moduleProfileName;
     String annotationProcessorDirectory=getRelativeAnnotationProcessorDirectory(mavenProject,false);
     if (annotationProcessorDirectory == null) {
       annotationProcessorDirectory=DEFAULT_ANNOTATION_PATH_OUTPUT;
@@ -26,61 +21,44 @@
     if (testAnnotationProcessorDirectory == null) {
       testAnnotationProcessorDirectory=DEFAULT_TEST_ANNOTATION_OUTPUT;
     }
-    Map<String,String> options=mavenProject.getAnnotationProcessorOptions();
-    List<String> processors=mavenProject.getDeclaredAnnotationProcessors();
-    if (processors == null && options.isEmpty() && DEFAULT_ANNOTATION_PATH_OUTPUT.equals(annotationProcessorDirectory.replace('\\','/')) && DEFAULT_TEST_ANNOTATION_OUTPUT.equals(testAnnotationProcessorDirectory.replace('\\','/'))) {
-      if (moduleProfile != null) {
-        compilerConfiguration.removeModuleProcessorProfile(moduleProfile);
-      }
-      if (defaultMavenProfile == null) {
-        defaultMavenProfile=new ProcessorConfigProfileImpl(MAVEN_DEFAULT_ANNOTATION_PROFILE);
-        defaultMavenProfile.setEnabled(true);
-        defaultMavenProfile.setOutputRelativeToContentRoot(true);
-        defaultMavenProfile.setObtainProcessorsFromClasspath(true);
-        defaultMavenProfile.setGeneratedSourcesDirectoryName(DEFAULT_ANNOTATION_PATH_OUTPUT,false);
-        defaultMavenProfile.setGeneratedSourcesDirectoryName(DEFAULT_TEST_ANNOTATION_OUTPUT,true);
-        compilerConfiguration.addModuleProcessorProfile(defaultMavenProfile);
-      }
-      defaultMavenProfile.addModuleName(module.getName());
+    final boolean isDefault;
+    if (isMavenDefaultAnnotationProcessorConfiguration(annotationProcessorDirectory,testAnnotationProcessorDirectory,mavenProject)) {
+      moduleProfileName=MAVEN_DEFAULT_ANNOTATION_PROFILE;
+      isDefault=true;
+    }
+ else     if (isMavenProcessorPluginDefaultConfiguration(annotationProcessorDirectory,testAnnotationProcessorDirectory,mavenProject)) {
+      moduleProfileName=MAVEN_BSC_DEFAULT_ANNOTATION_PROFILE;
+      isDefault=true;
     }
  else {
-      if (defaultMavenProfile != null) {
-        defaultMavenProfile.removeModuleName(module.getName());
-        if (defaultMavenProfile.getModuleNames().isEmpty()) {
-          compilerConfiguration.removeModuleProcessorProfile(defaultMavenProfile);
-        }
-      }
-      if (moduleProfile == null) {
-        moduleProfile=new ProcessorConfigProfileImpl(moduleProfileName);
-        moduleProfile.setOutputRelativeToContentRoot(true);
-        moduleProfile.setEnabled(true);
-        moduleProfile.setObtainProcessorsFromClasspath(true);
-        moduleProfile.addModuleName(module.getName());
-        compilerConfiguration.addModuleProcessorProfile(moduleProfile);
-      }
-      moduleProfile.setGeneratedSourcesDirectoryName(annotationProcessorDirectory,false);
-      moduleProfile.setGeneratedSourcesDirectoryName(testAnnotationProcessorDirectory,true);
-      moduleProfile.clearProcessorOptions();
-      for (      Map.Entry<String,String> entry : options.entrySet()) {
-        moduleProfile.setOption(entry.getKey(),entry.getValue());
-      }
-      moduleProfile.clearProcessors();
-      if (processors != null) {
-        for (        String processor : processors) {
-          moduleProfile.addProcessor(processor);
-        }
+      moduleProfileName=PROFILE_PREFIX + module.getName();
+      isDefault=false;
+    }
+    ProcessorConfigProfile moduleProfile=compilerConfiguration.findModuleProcessorProfile(moduleProfileName);
+    if (moduleProfile == null) {
+      moduleProfile=new ProcessorConfigProfileImpl(moduleProfileName);
+      compilerConfiguration.addModuleProcessorProfile(moduleProfile);
+    }
+    moduleProfile.setOutputRelativeToContentRoot(true);
+    moduleProfile.setEnabled(true);
+    moduleProfile.setObtainProcessorsFromClasspath(true);
+    moduleProfile.setGeneratedSourcesDirectoryName(annotationProcessorDirectory,false);
+    moduleProfile.setGeneratedSourcesDirectoryName(testAnnotationProcessorDirectory,true);
+    moduleProfile.clearProcessorOptions();
+    for (    Map.Entry<String,String> entry : mavenProject.getAnnotationProcessorOptions().entrySet()) {
+      moduleProfile.setOption(entry.getKey(),entry.getValue());
+    }
+    moduleProfile.clearProcessors();
+    final List<String> processors=mavenProject.getDeclaredAnnotationProcessors();
+    if (processors != null) {
+      for (      String processor : processors) {
+        moduleProfile.addProcessor(processor);
       }
     }
+    moduleProfile.addModuleName(module.getName());
+    cleanAndMergeModuleProfiles(rootProject,compilerConfiguration,moduleProfile,isDefault,module);
   }
  else {
-    if (defaultMavenProfile != null) {
-      defaultMavenProfile.removeModuleName(module.getName());
-      if (defaultMavenProfile.getModuleNames().isEmpty()) {
-        compilerConfiguration.removeModuleProcessorProfile(defaultMavenProfile);
-      }
-    }
-    if (moduleProfile != null) {
-      compilerConfiguration.removeModuleProcessorProfile(moduleProfile);
-    }
+    cleanAndMergeModuleProfiles(rootProject,compilerConfiguration,null,false,module);
   }
 }

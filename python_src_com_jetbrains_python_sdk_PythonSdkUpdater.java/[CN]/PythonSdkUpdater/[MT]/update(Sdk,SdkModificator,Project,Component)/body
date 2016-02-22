@@ -21,7 +21,7 @@ synchronized (ourLock) {
           if (sdk != null) {
             ourUnderRefresh.put(homePath);
             try {
-              final String skeletonsPath=PythonSdkType.getSkeletonsPath(PathManager.getSystemPath(),homePath);
+              final String skeletonsPath=getBinarySkeletonsPath(homePath);
               try {
                 if (PythonSdkType.isRemote(sdk) && project == null && ownerComponent == null) {
                   LOG.error("For refreshing skeletons of remote SDK, either project or owner component must be specified");
@@ -31,7 +31,12 @@ synchronized (ourLock) {
                 updateRemoteSdkPaths(sdk);
               }
  catch (              InvalidSdkException e) {
-                if (PythonSdkType.isVagrant(sdk) || PythonSdkType.isDocker(sdk)) {
+                if (PythonSdkType.isVagrant(sdk) || new CredentialsTypeExChecker(){
+                  @Override protected boolean checkLanguageContribution(                  PyCredentialsContribution languageContribution){
+                    return languageContribution.shouldNotifySdkSkeletonFail();
+                  }
+                }
+.check(sdk)) {
                   PythonSdkType.notifyRemoteSdkSkeletonsFail(e,new Runnable(){
                     @Override public void run(){
                       final Sdk sdk=PythonSdkType.findSdkByPath(homePath);
@@ -48,7 +53,12 @@ synchronized (ourLock) {
               }
             }
   finally {
-              ourUnderRefresh.remove(homePath);
+              try {
+                ourUnderRefresh.remove(homePath);
+              }
+ catch (              IllegalStateException e) {
+                LOG.error(e);
+              }
             }
           }
         }

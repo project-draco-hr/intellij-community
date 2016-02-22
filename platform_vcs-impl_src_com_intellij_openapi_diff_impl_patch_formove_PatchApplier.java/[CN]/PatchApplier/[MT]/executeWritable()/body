@@ -2,15 +2,14 @@
   final ReadonlyStatusHandler.OperationStatus readOnlyFilesStatus=getReadOnlyFilesStatus(myVerifier.getWritableFiles());
   if (readOnlyFilesStatus.hasReadonlyFiles()) {
     showError(myProject,readOnlyFilesStatus.getReadonlyFilesMessage(),true);
-    return ApplyPatchStatus.FAILURE;
+    return ApplyPatchStatus.ABORT;
   }
+  myFailedPatches.addAll(myVerifier.filterBadFileTypePatches());
+  ApplyPatchStatus result=myFailedPatches.isEmpty() ? null : ApplyPatchStatus.FAILURE;
   final List<Pair<VirtualFile,ApplyTextFilePatch>> textPatches=myVerifier.getTextPatches();
-  if (!fileTypesAreOk(textPatches)) {
-    return ApplyPatchStatus.FAILURE;
-  }
   try {
     markInternalOperation(textPatches,true);
-    return actualApply(myVerifier,myCommitContext);
+    return ApplyPatchStatus.and(result,actualApply(textPatches,myVerifier.getBinaryPatches(),myCommitContext));
   }
   finally {
     markInternalOperation(textPatches,false);

@@ -1,0 +1,33 @@
+{
+  PyClass containingClass=PsiTreeUtil.getParentOfType(expressionHook,PyClass.class);
+  if (containingClass != null) {
+    containingClass=CompletionUtil.getOriginalElement(containingClass);
+  }
+  boolean withinOurClass=containingClass == getPyClass() || isInSuperCall(expressionHook);
+  final CompletionVariantsProcessor processor=new CompletionVariantsProcessor(expressionHook,new FilterNotInstance(myClass),null);
+  if (suppressParentheses) {
+    processor.suppressParentheses();
+  }
+  myClass.processClassLevelDeclarations(processor);
+  final TypeEvalContext context=(expressionHook != null ? TypeEvalContext.codeCompletion(myClass.getProject(),myClass.getContainingFile()) : null);
+  List<String> slots=myClass.isNewStyleClass(context) ? myClass.getSlots(context) : null;
+  if (slots != null) {
+    processor.setAllowedNames(slots);
+  }
+  myClass.processInstanceLevelDeclarations(processor,expressionHook);
+  for (  LookupElement le : processor.getResultList()) {
+    String name=le.getLookupString();
+    if (namesAlready.contains(name))     continue;
+    if (!withinOurClass && isClassPrivate(name))     continue;
+    if (!withinOurClass && isClassProtected(name) && prefix == null)     continue;
+    namesAlready.add(name);
+    ret.add(le);
+  }
+  if (slots != null) {
+    for (    String name : slots) {
+      if (!namesAlready.contains(name)) {
+        ret.add(LookupElementBuilder.create(name));
+      }
+    }
+  }
+}

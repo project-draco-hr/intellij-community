@@ -1,0 +1,57 @@
+{
+  try {
+    StringBuilder content=new StringBuilder();
+    List<LineInfo> lines=new ArrayList<LineInfo>();
+    HashMap<String,LineInfo> commits=new HashMap<String,LineInfo>();
+    final Map<VcsRevisionNumber,VcsFileRevision> historyAsMap=getRevisionMap(revisions);
+    for (StringScanner s=new StringScanner(output); s.hasMoreData(); ) {
+      String commitHash=s.spaceToken();
+      if (commitHash.equals(GitRevisionNumber.NOT_COMMITTED_HASH)) {
+        commitHash=null;
+      }
+      s.spaceToken();
+      String s1=s.spaceToken();
+      int lineNum=Integer.parseInt(s1);
+      s.nextLine();
+      LineInfo commit=commits.get(commitHash);
+      if (commit != null || commitHash == null) {
+        while (s.hasMoreData() && !s.startsWith('\t')) {
+          s.nextLine();
+        }
+      }
+ else {
+        GitRevisionNumber revisionNumber=null;
+        Date committerDate=null;
+        String author=null;
+        while (s.hasMoreData() && !s.startsWith('\t')) {
+          String key=s.spaceToken();
+          String value=s.line();
+          if (AUTHOR_KEY.equals(key)) {
+            author=value;
+          }
+          if (COMMITTER_TIME_KEY.equals(key)) {
+            committerDate=GitUtil.parseTimestamp(value);
+            revisionNumber=new GitRevisionNumber(commitHash,committerDate);
+          }
+        }
+        commit=new LineInfo(committerDate,revisionNumber,(GitFileRevision)historyAsMap.get(revisionNumber),author);
+        commits.put(commitHash,commit);
+      }
+      if (!s.hasMoreData()) {
+        continue;
+      }
+      s.skipChars(1);
+      int expectedLineNum=lines.size() + 1;
+      if (lineNum != expectedLineNum) {
+        throw new VcsException("Adding for info for line " + lineNum + " but we are expecting it to be for "+ expectedLineNum);
+      }
+      content.append(s.line(true));
+      lines.add(commit);
+    }
+    return new GitFileAnnotation(myProject,file,revision,content.toString(),lines,revisions);
+  }
+ catch (  Exception e) {
+    LOG.error("Couldn't parse annotation: " + e,new Attachment("output.txt",output));
+    throw new VcsException(e);
+  }
+}

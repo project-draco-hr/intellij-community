@@ -1,18 +1,37 @@
 {
   JPanel actionsListPanel=new JPanel(new BorderLayout());
   actionsListPanel.setBackground(getProjectsBackground());
-  final JBList list=new JBList(action.getChildren(null));
+  final List<AnAction> groups=flattenActionGroups(action);
+  final JBList list=new JBList(groups);
   list.setBackground(getProjectsBackground());
-  list.installCellRenderer(new NotNullFunction<AnAction,JComponent>(){
-    final JLabel label=new JLabel();
-{
-      label.setBorder(JBUI.Borders.empty(3,7));
+  list.setCellRenderer(new GroupedItemsListRenderer(new ListItemDescriptorAdapter<AnAction>(){
+    @Nullable @Override public String getTextFor(    AnAction value){
+      return getActionText(value);
     }
-    @NotNull @Override public JComponent fun(    AnAction action){
-      label.setText(action.getTemplatePresentation().getText());
-      Icon icon=action.getTemplatePresentation().getIcon();
-      label.setIcon(icon);
-      return label;
+    @Nullable @Override public String getCaptionAboveOf(    AnAction value){
+      return getParentGroupName(value);
+    }
+    @Override public boolean hasSeparatorAboveOf(    AnAction value){
+      int index=groups.indexOf(value);
+      final String parentGroupName=getParentGroupName(value);
+      if (index < 1)       return parentGroupName != null;
+      AnAction upper=groups.get(index - 1);
+      if (getParentGroupName(upper) == null && parentGroupName != null)       return true;
+      return !Comparing.equal(getParentGroupName(upper),parentGroupName);
+    }
+  }
+){
+    @Override protected JComponent createItemComponent(){
+      myTextLabel=new ErrorLabel();
+      myTextLabel.setOpaque(true);
+      myTextLabel.setBorder(JBUI.Borders.empty(3,7));
+      return myTextLabel;
+    }
+    @Override protected void customizeComponent(    JList list,    Object value,    boolean isSelected){
+      if (myTextLabel != null) {
+        myTextLabel.setText(getActionText(((AnAction)value)));
+        myTextLabel.setIcon(((AnAction)value).getTemplatePresentation().getIcon());
+      }
     }
   }
 );

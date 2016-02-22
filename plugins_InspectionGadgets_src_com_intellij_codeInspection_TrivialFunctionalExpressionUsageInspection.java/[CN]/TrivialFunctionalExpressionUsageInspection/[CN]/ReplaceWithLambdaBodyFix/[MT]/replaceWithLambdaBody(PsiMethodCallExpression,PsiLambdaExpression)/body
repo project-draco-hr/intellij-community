@@ -1,0 +1,44 @@
+{
+  inlineCallArguments(callExpression,element);
+  final PsiElement body=element.getBody();
+  if (body instanceof PsiExpression) {
+    callExpression.replace(body);
+  }
+ else   if (body instanceof PsiCodeBlock) {
+    final PsiElement parent=callExpression.getParent();
+    if (parent instanceof PsiStatement) {
+      final PsiElement gParent=parent.getParent();
+      restoreComments(gParent,parent,body);
+      for (      PsiStatement statement : ((PsiCodeBlock)body).getStatements()) {
+        PsiElement toInsert;
+        if (statement instanceof PsiReturnStatement) {
+          toInsert=((PsiReturnStatement)statement).getReturnValue();
+        }
+ else {
+          toInsert=statement;
+        }
+        if (toInsert != null) {
+          gParent.addBefore(toInsert,parent);
+        }
+      }
+      parent.delete();
+    }
+ else {
+      final PsiStatement[] statements=((PsiCodeBlock)body).getStatements();
+      if (statements.length > 0) {
+        final PsiStatement anchor=PsiTreeUtil.getParentOfType(parent,PsiStatement.class);
+        if (anchor != null) {
+          final PsiElement gParent=anchor.getParent();
+          restoreComments(gParent,anchor,body);
+          for (int i=0; i < statements.length - 1; i++) {
+            gParent.addBefore(statements[i],anchor);
+          }
+        }
+        final PsiExpression returnValue=((PsiReturnStatement)statements[statements.length - 1]).getReturnValue();
+        if (returnValue != null) {
+          callExpression.replace(returnValue);
+        }
+      }
+    }
+  }
+}

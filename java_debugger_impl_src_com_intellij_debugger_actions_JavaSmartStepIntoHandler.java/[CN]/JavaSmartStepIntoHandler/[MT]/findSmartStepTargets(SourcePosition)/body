@@ -15,8 +15,7 @@
   }
   TextRange curLineRange=DocumentUtil.getLineTextRange(doc,line);
   PsiElement element=position.getElementAt();
-  PsiParameterListOwner method=DebuggerUtilsEx.getContainingMethod(element);
-  PsiElement body=method != null ? method.getBody() : null;
+  PsiElement body=DebuggerUtilsEx.getBody(DebuggerUtilsEx.getContainingMethod(element));
   final TextRange lineRange=(body != null) ? curLineRange.intersection(body.getTextRange()) : curLineRange;
   if (lineRange == null || lineRange.isEmpty()) {
     return Collections.emptyList();
@@ -30,11 +29,11 @@
       element=parent;
     }
  while (true);
-    final List<SmartStepTarget> targets=new OrderedSet<SmartStepTarget>();
-    final Ref<TextRange> textRange=new Ref<TextRange>(lineRange);
+    final List<SmartStepTarget> targets=new OrderedSet<>();
+    final Ref<TextRange> textRange=new Ref<>(lineRange);
     final PsiElementVisitor methodCollector=new JavaRecursiveElementVisitor(){
-      final Stack<PsiMethod> myContextStack=new Stack<PsiMethod>();
-      final Stack<String> myParamNameStack=new Stack<String>();
+      final Stack<PsiMethod> myContextStack=new Stack<>();
+      final Stack<String> myParamNameStack=new Stack<>();
       private int myNextLambdaExpressionOrdinal=0;
       private boolean myInsideLambda=false;
       @Nullable private String getCurrentParamName(){
@@ -42,7 +41,7 @@
       }
       @Override public void visitAnonymousClass(      PsiAnonymousClass aClass){
         for (        PsiMethod psiMethod : aClass.getMethods()) {
-          targets.add(new MethodSmartStepTarget(psiMethod,getCurrentParamName(),psiMethod.getBody(),true,null));
+          targets.add(0,new MethodSmartStepTarget(psiMethod,getCurrentParamName(),psiMethod.getBody(),true,null));
         }
       }
       public void visitLambdaExpression(      PsiLambdaExpression expression){
@@ -50,14 +49,14 @@
         myInsideLambda=true;
         super.visitLambdaExpression(expression);
         myInsideLambda=inLambda;
-        targets.add(new LambdaSmartStepTarget(expression,getCurrentParamName(),expression.getBody(),myNextLambdaExpressionOrdinal++,null));
+        targets.add(0,new LambdaSmartStepTarget(expression,getCurrentParamName(),expression.getBody(),myNextLambdaExpressionOrdinal++,null));
       }
       @Override public void visitMethodReferenceExpression(      PsiMethodReferenceExpression expression){
         PsiElement element=expression.resolve();
         if (element instanceof PsiMethod) {
           PsiElement navMethod=element.getNavigationElement();
           if (navMethod instanceof PsiMethod) {
-            targets.add(new MethodSmartStepTarget(((PsiMethod)navMethod),null,expression,true,null));
+            targets.add(0,new MethodSmartStepTarget(((PsiMethod)navMethod),null,expression,true,null));
           }
         }
       }
@@ -133,7 +132,7 @@
       }
       sibling.accept(methodCollector);
     }
-    Range<Integer> lines=new Range<Integer>(doc.getLineNumber(textRange.get().getStartOffset()),doc.getLineNumber(textRange.get().getEndOffset()));
+    Range<Integer> lines=new Range<>(doc.getLineNumber(textRange.get().getStartOffset()),doc.getLineNumber(textRange.get().getEndOffset()));
     for (    SmartStepTarget target : targets) {
       target.setCallingExpressionLines(lines);
     }
