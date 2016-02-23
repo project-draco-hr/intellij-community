@@ -1,0 +1,42 @@
+{
+  final MultiMap<PsiElement,String> conflicts=new MultiMap<>();
+  myDelegate.checkSourceClassConflicts(myPushDownData,conflicts);
+  final UsageInfo[] usagesIn=refUsages.get();
+  if (usagesIn.length == 0) {
+    mySubClassData=myDelegate.preprocessNoInheritorsFound(myPushDownData.getSourceClass(),getCommandName());
+    if (mySubClassData == NewSubClassData.EMPTY) {
+      return false;
+    }
+  }
+  Runnable runnable=new Runnable(){
+    @Override public void run(){
+      ApplicationManager.getApplication().runReadAction(new Runnable(){
+        @Override public void run(){
+          if (mySubClassData != null) {
+            myDelegate.checkTargetClassConflicts(null,myPushDownData,false,mySubClassData.getContext(),conflicts);
+          }
+ else {
+            for (            UsageInfo usage : usagesIn) {
+              final PsiElement element=usage.getElement();
+              if (element != null) {
+                final PushDownDelegate delegate=PushDownDelegate.findDelegateForTarget(myPushDownData.getSourceClass(),element);
+                if (delegate != null) {
+                  delegate.checkTargetClassConflicts(element,myPushDownData,usagesIn.length > 1,element,conflicts);
+                }
+ else {
+                  conflicts.putValue(element,"Not supported source/target pair detected");
+                }
+              }
+            }
+          }
+        }
+      }
+);
+    }
+  }
+;
+  if (!ProgressManager.getInstance().runProcessWithProgressSynchronously(runnable,RefactoringBundle.message("detecting.possible.conflicts"),true,myProject)) {
+    return false;
+  }
+  return showConflicts(conflicts,usagesIn);
+}
