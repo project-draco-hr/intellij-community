@@ -1,0 +1,285 @@
+{
+  myTitleLabel=new JBLabel(FindBundle.message("find.in.path.dialog.title"),UIUtil.ComponentStyle.REGULAR);
+  myTitleLabel.setFont(myTitleLabel.getFont().deriveFont(Font.BOLD));
+  myCbCaseSensitive=createCheckbox(FindBundle.message("find.popup.case.sensitive"));
+  ItemListener liveResultsPreviewUpdateListener=new ItemListener(){
+    @Override public void itemStateChanged(    ItemEvent e){
+      scheduleResultsUpdate();
+    }
+  }
+;
+  myCbCaseSensitive.addItemListener(liveResultsPreviewUpdateListener);
+  myCbPreserveCase=createCheckbox(FindBundle.message("find.options.replace.preserve.case"));
+  myCbPreserveCase.addItemListener(liveResultsPreviewUpdateListener);
+  myCbPreserveCase.setVisible(myModel.isReplaceState());
+  myCbWholeWordsOnly=createCheckbox(FindBundle.message("find.popup.whole.words"));
+  myCbWholeWordsOnly.addItemListener(liveResultsPreviewUpdateListener);
+  myCbRegularExpressions=createCheckbox(FindBundle.message("find.popup.regex"));
+  myCbRegularExpressions.addItemListener(liveResultsPreviewUpdateListener);
+  myCbFileFilter=createCheckbox("");
+  myCbFileFilter.setMargin(new Insets(0,0,0,0));
+  myCbFileFilter.setBorder(null);
+  myCbFileFilter.addItemListener(liveResultsPreviewUpdateListener);
+  myFileMaskField=new TextFieldWithAutoCompletion<String>(myProject,new TextFieldWithAutoCompletion.StringsCompletionProvider(myFileMasks,null),false,null){
+    @Override public void setEnabled(    boolean enabled){
+      super.setEnabled(enabled);
+      setBackground(enabled ? JBColor.background() : UIUtil.getComboBoxDisabledBackground());
+    }
+  }
+;
+  myFileMaskField.setPreferredWidth(JBUI.scale(100));
+  myCbFileFilter.addItemListener(new ItemListener(){
+    @Override public void itemStateChanged(    ItemEvent e){
+      myFileMaskField.setEnabled(myCbFileFilter.isSelected());
+    }
+  }
+);
+  DefaultActionGroup switchContextGroup=new DefaultActionGroup();
+  switchContextGroup.add(new MySwitchContextToggleAction(FindModel.SearchContext.ANY));
+  switchContextGroup.add(new MySwitchContextToggleAction(FindModel.SearchContext.IN_COMMENTS));
+  switchContextGroup.add(new MySwitchContextToggleAction(FindModel.SearchContext.IN_STRING_LITERALS));
+  switchContextGroup.add(new MySwitchContextToggleAction(FindModel.SearchContext.EXCEPT_COMMENTS));
+  switchContextGroup.add(new MySwitchContextToggleAction(FindModel.SearchContext.EXCEPT_STRING_LITERALS));
+  switchContextGroup.add(new MySwitchContextToggleAction(FindModel.SearchContext.EXCEPT_COMMENTS_AND_STRING_LITERALS));
+  switchContextGroup.setPopup(true);
+  Presentation filterPresentation=new Presentation();
+  filterPresentation.setIcon(AllIcons.General.Filter);
+  myFilterContextButton=new ActionButton(switchContextGroup,filterPresentation,ActionPlaces.UNKNOWN,ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE){
+    @Override public int getPopState(){
+      int state=super.getPopState();
+      if (state != ActionButtonComponent.NORMAL)       return state;
+      return mySelectedContextName.equals(FindDialog.getPresentableName(FindModel.SearchContext.ANY)) ? ActionButtonComponent.NORMAL : ActionButtonComponent.PUSHED;
+    }
+  }
+;
+  DefaultActionGroup tabResultsContextGroup=new DefaultActionGroup();
+  tabResultsContextGroup.add(new ToggleAction(FindBundle.message("find.options.skip.results.tab.with.one.usage.checkbox")){
+    @Override public boolean isSelected(    AnActionEvent e){
+      return FindSettings.getInstance().isSkipResultsWithOneUsage();
+    }
+    @Override public void setSelected(    AnActionEvent e,    boolean state){
+      FindSettings.getInstance().setSkipResultsWithOneUsage(state);
+    }
+  }
+);
+  tabResultsContextGroup.add(new ToggleAction(FindBundle.message("find.open.in.new.tab.checkbox")){
+    @Override public boolean isSelected(    AnActionEvent e){
+      return FindSettings.getInstance().isShowResultsInSeparateView();
+    }
+    @Override public void setSelected(    AnActionEvent e,    boolean state){
+      FindSettings.getInstance().setShowResultsInSeparateView(state);
+    }
+  }
+);
+  tabResultsContextGroup.setPopup(true);
+  Presentation tabSettingsPresentation=new Presentation();
+  tabSettingsPresentation.setIcon(AllIcons.General.SecondaryGroup);
+  myTabResultsButton=new ActionButton(tabResultsContextGroup,tabSettingsPresentation,ActionPlaces.UNKNOWN,ActionToolbar.DEFAULT_MINIMUM_BUTTON_SIZE);
+  myOKButton=new JButton(FindBundle.message("find.popup.find.button"));
+  myOkActionListener=new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      findSettingsChanged();
+      FindInProjectManager.getInstance(myProject).startFindInProject(myModel);
+      Disposer.dispose(myFindBalloon);
+    }
+  }
+;
+  myOKButton.addActionListener(myOkActionListener);
+  registerKeyboardAction(myOkActionListener,OK_KEYSTROKE,WHEN_IN_FOCUSED_WINDOW);
+  mySearchComponent=new JTextArea();
+  mySearchComponent.setColumns(25);
+  mySearchComponent.setRows(1);
+  myReplaceComponent=new JTextArea();
+  myReplaceComponent.setColumns(25);
+  myReplaceComponent.setRows(1);
+  mySearchTextArea=new SearchTextArea(mySearchComponent,true);
+  myReplaceTextArea=new SearchTextArea(myReplaceComponent,false);
+  DocumentAdapter documentAdapter=new DocumentAdapter(){
+    @Override protected void textChanged(    DocumentEvent e){
+      int searchRows1=mySearchComponent.getRows();
+      int searchRows2=Math.max(1,Math.min(3,StringUtil.countChars(mySearchComponent.getText(),'\n') + 1));
+      mySearchComponent.setRows(searchRows2);
+      int replaceRows1=myReplaceComponent.getRows();
+      int replaceRows2=Math.max(1,Math.min(3,StringUtil.countChars(myReplaceComponent.getText(),'\n') + 1));
+      myReplaceComponent.setRows(replaceRows2);
+      if (myFindBalloon == null)       return;
+      if (searchRows1 != searchRows2 || replaceRows1 != replaceRows2) {
+        Point resultsLocation=myResultsPopup != null && myResultsPopup.isVisible() ? myResultsPopup.getLocationOnScreen() : null;
+        Dimension findSize=myFindBalloon.getSize();
+        myFindBalloon.pack(false,true);
+        if (resultsLocation != null) {
+          int hDiff=myFindBalloon.getSize().height - findSize.height;
+          myResultsPopup.setLocation(new Point(resultsLocation.x,resultsLocation.y + hDiff));
+        }
+      }
+      scheduleResultsUpdate();
+    }
+  }
+;
+  mySearchComponent.getDocument().addDocumentListener(documentAdapter);
+  myReplaceComponent.getDocument().addDocumentListener(documentAdapter);
+  DefaultActionGroup scopeActionGroup=new DefaultActionGroup();
+  scopeActionGroup.add(new MySelectScopeToggleAction(Scope.PROJECT));
+  scopeActionGroup.add(new MySelectScopeToggleAction(Scope.MODULE));
+  scopeActionGroup.add(new MySelectScopeToggleAction(Scope.DIRECTORY));
+  scopeActionGroup.add(new MySelectScopeToggleAction(Scope.SCOPE));
+  myScopeSelectionToolbar=(ActionToolbarImpl)ActionManager.getInstance().createActionToolbar(ActionPlaces.EDITOR_TOOLBAR,scopeActionGroup,true);
+  myScopeSelectionToolbar.setForceMinimumSize(true);
+  myScopeSelectionToolbar.setLayoutPolicy(ActionToolbar.NOWRAP_LAYOUT_POLICY);
+  myScopeSelectionToolbar.setBorder(new RoundedLineBorder(JBColor.border(),JBUI.scale(5)));
+  Module[] modules=ModuleManager.getInstance(myProject).getModules();
+  String[] names=new String[modules.length];
+  for (int i=0; i < modules.length; i++) {
+    names[i]=modules[i].getName();
+  }
+  Arrays.sort(names,String.CASE_INSENSITIVE_ORDER);
+  myModuleComboBox=new ComboBox(names);
+  myModuleComboBox.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      scheduleResultsUpdate();
+    }
+  }
+);
+  myDirectoryComboBox=new ComboBox(200);
+  Component editorComponent=myDirectoryComboBox.getEditor().getEditorComponent();
+  if (editorComponent instanceof JTextField) {
+    JTextField field=(JTextField)editorComponent;
+    field.setColumns(40);
+  }
+  initCombobox(myDirectoryComboBox);
+  myDirectoryComboBox.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      scheduleResultsUpdate();
+    }
+  }
+);
+  mySelectDirectoryButton=new FixedSizeButton(myDirectoryComboBox);
+  TextFieldWithBrowseButton.MyDoClickAction.addTo(mySelectDirectoryButton,myDirectoryComboBox);
+  mySelectDirectoryButton.setMargin(new Insets(0,0,0,0));
+  mySelectDirectoryButton.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      FileChooserDescriptor descriptor=FileChooserDescriptorFactory.createSingleFolderDescriptor();
+      FileChooser.chooseFiles(descriptor,myProject,FindPopupPanel.this,null,new Consumer<java.util.List<VirtualFile>>(){
+        @Override public void consume(        final java.util.List<VirtualFile> files){
+          myDirectoryComboBox.setSelectedItem(files.get(0).getPresentableUrl());
+        }
+      }
+);
+    }
+  }
+);
+  myRecursiveDirectoryButton=new JToggleButton(AllIcons.General.Recursive,myModel.isWithSubdirectories());
+  myRecursiveDirectoryButton.setIcon(AllIcons.General.Recursive);
+  myRecursiveDirectoryButton.setMargin(new Insets(0,0,0,0));
+  myRecursiveDirectoryButton.addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      scheduleResultsUpdate();
+    }
+  }
+);
+  JPanel directoryPanel=new JPanel(new BorderLayout());
+  directoryPanel.add(myDirectoryComboBox,BorderLayout.CENTER);
+  JPanel buttonsPanel=new JPanel(new GridLayout(1,2));
+  buttonsPanel.add(mySelectDirectoryButton);
+  buttonsPanel.add(myRecursiveDirectoryButton);
+  directoryPanel.add(buttonsPanel,BorderLayout.EAST);
+  myScopeCombo=new ScopeChooserCombo();
+  myScopeCombo.init(myProject,true,true,FindSettings.getInstance().getDefaultScopeName(),new Condition<ScopeDescriptor>(){
+    final String projectFilesScopeName=PsiBundle.message("psi.search.scope.project");
+    final String moduleFilesScopeName;
+{
+      String moduleScopeName=PsiBundle.message("search.scope.module","");
+      final int ind=moduleScopeName.indexOf(' ');
+      moduleFilesScopeName=moduleScopeName.substring(0,ind + 1);
+    }
+    @Override public boolean value(    ScopeDescriptor descriptor){
+      final String display=descriptor.getDisplay();
+      return !projectFilesScopeName.equals(display) && !display.startsWith(moduleFilesScopeName);
+    }
+  }
+);
+  myScopeCombo.getComboBox().addActionListener(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      scheduleResultsUpdate();
+    }
+  }
+);
+  Disposer.register(myDisposable,myScopeCombo);
+  myScopeDetailsPanel=new JPanel(new CardLayout());
+  myScopeDetailsPanel.add(Scope.PROJECT.name(),new JLabel());
+  myScopeDetailsPanel.add(Scope.MODULE.name(),myModuleComboBox);
+  myScopeDetailsPanel.add(Scope.DIRECTORY.name(),directoryPanel);
+  myScopeDetailsPanel.add(Scope.SCOPE.name(),myScopeCombo);
+  setLayout(new MigLayout("flowx, ins 4, fillx, hidemode 3, gap 0"));
+  add(myTitleLabel,"pushx, gapleft 4");
+  add(Box.createHorizontalStrut(JBUI.scale(50)));
+  add(myCbCaseSensitive);
+  add(myCbPreserveCase);
+  add(myCbWholeWordsOnly);
+  add(myCbRegularExpressions);
+  LinkLabel helpLink=RegExHelpPopup.createRegExLink("<html><body><b>?</b></body></html>",myCbRegularExpressions,LOG);
+  add(helpLink,"gapright 8");
+  add(myCbFileFilter);
+  add(myFileMaskField);
+  add(myFilterContextButton,"wrap");
+  add(mySearchTextArea,"pushx, growx, sx 9, wrap");
+  add(myReplaceTextArea,"pushx, growx, sx 9, wrap");
+  add(myScopeSelectionToolbar.getComponent(),"gaptop 4");
+  add(myScopeDetailsPanel,"sx 8, pushx, growx");
+  MnemonicHelper.init(this);
+  myResultsPreviewTable=new JBTable(){
+    @Override public Dimension getPreferredScrollableViewportSize(){
+      return new Dimension(getWidth(),1 + getRowHeight() * Math.min(9,Math.max(4,getRowCount())));
+    }
+  }
+;
+  myResultsPreviewTable.getEmptyText().setShowAboveCenter(false);
+  myResultsPreviewTable.setShowColumns(false);
+  myResultsPreviewTable.getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+  myResultsPreviewTable.setShowGrid(false);
+  new NavigateToSourceListener().installOn(myResultsPreviewTable);
+  applyFont(JBUI.Fonts.smallFont(),myCbCaseSensitive,myCbPreserveCase,myCbWholeWordsOnly,myCbRegularExpressions,myResultsPreviewTable);
+  registerKeyboardAction(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      int row=myResultsPreviewTable.getSelectedRow();
+      if (row >= myResultsPreviewTable.getRowCount() - 1)       return;
+      myResultsPreviewTable.getSelectionModel().setSelectionInterval(row + 1,row + 1);
+      TableUtil.scrollSelectionToVisible(myResultsPreviewTable);
+    }
+  }
+,KeyStroke.getKeyStroke(KeyEvent.VK_DOWN,InputEvent.ALT_DOWN_MASK),WHEN_IN_FOCUSED_WINDOW);
+  registerKeyboardAction(new ActionListener(){
+    @Override public void actionPerformed(    ActionEvent e){
+      int row=myResultsPreviewTable.getSelectedRow();
+      if (row < 1)       return;
+      myResultsPreviewTable.getSelectionModel().setSelectionInterval(row - 1,row - 1);
+      TableUtil.scrollSelectionToVisible(myResultsPreviewTable);
+    }
+  }
+,KeyStroke.getKeyStroke(KeyEvent.VK_UP,InputEvent.ALT_DOWN_MASK),WHEN_IN_FOCUSED_WINDOW);
+  myUsagePreviewPanel=new UsagePreviewPanel(myProject,new UsageViewPresentation()){
+    @Override public Dimension getPreferredSize(){
+      Dimension size=super.getPreferredSize();
+      size.height=Math.min(size.height,getLineHeight() * 20);
+      return size;
+    }
+  }
+;
+  Disposer.register(myDisposable,myUsagePreviewPanel);
+  myResultsPreviewTable.getSelectionModel().addListSelectionListener(new ListSelectionListener(){
+    @Override public void valueChanged(    ListSelectionEvent e){
+      if (e.getValueIsAdjusting())       return;
+      int index=myResultsPreviewTable.getSelectedRow();
+      if (index != -1) {
+        UsageInfo usageInfo=((UsageInfo2UsageAdapter)myResultsPreviewTable.getModel().getValueAt(index,0)).getUsageInfo();
+        myUsagePreviewPanel.updateLayout(Collections.singletonList(usageInfo));
+      }
+ else {
+        myUsagePreviewPanel.updateLayout(null);
+      }
+    }
+  }
+);
+  mySearchRescheduleOnCancellationsAlarm=new Alarm();
+  myUpdateResultsPopupBoundsAlarm=new Alarm();
+}
