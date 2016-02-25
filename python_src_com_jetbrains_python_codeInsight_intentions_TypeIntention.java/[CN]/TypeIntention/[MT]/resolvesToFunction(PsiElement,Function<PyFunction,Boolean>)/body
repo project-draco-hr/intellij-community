@@ -1,0 +1,35 @@
+{
+  final PyFunction parentFunction=PsiTreeUtil.getParentOfType(elementAt,PyFunction.class);
+  if (parentFunction != null) {
+    final ASTNode nameNode=parentFunction.getNameNode();
+    if (nameNode != null) {
+      final PsiElement prev=elementAt.getContainingFile().findElementAt(elementAt.getTextOffset() - 1);
+      if (nameNode.getPsi() == elementAt || nameNode.getPsi() == prev) {
+        return isAvailableForFunction.apply(parentFunction);
+      }
+    }
+  }
+  final PyCallExpression callExpression=getCallExpression(elementAt);
+  if (callExpression == null)   return false;
+  final PyExpression callee=callExpression.getCallee();
+  if (callee == null)   return false;
+  final PsiReference reference=callee.getReference();
+  if (reference instanceof PsiPolyVariantReference) {
+    final ResolveResult[] results=((PsiPolyVariantReference)reference).multiResolve(false);
+    for (int i=0; i < results.length; i++) {
+      if (results[i].getElement() instanceof PyFunction) {
+        final PsiElement result=results[i].getElement();
+        final PsiFile psiFile=result.getContainingFile();
+        if (psiFile == null)         return false;
+        final VirtualFile virtualFile=psiFile.getVirtualFile();
+        if (virtualFile != null) {
+          if (ProjectRootManager.getInstance(psiFile.getProject()).getFileIndex().isInLibraryClasses(virtualFile)) {
+            return false;
+          }
+        }
+        return isAvailableForFunction.apply((PyFunction)result);
+      }
+    }
+  }
+  return false;
+}

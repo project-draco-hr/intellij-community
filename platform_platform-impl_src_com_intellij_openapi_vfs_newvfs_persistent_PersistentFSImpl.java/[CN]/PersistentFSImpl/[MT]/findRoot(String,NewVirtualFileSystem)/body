@@ -6,26 +6,18 @@
   String rootUrl=normalizeRootUrl(basePath,fs);
   VirtualFileSystemEntry root=myRoots.get(rootUrl);
   if (root != null)   return root;
-  final VirtualFileSystemEntry newRoot;
-  String rootPathBeforeSplash;
   String rootName;
-  if (fs instanceof JarFileSystem) {
-    String parentPath=basePath.substring(0,basePath.indexOf(JarFileSystem.JAR_SEPARATOR));
-    VirtualFile parentFile=LocalFileSystem.getInstance().findFileByPath(parentPath);
-    if (parentFile == null)     return null;
-    FileType type=FileTypeRegistry.getInstance().getFileTypeByFileName(parentFile.getName());
-    if (type != FileTypes.ARCHIVE)     return null;
-    rootName=parentFile.getName();
-    rootPathBeforeSplash=parentFile.getPath() + "!";
+  if (fs instanceof ArchiveFileSystem) {
+    VirtualFile localFile=((ArchiveFileSystem)fs).findLocalByRootPath(basePath);
+    if (localFile == null)     return null;
+    rootName=localFile.getName();
   }
  else {
     rootName=basePath;
-    rootPathBeforeSplash=StringUtil.trimEnd(basePath,"/");
   }
-  final String finalRootPathBeforeSplash=rootPathBeforeSplash;
   FileAttributes attributes=fs.getAttributes(new StubVirtualFile(){
     @NotNull @Override public String getPath(){
-      return finalRootPathBeforeSplash + "/";
+      return basePath;
     }
     @Nullable @Override public VirtualFile getParent(){
       return null;
@@ -38,7 +30,7 @@
   int rootId=FSRecords.findRootRecord(rootUrl);
   VfsData.Segment segment=VfsData.getSegment(rootId,true);
   VfsData.DirectoryData directoryData=new VfsData.DirectoryData();
-  newRoot=new FsRoot(rootId,segment,directoryData,fs,rootName,rootPathBeforeSplash);
+  VirtualFileSystemEntry newRoot=new FsRoot(rootId,segment,directoryData,fs,rootName,StringUtil.trimEnd(basePath,"/"));
   boolean mark;
 synchronized (myRoots) {
     root=myRoots.get(rootUrl);
