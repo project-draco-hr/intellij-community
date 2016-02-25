@@ -45,10 +45,18 @@
     commandLine.withEnvironment(env);
   }
   try {
+    final boolean[] serverStarted={false};
     final KillableColoredProcessHandler processHandler=new KillableColoredProcessHandler(commandLine){
       @Override protected void doDestroyProcess(){
         super.doDestroyProcess();
+        myKernels.clear();
         UnixProcessManager.sendSigIntToProcessTree(getProcess());
+      }
+      @Override public void coloredTextAvailable(      @NonNls String text,      Key attributes){
+        super.coloredTextAvailable(text,attributes);
+        if (text.toLowerCase().contains("active kernels")) {
+          serverStarted[0]=true;
+        }
       }
       @Override public boolean isSilentlyDestroyOnClose(){
         return true;
@@ -56,10 +64,11 @@
     }
 ;
     processHandler.setShouldDestroyProcessRecursively(true);
-    ApplicationManager.getApplication().invokeLater(new Runnable(){
+    UIUtil.invokeLaterIfNeeded(new Runnable(){
       @Override public void run(){
         new RunContentExecutor(myProject,processHandler).withTitle("IPython Notebook").withStop(new Runnable(){
           @Override public void run(){
+            myKernels.clear();
             processHandler.destroyProcess();
             UnixProcessManager.sendSigIntToProcessTree(processHandler.getProcess());
           }
@@ -78,6 +87,11 @@
       }
     }
 );
+    int countAttempt=0;
+    while (!serverStarted[0] && countAttempt < MAX_ATTEMPTS) {
+      countAttempt+=1;
+      TimeoutUtil.sleep(1000);
+    }
     return true;
   }
  catch (  ExecutionException e) {

@@ -1,0 +1,42 @@
+{
+  final PsiElement copy;
+  final PsiType typeByParent=PsiTypesUtil.getExpectedTypeByParent(expression);
+  if (typeByParent != null) {
+    final String arrayInitializer="new " + typeByParent.getCanonicalText() + "[]{0}";
+    final PsiNewExpression newExpr=(PsiNewExpression)JavaPsiFacade.getInstance(expression.getProject()).getElementFactory().createExpressionFromText(arrayInitializer,expression);
+    final PsiArrayInitializerExpression initializer=newExpr.getArrayInitializer();
+    LOG.assertTrue(initializer != null);
+    copy=initializer.getInitializers()[0].replace(expression);
+  }
+ else {
+    final int offset=expression.getTextRange().getStartOffset();
+    final PsiFile containingFile=expression.getContainingFile();
+    final PsiFile fileCopy=(PsiFile)containingFile.copy();
+    copy=fileCopy.findElementAt(offset);
+    if (method != null && method.getContainingFile() == containingFile) {
+      method=PsiTreeUtil.getParentOfType(fileCopy.findElementAt(method.getTextOffset()),PsiMethod.class);
+    }
+  }
+  final PsiCallExpression exprCopy=PsiTreeUtil.getParentOfType(copy,PsiCallExpression.class,false);
+  if (exprCopy != null) {
+    try {
+      final PsiElementFactory elementFactory=JavaPsiFacade.getInstance(exprCopy.getProject()).getElementFactory();
+      if (constructorRef) {
+        if (!(exprCopy instanceof PsiNewExpression) || !isInferenceEquivalent(typeArguments,elementFactory,(PsiNewExpression)exprCopy)) {
+          return false;
+        }
+      }
+ else {
+        LOG.assertTrue(method != null);
+        if (!isInferenceEquivalent(typeArguments,elementFactory,exprCopy,method,typeParameters)) {
+          return false;
+        }
+      }
+    }
+ catch (    IncorrectOperationException e) {
+      LOG.error(e);
+      return false;
+    }
+  }
+  return true;
+}

@@ -1,0 +1,27 @@
+{
+  myDataManager=dataManager;
+  myTaskExecutor=new SequentialLimitedLifoExecutor<Task>(parentDisposable,10,new ThrowableConsumer<Task,Throwable>(){
+    @Override public void consume(    final Task task) throws Throwable {
+      final List<String> branches=task.getContainingBranches(myDataManager);
+      ApplicationManager.getApplication().invokeLater(new Runnable(){
+        @Override public void run(){
+          task.cache.put(new CommitId(task.hash,task.root),branches);
+          notifyListeners();
+        }
+      }
+);
+    }
+  }
+);
+  myDataManager.addDataPackChangeListener(new DataPackChangeListener(){
+    @Override public void onDataPackChange(    @NotNull DataPack dataPack){
+      Collection<VcsRef> currentBranches=dataPack.getRefsModel().getBranches();
+      int checksum=currentBranches.hashCode();
+      if (myCurrentBranchesChecksum != 0 && myCurrentBranchesChecksum != checksum) {
+        clearCache();
+      }
+      myCurrentBranchesChecksum=checksum;
+    }
+  }
+);
+}
