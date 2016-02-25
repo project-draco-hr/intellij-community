@@ -1,0 +1,40 @@
+{
+  final DataContext context=event.getDataContext();
+  final IpnbFileEditor ipnbEditor=IpnbFileEditor.DATA_KEY.getData(context);
+  if (ipnbEditor != null) {
+    final IpnbFilePanel ipnbFilePanel=ipnbEditor.getIpnbFilePanel();
+    final List<IpnbEditablePanel> cells=ipnbFilePanel.getIpnbPanels();
+    final Project project=ipnbFilePanel.getProject();
+    final IpnbConnectionManager connectionManager=IpnbConnectionManager.getInstance(project);
+    final VirtualFile virtualFile=ipnbEditor.getVirtualFile();
+    final String path=virtualFile.getPath();
+    if (!connectionManager.hasConnection(path)) {
+      String url=IpnbSettings.getInstance(project).getURL();
+      if (StringUtil.isEmptyOrSpaces(url)) {
+        url=IpnbConnectionManager.showDialogUrl(url);
+      }
+      if (url == null)       return;
+      IpnbSettings.getInstance(project).setURL(url);
+      final String finalUrl=url;
+      ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
+        @Override public void run(){
+          final boolean serverStarted=connectionManager.startIpythonServer(finalUrl,ipnbEditor);
+          if (!serverStarted) {
+            return;
+          }
+          UIUtil.invokeLaterIfNeeded(new Runnable(){
+            @Override public void run(){
+              connectionManager.startConnection(null,path,finalUrl,false);
+            }
+          }
+);
+          runCells(cells,ipnbFilePanel);
+        }
+      }
+);
+    }
+ else {
+      runCells(cells,ipnbFilePanel);
+    }
+  }
+}
