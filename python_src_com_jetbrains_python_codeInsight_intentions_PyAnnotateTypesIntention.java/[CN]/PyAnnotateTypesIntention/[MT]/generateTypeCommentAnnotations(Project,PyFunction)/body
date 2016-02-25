@@ -1,0 +1,44 @@
+{
+  StringBuilder replacementTextBuilder=new StringBuilder("# type: (");
+  PyParameter[] params=function.getParameterList().getParameters();
+  List<Pair<Integer,String>> templates=Lists.newArrayList();
+  for (int i=0; i < params.length; i++) {
+    String type=parameterType(params[i]);
+    templates.add(Pair.create(replacementTextBuilder.length(),type));
+    replacementTextBuilder.append(type);
+    if (i < params.length - 1) {
+      replacementTextBuilder.append(", ");
+    }
+  }
+  replacementTextBuilder.append(") -> ");
+  String returnType=returnType(function);
+  templates.add(Pair.create(replacementTextBuilder.length(),returnType));
+  replacementTextBuilder.append(returnType);
+  final PyStatementList statements=function.getStatementList();
+  final String indentation=PyIndentUtil.getExpectedElementIndent(statements);
+  replacementTextBuilder.insert(0,indentation);
+  replacementTextBuilder.insert(0,"\n");
+  final PsiDocumentManager manager=PsiDocumentManager.getInstance(project);
+  final Document document=manager.getDocument(function.getContainingFile());
+  if (document != null) {
+    final PsiElement beforeStatements=statements.getPrevSibling();
+    int offset=beforeStatements.getTextRange().getStartOffset();
+    if (":".equals(beforeStatements.getText())) {
+      offset+=1;
+    }
+    try {
+      document.insertString(offset,replacementTextBuilder.toString());
+    }
+  finally {
+      manager.commitDocument(document);
+    }
+    function=CodeInsightUtilCore.forcePsiPostprocessAndRestoreElement(function);
+    if (function != null) {
+      final TemplateBuilder builder=TemplateBuilderFactory.getInstance().createTemplateBuilder(function);
+      for (      Pair<Integer,String> template : templates) {
+        builder.replaceRange(TextRange.from(offset - function.getTextRange().getStartOffset() + replacementTextBuilder.toString().indexOf('#') + template.first,template.second.length()),template.second);
+      }
+      startTemplate(project,function,builder);
+    }
+  }
+}
