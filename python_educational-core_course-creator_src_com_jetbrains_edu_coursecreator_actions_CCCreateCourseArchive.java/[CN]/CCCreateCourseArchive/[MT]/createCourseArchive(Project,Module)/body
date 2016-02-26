@@ -1,0 +1,77 @@
+{
+  final CCProjectService service=CCProjectService.getInstance(project);
+  final Course course=service.getCourse();
+  if (course == null)   return;
+  CreateCourseArchiveDialog dlg=new CreateCourseArchiveDialog(project,this);
+  dlg.show();
+  if (dlg.getExitCode() != DialogWrapper.OK_EXIT_CODE) {
+    return;
+  }
+  final VirtualFile baseDir=project.getBaseDir();
+  VirtualFile archiveFolder=getArchiveFolder(project,module);
+  if (archiveFolder == null) {
+    return;
+  }
+  CCLanguageManager manager=CCUtils.getStudyLanguageManager(course);
+  if (manager == null) {
+    return;
+  }
+  FileFilter filter=new FileFilter(){
+    @Override public boolean accept(    File pathname){
+      return !manager.doNotPackFile(pathname);
+    }
+  }
+;
+  for (  VirtualFile child : baseDir.getChildren()) {
+    String name=child.getName();
+    File fromFile=new File(child.getPath());
+    if (CCUtils.GENERATED_FILES_FOLDER.equals(name) || ".idea".equals(name) || name.contains("iml")|| manager.doNotPackFile(fromFile)) {
+      continue;
+    }
+    copyChild(archiveFolder,filter,child,fromFile);
+  }
+  final List<Lesson> lessons=course.getLessons();
+  ApplicationManager.getApplication().runWriteAction(new Runnable(){
+    @Override public void run(){
+      final Map<TaskFile,TaskFile> savedTaskFiles=new HashMap<TaskFile,TaskFile>();
+      replaceAnswerFilesWithTaskFiles(savedTaskFiles);
+      generateJson(project,archiveFolder);
+      resetTaskFiles(savedTaskFiles);
+      VirtualFileManager.getInstance().refreshWithoutFileWatcher(false);
+      packCourse(archiveFolder);
+      synchronize(project);
+    }
+    private void replaceAnswerFilesWithTaskFiles(    Map<TaskFile,TaskFile> savedTaskFiles){
+      for (      Lesson lesson : lessons) {
+        final VirtualFile lessonDir=baseDir.findChild(EduNames.LESSON + String.valueOf(lesson.getIndex()));
+        if (lessonDir == null)         continue;
+        for (        Task task : lesson.getTaskList()) {
+          final VirtualFile taskDir=lessonDir.findChild(EduNames.TASK + String.valueOf(task.getIndex()));
+          if (taskDir == null)           continue;
+          for (          final Map.Entry<String,TaskFile> entry : task.getTaskFiles().entrySet()) {
+            TaskFile taskFileCopy=new TaskFile();
+            TaskFile taskFile=entry.getValue();
+            TaskFile.copy(taskFile,taskFileCopy);
+            savedTaskFiles.put(taskFile,taskFileCopy);
+            VirtualFile userFileDir=VfsUtil.findRelativeFile(archiveFolder,lessonDir.getName(),taskDir.getName());
+            if (userFileDir == null) {
+              continue;
+            }
+            String taskFileName=entry.getKey();
+            EduUtils.createStudentFileFromAnswer(project,userFileDir,taskDir,taskFileName,taskFile);
+            VirtualFile answerFile=userFileDir.findChild(FileUtilRt.getNameWithoutExtension(taskFileName) + ".answer." + FileUtilRt.getExtension(taskFileName));
+            if (answerFile != null) {
+              try {
+                answerFile.delete(this);
+              }
+ catch (              IOException e) {
+                LOG.info(e);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+);
+}
