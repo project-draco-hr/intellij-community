@@ -12,15 +12,29 @@
       if (subj instanceof PsiParameter) {
         PsiParameterList parameterList=myMethodToReplaceIn.getParameterList();
         if (subj.getParent() != parameterList)         return;
-        int index=parameterList.getParameterIndex((PsiParameter)subj);
+        final PsiParameter parameter=(PsiParameter)subj;
+        int index=parameterList.getParameterIndex(parameter);
         if (index < 0)         return;
         if (index < myActualArgs.length) {
           PsiExpression actualArg=myActualArgs[index];
-          int copyingSafetyLevel=RefactoringUtil.verifySafeCopyExpression(actualArg);
-          if (copyingSafetyLevel == RefactoringUtil.EXPR_COPY_PROHIBITED) {
-            actualArg=factory.createExpressionFromText(getTempVar(actualArg),null);
+          PsiExpression initializer=actualArg;
+          final PsiType parameterType=parameter.getType();
+          if (parameter.isVarArgs() && parameterType instanceof PsiEllipsisType) {
+            final String varargsJoin=StringUtil.join(ContainerUtil.map2Array(myActualArgs,String.class,new Function<PsiExpression,String>(){
+              @Override public String fun(              PsiExpression expression){
+                return expression != null ? expression.getText() : "null";
+              }
+            }
+),index + 1,myActualArgs.length,",");
+            String newArrayInitializer="new " + ((PsiEllipsisType)parameterType).toArrayType().getCanonicalText() + " {"+ varargsJoin+ "}";
+            initializer=replaceInitializerWithVarargSubstitution(factory,parameter,initializer,newArrayInitializer);
           }
-          newExpr=newExpr.replace(actualArg);
+          if (RefactoringUtil.verifySafeCopyExpression(actualArg) == RefactoringUtil.EXPR_COPY_PROHIBITED) {
+            newExpr=newExpr.replace(factory.createExpressionFromText(getTempVar(actualArg,initializer),null));
+          }
+ else {
+            newExpr=newExpr.replace(initializer);
+          }
         }
       }
  else       if ((subj instanceof PsiField || subj instanceof PsiMethod) && oldRef.getQualifierExpression() == null && PsiTreeUtil.isAncestor(clss,scope,false)) {

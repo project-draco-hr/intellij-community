@@ -9,7 +9,7 @@
   try {
     final PyPackage ipythonPackage=PyPackageManager.getInstance(sdk).findPackage("ipython",false);
     if (ipythonPackage == null) {
-      showWarning(fileEditor,"Add IPython to the interpreter of the current project.",null);
+      showWarning(fileEditor,"Add Jupyter to the interpreter of the current project.",null);
       return false;
     }
   }
@@ -17,7 +17,7 @@
   }
   final Pair<String,String> hostPort=getHostPortFromUrl(url);
   if (hostPort == null) {
-    showWarning(fileEditor,"Please, check IPython Notebook URL in <a href=\"\">Settings->Tools->IPython Notebook</a>",new IpnbSettingsAdapter());
+    showWarning(fileEditor,"Please, check Jupyter Notebook URL in <a href=\"\">Settings->Tools->Jupyter Notebook</a>",new IpnbSettingsAdapter());
     return false;
   }
   final String homePath=sdk.getHomePath();
@@ -25,13 +25,22 @@
     showWarning(fileEditor,"Python Sdk is invalid, please check Python Interpreter in Settings->Python Interpreter",null);
     return false;
   }
-  String ipython=findIPythonRunner(homePath);
   Map<String,String> env=null;
+  final ArrayList<String> parameters=Lists.newArrayList(homePath);
+  String ipython=findJupyterRunner(homePath);
   if (ipython == null) {
-    ipython=PythonHelper.LOAD_ENTRY_POINT.asParamString();
-    env=ImmutableMap.of("PYCHARM_EP_DIST","ipython","PYCHARM_EP_NAME","ipython");
+    ipython=findIPythonRunner(homePath);
+    if (ipython == null) {
+      ipython=PythonHelper.LOAD_ENTRY_POINT.asParamString();
+      env=ImmutableMap.of("PYCHARM_EP_DIST","ipython","PYCHARM_EP_NAME","ipython");
+    }
+    parameters.add(ipython);
+    parameters.add("notebook");
   }
-  final ArrayList<String> parameters=Lists.newArrayList(homePath,ipython,"notebook","--no-browser");
+ else {
+    parameters.add(ipython);
+  }
+  parameters.add("--no-browser");
   if (hostPort.getFirst() != null) {
     parameters.add("--ip");
     parameters.add(hostPort.getFirst());
@@ -45,10 +54,18 @@
     commandLine.withEnvironment(env);
   }
   try {
+    final boolean[] serverStarted={false};
     final KillableColoredProcessHandler processHandler=new KillableColoredProcessHandler(commandLine){
       @Override protected void doDestroyProcess(){
         super.doDestroyProcess();
+        myKernels.clear();
         UnixProcessManager.sendSigIntToProcessTree(getProcess());
+      }
+      @Override public void coloredTextAvailable(      @NonNls String text,      Key attributes){
+        super.coloredTextAvailable(text,attributes);
+        if (text.toLowerCase().contains("active kernels")) {
+          serverStarted[0]=true;
+        }
       }
       @Override public boolean isSilentlyDestroyOnClose(){
         return true;
@@ -56,10 +73,11 @@
     }
 ;
     processHandler.setShouldDestroyProcessRecursively(true);
-    ApplicationManager.getApplication().invokeLater(new Runnable(){
+    UIUtil.invokeLaterIfNeeded(new Runnable(){
       @Override public void run(){
-        new RunContentExecutor(myProject,processHandler).withTitle("IPython Notebook").withStop(new Runnable(){
+        new RunContentExecutor(myProject,processHandler).withTitle("Jupyter Notebook").withStop(new Runnable(){
           @Override public void run(){
+            myKernels.clear();
             processHandler.destroyProcess();
             UnixProcessManager.sendSigIntToProcessTree(processHandler.getProcess());
           }
@@ -78,6 +96,11 @@
       }
     }
 );
+    int countAttempt=0;
+    while (!serverStarted[0] && countAttempt < MAX_ATTEMPTS) {
+      countAttempt+=1;
+      TimeoutUtil.sleep(1000);
+    }
     return true;
   }
  catch (  ExecutionException e) {
