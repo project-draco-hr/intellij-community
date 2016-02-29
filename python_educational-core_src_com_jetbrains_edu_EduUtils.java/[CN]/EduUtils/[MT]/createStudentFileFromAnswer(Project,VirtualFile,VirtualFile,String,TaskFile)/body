@@ -1,2 +1,79 @@
 {
+  VirtualFile file=userFileDir.findChild(taskFileName);
+  if (file != null) {
+    try {
+      file.delete(project);
+    }
+ catch (    IOException e) {
+      LOG.error(e);
+    }
+  }
+  if (taskFile.getAnswerPlaceholders().isEmpty()) {
+    VirtualFile answerFile=answerFileDir.findChild(taskFileName);
+    if (answerFile != null) {
+      try {
+        answerFile.copy(answerFileDir,userFileDir,taskFileName);
+      }
+ catch (      IOException e) {
+        LOG.error(e);
+      }
+    }
+    return;
+  }
+  try {
+    userFileDir.createChildData(project,taskFileName);
+  }
+ catch (  IOException e) {
+    LOG.error(e);
+  }
+  file=userFileDir.findChild(taskFileName);
+  if (file == null) {
+    LOG.info("Failed to find task file " + taskFileName);
+    return;
+  }
+  VirtualFile answerFile=answerFileDir.findChild(taskFileName);
+  if (answerFile == null) {
+    return;
+  }
+  final Document answerDocument=FileDocumentManager.getInstance().getDocument(answerFile);
+  if (answerDocument == null) {
+    return;
+  }
+  final Document document=FileDocumentManager.getInstance().getDocument(file);
+  if (document == null)   return;
+  CommandProcessor.getInstance().executeCommand(project,new Runnable(){
+    @Override public void run(){
+      ApplicationManager.getApplication().runWriteAction(new Runnable(){
+        @Override public void run(){
+          document.replaceString(0,document.getTextLength(),answerDocument.getCharsSequence());
+          FileDocumentManager.getInstance().saveDocument(document);
+        }
+      }
+);
+    }
+  }
+,"Create Student File","Create Student File");
+  EduDocumentListener listener=new EduDocumentListener(taskFile,false);
+  document.addDocumentListener(listener);
+  taskFile.sortAnswerPlaceholders();
+  for (int i=taskFile.getAnswerPlaceholders().size() - 1; i >= 0; i--) {
+    final AnswerPlaceholder answerPlaceholder=taskFile.getAnswerPlaceholders().get(i);
+    if (answerPlaceholder.getRealStartOffset(document) > document.getTextLength() || answerPlaceholder.getRealStartOffset(document) + answerPlaceholder.getPossibleAnswerLength() > document.getTextLength()) {
+      LOG.error("Wrong startOffset: " + answerPlaceholder.getRealStartOffset(document) + "; document: "+ file.getPath());
+      return;
+    }
+    replaceAnswerPlaceholder(project,document,answerPlaceholder);
+  }
+  CommandProcessor.getInstance().executeCommand(project,new Runnable(){
+    @Override public void run(){
+      ApplicationManager.getApplication().runWriteAction(new Runnable(){
+        @Override public void run(){
+          FileDocumentManager.getInstance().saveDocument(document);
+        }
+      }
+);
+    }
+  }
+,"Create Student File","Create Student File");
+  document.removeDocumentListener(listener);
 }

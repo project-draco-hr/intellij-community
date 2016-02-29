@@ -1,0 +1,34 @@
+{
+  VirtualFile baseDir=project.getBaseDir();
+  VirtualFile folder=baseDir.findChild(GENERATED_FILES_FOLDER);
+  if (folder != null) {
+    return folder;
+  }
+  final Ref<VirtualFile> generatedRoot=new Ref<>();
+  DumbService.allowStartingDumbModeInside(DumbModePermission.MAY_START_BACKGROUND,new Runnable(){
+    @Override public void run(){
+      ApplicationManager.getApplication().runWriteAction(new Runnable(){
+        @Override public void run(){
+          try {
+            generatedRoot.set(baseDir.createChildDirectory(this,GENERATED_FILES_FOLDER));
+            final ModifiableRootModel model=ModuleRootManager.getInstance(module).getModifiableModel();
+            ContentEntry entry=MarkRootActionBase.findContentEntry(model,generatedRoot.get());
+            if (entry == null) {
+              LOG.info("Failed to find contentEntry for archive folder");
+              return;
+            }
+            entry.addExcludeFolder(generatedRoot.get());
+            model.commit();
+            module.getProject().save();
+          }
+ catch (          IOException e) {
+            LOG.info("Failed to create folder for generated files",e);
+          }
+        }
+      }
+);
+    }
+  }
+);
+  return generatedRoot.get();
+}
