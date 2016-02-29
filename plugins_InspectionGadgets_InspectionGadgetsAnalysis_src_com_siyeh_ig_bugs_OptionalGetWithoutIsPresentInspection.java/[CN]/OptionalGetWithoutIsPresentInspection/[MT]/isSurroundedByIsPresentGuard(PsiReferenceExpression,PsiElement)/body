@@ -9,15 +9,13 @@
       if (condition != null) {
         if (!ControlFlowUtils.statementMayCompleteNormally(ifStatement.getThenBranch())) {
           checker.negate=true;
-          checker.checkExpression(condition);
-          if (checker.hasIsPresentCall()) {
+          if (checker.checkExpression(condition)) {
             return true;
           }
         }
  else         if (!ControlFlowUtils.statementMayCompleteNormally(ifStatement.getElseBranch())) {
           checker.negate=false;
-          checker.checkExpression(condition);
-          if (checker.hasIsPresentCall()) {
+          if (checker.checkExpression(condition)) {
             return true;
           }
         }
@@ -27,9 +25,25 @@
       final PsiAssertStatement assertStatement=(PsiAssertStatement)sibling;
       final PsiExpression condition=assertStatement.getAssertCondition();
       checker.negate=false;
-      checker.checkExpression(condition);
-      if (checker.hasIsPresentCall()) {
+      if (checker.checkExpression(condition)) {
         return true;
+      }
+    }
+ else     if (sibling instanceof PsiExpressionStatement) {
+      final PsiExpressionStatement expressionStatement=(PsiExpressionStatement)sibling;
+      final PsiExpression expression=expressionStatement.getExpression();
+      if (expression instanceof PsiMethodCallExpression) {
+        final PsiMethodCallExpression methodCallExpression=(PsiMethodCallExpression)expression;
+        if (MethodCallUtils.isCallToMethod(methodCallExpression,"org.junit.Assert",PsiType.VOID,"assertTrue",null) || MethodCallUtils.isCallToMethod(methodCallExpression,"junit.framework.Assert",PsiType.VOID,"assertTrue",null) || MethodCallUtils.isCallToMethod(methodCallExpression,"org.testng.Assert",PsiType.VOID,"assertTrue",null)|| MethodCallUtils.isCallToMethod(methodCallExpression,"org.testng.AssertJUnit",PsiType.VOID,"assertTrue",null)) {
+          checker.negate=false;
+          final PsiExpressionList argumentList=methodCallExpression.getArgumentList();
+          final PsiExpression[] arguments=argumentList.getExpressions();
+          for (          PsiExpression argument : arguments) {
+            if (checker.checkExpression(argument)) {
+              return true;
+            }
+          }
+        }
       }
     }
     sibling=PsiTreeUtil.getPrevSiblingOfType(sibling,PsiStatement.class);
