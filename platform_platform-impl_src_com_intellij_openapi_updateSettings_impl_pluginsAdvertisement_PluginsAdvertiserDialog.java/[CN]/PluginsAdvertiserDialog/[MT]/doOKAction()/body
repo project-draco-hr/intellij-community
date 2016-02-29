@@ -5,7 +5,7 @@
     String pluginId=downloader.getPluginId();
     if (!mySkippedPlugins.contains(pluginId)) {
       pluginsToEnable.add(pluginId);
-      if (!PluginManagerCore.getDisabledPlugins().contains(pluginId)) {
+      if (!pluginHelper.isDisabled(pluginId)) {
         final PluginNode pluginNode=PluginDownloader.createPluginNode(null,downloader);
         if (pluginNode != null) {
           nodes.add(pluginNode);
@@ -13,6 +13,26 @@
       }
     }
   }
+  final Set<IdeaPluginDescriptor> disabled=new HashSet<IdeaPluginDescriptor>();
+  final Set<IdeaPluginDescriptor> disabledDependants=new HashSet<IdeaPluginDescriptor>();
+  for (  PluginNode node : nodes) {
+    final PluginId pluginId=node.getPluginId();
+    if (pluginHelper.isDisabled(pluginId)) {
+      disabled.add(node);
+    }
+    final List<PluginId> depends=node.getDepends();
+    if (depends != null) {
+      final Set<PluginId> optionalDeps=new HashSet<PluginId>(Arrays.asList(node.getOptionalDependentPluginIds()));
+      for (      PluginId dependantId : depends) {
+        if (optionalDeps.contains(dependantId))         continue;
+        final IdeaPluginDescriptor pluginDescriptor=PluginManager.getPlugin(dependantId);
+        if (pluginDescriptor != null && pluginHelper.isDisabled(dependantId)) {
+          disabledDependants.add(pluginDescriptor);
+        }
+      }
+    }
+  }
+  suggestToEnableInstalledPlugins(pluginHelper,disabled,disabledDependants,nodes);
   final Runnable notifyRunnable=new Runnable(){
     @Override public void run(){
       PluginManagerMain.notifyPluginsUpdated(myProject);
