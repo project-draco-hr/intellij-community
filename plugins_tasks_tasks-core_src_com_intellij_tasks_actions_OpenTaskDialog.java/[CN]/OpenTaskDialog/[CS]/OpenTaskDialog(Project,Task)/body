@@ -19,7 +19,7 @@
     @Override public void actionPerformed(    ActionEvent e){
       final boolean selected=myUpdateState.isSelected();
       PropertiesComponent.getInstance(project).setValue(UPDATE_STATE_ENABLED,String.valueOf(selected));
-      updateFields(false);
+      updateFields();
       if (selected) {
         myTaskStateCombo.scheduleUpdateOnce();
       }
@@ -28,81 +28,14 @@
 );
   TaskManagerImpl.Config state=taskManager.getState();
   myClearContext.setSelected(state.clearContext);
-  AbstractVcs vcs=taskManager.getActiveVcs();
-  if (vcs == null) {
-    myVcsPanel.setVisible(false);
-  }
- else {
-    ActionListener listener=new ActionListener(){
-      @Override public void actionPerformed(      ActionEvent e){
-        updateFields(false);
-      }
-    }
-;
-    myCreateChangelist.addActionListener(listener);
-    myCreateBranch.addActionListener(listener);
-    myCreateChangelist.setSelected(taskManager.getState().createChangelist);
-    VcsTaskHandler[] handlers=VcsTaskHandler.getAllHandlers(project);
-    if (handlers.length == 0) {
-      myCreateBranch.setSelected(false);
-      myCreateBranch.setVisible(false);
-      myBranchName.setVisible(false);
-      myFromLabel.setVisible(false);
-      myBranchFrom.setVisible(false);
-    }
- else {
-      for (      VcsTaskHandler handler : handlers) {
-        VcsTaskHandler.TaskInfo[] tasks=handler.getAllExistingTasks();
-        if (tasks.length > 0) {
-          myVcsTaskHandler=handler;
-          Arrays.sort(tasks);
-          myBranchFrom.setModel(new DefaultComboBoxModel(tasks));
-          myBranchFrom.setEnabled(true);
-          final String startFrom=PropertiesComponent.getInstance(project).getValue(START_FROM_BRANCH);
-          VcsTaskHandler.TaskInfo info=null;
-          if (startFrom != null) {
-            info=ContainerUtil.find(tasks,new Condition<VcsTaskHandler.TaskInfo>(){
-              @Override public boolean value(              VcsTaskHandler.TaskInfo taskInfo){
-                return startFrom.equals(taskInfo.getName());
-              }
-            }
-);
-          }
-          if (info == null) {
-            VcsTaskHandler.TaskInfo[] current=handler.getCurrentTasks();
-            info=current.length > 0 ? current[0] : tasks[0];
-          }
-          myBranchFrom.setSelectedItem(info);
-          myBranchFrom.addActionListener(new ActionListener(){
-            @Override public void actionPerformed(            ActionEvent e){
-              VcsTaskHandler.TaskInfo item=(VcsTaskHandler.TaskInfo)myBranchFrom.getSelectedItem();
-              if (item != null) {
-                PropertiesComponent.getInstance(project).setValue(START_FROM_BRANCH,item.getName());
-              }
-            }
-          }
-);
-          break;
-        }
-      }
-      myCreateBranch.setSelected(taskManager.getState().createBranch && myBranchFrom.getItemCount() > 0);
-      myBranchFrom.setRenderer(new ColoredListCellRenderer<VcsTaskHandler.TaskInfo>(){
-        @Override protected void customizeCellRenderer(        JList list,        VcsTaskHandler.TaskInfo value,        int index,        boolean selected,        boolean hasFocus){
-          if (value != null) {
-            append(value.getName());
-          }
-        }
-      }
-);
-    }
-    myBranchName.setText(myVcsTaskHandler != null ? myVcsTaskHandler.cleanUpBranchName(taskManager.constructDefaultBranchName(task)) : taskManager.suggestBranchName(task));
-    myChangelistName.setText(taskManager.getChangelistName(task));
-  }
-  updateFields(true);
-  myTaskStateCombo.registerUpDownAction(myBranchName);
-  myTaskStateCombo.registerUpDownAction(myChangelistName);
+  updateFields();
   if (myUpdateState.isSelected()) {
     myTaskStateCombo.scheduleUpdateOnce();
+  }
+  myAdditionalPanel.setLayout(new BoxLayout(myAdditionalPanel,BoxLayout.Y_AXIS));
+  myPanels=TaskDialogPanelProvider.getOpenTaskPanels(project,task);
+  for (  TaskDialogPanel panel : myPanels) {
+    myAdditionalPanel.add(panel.getPanel());
   }
   init();
 }

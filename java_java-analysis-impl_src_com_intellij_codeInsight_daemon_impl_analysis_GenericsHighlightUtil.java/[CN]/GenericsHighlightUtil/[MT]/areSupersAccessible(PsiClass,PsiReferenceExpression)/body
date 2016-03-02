@@ -1,0 +1,37 @@
+{
+  final GlobalSearchScope resolveScope=ref.getResolveScope();
+  final HighlightInfo info=areSupersAccessible(aClass,resolveScope,ref.getTextRange(),false);
+  if (info != null) {
+    return info;
+  }
+  String message=null;
+  final PsiElement parent=ref.getParent();
+  if (parent instanceof PsiMethodCallExpression) {
+    final JavaResolveResult resolveResult=((PsiMethodCallExpression)parent).resolveMethodGenerics();
+    final PsiMethod method=(PsiMethod)resolveResult.getElement();
+    if (method != null) {
+      final HashSet<PsiClass> classes=new HashSet<>();
+      final JavaPsiFacade facade=JavaPsiFacade.getInstance(aClass.getProject());
+      final PsiSubstitutor substitutor=resolveResult.getSubstitutor();
+      message=isSuperTypeAccessible(substitutor.substitute(method.getReturnType()),classes,false,resolveScope,facade);
+      if (message == null) {
+        for (        PsiType type : method.getSignature(substitutor).getParameterTypes()) {
+          message=isSuperTypeAccessible(type,classes,false,resolveScope,facade);
+          if (message != null) {
+            break;
+          }
+        }
+      }
+    }
+  }
+ else {
+    final PsiElement resolve=ref.resolve();
+    if (resolve instanceof PsiField) {
+      message=isSuperTypeAccessible(((PsiField)resolve).getType(),new HashSet<>(),false,resolveScope,JavaPsiFacade.getInstance(aClass.getProject()));
+    }
+  }
+  if (message != null) {
+    return HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).descriptionAndTooltip(message).range(ref.getTextRange()).create();
+  }
+  return null;
+}

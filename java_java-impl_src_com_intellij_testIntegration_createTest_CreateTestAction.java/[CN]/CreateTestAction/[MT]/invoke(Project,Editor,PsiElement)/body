@@ -1,20 +1,23 @@
 {
   final Module srcModule=ModuleUtilCore.findModuleForPsiElement(element);
+  if (srcModule == null)   return;
   final PsiClass srcClass=getContainingClass(element);
   if (srcClass == null)   return;
   PsiDirectory srcDir=element.getContainingFile().getContainingDirectory();
   PsiPackage srcPackage=JavaDirectoryService.getInstance().getPackage(srcDir);
   final PropertiesComponent propertiesComponent=PropertiesComponent.getInstance();
-  final HashSet<VirtualFile> testFolders=new HashSet<VirtualFile>();
-  checkForTestRoots(srcModule,testFolders);
-  if (testFolders.isEmpty() && !propertiesComponent.getBoolean(CREATE_TEST_IN_THE_SAME_ROOT)) {
-    if (Messages.showOkCancelDialog(project,"Create test in the same source root?","No Test Roots Found",Messages.getQuestionIcon()) != Messages.OK) {
-      return;
+  Module testModule=suggestModuleForTests(project,srcModule);
+  final List<VirtualFile> testRootUrls=computeTestRoots(testModule);
+  if (testRootUrls.isEmpty() && computeSuitableTestRootUrls(testModule).isEmpty()) {
+    testModule=srcModule;
+    if (!propertiesComponent.getBoolean(CREATE_TEST_IN_THE_SAME_ROOT)) {
+      if (Messages.showOkCancelDialog(project,"Create test in the same source root?","No Test Roots Found",Messages.getQuestionIcon()) != Messages.OK) {
+        return;
+      }
+      propertiesComponent.setValue(CREATE_TEST_IN_THE_SAME_ROOT,true);
     }
-    propertiesComponent.setValue(CREATE_TEST_IN_THE_SAME_ROOT,true);
   }
-  final Module targetModule=selectTargetModule(project,srcModule,testFolders);
-  final CreateTestDialog d=createTestDialog(project,targetModule,srcClass,srcPackage);
+  final CreateTestDialog d=createTestDialog(project,testModule,srcClass,srcPackage);
   if (!d.showAndGet()) {
     return;
   }

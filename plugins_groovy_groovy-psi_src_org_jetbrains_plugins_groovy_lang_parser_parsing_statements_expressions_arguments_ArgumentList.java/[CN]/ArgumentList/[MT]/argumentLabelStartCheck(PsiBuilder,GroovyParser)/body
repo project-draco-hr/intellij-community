@@ -3,31 +3,47 @@
   if (ParserUtils.lookAhead(builder,GroovyTokenTypes.mSTAR,GroovyTokenTypes.mCOLON)) {
     builder.advanceLexer();
     marker.done(GroovyElementTypes.ARGUMENT_LABEL);
-    return true;
+    return Pair.create(true,null);
   }
   final IElementType type=builder.getTokenType();
   if (ParserUtils.lookAhead(builder,GroovyTokenTypes.mIDENT,GroovyTokenTypes.mCOLON) || TokenSets.KEYWORDS.contains(type) || GroovyTokenTypes.mSTRING_LITERAL.equals(type)|| GroovyTokenTypes.mGSTRING_LITERAL.equals(type)) {
     builder.advanceLexer();
     if (GroovyTokenTypes.mCOLON.equals(builder.getTokenType())) {
       marker.done(GroovyElementTypes.ARGUMENT_LABEL);
-      return true;
+      return Pair.create(true,null);
     }
  else {
       marker.rollbackTo();
-      return false;
+      return Pair.create(false,false);
     }
   }
   if (GroovyTokenTypes.mGSTRING_BEGIN.equals(type) || GroovyTokenTypes.mREGEX_BEGIN.equals(type) || GroovyTokenTypes.mDOLLAR_SLASH_REGEX_BEGIN.equals(type)|| TokenSets.NUMBERS.contains(type)|| GroovyTokenTypes.mLBRACK.equals(type)|| GroovyTokenTypes.mLPAREN.equals(type)|| GroovyTokenTypes.mLCURLY.equals(type)) {
-    PrimaryExpression.parsePrimaryExpression(builder,parser);
-    if (GroovyTokenTypes.mCOLON.equals(builder.getTokenType())) {
-      marker.done(GroovyElementTypes.ARGUMENT_LABEL);
-      return true;
+    PsiBuilder.Marker label=builder.mark();
+    if (AssignmentExpression.parse(builder,parser)) {
+      if (GroovyTokenTypes.mCOLON.equals(builder.getTokenType())) {
+        label.done(GroovyElementTypes.ARGUMENT_LABEL);
+        ParserUtils.getToken(builder,GroovyTokenTypes.mCOLON,GroovyBundle.message("colon.expected"));
+        if (AssignmentExpression.parse(builder,parser)) {
+          marker.done(GroovyElementTypes.NAMED_ARGUMENT);
+        }
+ else {
+          builder.error(GroovyBundle.message("expression.expected"));
+          marker.drop();
+        }
+      }
+ else {
+        label.drop();
+        marker.drop();
+      }
+      return Pair.create(false,true);
     }
  else {
+      label.drop();
       marker.rollbackTo();
-      return false;
     }
   }
-  marker.drop();
-  return false;
+ else {
+    marker.drop();
+  }
+  return Pair.create(false,false);
 }
