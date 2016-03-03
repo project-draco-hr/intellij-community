@@ -1,33 +1,23 @@
 {
-  final Runnable action=new Runnable(){
-    public void run(){
-      delegateCommitToVcsThread(processor);
-    }
-  }
-;
-  if (myForceSyncCommit) {
-    ProgressManager.getInstance().runProcessWithProgressSynchronously(action,myActionName,true,myProject);
-    boolean success=doesntContainErrors(processor.getVcsExceptions());
-    if (success) {
-      reportResult(processor);
-    }
-    return success;
-  }
- else {
-    Task.Backgroundable task=new Task.Backgroundable(myProject,myActionName,true,myConfiguration.getCommitOption()){
-      public void run(      @NotNull final ProgressIndicator indicator){
-        final ProjectLevelVcsManager vcsManager=ProjectLevelVcsManager.getInstance(myProject);
-        vcsManager.startBackgroundVcsOperation();
-        try {
-          action.run();
-        }
+  Task.Backgroundable task=new Task.Backgroundable(myProject,myActionName,true,myConfiguration.getCommitOption()){
+    public void run(    @NotNull final ProgressIndicator indicator){
+      final ProjectLevelVcsManager vcsManager=ProjectLevelVcsManager.getInstance(myProject);
+      vcsManager.startBackgroundVcsOperation();
+      try {
+        delegateCommitToVcsThread(processor);
+      }
   finally {
-          vcsManager.stopBackgroundVcsOperation();
-        }
+        vcsManager.stopBackgroundVcsOperation();
       }
     }
-;
-    ProgressManager.getInstance().run(task);
-    return false;
+    @Override public boolean shouldStartInBackground(){
+      return !myForceSyncCommit && super.shouldStartInBackground();
+    }
+    @Override public boolean isConditionalModal(){
+      return myForceSyncCommit;
+    }
   }
+;
+  ProgressManager.getInstance().run(task);
+  return doesntContainErrors(processor.getVcsExceptions());
 }

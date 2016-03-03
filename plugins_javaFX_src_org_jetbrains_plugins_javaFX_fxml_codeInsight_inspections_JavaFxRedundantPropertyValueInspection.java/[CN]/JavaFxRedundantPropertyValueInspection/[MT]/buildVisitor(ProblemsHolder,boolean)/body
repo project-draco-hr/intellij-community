@@ -1,0 +1,41 @@
+{
+  return new XmlElementVisitor(){
+    @Override public void visitXmlFile(    XmlFile file){
+      if (!JavaFxFileTypeFactory.isFxml(file))       return;
+      super.visitXmlFile(file);
+    }
+    @Override public void visitXmlAttribute(    XmlAttribute attribute){
+      super.visitXmlAttribute(attribute);
+      final XmlAttributeDescriptor descriptor=attribute.getDescriptor();
+      if (!(descriptor instanceof JavaFxPropertyAttributeDescriptor))       return;
+      final String attributeName=attribute.getName();
+      final String attributeValue=attribute.getValue();
+      if (attributeValue == null || attributeValue.startsWith("$") || attributeValue.startsWith("#") || attributeValue.startsWith("%") || FxmlConstants.FX_ID.equals(attributeName) || FxmlConstants.FX_CONTROLLER.equals(attributeName)) {
+        return;
+      }
+      final Object defaultValue=getDefaultValue(attributeName,attribute.getParent());
+      if (defaultValue == null)       return;
+      if (isEqualValue(attributeValue,defaultValue)) {
+        holder.registerProblem(attribute,"Attribute is redundant because it contains default value",ProblemHighlightType.GENERIC_ERROR_OR_WARNING,new RemoveAttributeIntentionFix(attributeName,attribute));
+      }
+    }
+    @Override public void visitXmlTag(    XmlTag tag){
+      super.visitXmlTag(tag);
+      final XmlElementDescriptor descriptor=tag.getDescriptor();
+      if (!(descriptor instanceof JavaFxPropertyElementDescriptor) && !(descriptor instanceof JavaFxClassBackedElementDescriptor)) {
+        return;
+      }
+      if (tag.getSubTags().length != 0)       return;
+      final String tagText=tag.getValue().getText().trim();
+      if (tagText.startsWith("$") || tagText.startsWith("#") || tagText.startsWith("%")) {
+        return;
+      }
+      final Object defaultValue=getDefaultValue(tag.getName(),tag.getParentTag());
+      if (defaultValue == null)       return;
+      if (isEqualValue(tagText,defaultValue)) {
+        holder.registerProblem(tag,"Tag is redundant because it contains default value",ProblemHighlightType.GENERIC_ERROR_OR_WARNING,new RemoveTagFix(tag.getName()));
+      }
+    }
+  }
+;
+}

@@ -2,26 +2,16 @@
   if (req.leftElem != req.rightElem) {
     final PsiElement parent=req.rightElem.getParent();
     if ((req.leftElem.getParent() == parent && parent instanceof PyStringLiteralExpression) || (req.leftExpr instanceof PyStringLiteralExpression && req.rightExpr instanceof PyStringLiteralExpression)) {
-      final CharSequence text=req.document.getCharsSequence();
       final StringNodeInfo leftNodeInfo=new StringNodeInfo(req.leftElem);
       final StringNodeInfo rightNodeInfo=new StringNodeInfo(req.rightElem);
       if (leftNodeInfo.isTerminated() && rightNodeInfo.isTerminated()) {
-        final int rightNodeContentOffset=rightNodeInfo.getContentRange().getStartOffset();
+        int quotesMaxLength=Math.max(leftNodeInfo.getQuote().length(),rightNodeInfo.getQuote().length());
+        int stringToJoinMaxLength=getStringToJoinMaxLength(req,quotesMaxLength);
+        final String replacement=findReplacement(rightNodeInfo.getContent(),stringToJoinMaxLength);
         if (leftNodeInfo.equals(rightNodeInfo)) {
-          return new Result("",0,leftNodeInfo.getQuote().length(),rightNodeContentOffset);
+          return getResultAndSplitStringIfTooLong(req,leftNodeInfo,rightNodeInfo,replacement,leftNodeInfo.getQuote());
         }
-        if (haveSamePrefixes(leftNodeInfo,rightNodeInfo) && !leftNodeInfo.isTripleQuoted() && !rightNodeInfo.isTripleQuoted()) {
-          if (!rightNodeInfo.getContent().contains(leftNodeInfo.getQuote())) {
-            final int quotePos=rightNodeInfo.getAbsoluteContentRange().getEndOffset();
-            req.document.replaceString(quotePos,quotePos + 1,leftNodeInfo.getQuote());
-            return new Result("",0,1,rightNodeContentOffset);
-          }
- else           if (!leftNodeInfo.getContent().contains(rightNodeInfo.getQuote())) {
-            final int quotePos=leftNodeInfo.getAbsoluteContentRange().getStartOffset() - 1;
-            req.document.replaceString(quotePos,quotePos + 1,rightNodeInfo.getQuote());
-            return new Result("",0,1,rightNodeContentOffset);
-          }
-        }
+        return processStringsWithDifferentQuotes(req,leftNodeInfo,rightNodeInfo,replacement);
       }
     }
   }
