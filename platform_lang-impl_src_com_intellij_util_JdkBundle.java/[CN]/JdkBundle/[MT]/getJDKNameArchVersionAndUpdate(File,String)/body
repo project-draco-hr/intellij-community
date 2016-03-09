@@ -2,16 +2,18 @@
   GeneralCommandLine commandLine=new GeneralCommandLine().withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.NONE);
   commandLine.setExePath(new File(jvm,homeSubPath + File.separator + "jre"+ File.separator+ "bin"+ File.separator+ "java").getAbsolutePath());
   commandLine.addParameter("-version");
-  String displayVersion=null;
+  String displayVersion;
+  Boolean is64Bit=null;
   Pair<Version,Integer> versionAndUpdate=null;
+  List<String> outputLines=null;
   try {
-    displayVersion=ExecUtil.readFirstLine(commandLine.createProcess().getErrorStream(),null);
+    outputLines=ExecUtil.execAndGetOutput(commandLine).getStderrLines();
   }
  catch (  ExecutionException e) {
     if (SystemInfo.isMac) {
       commandLine.setExePath(new File(jvm,homeSubPath + File.separator + "bin"+ File.separator+ "java").getAbsolutePath());
       try {
-        displayVersion=ExecUtil.readFirstLine(commandLine.createProcess().getErrorStream(),null);
+        outputLines=ExecUtil.execAndGetOutput(commandLine).getStderrLines();
       }
  catch (      ExecutionException e1) {
         LOG.debug(e);
@@ -19,12 +21,17 @@
     }
     LOG.debug(e);
   }
-  if (displayVersion != null) {
-    versionAndUpdate=VersionUtil.parseVersionAndUpdate(displayVersion,VERSION_UPDATE_PATTERNS);
-    displayVersion=displayVersion.replaceFirst("\".*\"","");
+  if (outputLines != null && outputLines.size() >= 1) {
+    String versionLine=outputLines.get(0);
+    versionAndUpdate=VersionUtil.parseVersionAndUpdate(versionLine,VERSION_UPDATE_PATTERNS);
+    displayVersion=versionLine.replaceFirst("\".*\"","");
+    if (outputLines.size() >= 3) {
+      String archLine=outputLines.get(2);
+      is64Bit=ARCH_64_BIT_PATTERN.matcher(archLine).find();
+    }
   }
  else {
     displayVersion=jvm.getName();
   }
-  return Pair.create(displayVersion,versionAndUpdate);
+  return Pair.create(Pair.create(displayVersion,is64Bit),versionAndUpdate);
 }
