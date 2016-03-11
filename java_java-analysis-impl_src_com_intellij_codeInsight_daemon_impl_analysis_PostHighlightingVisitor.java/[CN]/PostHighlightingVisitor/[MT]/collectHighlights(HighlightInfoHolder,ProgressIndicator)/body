@@ -1,0 +1,48 @@
+{
+  DaemonCodeAnalyzerEx daemonCodeAnalyzer=DaemonCodeAnalyzerEx.getInstanceEx(myProject);
+  FileStatusMap fileStatusMap=daemonCodeAnalyzer.getFileStatusMap();
+  InspectionProfile profile=InspectionProjectProfileManager.getInstance(myProject).getInspectionProfile();
+  boolean unusedSymbolEnabled=profile.isToolEnabled(myDeadCodeKey,myFile);
+  GlobalUsageHelper globalUsageHelper=myRefCountHolder.getGlobalUsageHelper(myFile,myDeadCodeInspection,unusedSymbolEnabled);
+  boolean errorFound=false;
+  if (unusedSymbolEnabled) {
+    final FileViewProvider viewProvider=myFile.getViewProvider();
+    final Set<Language> relevantLanguages=viewProvider.getLanguages();
+    for (    Language language : relevantLanguages) {
+      progress.checkCanceled();
+      PsiElement psiRoot=viewProvider.getPsi(language);
+      if (!HighlightingLevelManager.getInstance(myProject).shouldHighlight(psiRoot))       continue;
+      List<PsiElement> elements=CollectHighlightsUtil.getElementsInRange(psiRoot,0,myFile.getTextLength());
+      for (      PsiElement element : elements) {
+        progress.checkCanceled();
+        if (element instanceof PsiIdentifier) {
+          PsiIdentifier identifier=(PsiIdentifier)element;
+          HighlightInfo info=processIdentifier(identifier,progress,globalUsageHelper);
+          if (info != null) {
+            errorFound|=info.getSeverity() == HighlightSeverity.ERROR;
+            result.add(info);
+          }
+        }
+      }
+    }
+  }
+  HighlightDisplayKey unusedImportKey=HighlightDisplayKey.find(UnusedImportLocalInspection.SHORT_NAME);
+  if (isUnusedImportEnabled(unusedImportKey)) {
+    PsiImportList importList=((PsiJavaFile)myFile).getImportList();
+    if (importList != null) {
+      final PsiImportStatementBase[] imports=importList.getAllImportStatements();
+      for (      PsiImportStatementBase statement : imports) {
+        progress.checkCanceled();
+        final HighlightInfo info=processImport(statement,unusedImportKey);
+        if (info != null) {
+          errorFound|=info.getSeverity() == HighlightSeverity.ERROR;
+          result.add(info);
+        }
+      }
+    }
+  }
+  if (errorFound) {
+    fileStatusMap.setErrorFoundFlag(myProject,myDocument,true);
+  }
+  optimizeImportsOnTheFlyLater(progress);
+}
