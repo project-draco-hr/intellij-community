@@ -1,0 +1,36 @@
+{
+  if (parameters.getInvocationCount() == 0 && !parameters.getOriginalFile().getUserData(TextCompletionUtil.AUTO_POPUP_KEY)) {
+    return;
+  }
+  Collection<T> items=getItems(prefix,true,parameters);
+  addCompletionElements(result,this,items,-10000);
+  final ProgressManager progressManager=ProgressManager.getInstance();
+  ProgressIndicator mainIndicator=progressManager.getProgressIndicator();
+  final ProgressIndicator indicator=mainIndicator != null ? new SensitiveProgressWrapper(mainIndicator) : new EmptyProgressIndicator();
+  Future<Collection<T>> future=ApplicationManager.getApplication().executeOnPooledThread(new Callable<Collection<T>>(){
+    @Override public Collection<T> call(){
+      return progressManager.runProcess(new Computable<Collection<T>>(){
+        @Override public Collection<T> compute(){
+          return getItems(prefix,false,parameters);
+        }
+      }
+,indicator);
+    }
+  }
+);
+  while (true) {
+    try {
+      Collection<T> tasks=future.get(100,TimeUnit.MILLISECONDS);
+      if (tasks != null) {
+        addCompletionElements(result,this,tasks,0);
+        return;
+      }
+    }
+ catch (    ProcessCanceledException e) {
+      throw e;
+    }
+catch (    Exception ignore) {
+    }
+    ProgressManager.checkCanceled();
+  }
+}
