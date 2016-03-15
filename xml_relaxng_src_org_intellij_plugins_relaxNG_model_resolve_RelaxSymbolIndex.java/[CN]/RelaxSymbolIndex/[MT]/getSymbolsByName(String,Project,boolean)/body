@@ -1,6 +1,25 @@
 {
   final GlobalSearchScope scope=includeNonProjectItems ? GlobalSearchScope.allScope(project) : GlobalSearchScope.projectScope(project);
-  final SymbolCollector processor=new SymbolCollector(name,project,scope);
-  FileBasedIndex.getInstance().processValues(NAME,name,null,processor,scope);
-  return processor.getResult();
+  final Collection<NavigationItem> result=new ArrayList<NavigationItem>();
+  PsiManager psiManager=PsiManager.getInstance(project);
+  for (  VirtualFile file : FileBasedIndex.getInstance().getContainingFiles(NAME,name,scope)) {
+    final PsiFile psiFile=psiManager.findFile(file);
+    if (psiFile instanceof XmlFile) {
+      final Grammar grammar=GrammarFactory.getGrammar((XmlFile)psiFile);
+      if (grammar != null) {
+        grammar.acceptChildren(new CommonElement.Visitor(){
+          @Override public void visitDefine(          Define define){
+            if (name.equals(define.getName())) {
+              final PsiElement psi=define.getPsiElement();
+              if (psi != null) {
+                MyNavigationItem.add((NavigationItem)define.getPsiElement(),result);
+              }
+            }
+          }
+        }
+);
+      }
+    }
+  }
+  return result.toArray(new NavigationItem[result.size()]);
 }
