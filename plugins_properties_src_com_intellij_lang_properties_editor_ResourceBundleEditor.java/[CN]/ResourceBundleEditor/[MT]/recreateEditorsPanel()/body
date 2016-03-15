@@ -19,7 +19,7 @@
   Editor previousEditor=null;
   Editor firstEditor=null;
   for (  final PropertiesFile propertiesFile : propertiesFiles) {
-    final Editor editor=createEditor();
+    final EditorEx editor=createEditor();
     final Editor oldEditor=myEditors.put(propertiesFile,editor);
     if (firstEditor == null) {
       firstEditor=editor;
@@ -32,19 +32,21 @@
     if (oldEditor != null) {
       EditorFactory.getInstance().releaseEditor(oldEditor);
     }
-    final Boolean[] isViewer=new Boolean[1];
-    ((EditorEx)editor).addFocusListener(new FocusChangeListener(){
-      @Override public void focusGained(      final Editor editor){
-        mySelectedEditor=editor;
-        final EditorEx editorEx=(EditorEx)editor;
-        if (isViewer[0] == null) {
-          final boolean readOnly=ReadonlyStatusHandler.getInstance(myProject).ensureFilesWritable(propertiesFile.getVirtualFile()).hasReadonlyFiles();
-          editorEx.setViewer(readOnly);
-          isViewer[0]=readOnly;
+    editor.setViewer(!propertiesFile.getVirtualFile().isWritable());
+    editor.getContentComponent().addKeyListener(new KeyAdapter(){
+      @Override public void keyTyped(      KeyEvent e){
+        if (editor.isViewer()) {
+          editor.setViewer(ReadonlyStatusHandler.getInstance(myProject).ensureFilesWritable(propertiesFile.getVirtualFile()).hasReadonlyFiles());
         }
       }
-      @Override public void focusLost(      final Editor eventEditor){
-        if (Boolean.FALSE.equals(isViewer[0]) && propertiesFile.getContainingFile().isValid()) {
+    }
+);
+    editor.addFocusListener(new FocusChangeListener(){
+      @Override public void focusGained(      final Editor editor){
+        mySelectedEditor=editor;
+      }
+      @Override public void focusLost(      final Editor editor){
+        if (!editor.isViewer() && propertiesFile.getContainingFile().isValid()) {
           writeEditorPropertyValue(null,editor,propertiesFile);
         }
       }
