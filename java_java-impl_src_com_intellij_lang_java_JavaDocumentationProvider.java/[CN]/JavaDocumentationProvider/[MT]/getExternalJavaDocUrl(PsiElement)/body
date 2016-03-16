@@ -1,14 +1,17 @@
 {
+  LOG.assertTrue(ApplicationManager.getApplication().isUnitTestMode() || !ApplicationManager.getApplication().isDispatchThread());
   List<String> urls=null;
   if (element instanceof PsiClass) {
-    urls=findUrlForClass((PsiClass)element);
+    ClassInfo info=findUrlForClass((PsiClass)element);
+    urls=info == null ? null : info.docUrls;
   }
  else   if (element instanceof PsiField) {
     PsiField field=(PsiField)element;
     PsiClass aClass=field.getContainingClass();
     if (aClass != null) {
-      urls=findUrlForClass(aClass);
-      if (urls != null) {
+      ClassInfo info=findUrlForClass(aClass);
+      if (info != null) {
+        urls=info.docUrls;
         for (int i=0; i < urls.size(); i++) {
           urls.set(i,urls.get(i) + "#" + field.getName());
         }
@@ -19,15 +22,13 @@
     PsiMethod method=(PsiMethod)element;
     PsiClass aClass=method.getContainingClass();
     if (aClass != null) {
-      List<String> classUrls=findUrlForClass(aClass);
-      if (classUrls != null) {
+      ClassInfo info=findUrlForClass(aClass);
+      if (info != null) {
         urls=ContainerUtil.newSmartList();
-        final boolean useJava8Format=PsiUtil.isLanguageLevel8OrHigher(method);
-        final Set<String> signatures=getHtmlMethodSignatures(method,useJava8Format);
-        for (        String signature : signatures) {
-          for (          String classUrl : classUrls) {
-            urls.add(classUrl + "#" + signature);
-          }
+        for (        String classUrl : info.docUrls) {
+          LanguageLevel languageLevel=info.isInJdk ? PsiUtil.getLanguageLevel(method) : detectLanguageLevel(classUrl);
+          String signature=formatMethodSignature(method,languageLevel.isAtLeast(LanguageLevel.JDK_1_5),languageLevel.isAtLeast(LanguageLevel.JDK_1_8));
+          urls.add(classUrl + "#" + signature);
         }
       }
     }

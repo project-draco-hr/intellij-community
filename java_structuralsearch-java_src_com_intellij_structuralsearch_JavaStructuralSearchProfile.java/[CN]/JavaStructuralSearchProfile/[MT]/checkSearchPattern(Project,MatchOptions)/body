@@ -27,8 +27,28 @@ class ValidatingVisitor extends JavaRecursiveElementWalkingVisitor {
     }
     @Override public void visitErrorElement(    PsiErrorElement element){
       super.visitErrorElement(element);
+      final PsiElement parent=element.getParent();
+      final String errorDescription=element.getErrorDescription();
+      if (parent instanceof PsiClass && "Identifier expected".equals(errorDescription)) {
+        return;
+      }
+      if (parent instanceof PsiTryStatement && "'catch' or 'finally' expected".equals(errorDescription)) {
+        return;
+      }
+      if (parent == myCurrent) {
+        if ("';' expected".equals(errorDescription)) {
+          return;
+        }
+        if ("Identifier or type expected".equals(errorDescription)) {
+          return;
+        }
+        if ("Identifier expected".equals(errorDescription)) {
+          return;
+        }
+      }
+      throw new MalformedPatternException(errorDescription);
     }
-    public void setCurrent(    PsiElement current){
+    void setCurrent(    PsiElement current){
       myCurrent=current;
     }
   }
@@ -38,7 +58,7 @@ class ValidatingVisitor extends JavaRecursiveElementWalkingVisitor {
   final NodeIterator nodes=compiledPattern.getNodes();
   while (nodes.hasNext()) {
     final PsiElement current=nodes.current();
-    visitor.setCurrent(nodeCount == 1 && current instanceof PsiExpressionStatement ? current : null);
+    visitor.setCurrent((nodeCount == 1 && (current instanceof PsiExpressionStatement || current instanceof PsiDeclarationStatement)) ? current : null);
     current.accept(visitor);
     nodes.advance();
   }
