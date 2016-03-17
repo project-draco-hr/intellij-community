@@ -1,0 +1,45 @@
+{
+  final Project project=method.getProject();
+  final JavaPsiFacade psiFacade=JavaPsiFacade.getInstance(project);
+  PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
+  String packageName;
+  if (myContainingClass != null) {
+    packageName=myContainingClass.getQualifiedName();
+    if (packageName == null) {
+      packageName=myContainingClass.getName();
+    }
+  }
+ else {
+    packageName=this.packageName;
+  }
+  String text=StringUtil.getQualifiedName(packageName,className);
+  if (!typeParams.isEmpty()) {
+    text+="<" + StringUtil.join(typeParams,new Function<PsiTypeParameter,String>(){
+      @Override public String fun(      PsiTypeParameter parameter){
+        return parameter.getName();
+      }
+    }
+,", ") + ">";
+  }
+  final PsiType classType=factory.createTypeFromText(text,method);
+  final List<ParameterInfoImpl> parametersInfo=new ArrayList<ParameterInfoImpl>();
+  final ParameterInfoImpl mergedParamInfo=new ParameterInfoImpl(-1,parameterName,classType,null){
+    @Override public PsiExpression getValue(    final PsiCallExpression expr) throws IncorrectOperationException {
+      return (PsiExpression)JavaCodeStyleManager.getInstance(project).shortenClassReferences(psiFacade.getElementFactory().createExpressionFromText(getMergedParam(expr),expr));
+    }
+  }
+;
+  int firstIncludedIdx=-1;
+  final PsiParameter[] parameters=method.getParameterList().getParameters();
+  for (int i=0; i < parameters.length; i++) {
+    if (!isParameterToMerge(i)) {
+      parametersInfo.add(new ParameterInfoImpl(i,parameters[i].getName(),parameters[i].getType()));
+    }
+ else     if (firstIncludedIdx == -1) {
+      firstIncludedIdx=i;
+    }
+  }
+  parametersInfo.add(firstIncludedIdx == -1 ? 0 : firstIncludedIdx,mergedParamInfo);
+  PsiType returnType=method.getReturnType();
+  return new JavaChangeInfoImpl(VisibilityUtil.getVisibilityModifier(method.getModifierList()),method,method.getName(),returnType != null ? CanonicalTypes.createTypeWrapper(returnType) : null,parametersInfo.toArray(new ParameterInfoImpl[parametersInfo.size()]),null,myKeepMethodAsDelegate,Collections.emptySet(),Collections.emptySet());
+}
