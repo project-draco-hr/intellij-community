@@ -1,0 +1,33 @@
+{
+  if (left == null || right == null)   return true;
+  final PsiClassType.ClassResolveResult leftResolveResult=left.resolveGenerics();
+  final PsiClassType.ClassResolveResult rightResolveResult=right.resolveGenerics();
+  final PsiClass leftClass=leftResolveResult.getElement();
+  final PsiClass rightClass=rightResolveResult.getElement();
+  if (leftClass == null || rightClass == null || leftClass instanceof PsiTypeParameter || rightClass instanceof PsiTypeParameter) {
+    return true;
+  }
+  if (leftClass.getManager().areElementsEquivalent(leftClass,rightClass)) {
+    if (!leftClass.hasTypeParameters())     return true;
+    final PsiSubstitutor leftSubstitutor=leftResolveResult.getSubstitutor();
+    final PsiSubstitutor rightSubstitutor=rightResolveResult.getSubstitutor();
+    final PsiTypeParameter[] typeParameters=leftClass.getTypeParameters();
+    for (    PsiTypeParameter typeParameter : typeParameters) {
+      final PsiType leftParameter=leftSubstitutor.substitute(typeParameter);
+      if (leftParameter == null || leftParameter instanceof PsiTypeParameter)       continue;
+      final PsiType rightParameter=rightSubstitutor.substitute(typeParameter);
+      if (rightParameter == null || rightParameter instanceof PsiTypeParameter)       continue;
+      final PsiClassType leftParameterClass=getBoundClassType(leftParameter,true);
+      final PsiClassType rightParameterClass=getBoundClassType(rightParameter,false);
+      if (!isAssignableFromIgnoringUnresolved(leftParameterClass,rightParameterClass)) {
+        return false;
+      }
+    }
+    return true;
+  }
+ else   if (leftClass.isInheritor(rightClass,true)) {
+    final PsiType rightSubstitute=leftResolveResult.getSubstitutor().substitute(right);
+    return rightSubstitute.isAssignableFrom(left);
+  }
+  return false;
+}

@@ -1,0 +1,37 @@
+{
+  final XmlTag xmlTag=attribute.getParent();
+  final XmlElementDescriptor descriptor=xmlTag.getDescriptor();
+  if (descriptor == null)   return null;
+  final PsiElement declaration=descriptor.getDeclaration();
+  if (!(declaration instanceof PsiClass))   return null;
+  final PsiClass tagClass=(PsiClass)declaration;
+  final String handlerSetterName=PropertyUtil.suggestSetterName(attribute.getName());
+  final PsiMethod[] handlerSetterCandidates=tagClass.findMethodsByName(handlerSetterName,true);
+  if (handlerSetterCandidates.length == 0)   return null;
+  final Project project=attribute.getProject();
+  final PsiClass javaFxEventHandlerClass=JavaPsiFacade.getInstance(project).findClass(JavaFxCommonNames.JAVAFX_EVENT_EVENT_HANDLER,GlobalSearchScope.allScope(project));
+  if (javaFxEventHandlerClass != null) {
+    final PsiTypeParameter[] typeParameters=javaFxEventHandlerClass.getTypeParameters();
+    if (typeParameters.length == 1) {
+      final PsiTypeParameter javaFxEventHandlerTypeParameter=typeParameters[0];
+      final PsiSubstitutor tagClassSubstitutor=JavaFxPsiUtil.getTagClassSubstitutor(xmlTag,tagClass,controllerClass);
+      for (      PsiMethod handlerSetter : handlerSetterCandidates) {
+        if (handlerSetter.hasModifierProperty(PsiModifier.STATIC) || !handlerSetter.hasModifierProperty(PsiModifier.PUBLIC))         continue;
+        final PsiParameter[] parameters=handlerSetter.getParameterList().getParameters();
+        if (parameters.length == 1) {
+          PsiType handlerParameterType=parameters[0].getType();
+          if (tagClassSubstitutor != null) {
+            handlerParameterType=tagClassSubstitutor.substitute(handlerParameterType);
+          }
+          if (handlerParameterType instanceof PsiClassType && InheritanceUtil.isInheritorOrSelf(((PsiClassType)handlerParameterType).resolve(),javaFxEventHandlerClass,true)) {
+            final PsiClassType.ClassResolveResult resolveResult=((PsiClassType)handlerParameterType).resolveGenerics();
+            final PsiType eventType=resolveResult.getSubstitutor().substitute(javaFxEventHandlerTypeParameter);
+            PsiClassType eventClassType=getBoundClassType(eventType,true);
+            if (eventClassType != null)             return eventClassType;
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
