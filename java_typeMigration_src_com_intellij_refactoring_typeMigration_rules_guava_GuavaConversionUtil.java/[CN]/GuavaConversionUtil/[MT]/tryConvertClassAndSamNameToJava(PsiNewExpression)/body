@@ -1,0 +1,31 @@
+{
+  final GuavaLambda lambda=GuavaLambda.findFor(expression.getType());
+  if (lambda == null)   return expression;
+  final PsiAnonymousClass aClass=expression.getAnonymousClass();
+  LOG.assertTrue(aClass != null);
+  final PsiElementFactory factory=JavaPsiFacade.getElementFactory(expression.getProject());
+  if (!lambda.getSamName().equals(lambda.getJavaAnalogueSamName())) {
+    boolean isFound=false;
+    for (    PsiMethod method : aClass.findMethodsByName(lambda.getSamName(),false)) {
+      if (method.getParameterList().getParametersCount() == lambda.getParametersCount()) {
+        for (        PsiMethod psiMethod : method.findSuperMethods()) {
+          final PsiClass superMethodContainingClass=psiMethod.getContainingClass();
+          if (superMethodContainingClass != null && lambda.getClassQName().equals(superMethodContainingClass.getQualifiedName())) {
+            final PsiIdentifier methodNameIdentifier=method.getNameIdentifier();
+            LOG.assertTrue(methodNameIdentifier != null);
+            methodNameIdentifier.replace(factory.createIdentifier(lambda.getJavaAnalogueSamName()));
+            isFound=true;
+            break;
+          }
+        }
+      }
+      if (isFound)       break;
+    }
+  }
+  final PsiElement currentClassName=aClass.getBaseClassReference().getReferenceNameElement();
+  if (currentClassName != null) {
+    final PsiElement newNameElement=factory.createReferenceFromText(lambda.getJavaAnalogueClassQName(),null);
+    currentClassName.replace(newNameElement);
+  }
+  return (PsiExpression)expression.replace(factory.createExpressionFromText(expression.getText(),null));
+}
