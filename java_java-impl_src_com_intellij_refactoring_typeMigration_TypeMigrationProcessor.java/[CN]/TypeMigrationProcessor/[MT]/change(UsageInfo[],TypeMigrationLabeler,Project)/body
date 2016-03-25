@@ -1,0 +1,43 @@
+{
+  final List<SmartPsiElementPointer<PsiNewExpression>> newExpressionsToCheckDiamonds=new SmartList<>();
+  final TypeMigrationLabeler.MigrationProducer producer=labeler.createMigratorFor(usages);
+  final SmartPointerManager smartPointerManager=SmartPointerManager.getInstance(project);
+  List<UsageInfo> nonCodeUsages=new ArrayList<UsageInfo>();
+  for (  UsageInfo usage : usages) {
+    if (((TypeMigrationUsageInfo)usage).isExcluded())     continue;
+    final PsiElement element=usage.getElement();
+    if (element instanceof PsiVariable || element instanceof PsiMember || element instanceof PsiExpression|| element instanceof PsiReferenceParameterList) {
+      producer.change((TypeMigrationUsageInfo)usage,new Consumer<PsiNewExpression>(){
+        @Override public void consume(        @NotNull PsiNewExpression expression){
+          newExpressionsToCheckDiamonds.add(smartPointerManager.createSmartPsiElementPointer(expression));
+        }
+      }
+);
+    }
+ else {
+      nonCodeUsages.add(usage);
+    }
+  }
+  for (  SmartPsiElementPointer<PsiNewExpression> newExpressionPointer : newExpressionsToCheckDiamonds) {
+    final PsiNewExpression newExpression=newExpressionPointer.getElement();
+    if (newExpression != null) {
+      labeler.postProcessNewExpression(newExpression);
+    }
+  }
+  for (  UsageInfo usageInfo : nonCodeUsages) {
+    final PsiElement element=usageInfo.getElement();
+    if (element != null) {
+      final PsiReference reference=element.getReference();
+      if (reference != null) {
+        final Object target=producer.getConversion(usageInfo);
+        if (target instanceof PsiMember) {
+          try {
+            reference.bindToElement((PsiElement)target);
+          }
+ catch (          IncorrectOperationException ignored) {
+          }
+        }
+      }
+    }
+  }
+}

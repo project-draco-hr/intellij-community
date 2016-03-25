@@ -1,0 +1,38 @@
+{
+  VfsUtilCore.visitChildrenRecursively(from,new VirtualFileVisitor(VirtualFileVisitor.NO_FOLLOW_SYMLINKS){
+    @NotNull @Override public Result visitFileEx(    @NotNull VirtualFile file){
+      try {
+        return visitImpl(file);
+      }
+ catch (      IOException e) {
+        throw new VisitorException(e);
+      }
+    }
+    Result visitImpl(    @NotNull VirtualFile file) throws IOException {
+      File child=new File(to,FileUtil.toSystemDependentName(ObjectUtils.notNull(VfsUtilCore.getRelativePath(file,from))));
+      if (child.exists() && child.isDirectory() != file.isDirectory()) {
+        renameToBackupCopy(child);
+      }
+      File dir=file.isDirectory() ? child : child.getParentFile();
+      if (!dir.exists() && !dir.mkdirs()) {
+        LOG.warn("Failed to create dir: " + dir.getPath());
+        return SKIP_CHILDREN;
+      }
+      if (file.isDirectory())       return CONTINUE;
+      if (file.getFileType().isBinary())       return CONTINUE;
+      if (file.getLength() > FileUtilRt.LARGE_FOR_CONTENT_LOADING)       return CONTINUE;
+      String newText=FileUtil.loadTextAndClose(file.getInputStream());
+      String oldText=child.exists() ? FileUtil.loadFile(child) : "";
+      String newHash=hash(newText);
+      String oldHash=hash(oldText);
+      boolean upToDate=oldHash != null && newHash != null && StringUtil.equals(oldHash,newHash);
+      if (upToDate)       return CONTINUE;
+      if (child.exists()) {
+        renameToBackupCopy(child);
+      }
+      FileUtil.writeToFile(child,newText);
+      return CONTINUE;
+    }
+  }
+,IOException.class);
+}

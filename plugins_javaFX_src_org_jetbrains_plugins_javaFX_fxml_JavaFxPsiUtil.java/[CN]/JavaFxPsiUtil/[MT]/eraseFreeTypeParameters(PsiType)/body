@@ -1,0 +1,48 @@
+{
+  return psiType.accept(new PsiTypeVisitor<PsiType>(){
+    @Nullable @Override public PsiType visitType(    PsiType type){
+      return type;
+    }
+    @Nullable @Override public PsiType visitClassType(    PsiClassType classType){
+      final PsiClassType.ClassResolveResult resolveResult=classType.resolveGenerics();
+      final PsiClass aClass=resolveResult.getElement();
+      if (aClass == null)       return classType;
+      if (aClass instanceof PsiTypeParameter)       return null;
+      PsiSubstitutor substitutor=PsiSubstitutor.EMPTY;
+      boolean unchanged=true;
+      for (      PsiTypeParameter typeParameter : PsiUtil.typeParametersIterable(aClass)) {
+        final PsiType typeArgument=resolveResult.getSubstitutor().substitute(typeParameter);
+        if (typeArgument == null)         return classType.rawType();
+        final PsiType toPut=typeArgument.accept(this);
+        if (toPut == null)         return classType.rawType();
+        unchanged&=toPut == typeArgument;
+        substitutor=substitutor.put(typeParameter,toPut);
+      }
+      if (unchanged)       return classType;
+      final PsiManager manager=aClass.getManager();
+      final PsiAnnotation[] applicableAnnotations=classType.getApplicableAnnotations();
+      return JavaPsiFacade.getInstance(manager.getProject()).getElementFactory().createType(aClass,substitutor,PsiUtil.getLanguageLevel(aClass),applicableAnnotations);
+    }
+    @Override public PsiType visitWildcardType(    PsiWildcardType wildcardType){
+      final PsiType bound=wildcardType.getBound();
+      return bound != null ? bound.accept(this) : null;
+    }
+    @Nullable @Override public PsiType visitCapturedWildcardType(    PsiCapturedWildcardType capturedWildcardType){
+      return capturedWildcardType.getUpperBound().accept(this);
+    }
+    @Override public PsiType visitEllipsisType(    PsiEllipsisType ellipsisType){
+      return visitArrayType(ellipsisType);
+    }
+    @Override public PsiType visitArrayType(    PsiArrayType arrayType){
+      final PsiType componentType=arrayType.getComponentType();
+      final PsiType newComponentType=componentType.accept(this);
+      if (newComponentType == componentType)       return arrayType;
+      return newComponentType != null ? newComponentType.createArrayType() : null;
+    }
+    @Override public PsiType visitDisjunctionType(    PsiDisjunctionType disjunctionType){
+      final PsiClassType lub=PsiTypesUtil.getLowestUpperBoundClassType(disjunctionType);
+      return lub != null ? lub.accept(this) : null;
+    }
+  }
+);
+}
