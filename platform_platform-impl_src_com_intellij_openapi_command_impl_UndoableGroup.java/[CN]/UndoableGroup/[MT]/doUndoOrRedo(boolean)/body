@@ -1,31 +1,16 @@
 {
   final boolean wrapInBulkUpdate=myActions.size() > 50;
-  final Set<DocumentEx> bulkDocuments=new THashSet<DocumentEx>();
+  final Ref<DocumentEx> bulkDocument=new Ref<>();
   ApplicationManager.getApplication().runWriteAction(new Runnable(){
     public void run(){
       try {
         for (        final UndoableAction action : isUndo ? ContainerUtil.iterateBackward(myActions) : myActions) {
           if (wrapInBulkUpdate) {
-            Collection<DocumentEx> newDocuments=new THashSet<DocumentEx>();
-            Set<DocumentEx> documentsToRemoveFromBulk=new THashSet<DocumentEx>(bulkDocuments);
-            DocumentReference[] affectedDocuments=action.getAffectedDocuments();
-            if (affectedDocuments != null) {
-              for (              DocumentReference affectedDocument : affectedDocuments) {
-                VirtualFile file=affectedDocument.getFile();
-                if (file != null && !file.isValid())                 continue;
-                DocumentEx document=(DocumentEx)affectedDocument.getDocument();
-                if (document == null)                 continue;
-                documentsToRemoveFromBulk.remove(document);
-                if (bulkDocuments.contains(document))                 continue;
-                newDocuments.add(document);
-                document.setInBulkUpdate(true);
-              }
-            }
-            for (            DocumentEx document : documentsToRemoveFromBulk) {
-              document.setInBulkUpdate(false);
-            }
-            bulkDocuments.removeAll(documentsToRemoveFromBulk);
-            bulkDocuments.addAll(newDocuments);
+            DocumentEx newDocument=getDocumentToSetBulkMode(action);
+            DocumentEx oldDocument=bulkDocument.get();
+            if (oldDocument != null && !oldDocument.equals(newDocument))             oldDocument.setInBulkUpdate(false);
+            if (newDocument != null && !newDocument.equals(oldDocument))             newDocument.setInBulkUpdate(true);
+            bulkDocument.set(newDocument);
           }
           if (isUndo) {
             action.undo();
@@ -39,8 +24,9 @@
         reportUndoProblem(e,isUndo);
       }
  finally {
-        for (        DocumentEx bulkDocument : bulkDocuments) {
-          bulkDocument.setInBulkUpdate(false);
+        DocumentEx document=bulkDocument.get();
+        if (document != null) {
+          document.setInBulkUpdate(false);
         }
       }
     }
