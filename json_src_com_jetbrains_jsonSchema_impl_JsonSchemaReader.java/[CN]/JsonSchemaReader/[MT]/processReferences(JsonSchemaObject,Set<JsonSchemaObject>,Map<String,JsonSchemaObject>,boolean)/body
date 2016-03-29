@@ -1,0 +1,30 @@
+{
+  final ArrayDeque<JsonSchemaObject> queue=new ArrayDeque<JsonSchemaObject>();
+  queue.addAll(objects);
+  int control=10000;
+  while (!queue.isEmpty()) {
+    if (--control == 0)     throw new RuntimeException("cyclic definitions search");
+    final JsonSchemaObject current=queue.removeFirst();
+    if ("#".equals(current.getRef()))     continue;
+    if (current.getRef() != null) {
+      final JsonSchemaObject definition=findDefinition(myProject,current.getRef(),root,ids,processCrossReferences);
+      if (definition == null) {
+        if (!processCrossReferences) {
+          current.setRef(null);
+          continue;
+        }
+        throw new RuntimeException("Can not find definition: " + current.getRef());
+      }
+      if (definition.getRef() != null && !"#".equals(definition.getRef())) {
+        queue.addFirst(current);
+        queue.addFirst(definition);
+        continue;
+      }
+      final JsonSchemaObject copy=new JsonSchemaObject();
+      copy.mergeValues(definition);
+      copy.mergeValues(current);
+      current.copyValues(copy);
+      current.setRef(null);
+    }
+  }
+}
