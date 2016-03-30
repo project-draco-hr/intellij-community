@@ -1,10 +1,10 @@
 {
   if (firstQuoteOffset < 0 || firstQuoteOffset > document.getTextLength() - 3) {
-    return false;
+    return DocstringState.NONE;
   }
   final String quotes=document.getText(TextRange.from(firstQuoteOffset,3));
   if (!quotes.equals("\"\"\"") && !quotes.equals("'''")) {
-    return false;
+    return DocstringState.NONE;
   }
   final PyStringLiteralExpression pyString=DocStringUtil.getParentDefinitionDocString(element);
   if (pyString != null) {
@@ -15,26 +15,28 @@
     if (literalText.endsWith(nodeText) && nodeText.startsWith(quotes)) {
       if (firstQuoteOffset == pyString.getTextOffset() + prefixLength) {
         PsiErrorElement error=PsiTreeUtil.getNextSiblingOfType(pyString,PsiErrorElement.class);
-        if (error != null) {
-          return true;
+        if (error == null) {
+          error=PsiTreeUtil.getNextSiblingOfType(pyString.getParent(),PsiErrorElement.class);
         }
-        error=PsiTreeUtil.getNextSiblingOfType(pyString.getParent(),PsiErrorElement.class);
         if (error != null) {
-          return true;
+          return DocstringState.INCOMPLETE;
+        }
+        if (nodeText.equals(quotes + quotes)) {
+          return DocstringState.EMPTY;
         }
         if (nodeText.length() < 6 || !nodeText.endsWith(quotes)) {
-          return true;
+          return DocstringState.INCOMPLETE;
         }
         final String docstringIndent=PyIndentUtil.getLineIndent(document,document.getLineNumber(firstQuoteOffset));
         for (        String line : LineTokenizer.tokenizeIntoList(nodeText,false)) {
           final String lineIndent=(String)PyIndentUtil.getLineIndent(line);
           final String lineContent=line.substring(lineIndent.length());
           if ((lineContent.startsWith("def ") || lineContent.startsWith("class ")) && docstringIndent.length() > lineIndent.length() && docstringIndent.startsWith(lineIndent)) {
-            return true;
+            return DocstringState.INCOMPLETE;
           }
         }
       }
     }
   }
-  return false;
+  return DocstringState.NONE;
 }
