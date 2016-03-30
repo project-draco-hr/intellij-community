@@ -1,0 +1,41 @@
+{
+  final ThreadReferenceProxyImpl thread=myStackFrame.threadProxy();
+  try {
+    if (!getSuspendManager().isSuspended(thread)) {
+      notifyCancelled();
+      return;
+    }
+  }
+ catch (  ObjectCollectedException ignored) {
+    notifyCancelled();
+    return;
+  }
+  if (!suspendContext.suspends(thread)) {
+    suspendContext.postponeCommand(this);
+    return;
+  }
+  if (myStackFrame.isBottom()) {
+    DebuggerInvocationUtil.swingInvokeLater(myProject,new Runnable(){
+      @Override public void run(){
+        Messages.showMessageDialog(myProject,DebuggerBundle.message("error.pop.bottom.stackframe"),ActionsBundle.actionText(DebuggerActions.POP_FRAME),Messages.getErrorIcon());
+      }
+    }
+);
+    return;
+  }
+  try {
+    thread.popFrames(myStackFrame);
+  }
+ catch (  final EvaluateException e) {
+    DebuggerInvocationUtil.swingInvokeLater(myProject,new Runnable(){
+      @Override public void run(){
+        Messages.showMessageDialog(myProject,DebuggerBundle.message("error.pop.stackframe",e.getLocalizedMessage()),ActionsBundle.actionText(DebuggerActions.POP_FRAME),Messages.getErrorIcon());
+      }
+    }
+);
+    LOG.info(e);
+  }
+ finally {
+    getSuspendManager().popFrame(suspendContext);
+  }
+}

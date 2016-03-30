@@ -1,0 +1,42 @@
+{
+  Map<ExternalDependencyId,ExternalDependency> dependencyMap=ContainerUtil.newHashMap();
+  Queue<ExternalDependency> queue=ContainerUtil.newLinkedList(dependencies);
+  while (!queue.isEmpty()) {
+    final ExternalDependency dependency=queue.remove();
+    ExternalDependency seenDependency=dependencyMap.get(dependency.getId());
+    if (seenDependency != null) {
+      if (dependency instanceof ExternalLibraryDependency) {
+        if (seenDependency instanceof ExternalLibraryDependency && !FileUtil.filesEqual(((ExternalLibraryDependency)seenDependency).getFile(),((ExternalLibraryDependency)dependency).getFile())) {
+          DefaultExternalMultiLibraryDependency mergedDependency=new DefaultExternalMultiLibraryDependency();
+          mergedDependency.setName(dependency.getId().getName());
+          mergedDependency.setGroup(dependency.getId().getGroup());
+          mergedDependency.setVersion(dependency.getId().getVersion());
+          mergedDependency.setPackaging(dependency.getId().getPackaging());
+          mergedDependency.setClassifier(dependency.getId().getClassifier());
+          mergedDependency.setScope(dependency.getScope());
+          mergedDependency.setClasspathOrder(dependency.getClasspathOrder());
+          mergedDependency.getDependencies().addAll(dependency.getDependencies());
+          mergedDependency.getFiles().addAll(ContainerUtil.packNullables(((ExternalLibraryDependency)seenDependency).getFile(),((ExternalLibraryDependency)dependency).getFile()));
+          mergedDependency.getSources().addAll((ContainerUtil.packNullables(((ExternalLibraryDependency)seenDependency).getSource(),((ExternalLibraryDependency)dependency).getSource())));
+          mergedDependency.getJavadoc().addAll((ContainerUtil.packNullables(((ExternalLibraryDependency)seenDependency).getJavadoc(),((ExternalLibraryDependency)dependency).getJavadoc())));
+          dependencyMap.put(dependency.getId(),mergedDependency);
+          continue;
+        }
+ else         if (seenDependency instanceof DefaultExternalMultiLibraryDependency) {
+          DefaultExternalMultiLibraryDependency mergedDependency=(DefaultExternalMultiLibraryDependency)seenDependency;
+          mergedDependency.getFiles().addAll(ContainerUtil.packNullables(((ExternalLibraryDependency)dependency).getFile()));
+          mergedDependency.getSources().addAll(ContainerUtil.packNullables(((ExternalLibraryDependency)dependency).getSource()));
+          mergedDependency.getJavadoc().addAll(ContainerUtil.packNullables(((ExternalLibraryDependency)dependency).getJavadoc()));
+          continue;
+        }
+      }
+      DependencyScope prevScope=seenDependency.getScope() == null ? DependencyScope.COMPILE : DependencyScope.valueOf(seenDependency.getScope());
+      DependencyScope currentScope=dependency.getScope() == null ? DependencyScope.COMPILE : DependencyScope.valueOf(dependency.getScope());
+      if (prevScope.isForProductionCompile())       continue;
+      if (prevScope.isForProductionRuntime() && currentScope.isForProductionRuntime())       continue;
+    }
+    dependencyMap.put(new DefaultExternalDependencyId(dependency.getId()),dependency);
+    queue.addAll(dependency.getDependencies());
+  }
+  doBuildDependencies(sourceSetMap,artifactsMap,dependencyMap,ownerDataNode,dependencies,ideProject);
+}

@@ -1,0 +1,51 @@
+{
+  VirtualFile jar=getJarByPsiFile(psiFile);
+  if (jar == null)   return Collections.emptyList();
+  VirtualFile jarsDir=jar.getParent();
+  if (jarsDir == null || !jarsDir.getName().equals("jars"))   return Collections.emptyList();
+  VirtualFile artifactDir=jarsDir.getParent();
+  if (artifactDir == null)   return Collections.emptyList();
+  String jarNameWithoutExt=jar.getNameWithoutExtension();
+  String artifactName=artifactDir.getName();
+  if (!jarNameWithoutExt.startsWith(artifactName) || !jarNameWithoutExt.substring(artifactName.length()).startsWith("-")) {
+    return Collections.emptyList();
+  }
+  String version=jarNameWithoutExt.substring(artifactName.length() + 1);
+  VirtualFile propertiesFile=artifactDir.findChild("ivydata-" + version + ".properties");
+  if (propertiesFile == null)   return Collections.emptyList();
+  Library library=getLibraryFromOrderEntriesList(orderEntries);
+  if (library == null)   return Collections.emptyList();
+  String sourceFileName=artifactName + '-' + version+ "-sources.jar";
+  VirtualFile sources=artifactDir.findChild("sources");
+  if (sources != null) {
+    VirtualFile srcFile=sources.findChild(sourceFileName);
+    if (srcFile != null) {
+      VirtualFile jarRoot=JarFileSystem.getInstance().getJarRootForLocalFile(srcFile);
+      if (jarRoot == null || ArrayUtil.contains(jarRoot,(Object[])library.getFiles(OrderRootType.SOURCES))) {
+        return Collections.emptyList();
+      }
+      return Collections.singleton(new AttachExistingSourceAction(jarRoot,library,"Attache sources from Ivy repository"));
+    }
+  }
+  String url=extractUrl(propertiesFile,artifactName);
+  if (StringUtil.isEmptyOrSpaces(url))   return Collections.emptyList();
+  return Collections.singleton(new DownloadSourcesAction(psiFile.getProject(),"Downloading Ivy Sources",url){
+    @Override protected void storeFile(    byte[] content){
+      try {
+        VirtualFile existingSourcesFolder=sources;
+        if (existingSourcesFolder == null) {
+          existingSourcesFolder=artifactDir.createChildDirectory(this,"sources");
+        }
+        VirtualFile srcFile=existingSourcesFolder.createChildData(this,sourceFileName);
+        srcFile.setBinaryContent(content);
+        addSourceFile(JarFileSystem.getInstance().getJarRootForLocalFile(srcFile),library);
+      }
+ catch (      IOException e) {
+        String message="Failed to save " + artifactDir.getPath() + "/sources/"+ sourceFileName;
+        new Notification(myMessageGroupId,"IO Error",message,NotificationType.ERROR).notify(myProject);
+        LOG.warn(e);
+      }
+    }
+  }
+);
+}

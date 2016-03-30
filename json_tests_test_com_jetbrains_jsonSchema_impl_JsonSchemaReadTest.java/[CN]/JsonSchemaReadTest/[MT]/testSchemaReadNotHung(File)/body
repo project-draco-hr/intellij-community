@@ -1,0 +1,34 @@
+{
+  if (Runtime.getRuntime().availableProcessors() < 2)   return;
+  Assert.assertTrue(file.exists());
+  final AtomicBoolean done=new AtomicBoolean();
+  final AtomicReference<IOException> error=new AtomicReference<>();
+  final Semaphore semaphore=new Semaphore();
+  semaphore.down();
+  final Thread thread=new Thread(new Runnable(){
+    @Override public void run(){
+      final JsonSchemaReader reader=new JsonSchemaReader(KEY);
+      try {
+        reader.read(new FileReader(file),null);
+        done.set(true);
+      }
+ catch (      IOException e) {
+        error.set(e);
+      }
+ finally {
+        semaphore.up();
+      }
+    }
+  }
+,getClass().getName() + ": read test json schema " + file.getName());
+  thread.setDaemon(true);
+  try {
+    thread.start();
+    semaphore.waitFor(TimeUnit.SECONDS.toMillis(120));
+    if (error.get() != null)     throw error.get();
+    Assert.assertTrue("Reading test schema hung!",done.get());
+  }
+  finally {
+    thread.interrupt();
+  }
+}

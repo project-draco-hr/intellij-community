@@ -1,15 +1,19 @@
 {
   final MultiMap<PsiElement,String> conflicts=new MultiMap<PsiElement,String>();
-  final PushDownConflicts pushDownConflicts=new PushDownConflicts(mySuperClass,myMemberInfos);
+  final PushDownConflicts pushDownConflicts=new PushDownConflicts(mySuperClass,myMemberInfos,conflicts);
   for (  PsiClass targetClass : myTargetClasses) {
-    for (    MemberInfo info : myMemberInfos) {
-      final PsiMember member=info.getMember();
-      pushDownConflicts.checkMemberPlacementInTargetClassConflict(targetClass,member);
+    if (targetClass instanceof PsiAnonymousClass) {
+      conflicts.putValue(targetClass,"Cannot inline into anonymous class.");
     }
-  }
-  final MultiMap<PsiElement,String> conflictsMap=pushDownConflicts.getConflicts();
-  for (  PsiElement element : conflictsMap.keySet()) {
-    conflicts.put(element,conflictsMap.get(element));
+ else     if (PsiTreeUtil.isAncestor(mySuperClass,targetClass,false)) {
+      conflicts.putValue(targetClass,"Cannot inline into the inner class. Move \'" + targetClass.getName() + "\' to upper level");
+    }
+ else {
+      for (      MemberInfo info : myMemberInfos) {
+        final PsiMember member=info.getMember();
+        pushDownConflicts.checkMemberPlacementInTargetClassConflict(targetClass,member);
+      }
+    }
   }
   if (myCurrentInheritor != null) {
     ReferencesSearch.search(myCurrentInheritor).forEach(new Processor<PsiReference>(){

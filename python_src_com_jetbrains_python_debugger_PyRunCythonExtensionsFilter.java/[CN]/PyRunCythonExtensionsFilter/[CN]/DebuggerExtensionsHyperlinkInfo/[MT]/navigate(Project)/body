@@ -1,0 +1,72 @@
+{
+  try {
+    final RunManager runManager=RunManager.getInstance(myProject);
+    final RunnerAndConfigurationSettings selectedConfiguration=runManager.getSelectedConfiguration();
+    if (selectedConfiguration == null) {
+      throw new ExecutionException("Python Run Configuration should be selected");
+    }
+    final RunConfiguration configuration=selectedConfiguration.getConfiguration();
+    if (!(configuration instanceof AbstractPythonRunConfiguration)) {
+      throw new ExecutionException("Python Run Configuration should be selected");
+    }
+    AbstractPythonRunConfiguration runConfiguration=(AbstractPythonRunConfiguration)configuration;
+    final String sdkPath=runConfiguration.getSdkHome();
+    final String helpersPath=PythonHelpersLocator.getHelpersRoot().getPath();
+    final List<String> cmdline=new ArrayList<>();
+    cmdline.add(sdkPath);
+    cmdline.add(FileUtil.join(helpersPath,FileUtil.toSystemDependentName(SETUP_CYTHON_PATH)));
+    cmdline.addAll(Arrays.asList(CYTHON_ARGS));
+    LOG.info("Compile Cython Extensions " + StringUtil.join(cmdline," "));
+    final Map<String,String> environment=new HashMap<String,String>(System.getenv());
+    PythonEnvUtil.setPythonUnbuffered(environment);
+    PythonEnvUtil.setPythonDontWriteBytecode(environment);
+    GeneralCommandLine commandLine=new GeneralCommandLine(cmdline).withEnvironment(environment);
+    final boolean canCreate=FileUtil.ensureCanCreateFile(new File(helpersPath));
+    final boolean useSudo=!canCreate && !SystemInfo.isWindows;
+    Process process;
+    if (useSudo) {
+      process=ExecUtil.sudo(commandLine,"Please enter your password to compile cython extensions: ");
+    }
+ else {
+      process=commandLine.createProcess();
+    }
+    ProgressManager.getInstance().run(new Task.Backgroundable(myProject,"Compile Cython Extensions"){
+      @Override public void run(      @NotNull ProgressIndicator indicator){
+        final CapturingProcessHandler handler=new CapturingProcessHandler(process,commandLine.getCharset(),commandLine.getCommandLineString());
+        handler.addProcessListener(new ProcessAdapter(){
+          @Override public void onTextAvailable(          ProcessEvent event,          Key outputType){
+            if (outputType == ProcessOutputTypes.STDOUT || outputType == ProcessOutputTypes.STDERR) {
+              for (              String line : StringUtil.splitByLines(event.getText())) {
+                if (isSignificantOutput(line)) {
+                  indicator.setText2(line.trim());
+                }
+              }
+            }
+          }
+          private boolean isSignificantOutput(          String line){
+            return line.trim().length() > 3;
+          }
+        }
+);
+        final ProcessOutput result=handler.runProcessWithProgressIndicator(indicator);
+        final int exitCode=result.getExitCode();
+        if (exitCode != 0) {
+          final String message=StringUtil.isEmptyOrSpaces(result.getStdout()) && StringUtil.isEmptyOrSpaces(result.getStderr()) ? "Permission denied" : "Non-zero exit code (" + exitCode + "): \n"+ result.getStderr();
+          UIUtil.invokeLaterIfNeeded(new Runnable(){
+            @Override public void run(){
+              showErrorDialog(message);
+            }
+          }
+);
+        }
+      }
+    }
+);
+  }
+ catch (  IOException e) {
+    showErrorDialog(e.getMessage());
+  }
+catch (  ExecutionException e) {
+    showErrorDialog(e.getMessage());
+  }
+}

@@ -1,0 +1,36 @@
+{
+  PsiExpression initializer=ObjectUtils.assertNotNull(variable.getInitializer());
+  PsiElement declaration=variable.getParent();
+  PsiElement codeBlock=declaration.getParent();
+  LocalSearchScope scope=new LocalSearchScope(codeBlock);
+  PsiElement last=null;
+  for (  PsiReference reference : ReferencesSearch.search(variable,scope).findAll()) {
+    PsiElement usage=PsiTreeUtil.findPrevParent(codeBlock,reference.getElement());
+    if ((last == null || usage.getTextOffset() > last.getTextOffset())) {
+      last=usage;
+    }
+  }
+  String text="try (" + variable.getTypeElement().getText() + " "+ variable.getName()+ " = "+ initializer.getText()+ ") {}";
+  PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
+  PsiTryStatement armStatement=(PsiTryStatement)declaration.replace(factory.createStatementFromText(text,codeBlock));
+  List<PsiElement> toFormat=null;
+  if (last != null) {
+    toFormat=moveStatements(last,armStatement);
+  }
+  CodeStyleManager codeStyleManager=CodeStyleManager.getInstance(project);
+  PsiElement formattedElement=codeStyleManager.reformat(armStatement);
+  if (toFormat != null) {
+    for (    PsiElement psiElement : toFormat) {
+      codeStyleManager.reformat(psiElement);
+    }
+  }
+  if (last == null) {
+    PsiCodeBlock tryBlock=((PsiTryStatement)formattedElement).getTryBlock();
+    if (tryBlock != null) {
+      PsiJavaToken brace=tryBlock.getLBrace();
+      if (brace != null) {
+        editor.getCaretModel().moveToOffset(brace.getTextOffset() + 1);
+      }
+    }
+  }
+}

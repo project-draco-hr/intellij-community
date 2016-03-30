@@ -1,3 +1,30 @@
 {
-  throw new EvaluateRuntimeException(new UnsupportedExpressionException(statement.getText()));
+  if (statement.getResourceList() != null) {
+    throw new EvaluateRuntimeException(new UnsupportedExpressionException("Try with resources is not yet supported"));
+  }
+  Evaluator bodyEvaluator=accept(statement.getTryBlock());
+  if (bodyEvaluator != null) {
+    PsiCatchSection[] catchSections=statement.getCatchSections();
+    List<CatchEvaluator> evaluators=new ArrayList<>();
+    for (    PsiCatchSection catchSection : catchSections) {
+      PsiParameter parameter=catchSection.getParameter();
+      PsiCodeBlock catchBlock=catchSection.getCatchBlock();
+      if (parameter != null && catchBlock != null) {
+        CodeFragmentEvaluator oldFragmentEvaluator=setNewCodeFragmentEvaluator();
+        try {
+          myCurrentFragmentEvaluator.setInitialValue(parameter.getName(),null);
+          myCurrentFragmentEvaluator.setStatements(visitStatements(catchBlock.getStatements()));
+          PsiType type=parameter.getType();
+          List<PsiType> types=type instanceof PsiDisjunctionType ? ((PsiDisjunctionType)type).getDisjunctions() : Collections.singletonList(type);
+          for (          PsiType psiType : types) {
+            evaluators.add(new CatchEvaluator(psiType.getCanonicalText(),parameter.getName(),myCurrentFragmentEvaluator));
+          }
+        }
+  finally {
+          myCurrentFragmentEvaluator=oldFragmentEvaluator;
+        }
+      }
+    }
+    myResult=new TryEvaluator(bodyEvaluator,evaluators,accept(statement.getFinallyBlock()));
+  }
 }

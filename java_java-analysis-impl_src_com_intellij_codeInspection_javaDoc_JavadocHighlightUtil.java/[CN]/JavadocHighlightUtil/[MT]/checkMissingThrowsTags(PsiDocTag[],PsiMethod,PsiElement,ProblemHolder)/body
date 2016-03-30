@@ -1,0 +1,39 @@
+{
+  PsiClassType[] thrownTypes=psiMethod.getThrowsList().getReferencedTypes();
+  if (thrownTypes.length <= 0)   return;
+  Map<PsiClassType,PsiClass> declaredExceptions=ContainerUtil.newLinkedHashMap();
+  for (  PsiClassType classType : thrownTypes) {
+    PsiClass psiClass=classType.resolve();
+    if (psiClass != null) {
+      declaredExceptions.put(classType,psiClass);
+    }
+  }
+  for (  PsiDocTag tag : tags) {
+    if ("throws".equals(tag.getName()) || "exception".equals(tag.getName())) {
+      PsiDocTagValue value=tag.getValueElement();
+      if (value != null) {
+        PsiElement firstChild=value.getFirstChild();
+        if (firstChild != null) {
+          PsiElement psiElement=firstChild.getFirstChild();
+          if ((psiElement instanceof PsiJavaCodeReferenceElement)) {
+            PsiElement target=((PsiJavaCodeReferenceElement)psiElement).resolve();
+            if (target instanceof PsiClass) {
+              for (Iterator<PsiClassType> it=declaredExceptions.keySet().iterator(); it.hasNext(); ) {
+                PsiClass psiClass=declaredExceptions.get(it.next());
+                if (InheritanceUtil.isInheritorOrSelf((PsiClass)target,psiClass,true)) {
+                  it.remove();
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  for (  PsiClassType declaredException : declaredExceptions.keySet()) {
+    String tagText="<code>@throws</code> " + declaredException.getCanonicalText();
+    String message=InspectionsBundle.message("inspection.javadoc.problem.missing.tag",tagText);
+    String firstDeclaredException=declaredException.getCanonicalText();
+    holder.problem(toHighlight,message,holder.addMissingTagFix("throws",firstDeclaredException));
+  }
+}

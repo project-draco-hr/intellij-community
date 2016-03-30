@@ -1,0 +1,35 @@
+{
+  for (int i=0; i < args.length; i++) {
+    final PsiExpression arg=PsiUtil.skipParenthesizedExprDown(args[i]);
+    if (arg != null) {
+      final PsiSubstitutor nestedSubstitutor=myInferenceSessionContainer.findNestedSubstitutor(arg,myInferenceSubstitution);
+      final PsiType parameterType=nestedSubstitutor.substitute(getParameterType(parameters,i,siteSubstitutor,varargs));
+      if (!isPertinentToApplicability(arg,parentMethod)) {
+        if (arg instanceof PsiLambdaExpression) {
+          for (          Object expr : MethodCandidateInfo.ourOverloadGuard.currentStack()) {
+            if (PsiTreeUtil.getParentOfType((PsiElement)expr,PsiLambdaExpression.class) == arg) {
+              return;
+            }
+          }
+          for (          Object expr : LambdaUtil.ourParameterGuard.currentStack()) {
+            if (expr instanceof PsiParameter && ((PsiParameter)expr).getDeclarationScope() == arg) {
+              ignoredConstraints.add(new ExpressionCompatibilityConstraint(arg,parameterType));
+              return;
+            }
+          }
+        }
+        additionalConstraints.add(new ExpressionCompatibilityConstraint(arg,parameterType));
+      }
+      additionalConstraints.add(new CheckedExceptionCompatibilityConstraint(arg,parameterType));
+      if (arg instanceof PsiCall) {
+        final PsiMethod calledMethod=getCalledMethod((PsiCall)arg);
+        if (calledMethod != null && PsiPolyExpressionUtil.isMethodCallPolyExpression(arg,calledMethod)) {
+          collectAdditionalConstraints(additionalConstraints,ignoredConstraints,(PsiCall)arg,initialSubstitutor);
+        }
+      }
+ else       if (arg instanceof PsiLambdaExpression && isPertinentToApplicability(arg,parentMethod)) {
+        collectLambdaReturnExpression(additionalConstraints,ignoredConstraints,(PsiLambdaExpression)arg,parameterType,!isProperType(initialSubstitutor.substitute(parameterType)),initialSubstitutor);
+      }
+    }
+  }
+}

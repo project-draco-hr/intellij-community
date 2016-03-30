@@ -1,0 +1,58 @@
+{
+  final Set<InferenceVariable> outputVariables=getOutputVariables(additionalConstraints);
+  final Set<InferenceVariable> ignoredOutputVariables=getOutputVariables(ignoredConstraints);
+  Set<ConstraintFormula> subset=new LinkedHashSet<ConstraintFormula>();
+  Set<ConstraintFormula> noInputVariables=new LinkedHashSet<ConstraintFormula>();
+  for (  ConstraintFormula constraint : additionalConstraints) {
+    if (constraint instanceof InputOutputConstraintFormula) {
+      final Set<InferenceVariable> inputVariables=((InputOutputConstraintFormula)constraint).getInputVariables(this);
+      if (inputVariables != null) {
+        boolean dependsOnOutput=false;
+        for (        InferenceVariable inputVariable : inputVariables) {
+          if (dependsOnOutput)           break;
+          final Set<InferenceVariable> dependencies=inputVariable.getDependencies(this);
+          dependencies.add(inputVariable);
+          if (!hasCapture(inputVariable)) {
+            if (dependsOnOutput(ignoredOutputVariables,dependencies)) {
+              dependsOnOutput=true;
+              ignoredConstraints.add(constraint);
+              break;
+            }
+ else {
+              dependsOnOutput=dependsOnOutput(outputVariables,dependencies);
+            }
+          }
+          dependencies.retainAll(outputVariables);
+          if (!dependencies.isEmpty()) {
+            dependsOnOutput=true;
+            break;
+          }
+        }
+        if (!dependsOnOutput) {
+          subset.add(constraint);
+          if (inputVariables.isEmpty()) {
+            noInputVariables.add(constraint);
+          }
+        }
+      }
+ else {
+        subset.add(constraint);
+        noInputVariables.add(constraint);
+      }
+    }
+ else {
+      subset.add(constraint);
+    }
+  }
+  if (subset.isEmpty()) {
+    additionalConstraints.removeAll(ignoredConstraints);
+    if (!additionalConstraints.isEmpty()) {
+      subset.add(additionalConstraints.iterator().next());
+    }
+  }
+  if (!noInputVariables.isEmpty()) {
+    subset=noInputVariables;
+  }
+  additionalConstraints.removeAll(subset);
+  return subset;
+}

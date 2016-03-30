@@ -1,0 +1,51 @@
+{
+  final Map<? extends MethodSignature,Set<PsiMethod>> overrideEquivalent=PsiSuperMethodUtil.collectOverrideEquivalents(aClass);
+  final boolean isInterface=aClass.isInterface();
+  for (  Set<PsiMethod> overrideEquivalentMethods : overrideEquivalent.values()) {
+    if (overrideEquivalentMethods.size() <= 1)     continue;
+    List<PsiMethod> defaults=null;
+    List<PsiMethod> astracts=null;
+    boolean hasConcrete=false;
+    for (    PsiMethod method : overrideEquivalentMethods) {
+      final boolean isDefault=method.hasModifierProperty(PsiModifier.DEFAULT);
+      final boolean isAbstract=method.hasModifierProperty(PsiModifier.ABSTRACT);
+      if (isDefault) {
+        if (defaults == null)         defaults=new ArrayList<PsiMethod>(2);
+        defaults.add(method);
+      }
+      if (isAbstract) {
+        if (astracts == null)         astracts=new ArrayList<PsiMethod>(2);
+        astracts.add(method);
+      }
+      hasConcrete|=!isDefault && !isAbstract;
+    }
+    if (!hasConcrete && defaults != null) {
+      final PsiMethod defaultMethod=defaults.get(0);
+      final PsiClass defaultMethodContainingClass=defaultMethod.getContainingClass();
+      if (defaultMethodContainingClass == null)       continue;
+      final PsiMethod unrelatedMethod=astracts != null ? astracts.get(0) : defaults.get(1);
+      final PsiClass unrelatedMethodContainingClass=unrelatedMethod.getContainingClass();
+      if (unrelatedMethodContainingClass == null)       continue;
+      if (!aClass.hasModifierProperty(PsiModifier.ABSTRACT) && !(aClass instanceof PsiTypeParameter) && astracts != null && unrelatedMethodContainingClass.isInterface()) {
+        if (defaultMethodContainingClass.isInheritor(unrelatedMethodContainingClass,true) && MethodSignatureUtil.isSubsignature(unrelatedMethod.getSignature(TypeConversionUtil.getSuperClassSubstitutor(unrelatedMethodContainingClass,defaultMethodContainingClass,PsiSubstitutor.EMPTY)),defaultMethod.getSignature(PsiSubstitutor.EMPTY))) {
+          continue;
+        }
+        final String key=aClass instanceof PsiEnumConstantInitializer ? "enum.constant.should.implement.method" : "class.must.be.abstract";
+        final String message=JavaErrorMessages.message(key,HighlightUtil.formatClass(aClass,false),JavaHighlightUtil.formatMethod(astracts.get(0)),HighlightUtil.formatClass(unrelatedMethodContainingClass,false));
+        final HighlightInfo info=HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(classIdentifier).descriptionAndTooltip(message).create();
+        QuickFixAction.registerQuickFixAction(info,QUICK_FIX_FACTORY.createImplementMethodsFix(aClass));
+        return info;
+      }
+      if (isInterface || astracts == null || unrelatedMethodContainingClass.isInterface()) {
+        if (defaultMethodContainingClass.isInheritor(unrelatedMethodContainingClass,true) || unrelatedMethodContainingClass.isInheritor(defaultMethodContainingClass,true)) {
+          continue;
+        }
+        final String message=astracts != null ? " inherits abstract and default for " : " inherits unrelated defaults for ";
+        final HighlightInfo info=HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(classIdentifier).descriptionAndTooltip(HighlightUtil.formatClass(aClass) + message + JavaHighlightUtil.formatMethod(defaultMethod)+ " from types "+ HighlightUtil.formatClass(defaultMethodContainingClass)+ " and "+ HighlightUtil.formatClass(unrelatedMethodContainingClass)).create();
+        QuickFixAction.registerQuickFixAction(info,QUICK_FIX_FACTORY.createImplementMethodsFix(aClass));
+        return info;
+      }
+    }
+  }
+  return null;
+}

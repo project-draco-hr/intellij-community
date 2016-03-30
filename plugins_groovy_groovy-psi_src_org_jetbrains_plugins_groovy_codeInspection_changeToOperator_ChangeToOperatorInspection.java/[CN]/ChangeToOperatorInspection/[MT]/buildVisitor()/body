@@ -1,0 +1,37 @@
+{
+  return new BaseInspectionVisitor(){
+    @Override public void visitMethodCallExpression(    GrMethodCallExpression methodCallExpression){
+      super.visitMethodCallExpression(methodCallExpression);
+      processMethodCall(methodCallExpression);
+    }
+    private void processMethodCall(    GrMethodCallExpression methodCallExpression){
+      PsiMethod method=methodCallExpression.resolveMethod();
+      if (!isValid(method))       return;
+      String methodName=method.getName();
+      Transformation transformation=TRANSFORMATIONS.get(methodName);
+      if (transformation == null)       return;
+      OptionsData optionsData=new OptionsData(useDoubleNegation,shouldChangeCompareToEqualityToEquals);
+      ReplacementData replacement=transformation.transform(methodCallExpression,optionsData);
+      if (replacement == null)       return;
+      GrExpression expression=replacement.getExpression();
+      String text=expression.getText();
+      GroovyFix fix=getFix(message("change.to.operator.fix",text),replacement.getReplacement());
+      registerError(expression,message("change.to.operator.message",text),new LocalQuickFix[]{fix},GENERIC_ERROR_OR_WARNING);
+    }
+    private boolean isValid(    PsiModifierListOwner method){
+      return ((method != null) && !method.hasModifierProperty(PsiModifier.STATIC));
+    }
+    private GroovyFix getFix(    @NotNull final String message,    final String replacement){
+      return new GroovyFix(){
+        @NotNull @Override public String getName(){
+          return message;
+        }
+        @Override protected void doFix(        Project project,        ProblemDescriptor descriptor){
+          replaceExpression((GrExpression)descriptor.getPsiElement(),replacement);
+        }
+      }
+;
+    }
+  }
+;
+}

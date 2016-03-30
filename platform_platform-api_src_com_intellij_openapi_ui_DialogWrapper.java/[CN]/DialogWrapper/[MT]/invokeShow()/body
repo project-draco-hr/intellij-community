@@ -1,4 +1,11 @@
 {
+  Window window=myPeer.getWindow();
+  if (window instanceof JDialog && ((JDialog)window).getModalityType() == Dialog.ModalityType.DOCUMENT_MODAL) {
+    if (ApplicationManager.getApplication().isWriteAccessAllowed()) {
+      LOG.error("Project-modal dialogs should not be shown under a write action.");
+    }
+    TransactionGuard.getInstance().assertInsideTransaction(false,"Project-modal dialogs should not be shown inside a transaction. See TransactionGuard documentation.");
+  }
   final AsyncResult<Boolean> result=new AsyncResult<Boolean>();
   ensureEventDispatchThread();
   registerKeyboardShortcuts();
@@ -12,6 +19,9 @@
     }
   }
 );
-  myPeer.show();
-  return result;
+  AcceptNestedTransactions anno=getClass().getAnnotation(AcceptNestedTransactions.class);
+  try (AccessToken ignore=anno == null ? null : TransactionGuard.getInstance().acceptNestedTransactions((TransactionKind[])anno.value())){
+    myPeer.show();
+  }
+   return result;
 }

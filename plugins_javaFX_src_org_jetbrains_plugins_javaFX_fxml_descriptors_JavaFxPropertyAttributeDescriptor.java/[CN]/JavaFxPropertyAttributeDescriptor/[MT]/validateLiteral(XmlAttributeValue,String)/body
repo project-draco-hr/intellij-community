@@ -1,0 +1,42 @@
+{
+  final PsiClass tagClass=JavaFxPsiUtil.getTagClass(xmlAttributeValue);
+  final PsiElement declaration=JavaFxPsiUtil.getAttributeDeclaration(xmlAttributeValue);
+  final String boxedQName;
+  if (declaration != null) {
+    boxedQName=declaration instanceof PsiMember ? JavaFxPsiUtil.getBoxedPropertyType(tagClass,(PsiMember)declaration) : null;
+  }
+ else {
+    if (tagClass != null && !InheritanceUtil.isInheritor(tagClass,false,JavaFxCommonNames.JAVAFX_SCENE_NODE)) {
+      boxedQName=tagClass.getQualifiedName();
+    }
+ else {
+      boxedQName=null;
+    }
+  }
+  if (boxedQName != null) {
+    try {
+      final Class<?> aClass=Class.forName(boxedQName);
+      final Method method=aClass.getMethod(JavaFxCommonNames.VALUE_OF,String.class);
+      method.invoke(aClass,value);
+    }
+ catch (    InvocationTargetException e) {
+      final Throwable cause=e.getCause();
+      if (cause instanceof NumberFormatException) {
+        final PsiReference reference=xmlAttributeValue.getReference();
+        if (reference != null) {
+          final PsiElement resolve=reference.resolve();
+          if (resolve instanceof XmlAttributeValue) {
+            final PsiClass resolvedClass=JavaFxPsiUtil.getTagClass((XmlAttributeValue)resolve);
+            if (resolvedClass != null && boxedQName.equals(resolvedClass.getQualifiedName())) {
+              return null;
+            }
+          }
+        }
+        return "Invalid value: unable to coerce to " + boxedQName;
+      }
+    }
+catch (    Throwable ignore) {
+    }
+  }
+  return null;
+}

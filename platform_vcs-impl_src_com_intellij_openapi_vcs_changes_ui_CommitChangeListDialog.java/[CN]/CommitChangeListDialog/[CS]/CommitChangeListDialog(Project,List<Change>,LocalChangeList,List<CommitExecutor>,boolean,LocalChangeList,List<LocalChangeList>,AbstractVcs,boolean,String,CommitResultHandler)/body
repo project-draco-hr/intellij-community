@@ -2,6 +2,7 @@
   super(project,true);
   myCommitContext=new CommitContext();
   myProject=project;
+  myVcsConfiguration=ObjectUtils.assertNotNull(VcsConfiguration.getInstance(myProject));
   myExecutors=executors;
   myShowVcsCommit=showVcsCommit;
   myVcs=singleVcs;
@@ -15,12 +16,11 @@
   myAllOfDefaultChangeListChangesIncluded=new HashSet<Change>(changes).containsAll(new HashSet<Change>(defaultChangeList.getChanges()));
   myIsAlien=isAlien;
   if (isAlien) {
-    AlienChangeListBrowser browser=new AlienChangeListBrowser(project,changeLists,changes,initialSelection,true,true,singleVcs);
-    myBrowser=browser;
-    myBrowserExtender=browser;
+    myBrowser=new AlienChangeListBrowser(project,changeLists,changes,initialSelection,true,true,singleVcs);
   }
  else {
-    MultipleChangeListBrowser browser=new MultipleChangeListBrowser(project,changeLists,changes,getDisposable(),initialSelection,true,true,new Runnable(){
+    boolean showUnversioned=myShowVcsCommit && myVcsConfiguration.SHOW_UNVERSIONED_FILES_WHILE_COMMIT && Registry.is("vcs.unversioned.files.in.commit");
+    MultipleChangeListBrowser browser=new MultipleChangeListBrowser(project,changeLists,(List)changes,initialSelection,true,true,new Runnable(){
       @Override public void run(){
         updateWarning();
       }
@@ -32,7 +32,7 @@
         }
       }
     }
-){
+,showUnversioned){
       @Override protected void afterDiffRefresh(){
         myBrowser.rebuildList();
         myBrowser.setDataIsDirty(false);
@@ -45,9 +45,14 @@
       }
     }
 ;
+    browser.addSelectedListChangeListener(new SelectedListChangeListener(){
+      @Override public void selectedListChanged(){
+        updateOnListSelection();
+      }
+    }
+);
     myBrowser=browser;
     myBrowser.setAlwayExpandList(false);
-    myBrowserExtender=browser.getExtender();
   }
   myBrowser.getViewer().addSelectionListener(new Runnable(){
     @Override public void run(){
@@ -60,15 +65,8 @@
     }
   }
 );
-  myBrowserExtender.addToolbarActions(this);
-  myBrowserExtender.addSelectedListChangeListener(new SelectedListChangeListener(){
-    @Override public void selectedListChanged(){
-      updateOnListSelection();
-    }
-  }
-);
   myCommitMessageArea=new CommitMessage(project);
-  if (!VcsConfiguration.getInstance(project).CLEAR_INITIAL_COMMIT_MESSAGE) {
+  if (!myVcsConfiguration.CLEAR_INITIAL_COMMIT_MESSAGE) {
     setComment(project,initialSelection,comment);
   }
   myBrowser.setDiffBottomComponent(new DiffCommitMessageEditor(this));

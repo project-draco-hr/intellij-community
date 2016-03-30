@@ -14,26 +14,30 @@
     String[] javadocPaths=JavaModuleExternalPaths.getInstance(module).getJavadocUrls();
     final List<String> httpRoots=PlatformDocumentationUtil.getHttpRoots(javadocPaths,relPath);
     if (httpRoots != null || !fileIndex.isInLibraryClasses(virtualFile)) {
-      return httpRoots;
+      return ContainerUtil.isEmpty(httpRoots) ? null : new ClassInfo(false,httpRoots);
     }
   }
   for (  OrderEntry orderEntry : fileIndex.getOrderEntriesForFile(virtualFile)) {
+    boolean isJdk=orderEntry instanceof JdkOrderEntry;
+    List<String> internalUrls=new ArrayList<>();
     for (    VirtualFile root : orderEntry.getFiles(JavadocOrderRootType.getInstance())) {
+      String internalUrl=PlatformDocumentationUtil.getDocUrl(root,relPath);
+      if (internalUrl == null)       continue;
       if (root.getFileSystem() == JarFileSystem.getInstance()) {
         VirtualFile file=root.findFileByRelativePath(relPath);
         List<Url> urls=file == null ? null : BuiltInWebBrowserUrlProvider.getUrls(file,project,null);
         if (!ContainerUtil.isEmpty(urls)) {
-          List<String> result=new SmartList<String>();
+          List<String> externalUrls=new SmartList<String>();
           for (          Url url : urls) {
-            result.add(url.toExternalForm());
+            externalUrls.add(url.toExternalForm());
           }
-          return result;
+          return new ClassInfo(isJdk,Collections.nCopies(externalUrls.size(),internalUrl),externalUrls);
         }
       }
+      internalUrls.add(internalUrl);
     }
-    List<String> httpRoot=PlatformDocumentationUtil.getHttpRoots(JavadocOrderRootType.getUrls(orderEntry),relPath);
-    if (httpRoot != null) {
-      return httpRoot;
+    if (!ContainerUtil.isEmpty(internalUrls)) {
+      return new ClassInfo(isJdk,internalUrls);
     }
   }
   return null;

@@ -9,7 +9,7 @@
   initTabPainter();
   myIsViewer=viewer;
   mySettings=new SettingsImpl(this,project);
-  if (shouldSoftWrapsBeForced()) {
+  if (!mySettings.isUseSoftWraps() && shouldSoftWrapsBeForced()) {
     mySettings.setUseSoftWrapsQuiet();
     putUserData(FORCED_SOFT_WRAPS,Boolean.TRUE);
   }
@@ -19,6 +19,7 @@
   myDocumentMarkupModel=new EditorFilteringMarkupModelEx(this,documentMarkup);
   myFoldingModel=new FoldingModelImpl(this);
   myCaretModel=new CaretModelImpl(this);
+  myScrollingModel=new ScrollingModelImpl(this);
   mySoftWrapModel=new SoftWrapModelImpl(this);
   if (!myUseNewRendering)   mySizeContainer.reset();
   myCommandProcessor=CommandProcessor.getInstance();
@@ -32,10 +33,10 @@
       return highlighter.getCustomRenderer() != null || highlighter.getGutterIconRenderer() != null || highlighter.getLineMarkerRenderer() != null || highlighter.getLineSeparatorRenderer() != null;
     }
     @Override public void afterAdded(    @NotNull RangeHighlighterEx highlighter){
-      attributesChanged(highlighter,areRenderersInvolved(highlighter),false);
+      attributesChanged(highlighter,areRenderersInvolved(highlighter),EditorUtil.attributesImpactFontStyle(highlighter.getTextAttributes()));
     }
     @Override public void beforeRemoved(    @NotNull RangeHighlighterEx highlighter){
-      attributesChanged(highlighter,areRenderersInvolved(highlighter),false);
+      attributesChanged(highlighter,areRenderersInvolved(highlighter),EditorUtil.attributesImpactFontStyle(highlighter.getTextAttributes()));
     }
     @Override public void attributesChanged(    @NotNull RangeHighlighterEx highlighter,    boolean renderersChanged,    boolean fontStyleChanged){
       if (myDocument.isInBulkUpdate())       return;
@@ -53,8 +54,7 @@
       int end=Math.min(Math.max(highlighter.getAffectedAreaEndOffset(),0),textLength);
       int startLine=start == -1 ? 0 : myDocument.getLineNumber(start);
       int endLine=end == -1 ? myDocument.getLineCount() : myDocument.getLineNumber(end);
-      TextAttributes attributes=highlighter.getTextAttributes();
-      if (myUseNewRendering && start != end && (fontStyleChanged || attributes != null && attributes.getFontType() != Font.PLAIN)) {
+      if (myUseNewRendering && start != end && fontStyleChanged) {
         myView.invalidateRange(start,end);
       }
       repaintLines(Math.max(0,startLine - 1),Math.min(endLine + 1,getDocument().getLineCount()));
@@ -151,11 +151,7 @@
   EditorHighlighter highlighter=new EmptyEditorHighlighter(myScheme.getAttributes(HighlighterColors.TEXT));
   setHighlighter(highlighter);
   myEditorComponent=new EditorComponentImpl(this);
-  myScrollPane=new MyScrollPane();
   myScrollPane.putClientProperty(JBScrollPane.BRIGHTNESS_FROM_VIEW,true);
-  if (SystemInfo.isMac && SystemInfo.isJavaVersionAtLeast("1.7") && Registry.is("editor.mac.smooth.scrolling")) {
-    PreciseMouseWheelScroller.install(myScrollPane);
-  }
   myVerticalScrollBar=(MyScrollBar)myScrollPane.getVerticalScrollBar();
   myVerticalScrollBar.setOpaque(false);
   myPanel=new JPanel();
@@ -172,7 +168,6 @@
   myHeaderPanel=new MyHeaderPanel();
   myGutterComponent=new EditorGutterComponentImpl(this);
   initComponent();
-  myScrollingModel=new ScrollingModelImpl(this);
   if (myUseNewRendering) {
     myView=new EditorView(this);
     myView.reinitSettings();
@@ -183,12 +178,6 @@
   if (UISettings.getInstance().PRESENTATION_MODE) {
     setFontSize(UISettings.getInstance().PRESENTATION_MODE_FONT_SIZE);
   }
-  myGutterComponent.setLineNumberAreaWidthFunction(new TIntFunction(){
-    @Override public int execute(    int lineNumber){
-      return getFontMetrics(Font.PLAIN).stringWidth(Integer.toString(lineNumber + 1));
-    }
-  }
-);
   myGutterComponent.updateSize();
   Dimension preferredSize=getPreferredSize();
   myEditorComponent.setSize(preferredSize);
