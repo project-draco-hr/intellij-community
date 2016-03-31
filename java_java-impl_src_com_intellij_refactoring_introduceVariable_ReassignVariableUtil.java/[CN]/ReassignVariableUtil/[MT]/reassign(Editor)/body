@@ -5,13 +5,34 @@
   if (type != null) {
     VariablesProcessor proc=findVariablesOfType(declaration,type);
     if (proc.size() > 0) {
-      if (proc.size() == 1) {
+      List<PsiVariable> vars=new ArrayList<>();
+      for (int i=0; i < proc.size(); i++) {
+        final PsiVariable variable=proc.getResult(i);
+        PsiElement outerCodeBlock=PsiUtil.getVariableCodeBlock(variable,null);
+        if (outerCodeBlock == null)         continue;
+        if (ReferencesSearch.search(variable,new LocalSearchScope(outerCodeBlock)).forEach(new Processor<PsiReference>(){
+          @Override public boolean process(          PsiReference reference){
+            final PsiElement element=reference.getElement();
+            if (element != null) {
+              return HighlightControlFlowUtil.getInnerClassVariableReferencedFrom(variable,element) == null;
+            }
+            return true;
+          }
+        }
+)) {
+          vars.add(variable);
+        }
+      }
+      if (vars.isEmpty()) {
+        return true;
+      }
+      if (vars.size() == 1) {
         replaceWithAssignment(declaration,proc.getResult(0),editor);
         return true;
       }
       final DefaultListModel<PsiVariable> model=new DefaultListModel<>();
-      for (int i=0; i < proc.size(); i++) {
-        model.addElement(proc.getResult(i));
+      for (      PsiVariable var : vars) {
+        model.addElement(var);
       }
       final JBList list=new JBList(model);
       list.setCellRenderer(new ListCellRendererWrapper<PsiVariable>(){
