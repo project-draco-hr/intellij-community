@@ -1,0 +1,36 @@
+{
+  final XmlTag xmlTag=attribute.getParent();
+  if (xmlTag != null) {
+    final String tagFieldName=xmlTag.getAttributeValue(FxmlConstants.FX_ID);
+    if (!StringUtil.isEmpty(tagFieldName)) {
+      final PsiClass controllerClass=JavaFxPsiUtil.getControllerClass(attribute.getContainingFile());
+      if (controllerClass != null) {
+        final PsiField tagField=controllerClass.findFieldByName(tagFieldName,true);
+        if (tagField != null && !tagField.hasModifierProperty(PsiModifier.STATIC) && JavaFxPsiUtil.isVisibleInFxml(tagField)) {
+          final PsiType tagFieldType=tagField.getType();
+          if (tagFieldType instanceof PsiClassType) {
+            final PsiClass fieldClass=PsiUtil.resolveClassInClassTypeOnly(tagFieldType);
+            if (fieldClass != null) {
+              final PsiClassType.ClassResolveResult resolveResult=PsiUtil.resolveGenericsClassInType(eventType);
+              final PsiClass eventClass=resolveResult.getElement();
+              if (eventClass != null) {
+                final PsiSubstitutor eventSubstitutor=resolveResult.getSubstitutor();
+                final PsiManager manager=fieldClass.getManager();
+                for (                PsiTypeParameter typeParameter : PsiUtil.typeParametersIterable(eventClass)) {
+                  final PsiType eventTypeArgument=eventSubstitutor.substitute(typeParameter);
+                  if (eventTypeArgument instanceof PsiClassType) {
+                    final PsiClass aClass=PsiUtil.resolveClassInClassTypeOnly(eventTypeArgument);
+                    if (manager.areElementsEquivalent(aClass,fieldClass)) {
+                      return new VariableTypeFix(tagField,eventTypeArgument);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
