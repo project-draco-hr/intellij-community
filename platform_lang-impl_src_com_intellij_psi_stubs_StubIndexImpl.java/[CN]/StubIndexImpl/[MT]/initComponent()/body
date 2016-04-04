@@ -1,26 +1,16 @@
 {
-  try {
-    final boolean forceClean=Boolean.TRUE == ourForcedClean.getAndSet(Boolean.FALSE);
-    StubIndexExtension<?,?>[] extensions=Extensions.getExtensions(StubIndexExtension.EP_NAME);
-    StringBuilder updated=new StringBuilder();
-    for (    StubIndexExtension extension : extensions) {
-      @SuppressWarnings("unchecked") boolean rebuildRequested=registerIndexer(extension,forceClean);
-      if (rebuildRequested) {
-        updated.append(extension).append(' ');
-      }
+  long started=System.nanoTime();
+  StubIndexExtension<?,?>[] extensions=Extensions.getExtensions(StubIndexExtension.EP_NAME);
+  LOG.info("All stub exts enumerated:" + (System.nanoTime() - started) / 1000000);
+  started=System.nanoTime();
+  myStateFuture=IndexInfrastructure.submitGenesisTask(new StubIndexInitialization(extensions));
+  LOG.info("stub exts update scheduled:" + (System.nanoTime() - started) / 1000000);
+  if (!IndexInfrastructure.ourDoAsyncIndicesInitialization) {
+    try {
+      myStateFuture.get();
     }
-    if (updated.length() > 0) {
-      final Throwable e=new Throwable(updated.toString());
-      ApplicationManager.getApplication().invokeLater(new Runnable(){
-        @Override public void run(){
-          forceRebuild(e);
-        }
-      }
-,ModalityState.NON_MODAL);
+ catch (    Throwable t) {
+      LOG.error(t);
     }
-    dropUnregisteredIndices();
-  }
- catch (  IOException ex) {
-    throw new RuntimeException(ex);
   }
 }

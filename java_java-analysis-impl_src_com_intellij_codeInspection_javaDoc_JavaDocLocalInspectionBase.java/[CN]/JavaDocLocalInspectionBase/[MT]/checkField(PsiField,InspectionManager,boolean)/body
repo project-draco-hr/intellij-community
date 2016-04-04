@@ -1,20 +1,23 @@
 {
-  if (IGNORE_DEPRECATED && (psiField.isDeprecated() || psiField.getContainingClass().isDeprecated())) {
+  if (IGNORE_DEPRECATED && isDeprecated(psiField)) {
     return null;
   }
   PsiDocComment docComment=psiField.getDocComment();
+  boolean required=JavadocHighlightUtil.isJavaDocRequired(this,psiField);
+  ProblemHolderImpl holder=new ProblemHolderImpl(manager,isOnTheFly);
   if (docComment == null) {
-    final PsiIdentifier nameIdentifier=psiField.getNameIdentifier();
-    return isJavaDocRequired(psiField) ? new ProblemDescriptor[]{createRequiredJavadocAbsentDescription(nameIdentifier,manager,isOnTheFly)} : null;
+    if (required) {
+      JavadocHighlightUtil.reportMissingTag(psiField.getNameIdentifier(),holder);
+    }
   }
-  final ArrayList<ProblemDescriptor> problems=new ArrayList<ProblemDescriptor>(2);
-  ArrayList<ProblemDescriptor> tagProblems=getTagValuesProblems(psiField,docComment.getTags(),manager,isOnTheFly);
-  if (tagProblems != null) {
-    problems.addAll(tagProblems);
+ else {
+    JavadocHighlightUtil.checkTagValues(docComment.getTags(),psiField,holder);
+    JavadocHighlightUtil.checkInlineTags(docComment.getDescriptionElements(),holder);
+    if (!IGNORE_JAVADOC_PERIOD) {
+      JavadocHighlightUtil.checkForPeriod(docComment,psiField,holder);
+    }
+    JavadocHighlightUtil.checkDuplicateTags(docComment.getTags(),holder);
+    JavadocHighlightUtil.checkForBadCharacters(docComment,holder);
   }
-  checkInlineTags(manager,problems,docComment.getDescriptionElements(),JavadocManager.SERVICE.getInstance(docComment.getProject()),isOnTheFly);
-  checkForPeriodInDoc(psiField,docComment,problems,manager,isOnTheFly);
-  checkDuplicateTags(docComment.getTags(),problems,manager,isOnTheFly);
-  checkForBadCharacters(docComment,problems,manager,isOnTheFly);
-  return problems.isEmpty() ? null : problems.toArray(new ProblemDescriptor[problems.size()]);
+  return holder.problems();
 }

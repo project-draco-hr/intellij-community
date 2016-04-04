@@ -1,2 +1,40 @@
 {
+  final PyAnnotation annotation=param.getAnnotation();
+  if (annotation != null) {
+    final PyExpression value=annotation.getValue();
+    if (value != null) {
+      final PyType type=getType(value,new Context(context));
+      if (type != null) {
+        final PyType optionalType=getOptionalTypeFromDefaultNone(param,type,context);
+        return Ref.create(optionalType != null ? optionalType : type);
+      }
+    }
+  }
+  final String paramComment=param.getTypeCommentAnnotation();
+  if (paramComment != null) {
+    return Ref.create(getStringBasedType(paramComment,param,new Context(context)));
+  }
+  final String comment=func.getTypeCommentAnnotation();
+  if (comment != null) {
+    final PyTypeParser.ParseResult result=PyTypeParser.parsePep484FunctionTypeComment(param,comment);
+    final PyCallableType functionType=as(result.getType(),PyCallableType.class);
+    if (functionType != null) {
+      final List<PyCallableParameter> paramTypes=functionType.getParameters(context);
+      if (paramTypes == null) {
+        return Ref.create();
+      }
+      final PyParameter[] funcParams=func.getParameterList().getParameters();
+      final int startOffset=omitFirstParamInTypeComment(func) ? 1 : 0;
+      for (int paramIndex=0; paramIndex < funcParams.length; paramIndex++) {
+        if (funcParams[paramIndex] == param) {
+          final int typeIndex=paramIndex - startOffset;
+          if (typeIndex >= 0 && typeIndex < paramTypes.size()) {
+            return Ref.create(paramTypes.get(typeIndex).getType(context));
+          }
+          break;
+        }
+      }
+    }
+  }
+  return null;
 }

@@ -1,32 +1,5 @@
 {
-  final Map<MethodSignature,Set<PsiMethod>> overrideEquivalent=new THashMap<MethodSignature,Set<PsiMethod>>(MethodSignatureUtil.METHOD_PARAMETERS_ERASURE_EQUALITY);
-  PsiClass[] supers=aClass.getSupers();
-  for (int i=0; i < supers.length; i++) {
-    PsiClass superClass=supers[i];
-    boolean subType=false;
-    for (int j=0; j < supers.length; j++) {
-      if (j == i)       continue;
-      subType|=supers[j].isInheritor(supers[i],true);
-    }
-    if (subType)     continue;
-    final PsiSubstitutor superClassSubstitutor=TypeConversionUtil.getSuperClassSubstitutor(superClass,aClass,PsiSubstitutor.EMPTY);
-    for (    HierarchicalMethodSignature hms : superClass.getVisibleSignatures()) {
-      final PsiMethod method=hms.getMethod();
-      if (MethodSignatureUtil.findMethodBySignature(aClass,method.getSignature(superClassSubstitutor),false) != null)       continue;
-      final PsiClass containingClass=method.getContainingClass();
-      if (containingClass == null)       continue;
-      final PsiSubstitutor containingClassSubstitutor=TypeConversionUtil.getClassSubstitutor(containingClass,aClass,PsiSubstitutor.EMPTY);
-      if (containingClassSubstitutor == null)       continue;
-      final PsiSubstitutor finalSubstitutor=PsiSuperMethodImplUtil.obtainFinalSubstitutor(containingClass,containingClassSubstitutor,hms.getSubstitutor(),false);
-      final MethodSignatureBackedByPsiMethod signature=MethodSignatureBackedByPsiMethod.create(method,finalSubstitutor,false);
-      Set<PsiMethod> methods=overrideEquivalent.get(signature);
-      if (methods == null) {
-        methods=new LinkedHashSet<PsiMethod>();
-        overrideEquivalent.put(signature,methods);
-      }
-      methods.add(method);
-    }
-  }
+  final Map<? extends MethodSignature,Set<PsiMethod>> overrideEquivalent=PsiSuperMethodUtil.collectOverrideEquivalents(aClass);
   final boolean isInterface=aClass.isInterface();
   for (  Set<PsiMethod> overrideEquivalentMethods : overrideEquivalent.values()) {
     if (overrideEquivalentMethods.size() <= 1)     continue;
@@ -53,7 +26,7 @@
       final PsiMethod unrelatedMethod=astracts != null ? astracts.get(0) : defaults.get(1);
       final PsiClass unrelatedMethodContainingClass=unrelatedMethod.getContainingClass();
       if (unrelatedMethodContainingClass == null)       continue;
-      if (!aClass.hasModifierProperty(PsiModifier.ABSTRACT) && astracts != null && unrelatedMethodContainingClass.isInterface()) {
+      if (!aClass.hasModifierProperty(PsiModifier.ABSTRACT) && !(aClass instanceof PsiTypeParameter) && astracts != null && unrelatedMethodContainingClass.isInterface()) {
         if (defaultMethodContainingClass.isInheritor(unrelatedMethodContainingClass,true) && MethodSignatureUtil.isSubsignature(unrelatedMethod.getSignature(TypeConversionUtil.getSuperClassSubstitutor(unrelatedMethodContainingClass,defaultMethodContainingClass,PsiSubstitutor.EMPTY)),defaultMethod.getSignature(PsiSubstitutor.EMPTY))) {
           continue;
         }

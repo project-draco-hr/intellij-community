@@ -1,0 +1,31 @@
+{
+  final ChangeSignatureUsageProcessor[] processors=ChangeSignatureUsageProcessor.EP_NAME.getExtensions();
+  final ResolveSnapshotProvider resolveSnapshotProvider=changeInfo.isParameterNamesChanged() ? VariableInplaceRenamer.INSTANCE.forLanguage(changeInfo.getMethod().getLanguage()) : null;
+  final List<ResolveSnapshotProvider.ResolveSnapshot> snapshots=new ArrayList<ResolveSnapshotProvider.ResolveSnapshot>();
+  for (  ChangeSignatureUsageProcessor processor : processors) {
+    if (resolveSnapshotProvider != null) {
+      processor.registerConflictResolvers(snapshots,resolveSnapshotProvider,usages,changeInfo);
+    }
+  }
+  for (  UsageInfo usage : usages) {
+    for (    ChangeSignatureUsageProcessor processor : processors) {
+      if (processor.processUsage(changeInfo,usage,true,usages))       break;
+    }
+  }
+  LOG.assertTrue(changeInfo.getMethod().isValid());
+  for (  ChangeSignatureUsageProcessor processor : processors) {
+    if (processor.processPrimaryMethod(changeInfo))     break;
+  }
+  for (  UsageInfo usage : usages) {
+    for (    ChangeSignatureUsageProcessor processor : processors) {
+      if (processor.processUsage(changeInfo,usage,false,usages))       break;
+    }
+  }
+  if (!snapshots.isEmpty()) {
+    for (    ParameterInfo parameterInfo : changeInfo.getNewParameters()) {
+      for (      ResolveSnapshotProvider.ResolveSnapshot snapshot : snapshots) {
+        snapshot.apply(parameterInfo.getName());
+      }
+    }
+  }
+}
