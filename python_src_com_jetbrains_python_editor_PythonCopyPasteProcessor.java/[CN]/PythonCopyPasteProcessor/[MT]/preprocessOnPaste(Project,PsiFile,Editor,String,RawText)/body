@@ -7,7 +7,7 @@
   final int indentSize=codeStyleSettings.getIndentSize(PythonFileType.INSTANCE);
   CharFilter NOT_INDENT_FILTER=new CharFilter(){
     public boolean accept(    char ch){
-      return useTabs ? ch != '\t' : ch != ' ';
+      return ch != (useTabs ? '\t' : ' ');
     }
   }
 ;
@@ -24,13 +24,13 @@
   final PsiElement element=file.findElementAt(caretOffset);
   if (PsiTreeUtil.getParentOfType(element,PyStringLiteralExpression.class) != null)   return text;
   text=addLeadingSpaces(text,NOT_INDENT_FILTER,indentSize,indentChar);
-  int firstLineIndent=StringUtil.findFirst(text,NOT_INDENT_FILTER);
   final String indentText=getIndentText(file,document,caretOffset,lineNumber);
   int toRemove=calculateIndentToRemove(text,NOT_INDENT_FILTER);
-  final String toString=document.getText(TextRange.create(lineStartOffset,lineEndOffset));
-  if (StringUtil.isEmptyOrSpaces(indentText) && isApplicable(file,text,caretOffset)) {
+  final String line=document.getText(TextRange.create(lineStartOffset,lineEndOffset));
+  if (StringUtil.isEmptyOrSpaces(indentText) && shouldPasteOnPreviousLine(file,text,caretOffset)) {
     caretModel.moveToOffset(lineStartOffset);
-    if (StringUtil.isEmptyOrSpaces(toString)) {
+    editor.getSelectionModel().setSelection(lineStartOffset,selectionModel.getSelectionEnd());
+    if (StringUtil.isEmptyOrSpaces(line)) {
       ApplicationManager.getApplication().runWriteAction(new Runnable(){
         @Override public void run(){
           document.deleteString(lineStartOffset,lineEndOffset);
@@ -38,7 +38,6 @@
       }
 );
     }
-    editor.getSelectionModel().setSelection(lineStartOffset,selectionModel.getSelectionEnd());
   }
   final List<String> strings=StringUtil.split(text,"\n",false);
   String newText="";
@@ -50,6 +49,8 @@
  else {
     newText=text;
   }
-  if (addLinebreak(text,toString,useTabs) && selectionModel.getSelectionStart() == selectionModel.getSelectionEnd())   newText+="\n";
+  if (addLinebreak(text,line,useTabs) && selectionModel.getSelectionStart() == selectionModel.getSelectionEnd()) {
+    newText+="\n";
+  }
   return newText;
 }
