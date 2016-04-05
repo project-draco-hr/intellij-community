@@ -9,32 +9,22 @@
         contentHashesEnumeratorOk=true;
       }
       storage=new MapIndexStorage<K,V>(IndexInfrastructure.getStorageFile(name),extension.getKeyDescriptor(),extension.getValueExternalizer(),extension.getCacheSize(),extension.keyIsUniqueForIndexedFile(),extension.traceKeyHashToVirtualFileMapping());
-      InputFilter inputFilter=extension.getInputFilter();
-      Pair<UpdatableIndex<?,?,FileContent>,InputFilter> pair=new Pair<>(createIndex(extension,new MemoryIndexStorage<K,V>(storage)),new IndexableFilesFilter(inputFilter));
-      if (inputFilter instanceof FileTypeSpecificInputFilter) {
-        ((FileTypeSpecificInputFilter)inputFilter).registerFileTypesUsedForIndexing(new Consumer<FileType>(){
-          final Set<FileType> addedTypes=new THashSet<FileType>();
+      final InputFilter inputFilter=extension.getInputFilter();
+      final Set<FileType> addedTypes=new THashSet<FileType>();
+      if (inputFilter instanceof FileBasedIndex.FileTypeSpecificInputFilter) {
+        ((FileBasedIndex.FileTypeSpecificInputFilter)inputFilter).registerFileTypesUsedForIndexing(new Consumer<FileType>(){
           @Override public void consume(          FileType type){
-            if (type == null || !addedTypes.add(type)) {
-              return;
-            }
-synchronized (state) {
-              List<ID<?,?>> ids=state.myFileType2IndicesWithFileTypeInfoMap.get(type);
-              if (ids == null)               state.myFileType2IndicesWithFileTypeInfoMap.put(type,ids=new ArrayList<ID<?,?>>(5));
-              ids.add(name);
-            }
+            if (type != null)             addedTypes.add(type);
           }
         }
 );
       }
- else {
-synchronized (state) {
-          state.myIndicesWithoutFileTypeInfo.add(name);
+      state.registerIndex(name,createIndex(extension,new MemoryIndexStorage<K,V>(storage)),new FileBasedIndex.InputFilter(){
+        @Override public boolean acceptInput(        @NotNull VirtualFile file){
+          return file instanceof VirtualFileWithId && inputFilter.acceptInput(file);
         }
       }
-synchronized (state) {
-        state.myIndices.put(name,pair);
-      }
+,version,addedTypes);
       break;
     }
  catch (    Exception e) {
