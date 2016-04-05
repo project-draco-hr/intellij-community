@@ -1,0 +1,28 @@
+{
+  if (JavaFxPsiUtil.isIncorrectExpressionBinding(value)) {
+    return "Incorrect expression syntax";
+  }
+  final List<String> propertyNames=JavaFxPsiUtil.isExpressionBinding(value) ? StringUtil.split(value.substring(2,value.length() - 1),".",true,false) : Collections.singletonList(value.substring(1));
+  if (isIncompletePropertyChain(propertyNames)) {
+    return "Incorrect expression syntax";
+  }
+  final XmlTag currentTag=PsiTreeUtil.getParentOfType(xmlAttributeValue,XmlTag.class);
+  final PsiClass targetPropertyClass=JavaFxPsiUtil.getWritablePropertyClass(xmlAttributeValue);
+  if (targetPropertyClass == null || JavaFxPsiUtil.hasConversionFromAnyType(targetPropertyClass))   return null;
+  final String firstPropertyName=propertyNames.get(0);
+  final Map<String,XmlAttributeValue> fileIds=JavaFxPsiUtil.collectFileIds(currentTag);
+  final PsiClass tagClass=JavaFxPsiUtil.getTagClassById(fileIds.get(firstPropertyName),firstPropertyName,xmlAttributeValue);
+  if (tagClass != null) {
+    PsiClass aClass=tagClass;
+    final List<String> remainingPropertyNames=propertyNames.subList(1,propertyNames.size());
+    for (    String propertyName : remainingPropertyNames) {
+      if (aClass == null)       break;
+      final PsiMember member=JavaFxPsiUtil.collectReadableProperties(aClass).get(propertyName);
+      aClass=JavaFxPsiUtil.getPropertyClass(JavaFxPsiUtil.getReadablePropertyType(member),xmlAttributeValue);
+    }
+    if (aClass != null && !InheritanceUtil.isInheritorOrSelf(aClass,targetPropertyClass,true)) {
+      return "Invalid value: unable to coerce to " + targetPropertyClass.getQualifiedName();
+    }
+  }
+  return null;
+}

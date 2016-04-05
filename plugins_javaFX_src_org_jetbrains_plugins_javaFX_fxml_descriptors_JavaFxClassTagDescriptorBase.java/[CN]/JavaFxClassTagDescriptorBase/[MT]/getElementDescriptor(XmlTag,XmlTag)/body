@@ -1,0 +1,52 @@
+{
+  final String name=childTag.getName();
+  if (FxmlConstants.FX_BUILT_IN_TAGS.contains(name)) {
+    return new JavaFxBuiltInTagDescriptor(name,childTag);
+  }
+  if (FxmlConstants.FX_ROOT.equals(name)) {
+    return new JavaFxRootTagDescriptor(childTag);
+  }
+  final String shortName=StringUtil.getShortName(name);
+  if (!name.equals(shortName)) {
+    final PsiMethod propertySetter=JavaFxPsiUtil.findStaticPropertySetter(name,childTag);
+    if (propertySetter != null) {
+      return new JavaFxPropertyTagDescriptor(propertySetter.getContainingClass(),shortName,true);
+    }
+    final Project project=childTag.getProject();
+    if (JavaPsiFacade.getInstance(project).findClass(name,GlobalSearchScope.allScope(project)) == null) {
+      return null;
+    }
+  }
+  final PsiClass psiClass=getPsiClass();
+  if (psiClass != null) {
+    final String parentTagName=contextTag.getName();
+    if (!FxmlConstants.FX_DEFINE.equals(parentTagName)) {
+      if (FxmlConstants.FX_ROOT.equals(parentTagName)) {
+        final Map<String,PsiMember> properties=JavaFxPsiUtil.collectWritableProperties(psiClass);
+        if (properties.get(name) != null) {
+          return new JavaFxPropertyTagDescriptor(psiClass,name,false);
+        }
+      }
+ else {
+        final JavaFxPropertyTagDescriptor defaultPropertyDescriptor=getDefaultPropertyDescriptor();
+        if (defaultPropertyDescriptor != null) {
+          final String defaultPropertyName=defaultPropertyDescriptor.getName();
+          if (StringUtil.equalsIgnoreCase(defaultPropertyName,name) && !StringUtil.equals(defaultPropertyName,name)) {
+            final XmlElementDescriptor childDescriptor=defaultPropertyDescriptor.getElementDescriptor(childTag,contextTag);
+            if (childDescriptor != null) {
+              return childDescriptor;
+            }
+          }
+        }
+        final Map<String,PsiMember> properties=JavaFxPsiUtil.collectWritableProperties(psiClass);
+        if (properties.get(name) != null) {
+          return new JavaFxPropertyTagDescriptor(psiClass,name,false);
+        }
+      }
+    }
+  }
+  if (name.length() != 0 && Character.isLowerCase(name.charAt(0))) {
+    return new JavaFxPropertyTagDescriptor(psiClass,name,false);
+  }
+  return new JavaFxClassTagDescriptor(name,childTag);
+}

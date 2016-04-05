@@ -9,17 +9,11 @@
   myListChangeListener=new Runnable(){
     @Override public void run(){
       if (myBrowser != null) {
-        myInfoCalculator.update(new ArrayList<Change>(myBrowser.getAllChanges()),new ArrayList<Change>(myBrowser.getChangesIncludedInAllLists()));
+        List<Change> allChanges=getAllChanges(changeLists);
+        Collection<Change> includedChanges=myBrowser.getViewer().getIncludedChanges();
+        myInfoCalculator.update(allChanges,ContainerUtil.newArrayList(includedChanges));
         myCommitLegendPanel.update();
-        Collection<Change> selected=myBrowser.getChangesIncludedInAllLists();
-        List<Change> visibleSelected=myBrowser.getCurrentIncludedChanges();
-        if (selected.size() != visibleSelected.size()) {
-          setErrorText("Selection contains changes from other changelist");
-        }
- else {
-          setErrorText(null);
-        }
-        boolean hasNewFiles=ContainerUtil.exists(selected,new Condition<Change>(){
+        boolean hasNewFiles=ContainerUtil.exists(includedChanges,new Condition<Change>(){
           @Override public boolean value(          Change change){
             return change.getType() == Change.Type.NEW;
           }
@@ -30,8 +24,15 @@
     }
   }
 ;
-  myBrowser=new MultipleChangeListBrowser(project,changeLists,changes,getDisposable(),null,true,true,myListChangeListener,myListChangeListener);
-  myOperationName=operationNameByChanges(project,myBrowser.getAllChanges());
+  myBrowser=new ChangesBrowser(project,changeLists,changes,null,true,true,myListChangeListener,ChangesBrowser.MyUseCase.LOCAL_CHANGES,null){
+    @NotNull @Override protected DefaultTreeModel buildTreeModel(    List<Change> changes,    ChangeNodeDecorator changeNodeDecorator,    boolean showFlatten){
+      TreeModelBuilder builder=new TreeModelBuilder(myProject,showFlatten);
+      return builder.setChangeLists(changeLists).build();
+    }
+  }
+;
+  Disposer.register(getDisposable(),myBrowser);
+  myOperationName=operationNameByChanges(project,getAllChanges(changeLists));
   setOKButtonText(myOperationName);
   myOperationName=UIUtil.removeMnemonic(myOperationName);
   setTitle(VcsBundle.message("changes.action.rollback.custom.title",myOperationName));

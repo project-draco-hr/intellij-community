@@ -1,0 +1,29 @@
+{
+  MultiMap<ResourceBundle,PropertiesFile> bundleGrouping=new MultiMap<>();
+  for (  TreeNode sourceNode : sourceNodes) {
+    final PropertiesFile propertiesFile=extractPropertiesFileFromNode(sourceNode);
+    if (propertiesFile == null)     return;
+    bundleGrouping.putValue(propertiesFile.getResourceBundle(),propertiesFile);
+  }
+  final ResourceBundle resourceBundle=getValue();
+  bundleGrouping.remove(resourceBundle);
+  final ResourceBundleManager resourceBundleManager=ResourceBundleManager.getInstance(myProject);
+  final List<PropertiesFile> toAddInResourceBundle=new ArrayList<>();
+  for (  Map.Entry<ResourceBundle,Collection<PropertiesFile>> entry : bundleGrouping.entrySet()) {
+    toAddInResourceBundle.addAll(entry.getValue());
+    final ResourceBundle currentBundle=entry.getKey();
+    final Collection<PropertiesFile> propertiesFilesToMove=entry.getValue();
+    if (currentBundle.getPropertiesFiles().size() - propertiesFilesToMove.size() > 0) {
+      final String currentBundleBaseName=currentBundle.getBaseName();
+      final ArrayList<PropertiesFile> files=new ArrayList<>(currentBundle.getPropertiesFiles());
+      files.removeAll(propertiesFilesToMove);
+      resourceBundleManager.dissociateResourceBundle(currentBundle);
+      resourceBundleManager.combineToResourceBundle(files,currentBundleBaseName);
+    }
+  }
+  toAddInResourceBundle.addAll(resourceBundle.getPropertiesFiles());
+  final String baseName=resourceBundle.getBaseName();
+  resourceBundleManager.dissociateResourceBundle(resourceBundle);
+  resourceBundleManager.combineToResourceBundle(toAddInResourceBundle,baseName);
+  ProjectView.getInstance(myProject).refresh();
+}
