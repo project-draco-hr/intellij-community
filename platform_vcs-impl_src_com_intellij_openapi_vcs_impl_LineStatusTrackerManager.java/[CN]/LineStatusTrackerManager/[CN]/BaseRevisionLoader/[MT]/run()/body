@@ -5,23 +5,48 @@
     reportTrackerBaseLoadFailed();
     return;
   }
-  final Pair<VcsRevisionNumber,String> baseRevision=myStatusProvider.getBaseRevision(myVirtualFile);
-  if (baseRevision == null) {
+  VcsBaseContentProvider.BaseContent baseContent=myStatusProvider.getBaseRevision(myVirtualFile);
+  if (baseContent == null) {
     log("BaseRevisionLoader failed: null returned for base revision",myVirtualFile);
     reportTrackerBaseLoadFailed();
     return;
   }
-  final LineStatusTracker.RevisionPack revisionPack=new LineStatusTracker.RevisionPack(myLoadCounter,baseRevision.first);
+  final VcsRevisionNumber revisionNumber=baseContent.getRevisionNumber();
+  final long loadCounter=myLoadCounter;
   myLoadCounter++;
-  final String converted=StringUtil.convertLineSeparators(baseRevision.second);
+synchronized (myLock) {
+    final TrackerData data=myLineStatusTrackers.get(myDocument);
+    if (data == null) {
+      log("BaseRevisionLoader canceled: tracker already released",myVirtualFile);
+      return;
+    }
+    if (!data.shouldBeUpdated(revisionNumber,loadCounter)) {
+      log("BaseRevisionLoader canceled: no need to update",myVirtualFile);
+      return;
+    }
+  }
+  String lastUpToDateContent=baseContent.loadContent();
+  if (lastUpToDateContent == null) {
+    log("BaseRevisionLoader failed: can't load up-to-date content",myVirtualFile);
+    reportTrackerBaseLoadFailed();
+    return;
+  }
+  final String converted=StringUtil.convertLineSeparators(lastUpToDateContent);
   final Runnable runnable=new Runnable(){
     @Override public void run(){
 synchronized (myLock) {
-        log("BaseRevisionLoader: initializing tracker",myVirtualFile);
-        final LineStatusTracker tracker=myLineStatusTrackers.get(myDocument);
-        if (tracker != null) {
-          tracker.setBaseRevision(converted,revisionPack);
+        final TrackerData data=myLineStatusTrackers.get(myDocument);
+        if (data == null) {
+          log("BaseRevisionLoader initializing: tracker already released",myVirtualFile);
+          return;
         }
+        if (!data.shouldBeUpdated(revisionNumber,loadCounter)) {
+          log("BaseRevisionLoader initializing: canceled",myVirtualFile);
+          return;
+        }
+        log("BaseRevisionLoader initializing: success",myVirtualFile);
+        myLineStatusTrackers.put(myDocument,new TrackerData(data.tracker,revisionNumber,loadCounter));
+        data.tracker.setBaseRevision(converted);
       }
     }
   }
