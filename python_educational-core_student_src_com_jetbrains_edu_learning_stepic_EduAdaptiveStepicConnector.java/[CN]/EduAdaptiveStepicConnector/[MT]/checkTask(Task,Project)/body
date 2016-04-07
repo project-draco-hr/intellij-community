@@ -1,0 +1,43 @@
+{
+  try {
+    final int attemptId=getAttemptId(task,ATTEMPTS_URL);
+    final Editor editor=StudyUtils.getSelectedEditor(project);
+    String language=getLanguageString(task,project);
+    if (editor != null && language != null) {
+      final StepicWrappers.SubmissionToPostWrapper submissionToPostWrapper=new StepicWrappers.SubmissionToPostWrapper(String.valueOf(attemptId),"python3",editor.getDocument().getText());
+      final HttpPost httpPost=new HttpPost(STEPIC_API_URL + SUBMISSION_URL);
+      httpPost.setEntity(new StringEntity(new Gson().toJson(submissionToPostWrapper)));
+      final CloseableHttpClient client=getHttpClient();
+      setHeaders(httpPost,CONTENT_TYPE_APPL_JSON);
+      final CloseableHttpResponse execute=client.execute(httpPost);
+      StepicWrappers.ResultSubmissionWrapper wrapper=new Gson().fromJson(EntityUtils.toString(execute.getEntity()),StepicWrappers.ResultSubmissionWrapper.class);
+      final StepicUser user=StudySettings.getInstance().getUser();
+      if (user != null) {
+        final int id=user.getId();
+        while (wrapper.submissions.length == 1 && wrapper.submissions[0].status.equals("evaluation")) {
+          TimeUnit.MILLISECONDS.sleep(500);
+          final URI submissionURI=new URIBuilder(STEPIC_API_URL + SUBMISSION_URL).addParameter("attempt",String.valueOf(attemptId)).addParameter("order","desc").addParameter("user",String.valueOf(id)).build();
+          final HttpGet httpGet=new HttpGet(submissionURI);
+          setHeaders(httpGet,CONTENT_TYPE_APPL_JSON);
+          final CloseableHttpResponse httpResponse=client.execute(httpGet);
+          wrapper=new Gson().fromJson(EntityUtils.toString(httpResponse.getEntity()),StepicWrappers.ResultSubmissionWrapper.class);
+        }
+        final boolean isSolved=wrapper.submissions.length == 1 && !wrapper.submissions[0].status.equals("wrong");
+        return Pair.create(isSolved,wrapper.submissions[0].hint);
+      }
+    }
+  }
+ catch (  ClientProtocolException e) {
+    LOG.warn(e.getMessage());
+  }
+catch (  IOException e) {
+    LOG.warn(e.getMessage());
+  }
+catch (  URISyntaxException e) {
+    LOG.warn(e.getMessage());
+  }
+catch (  InterruptedException e) {
+    LOG.warn(e.getMessage());
+  }
+  return Pair.create(false,"");
+}
