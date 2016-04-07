@@ -1,0 +1,26 @@
+{
+  final UsageInfo[] usageInfos=refUsages.get();
+  MultiMap<PsiElement,String> conflicts=new MultiMap<PsiElement,String>();
+  myDelegate.collectConflicts(conflicts,usageInfos,myMethod,myClassDescriptor);
+  List<UsageInfo> changeSignatureUsages=new ArrayList<>();
+  for (  UsageInfo usageInfo : usageInfos) {
+    if (usageInfo instanceof ChangeSignatureUsageWrapper) {
+      final UsageInfo info=((ChangeSignatureUsageWrapper)usageInfo).getInfo();
+      if (info instanceof OverriderMethodUsageInfo) {
+        final PsiElement overridingMethod=((OverriderMethodUsageInfo)info).getOverridingMethod();
+        if (IntroduceParameterObjectDelegate.findDelegate(overridingMethod) == null) {
+          conflicts.putValue(overridingMethod,"Not supported overrider detected");
+        }
+      }
+      changeSignatureUsages.add(info);
+    }
+ else     if (usageInfo instanceof FixableUsageInfo) {
+      final String conflictMessage=((FixableUsageInfo)usageInfo).getConflictMessage();
+      if (conflictMessage != null) {
+        conflicts.putValue(usageInfo.getElement(),conflictMessage);
+      }
+    }
+  }
+  ChangeSignatureProcessorBase.collectConflictsFromExtensions(new Ref<>(changeSignatureUsages.toArray(new UsageInfo[changeSignatureUsages.size()])),conflicts,myChangeInfo);
+  return showConflicts(conflicts,usageInfos);
+}
