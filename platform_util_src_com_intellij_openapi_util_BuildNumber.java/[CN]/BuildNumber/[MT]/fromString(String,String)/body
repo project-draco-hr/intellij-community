@@ -2,7 +2,7 @@
   if (StringUtil.isEmptyOrSpaces(version))   return null;
   if (BUILD_NUMBER.equals(version) || SNAPSHOT.equals(version)) {
     final String productCode=name != null ? name : "";
-    return new BuildNumber(productCode,Holder.CURRENT_VERSION.getFormat(),Holder.CURRENT_VERSION.myComponents);
+    return new BuildNumber(productCode,Holder.CURRENT_VERSION.myComponents);
   }
   String code=version;
   int productSeparator=code.indexOf('-');
@@ -26,13 +26,19 @@
  catch (    NumberFormatException e) {
       throw new RuntimeException("Invalid version number: " + version + "; plugin name: "+ name);
     }
-    if (baselineVersion >= 2016) {
+    if (isYearBased(baselineVersion)) {
       List<String> stringComponents=StringUtil.split(code,".");
-      int[] intComponents=new int[stringComponents.size()];
-      for (int i=0; i < stringComponents.size(); i++) {
-        intComponents[i]=parseBuildNumber(version,stringComponents.get(i),name);
+      TIntArrayList intComponentsList=new TIntArrayList();
+      for (      String stringComponent : stringComponents) {
+        int comp=parseBuildNumber(version,stringComponent,name);
+        intComponentsList.add(comp);
+        if (comp == SNAPSHOT_VALUE)         break;
       }
-      return new BuildNumber(productCode,Format.YEAR_BASED,intComponents);
+      int[] intComponents=intComponentsList.toNativeArray();
+      if (intComponents[1] != SNAPSHOT_VALUE) {
+        intComponents[1]=normalizedYearRevision(intComponents);
+      }
+      return new BuildNumber(productCode,intComponents);
     }
  else {
       code=code.substring(baselineVersionSeparator + 1);
@@ -44,22 +50,22 @@
       }
       buildNumber=parseBuildNumber(version,code,name);
       if (attemptInfo != null) {
-        return new BuildNumber(productCode,Format.BRANCH_BASED,baselineVersion,buildNumber,attemptInfo);
+        return new BuildNumber(productCode,baselineVersion,buildNumber,attemptInfo);
       }
  else {
-        return new BuildNumber(productCode,Format.BRANCH_BASED,baselineVersion,buildNumber);
+        return new BuildNumber(productCode,baselineVersion,buildNumber);
       }
     }
   }
  else {
     buildNumber=parseBuildNumber(version,code,name);
     if (buildNumber <= 2000) {
-      return new BuildNumber(productCode,Format.BRANCH_BASED,buildNumber,0);
+      return new BuildNumber(productCode,buildNumber,0);
     }
-    if (buildNumber >= 2016 && buildNumber <= 2999) {
-      return new BuildNumber(productCode,Format.YEAR_BASED,buildNumber,0);
+    if (isYearBased(buildNumber)) {
+      return new BuildNumber(productCode,buildNumber,0);
     }
     baselineVersion=getBaseLineForHistoricBuilds(buildNumber);
-    return new BuildNumber(productCode,Format.HISTORIC,baselineVersion,buildNumber);
+    return new BuildNumber(productCode,baselineVersion,buildNumber);
   }
 }
