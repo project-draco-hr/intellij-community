@@ -1,0 +1,50 @@
+{
+  final File buildDir=externalProject.getBuildDir();
+  final MultiMap<String,ContentRootData> sourceSetRoots=MultiMap.create();
+  for (  DataNode<ContentRootData> contentRootNode : ExternalSystemApiUtil.findAll(moduleNode,ProjectKeys.CONTENT_ROOT)) {
+    File root=new File(contentRootNode.getData().getRootPath());
+    if (FileUtil.isAncestor(buildDir,root,true))     continue;
+    while (weightMap.containsKey(root.getParent()) && weightMap.get(root.getParent()).count <= 1) {
+      root=root.getParentFile();
+    }
+    ContentRootData mergedContentRoot=null;
+    String rootPath=ExternalSystemApiUtil.toCanonicalPath(root.getAbsolutePath());
+    Set<String> paths=ContainerUtil.newHashSet(sourceSetRoots.keySet());
+    for (    String path : paths) {
+      if (FileUtil.isAncestor(rootPath,path,false)) {
+        Collection<ContentRootData> values=sourceSetRoots.remove(path);
+        if (values != null) {
+          sourceSetRoots.putValues(rootPath,values);
+        }
+      }
+ else       if (FileUtil.isAncestor(path,rootPath,true)) {
+        mergedContentRoot=sourceSetRoots.get(path).iterator().next();
+        break;
+      }
+      if (sourceSetRoots.size() == 1)       break;
+    }
+    if (mergedContentRoot == null) {
+      mergedContentRoot=new ContentRootData(GradleConstants.SYSTEM_ID,root.getAbsolutePath());
+      sourceSetRoots.putValue(mergedContentRoot.getRootPath(),mergedContentRoot);
+    }
+    for (    ExternalSystemSourceType sourceType : ExternalSystemSourceType.values()) {
+      for (      ContentRootData.SourceRoot sourceRoot : contentRootNode.getData().getPaths(sourceType)) {
+        mergedContentRoot.storePath(sourceType,sourceRoot.getPath(),sourceRoot.getPackagePrefix());
+      }
+    }
+    contentRootNode.clear(true);
+  }
+  for (  Map.Entry<String,Collection<ContentRootData>> entry : sourceSetRoots.entrySet()) {
+    final String rootPath=entry.getKey();
+    final ContentRootData ideContentRoot=new ContentRootData(GradleConstants.SYSTEM_ID,rootPath);
+    for (    ContentRootData rootData : entry.getValue()) {
+      for (      ExternalSystemSourceType sourceType : ExternalSystemSourceType.values()) {
+        Collection<ContentRootData.SourceRoot> roots=rootData.getPaths(sourceType);
+        for (        ContentRootData.SourceRoot sourceRoot : roots) {
+          ideContentRoot.storePath(sourceType,sourceRoot.getPath(),sourceRoot.getPackagePrefix());
+        }
+      }
+    }
+    moduleNode.createChild(ProjectKeys.CONTENT_ROOT,ideContentRoot);
+  }
+}

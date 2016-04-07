@@ -1,8 +1,6 @@
 {
   try {
-    for (    List<ID<?,?>> value : state.myFileType2IndicesWithFileTypeInfoMap.values()) {
-      value.addAll(state.myIndicesWithoutFileTypeInfo);
-    }
+    state.finalizeFileTypeMappingForIndices();
     String rebuildNotification=null;
     if (currentVersionCorrupted) {
       rebuildNotification="Index files on disk are corrupted. Indices will be rebuilt.";
@@ -13,8 +11,9 @@
     if (rebuildNotification != null && !ApplicationManager.getApplication().isHeadlessEnvironment() && Registry.is("ide.showIndexRebuildMessage")) {
       NOTIFICATIONS.createNotification("Index Rebuild",rebuildNotification,NotificationType.INFORMATION,null).notify(null);
     }
+    state.freeze();
     myState=state;
-    for (    ID<?,?> indexId : state.myIndices.keySet()) {
+    for (    ID<?,?> indexId : state.getIndexIDs()) {
       if (ourRebuildStatus.get(indexId).compareAndSet(REQUIRES_REBUILD,OK)) {
         try {
           clearIndex(indexId);
@@ -36,7 +35,7 @@
       }
     }
 );
-    saveRegisteredIndicesAndDropUnregisteredOnes(state.myIndices.keySet());
+    saveRegisteredIndicesAndDropUnregisteredOnes(state.getIndexIDs());
     myFlushingFuture=FlushingDaemon.everyFiveSeconds(new Runnable(){
       private int lastModCount;
       @Override public void run(){
