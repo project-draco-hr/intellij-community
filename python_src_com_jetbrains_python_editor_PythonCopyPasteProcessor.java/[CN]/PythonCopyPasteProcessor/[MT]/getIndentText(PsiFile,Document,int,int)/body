@@ -12,15 +12,28 @@
   }
   int lineStartOffset=getLineStartSafeOffset(document,lineNumber);
   final PsiElement ws=file.findElementAt(lineStartOffset);
+  final String userIndent=document.getText(TextRange.create(lineStartOffset,caretOffset));
   if (ws != null) {
-    PyStatementList statementList=ObjectUtils.chooseNotNull(as(ws.getNextSibling(),PyStatementList.class),as(ws.getPrevSibling(),PyStatementList.class));
-    if (statementList != null && statementList.getStatements().length == 0) {
-      return PyIndentUtil.getExpectedElementIndent(statementList);
+    PyStatementList statementList=findEmptyStatementListNearby(ws);
+    if (statementList != null) {
+      return PyIndentUtil.getElementIndent(statementList);
     }
-    final PyStatementListContainer container=PsiTreeUtil.getParentOfType(ws,PyStatementListContainer.class);
-    if (container != null) {
-      return PyIndentUtil.getElementIndent(container.getStatementList());
+    final String smallestIndent=PyIndentUtil.getElementIndent(ws);
+    final PyStatementListContainer parentBlock=PsiTreeUtil.getParentOfType(ws,PyStatementListContainer.class);
+    final PyStatementListContainer deepestBlock=getDeepestPossibleParentBlock(ws);
+    final String greatestIndent;
+    if (deepestBlock != null && (parentBlock == null || PsiTreeUtil.isAncestor(parentBlock,deepestBlock,true))) {
+      greatestIndent=PyIndentUtil.getElementIndent(deepestBlock.getStatementList());
+    }
+ else {
+      greatestIndent=smallestIndent;
+    }
+    if (smallestIndent.startsWith(userIndent)) {
+      return smallestIndent;
+    }
+    if (userIndent.startsWith(greatestIndent)) {
+      return greatestIndent;
     }
   }
-  return document.getText(TextRange.create(lineStartOffset,caretOffset));
+  return userIndent;
 }

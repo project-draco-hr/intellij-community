@@ -1,0 +1,28 @@
+{
+  final UsageInfo[] usageInfos=refUsages.get();
+  MultiMap<PsiElement,String> conflicts=new MultiMap<PsiElement,String>();
+  myDelegate.collectConflicts(conflicts,usageInfos,myMethod,myClassDescriptor);
+  List<UsageInfo> changeSignatureUsages=new ArrayList<>();
+  Set<PsiFile> filesWithUsages=new HashSet<>();
+  for (  UsageInfo usageInfo : usageInfos) {
+    if (usageInfo instanceof ChangeSignatureUsageWrapper) {
+      final UsageInfo info=((ChangeSignatureUsageWrapper)usageInfo).getInfo();
+      final PsiElement element=info.getElement();
+      if (element != null && IntroduceParameterObjectDelegate.findDelegate(element) == null) {
+        final PsiFile containingFile=element.getContainingFile();
+        if (filesWithUsages.add(containingFile)) {
+          conflicts.putValue(element,"Usage in not supported language is detected: " + containingFile.getName());
+        }
+      }
+      changeSignatureUsages.add(info);
+    }
+ else     if (usageInfo instanceof FixableUsageInfo) {
+      final String conflictMessage=((FixableUsageInfo)usageInfo).getConflictMessage();
+      if (conflictMessage != null) {
+        conflicts.putValue(usageInfo.getElement(),conflictMessage);
+      }
+    }
+  }
+  ChangeSignatureProcessorBase.collectConflictsFromExtensions(new Ref<>(changeSignatureUsages.toArray(new UsageInfo[changeSignatureUsages.size()])),conflicts,myChangeInfo);
+  return showConflicts(conflicts,usageInfos);
+}
