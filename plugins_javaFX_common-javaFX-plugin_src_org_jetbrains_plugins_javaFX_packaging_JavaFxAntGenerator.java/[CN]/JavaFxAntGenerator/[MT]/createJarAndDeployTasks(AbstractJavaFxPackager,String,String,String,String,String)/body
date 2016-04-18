@@ -1,0 +1,84 @@
+{
+  final String artifactFileNameWithoutExtension=FileUtil.getNameWithoutExtension(artifactFileName);
+  final List<SimpleTag> topLevelTagsCollector=new ArrayList<SimpleTag>();
+  final String preloaderJar=packager.getPreloaderJar();
+  final String preloaderClass=packager.getPreloaderClass();
+  String preloaderFiles=null;
+  String allButPreloader=null;
+  if (!StringUtil.isEmptyOrSpaces(preloaderJar) && !StringUtil.isEmptyOrSpaces(preloaderClass)) {
+    preloaderFiles=artifactFileNameWithoutExtension + "_preloader_files";
+    topLevelTagsCollector.add(new SimpleTag("fx:fileset",Couple.of("id",preloaderFiles),Couple.of("requiredFor","preloader"),Couple.of("dir",tempDirPath),Couple.of("includes",preloaderJar)));
+    allButPreloader="all_but_preloader_" + artifactFileNameWithoutExtension;
+    topLevelTagsCollector.add(new SimpleTag("fx:fileset",Couple.of("id",allButPreloader),Couple.of("dir",tempDirPath),Couple.of("excludes",preloaderJar),Couple.of("includes","**/*.jar")));
+  }
+  final String allButSelf="all_but_" + artifactFileNameWithoutExtension;
+  final SimpleTag allButSelfAndPreloader=new SimpleTag("fx:fileset",Couple.of("id",allButSelf),Couple.of("dir",tempDirPath),Couple.of("includes","**/*.jar"));
+  allButSelfAndPreloader.add(new SimpleTag("exclude",Couple.of("name",artifactFileName)));
+  if (preloaderJar != null) {
+    allButSelfAndPreloader.add(new SimpleTag("exclude",Couple.of("name",preloaderJar)));
+  }
+  topLevelTagsCollector.add(allButSelfAndPreloader);
+  final String all="all_" + artifactFileNameWithoutExtension;
+  final SimpleTag allIncluded=new SimpleTag("fx:fileset",Couple.of("id",all),Couple.of("dir",tempDirPath),Couple.of("includes","**/*.jar"));
+  topLevelTagsCollector.add(allIncluded);
+  final String appId=artifactFileNameWithoutExtension + "_id";
+  final SimpleTag applicationTag=new SimpleTag("fx:application",Couple.of("id",appId),Couple.of("name",artifactName),Couple.of("mainClass",packager.getAppClass()));
+  if (preloaderFiles != null) {
+    applicationTag.addAttribute(Couple.of("preloaderClass",preloaderClass));
+  }
+  final String version=packager.getVersion();
+  if (!StringUtil.isEmptyOrSpaces(version)) {
+    applicationTag.addAttribute(Couple.of("version",version.trim().replaceAll("\\s","-")));
+  }
+  appendValuesFromPropertiesFile(applicationTag,packager.getHtmlParamFile(),"fx:htmlParam",false);
+  appendValuesFromPropertiesFile(applicationTag,packager.getParamFile(),"fx:param",true);
+  topLevelTagsCollector.add(applicationTag);
+  if (packager.convertCss2Bin()) {
+    final SimpleTag css2binTag=new SimpleTag("fx:csstobin",Couple.of("outdir",tempDirPath));
+    css2binTag.add(new SimpleTag("fileset",Couple.of("dir",tempDirPath),Couple.of("includes","**/*.css")));
+    topLevelTagsCollector.add(css2binTag);
+  }
+  final SimpleTag createJarTag=new SimpleTag("fx:jar",Couple.of("destfile",tempDirPath + "/" + artifactFileName));
+  createJarTag.add(new SimpleTag("fx:application",Couple.of("refid",appId)));
+  final List<Pair> fileset2Jar=new ArrayList<Pair>();
+  fileset2Jar.add(Couple.of("dir",tempDirPath));
+  fileset2Jar.add(Couple.of("excludes","**/*.jar"));
+  createJarTag.add(new SimpleTag("fileset",fileset2Jar.toArray(new Pair[fileset2Jar.size()])));
+  createJarTag.add(createResourcesTag(preloaderFiles,false,allButPreloader,allButSelf,all));
+  List<JavaFxManifestAttribute> manifestAttributes=packager.getCustomManifestAttributes();
+  if (manifestAttributes != null) {
+    final SimpleTag manifestTag=new SimpleTag("manifest");
+    for (    JavaFxManifestAttribute pair : manifestAttributes) {
+      manifestTag.add(new SimpleTag("attribute",Couple.of("name",pair.getName()),Couple.of("value",pair.getValue())));
+    }
+    createJarTag.add(manifestTag);
+  }
+  topLevelTagsCollector.add(createJarTag);
+  final JavaFxPackagerConstants.NativeBundles bundle=packager.getNativeBundle();
+  final SimpleTag iconTag=appendApplicationIconPath(topLevelTagsCollector,bundle,packager.getIcons(),relativeToBaseDirPath);
+  final SimpleTag deployTag=new SimpleTag("fx:deploy",Couple.of("width",packager.getWidth()),Couple.of("height",packager.getHeight()),Couple.of("updatemode",packager.getUpdateMode()),Couple.of("outdir",tempDirDeployPath),Couple.of("outfile",artifactFileNameWithoutExtension));
+  if (bundle != null && bundle != JavaFxPackagerConstants.NativeBundles.none) {
+    deployTag.addAttribute(Couple.of("nativeBundles",bundle.name()));
+  }
+  if (!StringUtil.isEmpty(packager.getHtmlPlaceholderId())) {
+    deployTag.addAttribute(Couple.of("placeholderId",packager.getHtmlPlaceholderId()));
+  }
+  if (packager.isEnabledSigning()) {
+    deployTag.add(new SimpleTag("fx:permissions",Couple.of("elevated","true")));
+  }
+  deployTag.add(new SimpleTag("fx:application",Couple.of("refid",appId)));
+  final List<Pair> infoPairs=new ArrayList<Pair>();
+  appendIfNotEmpty(infoPairs,"title",packager.getTitle());
+  appendIfNotEmpty(infoPairs,"vendor",packager.getVendor());
+  appendIfNotEmpty(infoPairs,"description",packager.getDescription());
+  if (!infoPairs.isEmpty() || iconTag != null) {
+    final SimpleTag infoTag=new SimpleTag("fx:info",infoPairs);
+    deployTag.add(infoTag);
+    if (iconTag != null)     infoTag.add(iconTag);
+  }
+  deployTag.add(createResourcesTag(preloaderFiles,true,allButPreloader,allButSelf,all));
+  final SimpleTag templateTag=createTemplateTag(packager,tempDirDeployPath,relativeToBaseDirPath);
+  if (templateTag != null)   deployTag.add(templateTag);
+  topLevelTagsCollector.add(deployTag);
+  return topLevelTagsCollector;
+}

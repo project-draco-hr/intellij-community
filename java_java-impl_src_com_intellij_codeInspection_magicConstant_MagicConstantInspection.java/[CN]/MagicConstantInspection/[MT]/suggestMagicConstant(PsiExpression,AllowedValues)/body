@@ -1,0 +1,48 @@
+{
+  Object argumentValue=JavaConstantExpressionEvaluator.computeConstantExpression(argument,null,false);
+  if (argumentValue == null)   return null;
+  if (!allowedValues.canBeOred) {
+    for (    PsiAnnotationMemberValue value : allowedValues.values) {
+      if (value instanceof PsiExpression) {
+        Object constantValue=JavaConstantExpressionEvaluator.computeConstantExpression((PsiExpression)value,null,false);
+        if (constantValue != null && constantValue.equals(argumentValue)) {
+          return new ReplaceWithMagicConstantFix(argument,value);
+        }
+      }
+    }
+  }
+ else {
+    Long longArgument=evaluateLongConstant(argument);
+    if (longArgument == null) {
+      return null;
+    }
+    long remainingFlags=longArgument.longValue();
+    List<PsiAnnotationMemberValue> flags=new ArrayList<>();
+    for (    PsiAnnotationMemberValue value : allowedValues.values) {
+      if (value instanceof PsiExpression) {
+        Long constantValue=evaluateLongConstant((PsiExpression)value);
+        if (constantValue == null) {
+          continue;
+        }
+        if ((remainingFlags & constantValue) == constantValue) {
+          flags.add(value);
+          remainingFlags&=~constantValue;
+        }
+      }
+    }
+    if (remainingFlags == 0) {
+      if (flags.size() > 1) {
+        for (int i=flags.size() - 1; i >= 0; i--) {
+          PsiAnnotationMemberValue flag=flags.get(i);
+          if (evaluateLongConstant((PsiExpression)flag) == 0) {
+            flags.remove(i);
+          }
+        }
+      }
+      if (!flags.isEmpty()) {
+        return new ReplaceWithMagicConstantFix(argument,flags.toArray(PsiAnnotationMemberValue.EMPTY_ARRAY));
+      }
+    }
+  }
+  return null;
+}

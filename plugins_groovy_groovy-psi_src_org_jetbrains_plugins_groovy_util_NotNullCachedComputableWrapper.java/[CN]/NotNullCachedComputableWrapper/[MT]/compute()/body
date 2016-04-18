@@ -1,16 +1,19 @@
 {
-  T result=myValue;
-  if (result != null)   return result;
-synchronized (this) {
-    result=myValue;
-    if (result == null) {
-      final RecursionGuard.StackStamp stamp=ourGuard.markStack();
-      result=myComputable.compute();
-      if (stamp.mayCacheNow()) {
-        myValue=result;
+  while (true) {
+    T value=myValueRef.get();
+    if (value != null)     return value;
+    final NotNullComputable<T> computable=myComputable;
+    if (computable == null)     continue;
+    final RecursionGuard.StackStamp stamp=ourGuard.markStack();
+    value=computable.compute();
+    if (stamp.mayCacheNow()) {
+      if (myValueRef.compareAndSet(null,value)) {
         myComputable=null;
+        return value;
       }
     }
+ else {
+      return value;
+    }
   }
-  return result;
 }

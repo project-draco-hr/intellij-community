@@ -1,0 +1,34 @@
+{
+  final XmlTag xmlTag=attribute.getParent();
+  if (xmlTag == null)   return;
+  final XmlAttribute idAttribute=xmlTag.getAttribute(FxmlConstants.FX_ID);
+  if (idAttribute == null)   return;
+  final XmlAttributeValue idValue=idAttribute.getValueElement();
+  if (idValue == null)   return;
+  final PsiReference reference=idValue.getReference();
+  if (reference == null)   return;
+  final PsiElement element=reference.resolve();
+  if (!(element instanceof PsiField))   return;
+  final PsiField tagField=(PsiField)element;
+  if (tagField.hasModifierProperty(PsiModifier.STATIC) || !JavaFxPsiUtil.isVisibleInFxml(tagField))   return;
+  final PsiType tagFieldType=tagField.getType();
+  if (!(tagFieldType instanceof PsiClassType))   return;
+  final PsiClassType rawFieldType=((PsiClassType)tagFieldType).rawType();
+  final PsiClassType.ClassResolveResult resolveResult=PsiUtil.resolveGenericsClassInType(eventType);
+  final PsiClass eventClass=resolveResult.getElement();
+  if (eventClass == null)   return;
+  final PsiSubstitutor eventSubstitutor=resolveResult.getSubstitutor();
+  for (  PsiTypeParameter typeParameter : PsiUtil.typeParametersIterable(eventClass)) {
+    final PsiType eventTypeArgument=eventSubstitutor.substitute(typeParameter);
+    final PsiClassType rawEventArgument=eventTypeArgument instanceof PsiClassType ? ((PsiClassType)eventTypeArgument).rawType() : null;
+    if (rawFieldType.equals(rawEventArgument)) {
+      final List<IntentionAction> fixes=HighlightUtil.getChangeVariableTypeFixes(tagField,eventTypeArgument);
+      for (      IntentionAction action : fixes) {
+        if (action instanceof LocalQuickFix) {
+          quickFixes.add((LocalQuickFix)action);
+        }
+      }
+      break;
+    }
+  }
+}
