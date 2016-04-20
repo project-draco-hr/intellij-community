@@ -1,0 +1,57 @@
+{
+  final SpacingImpl spacing=currentBlock.getSpaceProperty();
+  final WhiteSpace whiteSpace=currentBlock.getWhiteSpace();
+  final boolean wrapWasPresent=whiteSpace.containsLineFeeds();
+  if (wrapWasPresent) {
+    myFirstWrappedBlockOnLine=null;
+    if (!whiteSpace.containsLineFeedsInitially()) {
+      whiteSpace.removeLineFeeds(spacing,myBlockRangesMap);
+    }
+  }
+  final boolean wrapIsPresent=whiteSpace.containsLineFeeds();
+  final ArrayList<WrapImpl> wraps=currentBlock.getWraps();
+  for (  WrapImpl wrap : wraps) {
+    wrap.setWrapOffset(currentBlock.getStartOffset());
+  }
+  final WrapImpl wrap=getWrapToBeUsed(wraps,currentBlock);
+  if (wrap != null || wrapIsPresent) {
+    if (!wrapIsPresent && !canReplaceWrapCandidate(wrap,currentBlock)) {
+      return myWrapCandidate;
+    }
+    if (wrap != null && wrap.getChopStartBlock() != null) {
+      LeafBlockWrapper newCurrentBlock=wrap.getChopStartBlock();
+      wrap.setActive();
+      return newCurrentBlock;
+    }
+    if (wrap != null && isChopNeeded(wrap,currentBlock)) {
+      wrap.setActive();
+    }
+    if (!wrapIsPresent) {
+      whiteSpace.ensureLineFeed();
+      if (!wrapWasPresent) {
+        if (myFirstWrappedBlockOnLine != null && wrap.isChildOf(myFirstWrappedBlockOnLine.getWrap(),currentBlock)) {
+          wrap.ignoreParentWrap(myFirstWrappedBlockOnLine.getWrap(),currentBlock);
+          return myFirstWrappedBlockOnLine;
+        }
+ else {
+          myFirstWrappedBlockOnLine=currentBlock;
+        }
+      }
+    }
+    myWrapCandidate=null;
+  }
+ else {
+    for (    final WrapImpl wrap1 : wraps) {
+      if (isCandidateToBeWrapped(wrap1,currentBlock) && canReplaceWrapCandidate(wrap1,currentBlock)) {
+        myWrapCandidate=currentBlock;
+      }
+      if (isChopNeeded(wrap1,currentBlock)) {
+        wrap1.saveChopBlock(currentBlock);
+      }
+    }
+  }
+  if (!whiteSpace.containsLineFeeds() && myWrapCandidate != null && !whiteSpace.isReadOnly() && lineOver(currentBlock)) {
+    return myWrapCandidate;
+  }
+  return null;
+}
