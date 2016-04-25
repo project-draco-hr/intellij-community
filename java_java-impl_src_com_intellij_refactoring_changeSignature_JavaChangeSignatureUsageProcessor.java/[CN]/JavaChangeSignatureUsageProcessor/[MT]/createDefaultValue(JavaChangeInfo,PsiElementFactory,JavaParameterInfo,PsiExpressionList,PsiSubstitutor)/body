@@ -5,12 +5,9 @@
     final VariablesProcessor processor=new VariablesProcessor(false){
       @Override protected boolean check(      PsiVariable var,      ResolveState state){
         if (var instanceof PsiField && !resolveHelper.isAccessible((PsiField)var,list,null))         return false;
-        if (var instanceof GrVariable && PsiUtil.isLocalVariable(var) && list.getTextRange().getStartOffset() <= var.getTextRange().getStartOffset()) {
-          return false;
-        }
+        if (var instanceof PsiLocalVariable && list.getTextRange().getStartOffset() <= var.getTextRange().getStartOffset())         return false;
         if (PsiTreeUtil.isAncestor(var,list,false))         return false;
-        final PsiType _type=var instanceof GrVariable ? ((GrVariable)var).getTypeGroovy() : var.getType();
-        final PsiType varType=state.get(PsiSubstitutor.KEY).substitute(_type);
+        final PsiType varType=state.get(PsiSubstitutor.KEY).substitute(var.getType());
         return type.isAssignableFrom(varType);
       }
       @Override public boolean execute(      @NotNull PsiElement pe,      @NotNull ResolveState state){
@@ -19,7 +16,7 @@
       }
     }
 ;
-    ResolveUtil.treeWalkUp(list,processor,false);
+    PsiScopesUtil.treeWalkUp(processor,list,null);
     if (processor.size() == 1) {
       final PsiVariable result=processor.getResult(0);
       return factory.createExpressionFromText(result.getName(),list);
@@ -29,23 +26,19 @@
       if (parentClass != null) {
         PsiClass containingClass=parentClass;
         final Set<PsiClass> containingClasses=new HashSet<PsiClass>();
-        final PsiElementFactory jfactory=JavaPsiFacade.getElementFactory(list.getProject());
         while (containingClass != null) {
-          if (type.isAssignableFrom(jfactory.createType(containingClass,PsiSubstitutor.EMPTY))) {
+          if (type.isAssignableFrom(factory.createType(containingClass,PsiSubstitutor.EMPTY))) {
             containingClasses.add(containingClass);
           }
           containingClass=PsiTreeUtil.getParentOfType(containingClass,PsiClass.class);
         }
         if (containingClasses.size() == 1) {
-          return factory.createThisExpression(containingClasses.contains(parentClass) ? null : containingClasses.iterator().next());
+          return RefactoringChangeUtil.createThisExpression(parentClass.getManager(),containingClasses.contains(parentClass) ? null : containingClasses.iterator().next());
         }
       }
     }
   }
-  final PsiElement element=info.getActualValue(list.getParent());
-  if (element instanceof GrExpression) {
-    return (GrExpression)element;
-  }
-  final String value=info.getDefaultValue();
-  return !StringUtil.isEmpty(value) ? factory.createExpressionFromText(value,list) : null;
+  final PsiCallExpression callExpression=PsiTreeUtil.getParentOfType(list,PsiCallExpression.class);
+  final String defaultValue=info.getDefaultValue();
+  return callExpression != null ? (PsiExpression)info.getActualValue(callExpression,substitutor) : !StringUtil.isEmpty(defaultValue) ? factory.createExpressionFromText(defaultValue,list) : null;
 }
