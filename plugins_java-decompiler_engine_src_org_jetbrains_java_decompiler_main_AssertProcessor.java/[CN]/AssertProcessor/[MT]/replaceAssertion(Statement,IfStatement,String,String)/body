@@ -1,18 +1,32 @@
 {
+  boolean throwInIf=true;
   Statement ifstat=stat.getIfstat();
   InvocationExprent throwError=isAssertionError(ifstat);
   if (throwError == null) {
-    return false;
+    Statement elsestat=stat.getElsestat();
+    throwError=isAssertionError(elsestat);
+    if (throwError == null) {
+      return false;
+    }
+ else {
+      throwInIf=false;
+    }
   }
-  Object[] exprres=getAssertionExprent(stat.getHeadexprent().getCondition().copy(),classname,key);
+  Object[] exprres=getAssertionExprent(stat.getHeadexprent().getCondition().copy(),classname,key,throwInIf);
   if (!(Boolean)exprres[1]) {
     return false;
   }
   List<Exprent> lstParams=new ArrayList<Exprent>();
   Exprent ascond=null, retcond=null;
-  if (exprres[0] != null) {
-    ascond=new FunctionExprent(FunctionExprent.FUNCTION_BOOL_NOT,(Exprent)exprres[0],throwError.bytecode);
-    retcond=SecondaryFunctionsHelper.propagateBoolNot(ascond);
+  if (throwInIf) {
+    if (exprres[0] != null) {
+      ascond=new FunctionExprent(FunctionExprent.FUNCTION_BOOL_NOT,(Exprent)exprres[0],throwError.bytecode);
+      retcond=SecondaryFunctionsHelper.propagateBoolNot(ascond);
+    }
+  }
+ else {
+    ascond=(Exprent)exprres[0];
+    retcond=ascond;
   }
   lstParams.add(retcond == null ? ascond : retcond);
   if (!throwError.getLstParameters().isEmpty()) {
@@ -31,16 +45,27 @@
     }
     lstStatements.add(newstat);
     if (stat.iftype == IfStatement.IFTYPE_IFELSE) {
-      lstStatements.add(stat.getElsestat());
+      if (throwInIf) {
+        lstStatements.add(stat.getElsestat());
+      }
+ else {
+        lstStatements.add(stat.getIfstat());
+      }
     }
     SequenceStatement sequence=new SequenceStatement(lstStatements);
     sequence.setAllParent();
     for (int i=0; i < sequence.getStats().size() - 1; i++) {
       sequence.getStats().get(i).addSuccessor(new StatEdge(StatEdge.TYPE_REGULAR,sequence.getStats().get(i),sequence.getStats().get(i + 1)));
     }
-    if (stat.iftype == IfStatement.IFTYPE_IFELSE) {
-      Statement ifelse=stat.getElsestat();
-      List<StatEdge> lstSuccs=ifelse.getAllSuccessorEdges();
+    if (stat.iftype == IfStatement.IFTYPE_IFELSE || !throwInIf) {
+      Statement stmts;
+      if (throwInIf) {
+        stmts=stat.getElsestat();
+      }
+ else {
+        stmts=stat.getIfstat();
+      }
+      List<StatEdge> lstSuccs=stmts.getAllSuccessorEdges();
       if (!lstSuccs.isEmpty()) {
         StatEdge endedge=lstSuccs.get(0);
         if (endedge.closure == stat) {
