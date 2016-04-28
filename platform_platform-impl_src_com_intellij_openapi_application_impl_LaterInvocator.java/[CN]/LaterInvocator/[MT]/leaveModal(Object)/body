@@ -3,15 +3,18 @@
   if (LOG.isDebugEnabled()) {
     LOG.debug("leaveModal:" + modalEntity);
   }
-  while (ourFlushQueueRunnable.runNextEvent())   ;
   ourModalityStateMulticaster.getMulticaster().beforeModalityStateChanged(false);
-  boolean removed=ourModalEntities.remove(modalEntity);
-  if (ourModalityStack.size() > 1) {
-    ourModalityStack.pop();
+  int index=ourModalEntities.indexOf(modalEntity);
+  LOG.assertTrue(index >= 0);
+  ourModalEntities.remove(index);
+  ourModalityStack.remove(index + 1);
+  for (int i=1; i < ourModalityStack.size(); i++) {
+    ((ModalityStateEx)ourModalityStack.get(i)).removeModality(modalEntity);
   }
-  LOG.assertTrue(removed,modalEntity);
-  LOG.assertTrue(!ourModalityStack.isEmpty());
-  cleanupQueueForModal(modalEntity);
+  TransactionGuardImpl guard=IdeaApplication.isLoaded() ? (TransactionGuardImpl)TransactionGuard.getInstance() : null;
+  if (guard != null) {
+    guard.leftModality(modalEntity);
+  }
   ourQueueSkipCount=0;
   requestFlush();
 }
