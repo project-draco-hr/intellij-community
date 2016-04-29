@@ -1,21 +1,19 @@
 {
-  int offset=editor.getCaretModel().getOffset();
   editor.getScrollingModel().scrollToCaret(ScrollType.MAKE_VISIBLE);
-  PsiElement element=file.findElementAt(offset);
-  while (true) {
-    if (element == null || element instanceof PsiFile) {
-      String message=RefactoringBundle.getCannotRefactorMessage(RefactoringBundle.message("the.caret.should.be.positioned.inside.a.class.to.push.members.from"));
-      CommonRefactoringUtil.showErrorHint(project,editor,message,REFACTORING_NAME,HelpID.MEMBERS_PUSH_DOWN);
-      return;
+  ArrayList<PsiElement> elements=new ArrayList<>();
+  String errorMessage=null;
+  for (  Caret caret : editor.getCaretModel().getAllCarets()) {
+    int offset=caret.getOffset();
+    PsiElement element=file.findElementAt(offset);
+    String errorFromElement=collectElementsUnderCaret(element,elements);
+    if (errorFromElement != null) {
+      errorMessage=errorFromElement;
     }
-    if (element instanceof PsiClass || element instanceof PsiField || element instanceof PsiMethod) {
-      if (element instanceof JspClass) {
-        RefactoringMessageUtil.showNotSupportedForJspClassesError(project,editor,REFACTORING_NAME,HelpID.MEMBERS_PUSH_DOWN);
-        return;
-      }
-      invoke(project,new PsiElement[]{element},dataContext);
-      return;
-    }
-    element=element.getParent();
   }
+  if (elements.isEmpty()) {
+    String message=errorMessage != null ? errorMessage : RefactoringBundle.getCannotRefactorMessage(RefactoringBundle.message("the.caret.should.be.positioned.inside.a.class.to.push.members.from"));
+    CommonRefactoringUtil.showErrorHint(project,editor,message,REFACTORING_NAME,HelpID.MEMBERS_PUSH_DOWN);
+    return;
+  }
+  invoke(project,elements.toArray(new PsiElement[0]),dataContext);
 }
