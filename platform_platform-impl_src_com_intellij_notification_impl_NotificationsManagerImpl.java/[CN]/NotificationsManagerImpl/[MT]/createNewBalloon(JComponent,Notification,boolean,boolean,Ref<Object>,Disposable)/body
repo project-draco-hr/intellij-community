@@ -10,6 +10,12 @@
     layoutData.groupId=null;
   }
   layoutDataRef.set(layoutData);
+  if (layoutData.fillColor == null) {
+    layoutData.fillColor=FILL_COLOR;
+  }
+  if (layoutData.borderColor == null) {
+    layoutData.borderColor=BORDER_COLOR;
+  }
   boolean actions=!notification.getActions().isEmpty();
   boolean showFullContent=layoutData.showFullContent || notification instanceof NotificationActionProvider;
   Color foregroundR=Gray._0;
@@ -115,7 +121,7 @@
  else   if (!showFullContent && layoutData.maxScrollHeight != layoutData.fullHeight) {
     pane.setViewport(new GradientViewport(text,JBUI.insets(10,0),true){
       @Nullable @Override protected Color getViewColor(){
-        return FILL_COLOR;
+        return layoutData.fillColor;
       }
       @Override protected void paintGradient(      Graphics g){
         if (!layoutData.showMinSize) {
@@ -125,7 +131,7 @@
     }
 );
   }
-  configureBalloonScrollPane(pane);
+  configureBalloonScrollPane(pane,layoutData.fillColor);
   if (showFullContent) {
     pane.setPreferredSize(text.getPreferredSize());
   }
@@ -179,11 +185,11 @@
         int x=getWidth() - width - JBUI.scale(5);
         int y=layoutData.configuration.topSpaceHeight;
         int height=title instanceof JEditorPane ? getFirstLineHeight((JEditorPane)title) : title.getHeight();
-        g.setColor(FILL_COLOR);
+        g.setColor(layoutData.fillColor);
         g.fillRect(x,y,width,height);
         width=layoutData.configuration.beforeGearSpace;
         x-=width;
-        ((Graphics2D)g).setPaint(new GradientPaint(x,y,ColorUtil.withAlpha(FILL_COLOR,0.2),x + width,y,FILL_COLOR));
+        ((Graphics2D)g).setPaint(new GradientPaint(x,y,ColorUtil.withAlpha(layoutData.fillColor,0.2),x + width,y,layoutData.fillColor));
         g.fillRect(x,y,width,height);
       }
     }
@@ -227,9 +233,16 @@
     layoutData.groupId=null;
     buttons.setBorder(new EmptyBorder(0,0,JBUI.scale(5),JBUI.scale(7)));
   }
-  if (buttons == null && actions) {
-    createActionPanel(notification,centerPanel,layoutData.configuration.actionGap);
+  HoverAdapter hoverAdapter=new HoverAdapter();
+  hoverAdapter.addSource(content);
+  hoverAdapter.addSource(centerPanel);
+  if (expandAction != null) {
+    hoverAdapter.addComponent(expandAction,new Insets(5,5,7,7));
   }
+  if (buttons == null && actions) {
+    createActionPanel(notification,centerPanel,layoutData.configuration.actionGap,hoverAdapter);
+  }
+  hoverAdapter.initListeners();
   if (layoutData.mergeData != null) {
     createMergeAction(layoutData,content);
   }
@@ -243,11 +256,14 @@
     pane.setPreferredSize(new Dimension(maxWidth,paneSize.height + UIUtil.getScrollBarWidth()));
   }
   final BalloonBuilder builder=JBPopupFactory.getInstance().createBalloonBuilder(content);
-  builder.setFillColor(FILL_COLOR).setCloseButtonEnabled(buttons == null).setShowCallout(showCallout).setShadow(false).setHideOnClickOutside(hideOnClickOutside).setHideOnAction(hideOnClickOutside).setHideOnKeyOutside(hideOnClickOutside).setHideOnFrameResize(false).setBorderColor(BORDER_COLOR).setBorderInsets(new Insets(0,0,0,0));
+  builder.setFillColor(layoutData.fillColor).setCloseButtonEnabled(buttons == null).setShowCallout(showCallout).setShadow(false).setHideOnClickOutside(hideOnClickOutside).setHideOnAction(hideOnClickOutside).setHideOnKeyOutside(hideOnClickOutside).setHideOnFrameResize(false).setBorderColor(layoutData.borderColor).setBorderInsets(new Insets(0,0,0,0));
+  if (layoutData.fadeoutTime != 0) {
+    builder.setFadeoutTime(layoutData.fadeoutTime);
+  }
   final BalloonImpl balloon=(BalloonImpl)builder.createBalloon();
   balloon.setAnimationEnabled(false);
   notification.setBalloon(balloon);
-  balloon.setShadowBorderProvider(new NotificationBalloonShadowBorderProvider(FILL_COLOR,BORDER_COLOR));
+  balloon.setShadowBorderProvider(new NotificationBalloonShadowBorderProvider(layoutData.fillColor,layoutData.borderColor));
   if (!layoutData.welcomeScreen && buttons == null) {
     balloon.setActionProvider(new NotificationBalloonActionProvider(balloon,layout.getTitle(),layoutData,notification.getGroupId()));
   }
