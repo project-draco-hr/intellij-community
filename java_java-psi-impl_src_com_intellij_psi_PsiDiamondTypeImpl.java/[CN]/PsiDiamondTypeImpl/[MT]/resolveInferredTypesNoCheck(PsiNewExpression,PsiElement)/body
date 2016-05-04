@@ -1,33 +1,25 @@
 {
-  final Ref<JavaResolveResult> staticFactoryRef=new Ref<JavaResolveResult>();
+  final JavaResolveResult staticFactoryCandidateInfo=getStaticFactory(newExpression,context);
+  if (staticFactoryCandidateInfo == null) {
+    return DiamondInferenceResult.NULL_RESULT;
+  }
   final PsiSubstitutor inferredSubstitutor=ourDiamondGuard.doPreventingRecursion(context,false,new Computable<PsiSubstitutor>(){
     @Override public PsiSubstitutor compute(){
-      final JavaResolveResult staticFactoryCandidateInfo=context == newExpression ? CachedValuesManager.getCachedValue(newExpression,new CachedValueProvider<JavaResolveResult>(){
-        @Nullable @Override public Result<JavaResolveResult> compute(){
-          return new Result<JavaResolveResult>(getStaticFactoryCandidateInfo(newExpression,newExpression),PsiModificationTracker.MODIFICATION_COUNT);
-        }
-      }
-) : getStaticFactoryCandidateInfo(newExpression,context);
-      staticFactoryRef.set(staticFactoryCandidateInfo);
-      return staticFactoryCandidateInfo != null ? staticFactoryCandidateInfo.getSubstitutor() : null;
+      PsiSubstitutor substitutor=staticFactoryCandidateInfo.getSubstitutor();
+      return staticFactoryCandidateInfo instanceof MethodCandidateInfo && ((MethodCandidateInfo)staticFactoryCandidateInfo).getInferenceErrorMessage() != null ? null : substitutor;
     }
   }
 );
   if (inferredSubstitutor == null) {
     return DiamondInferenceResult.NULL_RESULT;
   }
-  final JavaResolveResult staticFactoryInfo=staticFactoryRef.get();
-  if (staticFactoryInfo == null) {
-    LOG.error(inferredSubstitutor);
-    return DiamondInferenceResult.NULL_RESULT;
-  }
-  if (!(staticFactoryInfo instanceof MethodCandidateInfo)) {
+  if (!(staticFactoryCandidateInfo instanceof MethodCandidateInfo)) {
     return DiamondInferenceResult.UNRESOLVED_CONSTRUCTOR;
   }
   if (InferenceSession.wasUncheckedConversionPerformed(context)) {
     return DiamondInferenceResult.RAW_RESULT;
   }
-  final PsiMethod staticFactory=((MethodCandidateInfo)staticFactoryInfo).getElement();
+  final PsiMethod staticFactory=((MethodCandidateInfo)staticFactoryCandidateInfo).getElement();
   final PsiTypeParameter[] parameters=staticFactory.getTypeParameters();
   final PsiElement staticFactoryContext=staticFactory.getContext();
   final PsiClass psiClass=PsiTreeUtil.getContextOfType(staticFactoryContext,PsiClass.class,false);

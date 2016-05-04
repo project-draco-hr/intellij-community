@@ -1,0 +1,47 @@
+{
+  final SpacingImpl spaceProperty=myCurrentBlock.getSpaceProperty();
+  final WhiteSpace whiteSpace=myCurrentBlock.getWhiteSpace();
+  if (isReformatSelectedRangesContext()) {
+    if (isCurrentBlockAlignmentUsedInRangesToModify() && whiteSpace.isReadOnly() && spaceProperty != null && !spaceProperty.isReadOnly()) {
+      whiteSpace.setReadOnly(false);
+      whiteSpace.setLineFeedsAreReadOnly(true);
+    }
+  }
+  whiteSpace.arrangeLineFeeds(spaceProperty,myBlockRangesMap);
+  if (!whiteSpace.containsLineFeeds()) {
+    whiteSpace.arrangeSpaces(spaceProperty);
+  }
+  try {
+    LeafBlockWrapper newBlock=myWrapProcessor.processWrap(myCurrentBlock);
+    if (newBlock != null) {
+      myCurrentBlock=newBlock;
+      return;
+    }
+  }
+  finally {
+    if (whiteSpace.containsLineFeeds()) {
+      onCurrentLineChanged();
+    }
+  }
+  LeafBlockWrapper newCurrentBlock=myIndentAdjuster.adjustIndent(myCurrentBlock);
+  if (newCurrentBlock != null) {
+    myCurrentBlock=newCurrentBlock;
+    onCurrentLineChanged();
+    return;
+  }
+  defineAlignOffset(myCurrentBlock);
+  if (myCurrentBlock.containsLineFeeds()) {
+    onCurrentLineChanged();
+  }
+  final List<TextRange> ranges=getDependentRegionRangesAfterCurrentWhiteSpace(spaceProperty,whiteSpace);
+  if (!ranges.isEmpty()) {
+    myDependentSpacingEngine.registerUnresolvedDependentSpacingRanges(spaceProperty,ranges);
+  }
+  if (!whiteSpace.isIsReadOnly() && myDependentSpacingEngine.shouldReformatPreviouslyLocatedDependentSpacing(whiteSpace)) {
+    myAlignAgain.add(whiteSpace);
+  }
+ else   if (!myAlignAgain.isEmpty()) {
+    myAlignAgain.remove(whiteSpace);
+  }
+  myCurrentBlock=myCurrentBlock.getNextBlock();
+}

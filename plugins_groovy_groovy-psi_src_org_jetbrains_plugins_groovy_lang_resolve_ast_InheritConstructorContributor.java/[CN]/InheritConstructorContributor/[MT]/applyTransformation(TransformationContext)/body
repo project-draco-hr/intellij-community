@@ -1,0 +1,24 @@
+{
+  GrTypeDefinition psiClass=context.getCodeClass();
+  if (psiClass.isAnonymous() || psiClass.isInterface() || psiClass.isEnum()) {
+    return;
+  }
+  if (!hasInheritConstructorsAnnotation(psiClass))   return;
+  final PsiClass superClass=context.getSuperClass();
+  if (superClass == null)   return;
+  final PsiSubstitutor superClassSubstitutor=TypeConversionUtil.getSuperClassSubstitutor(superClass,psiClass,PsiSubstitutor.EMPTY);
+  for (  PsiMethod constructor : superClass.getConstructors()) {
+    if (constructor.hasModifierProperty(PsiModifier.PRIVATE))     continue;
+    final GrLightMethodBuilder inheritedConstructor=new GrLightMethodBuilder(context.getManager(),context.getClassName());
+    inheritedConstructor.setConstructor(true);
+    inheritedConstructor.setNavigationElement(psiClass);
+    inheritedConstructor.addModifier(VisibilityUtil.getVisibilityModifier(constructor.getModifierList()));
+    inheritedConstructor.setOriginInfo("created by @InheritConstructors");
+    for (    PsiParameter parameter : constructor.getParameterList().getParameters()) {
+      String name=StringUtil.notNullize(parameter.getName());
+      PsiType type=superClassSubstitutor.substitute(parameter.getType());
+      inheritedConstructor.addParameter(name,type,false);
+    }
+    context.addMethod(inheritedConstructor);
+  }
+}
