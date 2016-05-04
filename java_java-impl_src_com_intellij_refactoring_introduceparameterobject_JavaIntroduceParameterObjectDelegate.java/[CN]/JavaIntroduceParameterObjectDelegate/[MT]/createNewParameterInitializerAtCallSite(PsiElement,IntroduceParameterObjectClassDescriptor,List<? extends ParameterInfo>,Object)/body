@@ -1,0 +1,37 @@
+{
+  if (callExpression instanceof PsiCallExpression) {
+    final PsiCallExpression expr=(PsiCallExpression)callExpression;
+    final JavaPsiFacade facade=JavaPsiFacade.getInstance(expr.getProject());
+    final String qualifiedName=StringUtil.getQualifiedName(descriptor.getPackageName(),descriptor.getClassName());
+    final PsiClass existingClass=facade.findClass(qualifiedName,expr.getResolveScope());
+    if (existingClass == null)     return null;
+    final PsiExpressionList argumentList=expr.getArgumentList();
+    if (argumentList == null)     return null;
+    final PsiExpression[] args=argumentList.getExpressions();
+    StringBuilder newExpression=new StringBuilder();
+    newExpression.append("new ").append(existingClass.getQualifiedName());
+    if (descriptor instanceof JavaIntroduceParameterObjectClassDescriptor) {
+      List<String> types=new ArrayList<>();
+      for (      PsiTypeParameter parameter : ((JavaIntroduceParameterObjectClassDescriptor)descriptor).getTypeParameters()) {
+        PsiType type=((PsiSubstitutor)substitutor).substitute(parameter);
+        if (type == null) {
+          types.clear();
+          break;
+        }
+        types.add(type.getCanonicalText());
+      }
+      if (!types.isEmpty()) {
+        newExpression.append("<").append(StringUtil.join(types,", ")).append(">");
+      }
+    }
+    newExpression.append('(');
+    newExpression.append(getMergedArgs(descriptor,oldMethodParameters,args));
+    newExpression.append(')');
+    PsiNewExpression newClassExpression=(PsiNewExpression)JavaCodeStyleManager.getInstance(callExpression.getProject()).shortenClassReferences(facade.getElementFactory().createExpressionFromText(newExpression.toString(),expr));
+    if (PsiDiamondTypeUtil.canChangeContextForDiamond(newClassExpression,newClassExpression.getType())) {
+      PsiDiamondTypeUtil.replaceExplicitWithDiamond(newClassExpression.getClassOrAnonymousClassReference().getParameterList());
+    }
+    return newClassExpression;
+  }
+  return null;
+}

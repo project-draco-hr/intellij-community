@@ -7,41 +7,45 @@
   final PsiMethodCallExpression mcall2=(PsiMethodCallExpression)element;
   final PsiReferenceExpression mcallRef1=mcall.getMethodExpression();
   final PsiReferenceExpression mcallRef2=mcall2.getMethodExpression();
-  final boolean isTypedVar=myMatchingVisitor.getMatchContext().getPattern().isTypedVar(mcallRef1.getReferenceNameElement());
-  if (!myMatchingVisitor.matchText(mcallRef1.getReferenceNameElement(),mcallRef2.getReferenceNameElement()) && !isTypedVar) {
+  final PsiElement patternMethodName=mcallRef1.getReferenceNameElement();
+  final boolean isTypedVar=myMatchingVisitor.getMatchContext().getPattern().isTypedVar(patternMethodName);
+  if (!isTypedVar && !myMatchingVisitor.matchText(patternMethodName,mcallRef2.getReferenceNameElement())) {
     myMatchingVisitor.setResult(false);
     return;
   }
-  final PsiExpression qualifier=mcallRef1.getQualifierExpression();
-  final PsiExpression elementQualifier=mcallRef2.getQualifierExpression();
-  if (qualifier != null) {
-    if (elementQualifier != null) {
-      myMatchingVisitor.setResult(myMatchingVisitor.match(qualifier,elementQualifier));
+  final PsiExpression patternQualifier=mcallRef1.getQualifierExpression();
+  final PsiExpression matchedQualifier=mcallRef2.getQualifierExpression();
+  if (patternQualifier != null) {
+    if (matchedQualifier != null) {
+      myMatchingVisitor.setResult(myMatchingVisitor.match(patternQualifier,matchedQualifier));
       if (!myMatchingVisitor.getResult())       return;
     }
  else {
       final PsiMethod method=mcall2.resolveMethod();
       if (method != null) {
-        if (qualifier instanceof PsiThisExpression) {
+        if (patternQualifier instanceof PsiThisExpression) {
           myMatchingVisitor.setResult(!method.hasModifierProperty(PsiModifier.STATIC));
           return;
         }
       }
-      final MatchingHandler handler=myMatchingVisitor.getMatchContext().getPattern().getHandler(qualifier);
+      final MatchingHandler handler=myMatchingVisitor.getMatchContext().getPattern().getHandler(patternQualifier);
       matchImplicitQualifier(handler,method,myMatchingVisitor.getMatchContext());
       if (!myMatchingVisitor.getResult()) {
         return;
       }
     }
   }
- else   if (elementQualifier != null) {
+ else   if (matchedQualifier != null) {
     myMatchingVisitor.setResult(false);
     return;
   }
   myMatchingVisitor.setResult(myMatchingVisitor.matchSons(mcall.getArgumentList(),mcall2.getArgumentList()));
+  if (myMatchingVisitor.getResult()) {
+    myMatchingVisitor.setResult(matchTypeParameters(mcallRef1,mcallRef2));
+  }
   if (myMatchingVisitor.getResult() && isTypedVar) {
     boolean res=myMatchingVisitor.getResult();
-    res&=myMatchingVisitor.handleTypedElement(mcallRef1.getReferenceNameElement(),mcallRef2.getReferenceNameElement());
+    res&=myMatchingVisitor.handleTypedElement(patternMethodName,mcallRef2.getReferenceNameElement());
     myMatchingVisitor.setResult(res);
   }
 }

@@ -4,8 +4,23 @@
     if (!moveDestination.isTargetAccessible(method.getProject(),method.getContainingFile().getVirtualFile())) {
       conflicts.putValue(method,"Created class won't be accessible");
     }
+    if (!classDescriptor.isCreateInnerClass()) {
+      final PsiFile containingFile=method.getContainingFile();
+      final PsiDirectory containingDirectory=containingFile.getContainingDirectory();
+      PsiDirectory directory=moveDestination.getTargetDirectory(containingDirectory);
+      if (directory != null) {
+        PsiFile file=directory.findFile(classDescriptor.getClassName() + ".java");
+        if (file != null) {
+          VirtualFile virtualFile=PsiUtilCore.getVirtualFile(file);
+          if (virtualFile != null) {
+            conflicts.putValue(method,"File already exits: " + virtualFile.getPresentableUrl());
+          }
+        }
+      }
+    }
   }
   if (moveDestination != null) {
+    boolean constructorMiss=false;
     for (    UsageInfo info : infos) {
       if (info instanceof IntroduceParameterObjectProcessor.ChangeSignatureUsageWrapper) {
         final UsageInfo usageInfo=((IntroduceParameterObjectProcessor.ChangeSignatureUsageWrapper)info).getInfo();
@@ -15,6 +30,18 @@
             conflicts.putValue(overridingMethod,"Created class won't be accessible");
           }
         }
+        if (!constructorMiss && classDescriptor.isUseExistingClass() && usageInfo instanceof MethodCallUsageInfo&& classDescriptor.getExistingClassCompatibleConstructor() == null) {
+          conflicts.putValue(classDescriptor.getExistingClass(),"Existing class misses compatible constructor");
+          constructorMiss=true;
+        }
+      }
+    }
+  }
+  if (classDescriptor.isUseExistingClass()) {
+    for (    ParameterInfoImpl info : classDescriptor.getParamsToMerge()) {
+      Object existingClassBean=classDescriptor.getBean(info);
+      if (existingClassBean == null) {
+        conflicts.putValue(classDescriptor.getExistingClass(),"No field associated with " + info.getName() + " found");
       }
     }
   }
