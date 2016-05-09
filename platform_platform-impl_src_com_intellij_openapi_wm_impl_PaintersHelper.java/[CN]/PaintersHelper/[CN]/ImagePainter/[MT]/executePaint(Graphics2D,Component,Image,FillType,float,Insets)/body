@@ -7,6 +7,9 @@
   int w=image.getWidth(null);
   int h=image.getHeight(null);
   if (w <= 0 || h <= 0)   return;
+  GraphicsConfiguration deviceCfg=g.getDeviceConfiguration();
+  Cached cached=cachedMap.get(deviceCfg);
+  VolatileImage scaled=cached == null ? null : cached.image;
   if (fillType == FillType.SCALE || fillType == FillType.TILE) {
     int sw, sh;
     if (fillType == FillType.SCALE) {
@@ -20,10 +23,14 @@
     }
     int sw0=scaled == null ? -1 : scaled.getWidth(null);
     int sh0=scaled == null ? -1 : scaled.getHeight(null);
-    boolean rescale=scaledW != sw || scaledH != sh;
-    while ((scaled=validateImage(scaled,g)) == null || rescale) {
+    boolean rescale=cached == null || cached.used.width != sw || cached.used.height != sh;
+    while ((scaled=validateImage(deviceCfg,scaled)) == null || rescale) {
       if (scaled == null || sw0 < sw || sh0 < sh) {
-        scaled=createImage(g,sw + sw / 10,sh + sh / 10);
+        scaled=createImage(deviceCfg,sw + sw / 10,sh + sh / 10);
+        cachedMap.put(deviceCfg,cached=new Cached(scaled,new Dimension(sw,sh)));
+      }
+ else {
+        cached.used.setSize(sw,sh);
       }
       Graphics2D gg=scaled.createGraphics();
       gg.setComposite(AlphaComposite.Src);
@@ -41,17 +48,23 @@
       gg.dispose();
       rescale=false;
     }
-    w=scaledW=sw;
-    h=scaledH=sh;
+    w=sw;
+    h=sh;
   }
  else {
-    while ((scaled=validateImage(scaled,g)) == null) {
-      scaled=createImage(g,w,h);
+    while ((scaled=validateImage(deviceCfg,scaled)) == null) {
+      scaled=createImage(deviceCfg,w,h);
+      cachedMap.put(deviceCfg,cached=new Cached(scaled,new Dimension(w,h)));
       Graphics2D gg=scaled.createGraphics();
       gg.setComposite(AlphaComposite.Src);
       gg.drawImage(image,0,0,null);
       gg.dispose();
     }
+  }
+  long currentTime=System.currentTimeMillis();
+  cached.touched=currentTime;
+  if (cachedMap.size() > 2) {
+    clearImages(currentTime);
   }
   int x, y;
   if (fillType == FillType.CENTER || fillType == FillType.BG_CENTER || fillType == FillType.SCALE || fillType == FillType.TILE || fillType == FillType.TOP_CENTER || fillType == FillType.BOTTOM_CENTER) {
