@@ -1,4 +1,5 @@
 {
+  expression=ParenthesesUtils.stripParentheses(expression);
   if (expression == null) {
     return true;
   }
@@ -24,9 +25,12 @@
         result&=isMoveable(initializerExpression);
       }
     }
+    final PsiType type=newExpression.getType();
+    if (type == null) {
+      return false;
+    }
  else     if (!m_allowConstructorAsInitializer) {
-      final PsiType type=newExpression.getType();
-      if (!ClassUtils.isImmutable(type)) {
+      if (!ClassUtils.isImmutable(type) && !type.getCanonicalText().startsWith("java.")) {
         return false;
       }
     }
@@ -43,13 +47,24 @@
   if (expression instanceof PsiReferenceExpression) {
     final PsiReferenceExpression referenceExpression=(PsiReferenceExpression)expression;
     final PsiElement target=referenceExpression.resolve();
-    if (!(target instanceof PsiField)) {
+    if (!(target instanceof PsiVariable)) {
       return false;
     }
-    final PsiField field=(PsiField)target;
-    if (ExpressionUtils.isConstant(field)) {
+    final PsiVariable variable=(PsiVariable)target;
+    if (variable.hasModifierProperty(PsiModifier.FINAL)) {
       return true;
     }
+    final PsiElement context=PsiUtil.getVariableCodeBlock(variable,referenceExpression);
+    return context != null && !(variable instanceof PsiField) && HighlightControlFlowUtil.isEffectivelyFinal(variable,context,referenceExpression);
+  }
+  if (expression instanceof PsiPolyadicExpression) {
+    final PsiPolyadicExpression polyadicExpression=(PsiPolyadicExpression)expression;
+    for (    PsiExpression operand : polyadicExpression.getOperands()) {
+      if (!isMoveable(operand)) {
+        return false;
+      }
+    }
+    return true;
   }
   return false;
 }
