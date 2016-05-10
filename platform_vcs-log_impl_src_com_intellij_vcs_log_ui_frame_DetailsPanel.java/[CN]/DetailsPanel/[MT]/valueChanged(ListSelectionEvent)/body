@@ -1,39 +1,70 @@
 {
-  if (notUsed != null && notUsed.getValueIsAdjusting())   return;
+  if (event != null && event.getValueIsAdjusting())   return;
   VcsFullCommitDetails newCommitDetails=null;
   int[] rows=myGraphTable.getSelectedRows();
+  myLoadingPanel.stopLoading();
   if (rows.length < 1) {
-    showMessage("No commits selected");
+    myEmptyText.setText("No commits selected");
+    myMainContentPanel.removeAll();
+    return;
   }
- else   if (rows.length > 1) {
-    showMessage("Several commits selected");
-  }
+  int MAX_ROWS=50;
+  myEmptyText.setText("");
+  GraphTableModel tableModel=myGraphTable.getModel();
+  int count=0;
+  for (int i=0; i < Math.min(rows.length,MAX_ROWS); i++) {
+    int row=rows[i];
+    boolean reuseExisting=count < myMainContentPanel.getComponentCount();
+    ReferencesPanel referencesPanel;
+    DataPanel dataPanel;
+    if (!reuseExisting) {
+      referencesPanel=new ReferencesPanel(myColorManager);
+      dataPanel=new DataPanel(myLogData.getProject(),myLogData.isMultiRoot());
+      if (i > 0) {
+        myMainContentPanel.add(new SeparatorComponent(8,OnePixelDivider.BACKGROUND,null));
+        count++;
+      }
+      myMainContentPanel.add(referencesPanel);
+      count++;
+      myMainContentPanel.add(dataPanel);
+      count++;
+    }
  else {
-    ((CardLayout)getLayout()).show(this,STANDARD_LAYER);
-    int row=rows[0];
-    GraphTableModel tableModel=myGraphTable.getModel();
+      if (i > 0)       count++;
+      referencesPanel=(ReferencesPanel)myMainContentPanel.getComponent(count++);
+      dataPanel=(DataPanel)myMainContentPanel.getComponent(count++);
+    }
     VcsFullCommitDetails commitData=tableModel.getFullDetails(row);
     if (commitData instanceof LoadingDetails) {
       myLoadingPanel.startLoading();
-      myCommitDetailsPanel.setData(null);
-      myReferencesPanel.setReferences(Collections.<VcsRef>emptyList());
+      dataPanel.setData(null);
+      referencesPanel.setReferences(Collections.emptyList());
       updateDetailsBorder(null);
     }
  else {
-      myLoadingPanel.stopLoading();
-      myCommitDetailsPanel.setData(commitData);
-      myReferencesPanel.setReferences(sortRefs(commitData.getId(),commitData.getRoot()));
+      dataPanel.setData(commitData);
+      referencesPanel.setReferences(sortRefs(commitData.getId(),commitData.getRoot()));
       updateDetailsBorder(commitData);
       newCommitDetails=commitData;
     }
     List<String> branches=null;
     if (!(commitData instanceof LoadingDetails)) {
-      branches=myLogDataManager.getContainingBranchesGetter().requestContainingBranches(commitData.getRoot(),commitData.getId());
+      branches=myLogData.getContainingBranchesGetter().requestContainingBranches(commitData.getRoot(),commitData.getId());
     }
-    myCommitDetailsPanel.setBranches(branches);
-    if (!Comparing.equal(myCurrentCommitDetails,newCommitDetails)) {
-      myCurrentCommitDetails=newCommitDetails;
-      myScrollPane.getVerticalScrollBar().setValue(0);
-    }
+    dataPanel.setBranches(branches);
+    dataPanel.update();
+  }
+  while (count < myMainContentPanel.getComponentCount()) {
+    myMainContentPanel.remove(count);
+  }
+  if (rows.length > MAX_ROWS) {
+    myMainContentPanel.add(new SeparatorComponent(8,OnePixelDivider.BACKGROUND,null));
+    JBLabel label=new JBLabel(rows.length + " commits selected, showing just " + MAX_ROWS+ "???",SwingConstants.LEFT);
+    label.setFont(getDataPanelFont());
+    myMainContentPanel.add(label);
+  }
+  if (!Comparing.equal(myCurrentCommitDetails,newCommitDetails)) {
+    myCurrentCommitDetails=newCommitDetails;
+    myScrollPane.getVerticalScrollBar().setValue(0);
   }
 }

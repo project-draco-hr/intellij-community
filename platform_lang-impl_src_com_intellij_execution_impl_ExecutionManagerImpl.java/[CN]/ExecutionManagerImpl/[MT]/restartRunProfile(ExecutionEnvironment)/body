@@ -29,19 +29,27 @@
       stop(descriptor);
     }
   }
-  awaitingTerminationAlarm.addRequest(new Runnable(){
+  if (myAwaitingRunProfiles.get(environment.getRunProfile()) == environment) {
+    return;
+  }
+  myAwaitingRunProfiles.put(environment.getRunProfile(),environment);
+  awaitTermination(new Runnable(){
     @Override public void run(){
+      if (myAwaitingRunProfiles.get(environment.getRunProfile()) != environment) {
+        return;
+      }
       if ((DumbService.getInstance(myProject).isDumb() && !Registry.is("dumb.aware.run.configurations")) || ExecutorRegistry.getInstance().isStarting(environment)) {
-        awaitingTerminationAlarm.addRequest(this,100);
+        awaitTermination(this,100);
         return;
       }
       for (      RunContentDescriptor descriptor : runningOfTheSameType) {
         ProcessHandler processHandler=descriptor.getProcessHandler();
         if (processHandler != null && !processHandler.isProcessTerminated()) {
-          awaitingTerminationAlarm.addRequest(this,100);
+          awaitTermination(this,100);
           return;
         }
       }
+      myAwaitingRunProfiles.remove(environment.getRunProfile());
       start(environment);
     }
   }

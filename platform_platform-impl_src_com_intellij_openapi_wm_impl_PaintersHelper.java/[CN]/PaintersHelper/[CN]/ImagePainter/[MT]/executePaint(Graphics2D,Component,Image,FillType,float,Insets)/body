@@ -7,9 +7,10 @@
   int w=image.getWidth(null);
   int h=image.getHeight(null);
   if (w <= 0 || h <= 0)   return;
+  GraphicsConfiguration deviceCfg=g.getDeviceConfiguration();
+  Cached cached=cachedMap.get(deviceCfg);
+  VolatileImage scaled=cached == null ? null : cached.image;
   if (fillType == FillType.SCALE || fillType == FillType.TILE) {
-    int sw0=scaled == null ? -1 : scaled.getWidth(null);
-    int sh0=scaled == null ? -1 : scaled.getHeight(null);
     int sw, sh;
     if (fillType == FillType.SCALE) {
       boolean useWidth=cw * h > ch * w;
@@ -20,9 +21,16 @@
       sw=cw < w ? w : (cw + w) / w * w;
       sh=ch < h ? h : (ch + h) / h * h;
     }
-    if (sw0 != sw || sh0 != sh || scaled != null && scaled.contentsLost()) {
-      if (sw0 != sw || sh0 != sh || scaled == null) {
-        scaled=createImage(g,sw,sh);
+    int sw0=scaled == null ? -1 : scaled.getWidth(null);
+    int sh0=scaled == null ? -1 : scaled.getHeight(null);
+    boolean rescale=cached == null || cached.used.width != sw || cached.used.height != sh;
+    while ((scaled=validateImage(deviceCfg,scaled)) == null || rescale) {
+      if (scaled == null || sw0 < sw || sh0 < sh) {
+        scaled=createImage(deviceCfg,sw + sw / 10,sh + sh / 10);
+        cachedMap.put(deviceCfg,cached=new Cached(scaled,new Dimension(sw,sh)));
+      }
+ else {
+        cached.used.setSize(sw,sh);
       }
       Graphics2D gg=scaled.createGraphics();
       gg.setComposite(AlphaComposite.Src);
@@ -38,18 +46,25 @@
         }
       }
       gg.dispose();
+      rescale=false;
     }
     w=sw;
     h=sh;
   }
- else   if (scaled == null || scaled.contentsLost()) {
-    if (scaled == null) {
-      scaled=createImage(g,w,h);
+ else {
+    while ((scaled=validateImage(deviceCfg,scaled)) == null) {
+      scaled=createImage(deviceCfg,w,h);
+      cachedMap.put(deviceCfg,cached=new Cached(scaled,new Dimension(w,h)));
+      Graphics2D gg=scaled.createGraphics();
+      gg.setComposite(AlphaComposite.Src);
+      gg.drawImage(image,0,0,null);
+      gg.dispose();
     }
-    Graphics2D gg=scaled.createGraphics();
-    gg.setComposite(AlphaComposite.Src);
-    gg.drawImage(image,0,0,null);
-    gg.dispose();
+  }
+  long currentTime=System.currentTimeMillis();
+  cached.touched=currentTime;
+  if (cachedMap.size() > 2) {
+    clearImages(currentTime);
   }
   int x, y;
   if (fillType == FillType.CENTER || fillType == FillType.BG_CENTER || fillType == FillType.SCALE || fillType == FillType.TILE || fillType == FillType.TOP_CENTER || fillType == FillType.BOTTOM_CENTER) {
@@ -64,7 +79,7 @@
     return;
   }
   GraphicsConfig cfg=new GraphicsConfig(g).setAlpha(alpha);
-  UIUtil.drawImage(g,scaled,x,y,null);
+  UIUtil.drawImage(g,scaled,x,y,w,h,null);
   if (fillType == FillType.BG_CENTER) {
     g.setColor(component.getBackground());
     g.fillRect(0,0,x,ch0);
