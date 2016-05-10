@@ -1,34 +1,34 @@
 {
-  return ApplicationManager.getApplication().executeOnPooledThread(new Runnable(){
-    @Override public void run(){
+  Task.Backgroundable task=new Task.Backgroundable(getProject(),"Scanning files to inspect"){
+    @Override public void run(    @NotNull ProgressIndicator indicator){
       try {
         final FileIndex fileIndex=ProjectRootManager.getInstance(getProject()).getFileIndex();
         scope.accept(new Processor<VirtualFile>(){
           @Override public boolean process(          final VirtualFile file){
-            progressIndicator.checkCanceled();
+            indicator.checkCanceled();
             if (ProjectCoreUtil.isProjectOrWorkspaceFile(file) || !fileIndex.isInContent(file))             return true;
-            final PsiFile[] psiFile=new PsiFile[1];
-            Document document=ApplicationManager.getApplication().runReadAction(new Computable<Document>(){
-              @Override public Document compute(){
+            PsiFile psiFile=ApplicationManager.getApplication().runReadAction(new Computable<PsiFile>(){
+              @Override public PsiFile compute(){
                 if (getProject().isDisposed())                 throw new ProcessCanceledException();
                 PsiFile psi=PsiManager.getInstance(getProject()).findFile(file);
                 Document document=psi == null ? null : shouldProcess(psi,headlessEnvironment,localScopeFiles);
                 if (document != null) {
-                  psiFile[0]=psi;
+                  return psi;
                 }
-                return document;
+                return null;
               }
             }
 );
-            if (document != null && psiFile[0] != null) {
+            if (psiFile != null) {
               try {
                 LOG.assertTrue(!ApplicationManager.getApplication().isReadAccessAllowed());
-                outFilesToInspect.put(psiFile[0]);
+                outFilesToInspect.put(psiFile);
               }
  catch (              InterruptedException e) {
                 LOG.error(e);
               }
             }
+            indicator.checkCanceled();
             return true;
           }
         }
@@ -46,5 +46,6 @@
       }
     }
   }
-);
+;
+  return ((CoreProgressManager)ProgressManager.getInstance()).runProcessWithProgressAsynchronously(task,progressIndicator,null);
 }
