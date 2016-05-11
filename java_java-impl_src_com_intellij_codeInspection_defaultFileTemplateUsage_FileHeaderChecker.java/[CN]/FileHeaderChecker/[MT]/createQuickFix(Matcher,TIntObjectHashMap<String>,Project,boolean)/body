@@ -1,0 +1,34 @@
+{
+  final FileTemplate template=FileTemplateManager.getInstance(project).getPattern(FileTemplateManager.FILE_HEADER_TEMPLATE_NAME);
+  ReplaceWithFileTemplateFix replaceTemplateFix=new ReplaceWithFileTemplateFix(){
+    @Override public void applyFix(    @NotNull Project project,    @NotNull ProblemDescriptor descriptor){
+      PsiElement element=descriptor.getPsiElement();
+      if (element == null || !element.isValid())       return;
+      if (!CodeInsightUtil.preparePsiElementsForWrite(element))       return;
+      String newText;
+      try {
+        newText=template.getText(computeProperties(matcher,offsetToProperty,project)).trim();
+      }
+ catch (      IOException e) {
+        LOG.error(e);
+        return;
+      }
+      if (!newText.isEmpty()) {
+        PsiElement parent=element.getParent();
+        PsiFile tempFile=PsiFileFactory.getInstance(project).createFileFromText("template.java",JavaFileType.INSTANCE,newText);
+        for (        PsiElement child : tempFile.getChildren()) {
+          if (child.getTextLength() > 0) {
+            parent.addBefore(child,element);
+          }
+        }
+      }
+      element.delete();
+    }
+  }
+;
+  if (onTheFly) {
+    LocalQuickFix editFileTemplateFix=DefaultFileTemplateUsageInspection.createEditFileTemplateFix(template,replaceTemplateFix);
+    return template.isDefault() ? new LocalQuickFix[]{editFileTemplateFix} : new LocalQuickFix[]{replaceTemplateFix,editFileTemplateFix};
+  }
+  return template.isDefault() ? null : new LocalQuickFix[]{replaceTemplateFix};
+}
