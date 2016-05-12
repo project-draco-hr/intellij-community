@@ -9,21 +9,28 @@
     final HttpEntity responseEntity=response.getEntity();
     final String responseString=responseEntity != null ? EntityUtils.toString(responseEntity) : "";
     if (statusLine.getStatusCode() == HttpStatus.SC_OK) {
-      Gson gson=new GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create();
+      final Gson gson=new GsonBuilder().setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES).create();
       final StepicWrappers.RecommendationWrapper recomWrapper=gson.fromJson(responseString,StepicWrappers.RecommendationWrapper.class);
       if (recomWrapper.recommendations.length != 0) {
         final StepicWrappers.Recommendation recommendation=recomWrapper.recommendations[0];
         final String lessonId=recommendation.lesson;
-        final StepicWrappers.LessonContainer lessonContainer=EduStepicConnector.getFromStepic(LESSON_URL + lessonId,StepicWrappers.LessonContainer.class);
-        final Lesson realLesson=lessonContainer.lessons.get(0);
-        course.getLessons().get(0).id=Integer.parseInt(lessonId);
-        for (        int stepId : realLesson.steps) {
-          final StepicWrappers.Step step=EduStepicConnector.getStep(stepId);
-          if (step.name.equals("code")) {
-            return getTaskFromStep(project,stepId,step,realLesson.getName());
+        final StepicWrappers.LessonContainer lessonContainer=getFromStepic(LESSON_URL + lessonId,StepicWrappers.LessonContainer.class);
+        if (lessonContainer.lessons.size() == 1) {
+          final Lesson realLesson=lessonContainer.lessons.get(0);
+          course.getLessons().get(0).id=Integer.parseInt(lessonId);
+          viewAllSteps(client,realLesson.id);
+          for (          int stepId : realLesson.steps) {
+            final StepicWrappers.Step step=getStep(stepId);
+            if (step.name.equals("code")) {
+              return getTaskFromStep(project,stepId,step,realLesson.getName());
+            }
           }
+          LOG.warn("Got a lesson without code part as a recommendation");
         }
-        LOG.warn("Got a lesson without code part as a recommendation");
+ else {
+          LOG.warn("Got unexpected number of lessons: " + lessonContainer.lessons.size());
+        }
+        VirtualFileManager.getInstance().refreshWithoutFileWatcher(true);
       }
     }
  else {

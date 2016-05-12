@@ -1,0 +1,29 @@
+{
+  final URI unitsUrl=new URIBuilder(UNITS_URL).addParameter("lesson",String.valueOf(lessonId)).build();
+  final StepicWrappers.UnitContainer unitContainer=getFromStepic(unitsUrl.toString(),StepicWrappers.UnitContainer.class);
+  if (unitContainer.units.size() != 1) {
+    LOG.warn("Got unexpected numbers of units: " + unitContainer.units.size());
+    return;
+  }
+  final URIBuilder builder=new URIBuilder(ASSIGNMENT_URL);
+  for (  Integer step : unitContainer.units.get(0).assignments) {
+    builder.addParameter("ids[]",String.valueOf(step));
+  }
+  final URI assignmentUrl=builder.build();
+  final StepicWrappers.AssignmentsWrapper assignments=getFromStepic(assignmentUrl.toString(),StepicWrappers.AssignmentsWrapper.class);
+  if (assignments.assignments.size() > 0) {
+    for (    StepicWrappers.Assignment assignment : assignments.assignments) {
+      final HttpPost post=new HttpPost(STEPIC_API_URL + VIEWS_URL);
+      final StepicWrappers.ViewsWrapper viewsWrapper=new StepicWrappers.ViewsWrapper(assignment.id,assignment.step);
+      post.setEntity(new StringEntity(new Gson().toJson(viewsWrapper)));
+      setHeaders(post,CONTENT_TYPE_APPL_JSON);
+      final CloseableHttpResponse viewPostResult=client.execute(post);
+      if (viewPostResult.getStatusLine().getStatusCode() != HttpStatus.SC_CREATED) {
+        LOG.warn("Error while Views post, code: " + viewPostResult.getStatusLine().getStatusCode());
+      }
+    }
+  }
+ else {
+    LOG.warn("Got assignments of incorrect length: " + assignments.assignments.size());
+  }
+}
