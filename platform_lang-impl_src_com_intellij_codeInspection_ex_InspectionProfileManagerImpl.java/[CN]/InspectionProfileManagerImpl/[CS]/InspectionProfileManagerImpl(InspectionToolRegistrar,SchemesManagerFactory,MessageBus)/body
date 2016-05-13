@@ -1,2 +1,36 @@
 {
+  myRegistrar=registrar;
+  registerProvidedSeverities();
+  mySchemeManager=schemesManagerFactory.<Profile>create(INSPECTION_DIR,new LazySchemeProcessor<InspectionProfileImpl>(){
+    @NotNull public InspectionProfileImpl createScheme(    @NotNull SchemeDataHolder dataHolder,    @NotNull Function<String,String> attributeProvider,    boolean duringLoad){
+      String profileName=ObjectUtils.chooseNotNull(attributeProvider.apply(InspectionProfileLoadUtil.PROFILE_NAME_TAG),"unnamed");
+      return new InspectionProfileImpl(profileName,myRegistrar,InspectionProfileManagerImpl.this,getDefaultProfile(),dataHolder);
+    }
+    @NotNull @Override public State getState(    @NotNull InspectionProfileImpl scheme){
+      return scheme.isProjectLevel() ? State.NON_PERSISTENT : scheme.wasInitialized() ? State.POSSIBLY_CHANGED : State.UNCHANGED;
+    }
+    @Override public Element writeScheme(    @NotNull InspectionProfileImpl scheme){
+      Element root=new Element("inspections");
+      root.setAttribute("profile_name",scheme.getName());
+      scheme.serializeInto(root,false);
+      return root;
+    }
+    @Override public void onSchemeAdded(    @NotNull final InspectionProfileImpl scheme){
+      updateProfileImpl(scheme);
+      fireProfileChanged(scheme);
+      onProfilesChanged();
+    }
+    @Override public void onSchemeDeleted(    @NotNull final InspectionProfileImpl scheme){
+      onProfilesChanged();
+    }
+    @Override public void onCurrentSchemeChanged(    @Nullable Scheme oldScheme){
+      Profile current=mySchemeManager.getCurrentScheme();
+      if (current != null) {
+        fireProfileChanged((Profile)oldScheme,current,null);
+      }
+      onProfilesChanged();
+    }
+  }
+);
+  mySeverityRegistrar=new SeverityRegistrar(messageBus);
 }
