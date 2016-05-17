@@ -57,7 +57,8 @@
   if (e.getClickCount() == 1) {
     myLastPressCreatedCaret=false;
   }
-  if (eventArea == EditorMouseEventArea.LINE_NUMBERS_AREA || eventArea == EditorMouseEventArea.EDITING_AREA || isInsideGutterWhitespaceArea(e)) {
+  boolean insideEditorRelatedAreas=eventArea == EditorMouseEventArea.LINE_NUMBERS_AREA || eventArea == EditorMouseEventArea.EDITING_AREA || isInsideGutterWhitespaceArea(e);
+  if (insideEditorRelatedAreas) {
     VisualPosition visualPosition=myUseNewRendering ? getTargetPosition(x,y,true) : null;
     LogicalPosition pos=myUseNewRendering ? visualToLogicalPosition(visualPosition) : getLogicalPositionForScreenPos(x,y,true);
     if (toggleCaret) {
@@ -110,46 +111,48 @@
     mySavedSelectionEnd=mySelectionModel.getSelectionEnd();
     return isNavigation;
   }
-  if (e.isShiftDown() && !e.isControlDown() && !e.isAltDown()) {
-    if (getMouseSelectionState() != MOUSE_SELECTION_STATE_NONE) {
-      if (caretOffset < mySavedSelectionStart) {
-        mySelectionModel.setSelection(mySavedSelectionEnd,caretOffset);
+  if (insideEditorRelatedAreas) {
+    if (e.isShiftDown() && !e.isControlDown() && !e.isAltDown()) {
+      if (getMouseSelectionState() != MOUSE_SELECTION_STATE_NONE) {
+        if (caretOffset < mySavedSelectionStart) {
+          mySelectionModel.setSelection(mySavedSelectionEnd,caretOffset);
+        }
+ else {
+          mySelectionModel.setSelection(mySavedSelectionStart,caretOffset);
+        }
       }
  else {
-        mySelectionModel.setSelection(mySavedSelectionStart,caretOffset);
+        int startToUse=oldSelectionStart;
+        if (mySelectionModel.isUnknownDirection() && caretOffset > startToUse) {
+          startToUse=Math.min(oldStart,oldEnd);
+        }
+        mySelectionModel.setSelection(startToUse,caretOffset);
       }
     }
  else {
-      int startToUse=oldSelectionStart;
-      if (mySelectionModel.isUnknownDirection() && caretOffset > startToUse) {
-        startToUse=Math.min(oldStart,oldEnd);
+      if (!myMousePressedInsideSelection && getSelectionModel().hasSelection()) {
+        setMouseSelectionState(MOUSE_SELECTION_STATE_NONE);
+        mySelectionModel.setSelection(caretOffset,caretOffset);
       }
-      mySelectionModel.setSelection(startToUse,caretOffset);
-    }
-  }
  else {
-    if (!myMousePressedInsideSelection && getSelectionModel().hasSelection()) {
-      setMouseSelectionState(MOUSE_SELECTION_STATE_NONE);
-      mySelectionModel.setSelection(caretOffset,caretOffset);
-    }
- else {
-      if (!e.isPopupTrigger() && (eventArea == EditorMouseEventArea.EDITING_AREA || eventArea == EditorMouseEventArea.LINE_NUMBERS_AREA) && (!toggleCaret || lastPressCreatedCaret)) {
+        if (!e.isPopupTrigger() && (eventArea == EditorMouseEventArea.EDITING_AREA || eventArea == EditorMouseEventArea.LINE_NUMBERS_AREA) && (!toggleCaret || lastPressCreatedCaret)) {
 switch (e.getClickCount()) {
 case 2:
-          selectWordAtCaret(mySettings.isMouseClickSelectionHonorsCamelWords() && mySettings.isCamelWords());
-        break;
+            selectWordAtCaret(mySettings.isMouseClickSelectionHonorsCamelWords() && mySettings.isCamelWords());
+          break;
 case 3:
-      if (HONOR_CAMEL_HUMPS_ON_TRIPLE_CLICK && mySettings.isCamelWords()) {
-        selectWordAtCaret(false);
-        break;
-      }
+        if (HONOR_CAMEL_HUMPS_ON_TRIPLE_CLICK && mySettings.isCamelWords()) {
+          selectWordAtCaret(false);
+          break;
+        }
 case 4:
-    mySelectionModel.selectLineAtCaret();
-  setMouseSelectionState(MOUSE_SELECTION_STATE_LINE_SELECTED);
-mySavedSelectionStart=mySelectionModel.getSelectionStart();
+      mySelectionModel.selectLineAtCaret();
+    setMouseSelectionState(MOUSE_SELECTION_STATE_LINE_SELECTED);
+  mySavedSelectionStart=mySelectionModel.getSelectionStart();
 mySavedSelectionEnd=mySelectionModel.getSelectionEnd();
 mySelectionModel.setUnknownDirection(true);
 break;
+}
 }
 }
 }
