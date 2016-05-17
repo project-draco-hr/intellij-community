@@ -3,7 +3,21 @@
     return;
   }
   if (properties != null && !properties.isApplicabilityCheck()) {
-    initReturnTypeConstraint(properties.getMethod(),(PsiCall)parent);
+    final PsiMethod method=properties.getMethod();
+    if (parent instanceof PsiCallExpression && PsiPolyExpressionUtil.isMethodCallPolyExpression((PsiExpression)parent,method)) {
+      final PsiType returnType=method.getReturnType();
+      if (!PsiType.VOID.equals(returnType) && returnType != null) {
+        final Ref<String> errorMessage=new Ref<String>();
+        final PsiType targetType=getTargetTypeFromParent(parent,errorMessage,false);
+        if (targetType == null && errorMessage.get() != null) {
+          registerIncompatibleErrorMessage(errorMessage.get());
+          return;
+        }
+        if (targetType != null && !PsiType.VOID.equals(targetType)) {
+          registerReturnTypeConstraints(PsiUtil.isRawSubstitutor(method,mySiteSubstitutor) ? returnType : mySiteSubstitutor.substitute(returnType),targetType);
+        }
+      }
+    }
     if (!repeatInferencePhases()) {
       return;
     }
