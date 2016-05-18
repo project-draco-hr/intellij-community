@@ -3,6 +3,7 @@
   final PsiClass aClass;
   final Project project;
   final int expectedFunExprParamsCount;
+  final boolean isVoid;
   AccessToken token=ReadAction.start();
   try {
     aClass=queryParameters.getElementToSearch();
@@ -11,16 +12,17 @@
     final Set<Module> highLevelModules=getJava8Modules(project);
     if (highLevelModules.isEmpty())     return;
     useScope=convertToGlobalScope(project,queryParameters.getEffectiveSearchScope());
-    final MethodSignature functionalInterfaceMethod=LambdaUtil.getFunction(aClass);
+    final PsiMethod functionalInterfaceMethod=LambdaUtil.getFunctionalInterfaceMethod(aClass);
     LOG.assertTrue(functionalInterfaceMethod != null);
-    expectedFunExprParamsCount=functionalInterfaceMethod.getParameterTypes().length;
+    expectedFunExprParamsCount=functionalInterfaceMethod.getParameterList().getParameters().length;
+    isVoid=PsiType.VOID.equals(functionalInterfaceMethod.getReturnType());
   }
   finally {
     token.finish();
   }
   Set<VirtualFile> candidateFiles=getFilesWithFunctionalExpressionsScope(project,new JavaSourceFilterScope(useScope));
   if (candidateFiles.size() < SMART_SEARCH_THRESHOLD) {
-    searchInFiles(aClass,consumer,candidateFiles,expectedFunExprParamsCount);
+    searchInFiles(aClass,consumer,candidateFiles,expectedFunExprParamsCount,isVoid);
     return;
   }
   final GlobalSearchScope candidateScope=GlobalSearchScope.filesScope(project,candidateFiles);
@@ -51,5 +53,5 @@
 );
   }
   collectFilesWithTypeOccurrencesAndFieldAssignments(aClass,candidateScope,filesToProcess);
-  searchInFiles(aClass,consumer,filesToProcess,expectedFunExprParamsCount);
+  searchInFiles(aClass,consumer,filesToProcess,expectedFunExprParamsCount,isVoid);
 }
