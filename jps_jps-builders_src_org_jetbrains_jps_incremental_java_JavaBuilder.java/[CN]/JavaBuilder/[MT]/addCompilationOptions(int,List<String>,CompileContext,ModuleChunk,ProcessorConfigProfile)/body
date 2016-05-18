@@ -1,0 +1,43 @@
+{
+  if (!isEncodingSet(options)) {
+    final CompilerEncodingConfiguration config=context.getProjectDescriptor().getEncodingConfiguration();
+    final String encoding=config.getPreferredModuleChunkEncoding(chunk);
+    if (config.getAllModuleChunkEncodings(chunk).size() > 1) {
+      final StringBuilder msgBuilder=new StringBuilder();
+      msgBuilder.append("Multiple encodings set for module chunk ").append(chunk.getName());
+      if (encoding != null) {
+        msgBuilder.append("\n\"").append(encoding).append("\" will be used by compiler");
+      }
+      context.processMessage(new CompilerMessage(BUILDER_NAME,BuildMessage.Kind.INFO,msgBuilder.toString()));
+    }
+    if (!StringUtil.isEmpty(encoding)) {
+      options.add("-encoding");
+      options.add(encoding);
+    }
+  }
+  addCrossCompilationOptions(compilerSdkVersion,options,context,chunk);
+  if (profile != null && profile.isEnabled()) {
+    if (!profile.isObtainProcessorsFromClasspath()) {
+      final String processorsPath=profile.getProcessorPath();
+      options.add("-processorpath");
+      options.add(FileUtil.toSystemDependentName(processorsPath.trim()));
+    }
+    final Set<String> processors=profile.getProcessors();
+    if (!processors.isEmpty()) {
+      options.add("-processor");
+      options.add(StringUtil.join(processors,","));
+    }
+    for (    Map.Entry<String,String> optionEntry : profile.getProcessorOptions().entrySet()) {
+      options.add("-A" + optionEntry.getKey() + "="+ optionEntry.getValue());
+    }
+    final File srcOutput=ProjectPaths.getAnnotationProcessorGeneratedSourcesOutputDir(chunk.getModules().iterator().next(),chunk.containsTests(),profile);
+    if (srcOutput != null) {
+      srcOutput.mkdirs();
+      options.add("-s");
+      options.add(srcOutput.getPath());
+    }
+  }
+ else {
+    options.add("-proc:none");
+  }
+}

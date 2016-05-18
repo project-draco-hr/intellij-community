@@ -1,2 +1,91 @@
 {
+  if (haveResultsPreview()) {
+    final ModalityState state=ModalityState.current();
+    if (state == ModalityState.NON_MODAL)     return;
+    finishPreviousPreviewSearch();
+    mySearchRescheduleOnCancellationsAlarm.cancelAllRequests();
+    final FindModel findModel=myModel.clone();
+    applyTo(findModel,false);
+    ValidationInfo result=getValidationInfo(findModel);
+    final ProgressIndicatorBase progressIndicatorWhenSearchStarted=new ProgressIndicatorBase();
+    myResultsPreviewSearchProgress=progressIndicatorWhenSearchStarted;
+    final DefaultTableModel model=new DefaultTableModel(){
+      @Override public boolean isCellEditable(      int row,      int column){
+        return false;
+      }
+    }
+;
+    final LinkedHashSet<VirtualFile> filesToScanInitially=new LinkedHashSet<VirtualFile>();
+    if (myPreviousModel != null && myPreviousModel.getStringToFind().length() < findModel.getStringToFind().length()) {
+      final DefaultTableModel previousModel=(DefaultTableModel)myResultsPreviewTable.getModel();
+      for (int i=0, len=previousModel.getRowCount(); i < len; ++i) {
+        final UsageInfo2UsageAdapter usage=(UsageInfo2UsageAdapter)previousModel.getValueAt(i,0);
+        final VirtualFile file=usage.getFile();
+        if (file != null)         filesToScanInitially.add(file);
+      }
+    }
+    myPreviousModel=findModel;
+    model.addColumn("Usages");
+    myResultsPreviewTable.setModel(model);
+    if (result != null) {
+      myResultsPreviewTable.getEmptyText().setText(UIBundle.message("message.nothingToShow"));
+      myContent.setTitleAt(RESULTS_PREVIEW_TAB_INDEX,PREVIEW_TITLE);
+      return;
+    }
+    myResultsPreviewTable.getColumnModel().getColumn(0).setCellRenderer(new UsageTableCellRenderer(false,true));
+    myResultsPreviewTable.getEmptyText().setText("Searching...");
+    myContent.setTitleAt(RESULTS_PREVIEW_TAB_INDEX,PREVIEW_TITLE);
+    final Component component=myInputComboBox.getEditor().getEditorComponent();
+    if (component instanceof EditorTextField) {
+      final Document document=((EditorTextField)component).getDocument();
+      if (document != null) {
+        PsiDocumentManager.getInstance(myProject).commitDocument(document);
+      }
+    }
+    final AtomicInteger resultsCount=new AtomicInteger();
+    ProgressIndicatorUtils.scheduleWithWriteActionPriority(myResultsPreviewSearchProgress,new ReadTask(){
+      @Nullable @Override public Continuation performInReadAction(      @NotNull ProgressIndicator indicator) throws ProcessCanceledException {
+        final UsageViewPresentation presentation=FindInProjectUtil.setupViewPresentation(FindSettings.getInstance().isShowResultsInSeparateView(),findModel);
+        final boolean showPanelIfOnlyOneUsage=!FindSettings.getInstance().isSkipResultsWithOneUsage();
+        final FindUsagesProcessPresentation processPresentation=FindInProjectUtil.setupProcessPresentation(myProject,showPanelIfOnlyOneUsage,presentation);
+        FindInProjectUtil.findUsages(findModel,myProject,new Processor<UsageInfo>(){
+          @Override public boolean process(          final UsageInfo info){
+            final Usage usage=UsageInfo2UsageAdapter.CONVERTER.fun(info);
+            usage.getPresentation().getIcon();
+            ApplicationManager.getApplication().invokeLater(new Runnable(){
+              @Override public void run(){
+                model.addRow(new Object[]{usage});
+                if (model.getRowCount() == 1 && myResultsPreviewTable.getModel() == model && isResultsPreviewTabActive()) {
+                  myResultsPreviewTable.setRowSelectionInterval(0,0);
+                }
+              }
+            }
+,state);
+            return resultsCount.incrementAndGet() < ShowUsagesAction.USAGES_PAGE_SIZE;
+          }
+        }
+,processPresentation,filesToScanInitially);
+        boolean succeeded=!progressIndicatorWhenSearchStarted.isCanceled();
+        if (succeeded) {
+          return new Continuation(new Runnable(){
+            @Override public void run(){
+              if (progressIndicatorWhenSearchStarted == myResultsPreviewSearchProgress && !myResultsPreviewSearchProgress.isCanceled()) {
+                int occurrences=resultsCount.get();
+                if (occurrences == 0)                 myResultsPreviewTable.getEmptyText().setText(UIBundle.message("message.nothingToShow"));
+                myContent.setTitleAt(RESULTS_PREVIEW_TAB_INDEX,PREVIEW_TITLE + " (" + (occurrences != ShowUsagesAction.USAGES_PAGE_SIZE ? Integer.valueOf(occurrences) : occurrences + "+")+ ")");
+              }
+            }
+          }
+,state);
+        }
+        return null;
+      }
+      @Override public void onCanceled(      @NotNull ProgressIndicator indicator){
+        if (isShowing() && progressIndicatorWhenSearchStarted == myResultsPreviewSearchProgress) {
+          scheduleResultsUpdate();
+        }
+      }
+    }
+);
+  }
 }

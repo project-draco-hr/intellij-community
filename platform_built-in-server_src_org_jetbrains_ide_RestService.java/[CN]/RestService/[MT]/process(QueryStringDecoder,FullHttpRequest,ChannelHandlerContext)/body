@@ -1,8 +1,17 @@
 {
   try {
+    AtomicInteger counter=abuseCounter.get(((InetSocketAddress)context.channel().remoteAddress()).getAddress());
+    if (counter.incrementAndGet() > Registry.intValue("ide.rest.api.requests.per.minute",30)) {
+      Responses.send(Responses.orInSafeMode(HttpResponseStatus.TOO_MANY_REQUESTS,HttpResponseStatus.OK),context.channel(),request);
+      return true;
+    }
+    if (!isHostTrusted(request)) {
+      Responses.send(Responses.orInSafeMode(HttpResponseStatus.FORBIDDEN,HttpResponseStatus.OK),context.channel(),request);
+      return true;
+    }
     String error=execute(urlDecoder,request,context);
     if (error != null) {
-      Responses.sendStatus(HttpResponseStatus.BAD_REQUEST,context.channel(),error,request);
+      Responses.send(HttpResponseStatus.BAD_REQUEST,context.channel(),request,error);
     }
   }
  catch (  Throwable e) {
@@ -15,7 +24,7 @@
       LOG.error(e);
       status=HttpResponseStatus.INTERNAL_SERVER_ERROR;
     }
-    Responses.sendStatus(status,context.channel(),ExceptionUtil.getThrowableText(e),request);
+    Responses.send(status,context.channel(),request,ExceptionUtil.getThrowableText(e));
   }
   return true;
 }

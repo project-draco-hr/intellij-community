@@ -10,12 +10,17 @@
     layoutData.groupId=null;
   }
   layoutDataRef.set(layoutData);
+  if (layoutData.fillColor == null) {
+    layoutData.fillColor=FILL_COLOR;
+  }
+  if (layoutData.borderColor == null) {
+    layoutData.borderColor=BORDER_COLOR;
+  }
   boolean actions=!notification.getActions().isEmpty();
   boolean showFullContent=layoutData.showFullContent || notification instanceof NotificationActionProvider;
   Color foregroundR=Gray._0;
   Color foregroundD=Gray._191;
   final Color foreground=new JBColor(foregroundR,foregroundD);
-  final JBColor fillColor=new JBColor(Gray._242,new Color(78,80,82));
   final JEditorPane text=new JEditorPane(){
     @Override protected void paintComponent(    Graphics g){
       super.paintComponent(g);
@@ -29,7 +34,38 @@
     }
   }
 ;
-  text.setEditorKit(UIUtil.getHTMLEditorKit());
+  text.setEditorKit(new HTMLEditorKit(){
+    final HTMLEditorKit kit=UIUtil.getHTMLEditorKit();
+    final HTMLFactory factory=new HTMLFactory(){
+      public View create(      Element e){
+        View view=super.create(e);
+        if (view instanceof ParagraphView) {
+          return new ParagraphView(e){
+            protected SizeRequirements calculateMinorAxisRequirements(            int axis,            SizeRequirements r){
+              if (r == null) {
+                r=new SizeRequirements();
+              }
+              r.minimum=(int)layoutPool.getMinimumSpan(axis);
+              r.preferred=Math.max(r.minimum,(int)layoutPool.getPreferredSpan(axis));
+              r.maximum=Integer.MAX_VALUE;
+              r.alignment=0.5f;
+              return r;
+            }
+          }
+;
+        }
+        return view;
+      }
+    }
+;
+    @Override public StyleSheet getStyleSheet(){
+      return kit.getStyleSheet();
+    }
+    @Override public ViewFactory getViewFactory(){
+      return factory;
+    }
+  }
+);
   text.setForeground(foreground);
   final HyperlinkListener listener=NotificationsUtil.wrapListener(notification);
   if (listener != null) {
@@ -55,8 +91,7 @@
   if (text.getCaret() != null) {
     text.setCaretPosition(0);
   }
-  final JScrollPane pane=ScrollPaneFactory.createScrollPane(text,true);
-  pane.setOpaque(false);
+  final JScrollPane pane=createBalloonScrollPane(text,false);
   pane.getVerticalScrollBar().addAdjustmentListener(new AdjustmentListener(){
     @Override public void adjustmentValueChanged(    AdjustmentEvent e){
       JScrollBar scrollBar=pane.getVerticalScrollBar();
@@ -80,10 +115,13 @@
   layoutData.twoLineHeight=calculateContentHeight(lines);
   layoutData.maxScrollHeight=Math.min(layoutData.fullHeight,calculateContentHeight(10));
   layoutData.configuration=BalloonLayoutConfiguration.create(notification,layoutData,actions);
-  if (!showFullContent && layoutData.maxScrollHeight != layoutData.fullHeight) {
+  if (layoutData.welcomeScreen) {
+    layoutData.maxScrollHeight=layoutData.fullHeight;
+  }
+ else   if (!showFullContent && layoutData.maxScrollHeight != layoutData.fullHeight) {
     pane.setViewport(new GradientViewport(text,JBUI.insets(10,0),true){
       @Nullable @Override protected Color getViewColor(){
-        return fillColor;
+        return layoutData.fillColor;
       }
       @Override protected void paintGradient(      Graphics g){
         if (!layoutData.showMinSize) {
@@ -93,14 +131,11 @@
     }
 );
   }
-  pane.getViewport().setOpaque(false);
-  if (!Registry.is("ide.scroll.new.layout")) {
-    pane.getVerticalScrollBar().setUI(ButtonlessScrollBarUI.createTransparent());
+  configureBalloonScrollPane(pane,layoutData.fillColor);
+  if (showFullContent) {
+    pane.setPreferredSize(text.getPreferredSize());
   }
-  pane.setBackground(fillColor);
-  pane.getViewport().setBackground(fillColor);
-  pane.getVerticalScrollBar().setBackground(fillColor);
-  if (!showFullContent && layoutData.twoLineHeight < layoutData.fullHeight) {
+ else   if (layoutData.twoLineHeight < layoutData.fullHeight) {
     text.setPreferredSize(null);
     Dimension size=text.getPreferredSize();
     size.height=layoutData.twoLineHeight;
@@ -150,11 +185,11 @@
         int x=getWidth() - width - JBUI.scale(5);
         int y=layoutData.configuration.topSpaceHeight;
         int height=title instanceof JEditorPane ? getFirstLineHeight((JEditorPane)title) : title.getHeight();
-        g.setColor(fillColor);
+        g.setColor(layoutData.fillColor);
         g.fillRect(x,y,width,height);
         width=layoutData.configuration.beforeGearSpace;
         x-=width;
-        ((Graphics2D)g).setPaint(new GradientPaint(x,y,ColorUtil.withAlpha(fillColor,0.2),x + width,y,fillColor));
+        ((Graphics2D)g).setPaint(new GradientPaint(x,y,ColorUtil.withAlpha(layoutData.fillColor,0.2),x + width,y,layoutData.fillColor));
         g.fillRect(x,y,width,height);
       }
     }
@@ -178,27 +213,36 @@
     centerPanel.add(expandAction,BorderLayout.EAST);
   }
   if (notification.isContent()) {
-    centerPanel.add(pane,BorderLayout.CENTER);
+    centerPanel.add(layoutData.welcomeScreen ? text : pane,BorderLayout.CENTER);
   }
-  final Icon icon=NotificationsUtil.getIcon(notification);
-  JComponent iconComponent=new JComponent(){
-    @Override protected void paintComponent(    Graphics g){
-      super.paintComponent(g);
-      icon.paintIcon(this,g,layoutData.configuration.iconOffset.width,layoutData.configuration.iconOffset.height);
+  if (!layoutData.welcomeScreen) {
+    final Icon icon=NotificationsUtil.getIcon(notification);
+    JComponent iconComponent=new JComponent(){
+      @Override protected void paintComponent(      Graphics g){
+        super.paintComponent(g);
+        icon.paintIcon(this,g,layoutData.configuration.iconOffset.width,layoutData.configuration.iconOffset.height);
+      }
     }
-  }
 ;
-  iconComponent.setOpaque(false);
-  iconComponent.setPreferredSize(new Dimension(layoutData.configuration.iconPanelWidth,2 * layoutData.configuration.iconOffset.height + icon.getIconHeight()));
-  content.add(iconComponent,BorderLayout.WEST);
+    iconComponent.setOpaque(false);
+    iconComponent.setPreferredSize(new Dimension(layoutData.configuration.iconPanelWidth,2 * layoutData.configuration.iconOffset.height + icon.getIconHeight()));
+    content.add(iconComponent,BorderLayout.WEST);
+  }
   JPanel buttons=createButtons(notification,content,listener);
   if (buttons != null) {
     layoutData.groupId=null;
     buttons.setBorder(new EmptyBorder(0,0,JBUI.scale(5),JBUI.scale(7)));
   }
-  if (buttons == null && actions) {
-    createActionPanel(notification,centerPanel,layoutData.configuration.actionGap);
+  HoverAdapter hoverAdapter=new HoverAdapter();
+  hoverAdapter.addSource(content);
+  hoverAdapter.addSource(centerPanel);
+  if (expandAction != null) {
+    hoverAdapter.addComponent(expandAction,JBUI.insets(5,5,7,7));
   }
+  if (buttons == null && actions) {
+    createActionPanel(notification,centerPanel,layoutData.configuration.actionGap,hoverAdapter);
+  }
+  hoverAdapter.initListeners();
   if (layoutData.mergeData != null) {
     createMergeAction(layoutData,content);
   }
@@ -211,14 +255,16 @@
   if (paneSize.width > maxWidth) {
     pane.setPreferredSize(new Dimension(maxWidth,paneSize.height + UIUtil.getScrollBarWidth()));
   }
-  JBColor borderColor=new JBColor(Gray._178.withAlpha(205),new Color(86,90,92,205));
   final BalloonBuilder builder=JBPopupFactory.getInstance().createBalloonBuilder(content);
-  builder.setFillColor(fillColor).setCloseButtonEnabled(buttons == null).setShowCallout(showCallout).setShadow(false).setHideOnClickOutside(hideOnClickOutside).setHideOnAction(hideOnClickOutside).setHideOnKeyOutside(hideOnClickOutside).setHideOnFrameResize(false).setBorderColor(borderColor).setBorderInsets(new Insets(0,0,0,0));
+  builder.setFillColor(layoutData.fillColor).setCloseButtonEnabled(buttons == null).setShowCallout(showCallout).setShadow(false).setHideOnClickOutside(hideOnClickOutside).setHideOnAction(hideOnClickOutside).setHideOnKeyOutside(hideOnClickOutside).setHideOnFrameResize(false).setBorderColor(layoutData.borderColor).setBorderInsets(JBUI.emptyInsets());
+  if (layoutData.fadeoutTime != 0) {
+    builder.setFadeoutTime(layoutData.fadeoutTime);
+  }
   final BalloonImpl balloon=(BalloonImpl)builder.createBalloon();
   balloon.setAnimationEnabled(false);
   notification.setBalloon(balloon);
-  balloon.setShadowBorderProvider(new NotificationBalloonShadowBorderProvider(fillColor,borderColor));
-  if (buttons == null) {
+  balloon.setShadowBorderProvider(new NotificationBalloonShadowBorderProvider(layoutData.fillColor,layoutData.borderColor));
+  if (!layoutData.welcomeScreen && buttons == null) {
     balloon.setActionProvider(new NotificationBalloonActionProvider(balloon,layout.getTitle(),layoutData,notification.getGroupId()));
   }
   Disposer.register(parentDisposable,balloon);

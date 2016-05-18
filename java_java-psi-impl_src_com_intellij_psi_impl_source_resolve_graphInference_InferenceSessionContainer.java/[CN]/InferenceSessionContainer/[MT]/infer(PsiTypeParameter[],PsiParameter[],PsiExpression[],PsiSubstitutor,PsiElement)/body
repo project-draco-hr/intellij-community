@@ -8,12 +8,12 @@
           if (parent instanceof PsiExpression && !PsiPolyExpressionUtil.isPolyExpression((PsiExpression)parent)) {
             return null;
           }
-          return treeWalkUp(parent);
+          return LambdaUtil.treeWalkUp(parent);
         }
       }
 );
       if (topLevelCall != null) {
-        final InferenceSession session;
+        InferenceSession session;
         if (MethodCandidateInfo.isOverloadCheck() || !PsiDiamondType.ourDiamondGuard.currentStack().isEmpty() || LambdaUtil.isLambdaParameterCheck()) {
           session=startTopLevelInference(topLevelCall);
         }
@@ -24,6 +24,18 @@
             }
           }
 );
+          if (session != null) {
+            final Map<PsiElement,InferenceSession> sessions=session.getInferenceSessionContainer().myNestedSessions;
+            final InferenceSession childSession=sessions.get(parent);
+            if (childSession != null) {
+              for (              PsiTypeParameter parameter : typeParameters) {
+                if (!childSession.getInferenceSubstitution().getSubstitutionMap().containsKey(parameter)) {
+                  session=startTopLevelInference(topLevelCall);
+                  break;
+                }
+              }
+            }
+          }
         }
         if (session != null) {
           final CompoundInitialState compoundInitialState=createState(session);

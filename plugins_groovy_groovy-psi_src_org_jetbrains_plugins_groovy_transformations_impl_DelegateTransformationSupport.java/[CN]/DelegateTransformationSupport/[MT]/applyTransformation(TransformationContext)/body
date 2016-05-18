@@ -1,0 +1,32 @@
+{
+  for (  GrField field : context.getFields()) {
+    final PsiAnnotation annotation=PsiImplUtil.getAnnotation(field,GroovyCommonClassNames.GROOVY_LANG_DELEGATE);
+    if (annotation == null)     continue;
+    final PsiType type=field.getDeclaredType();
+    if (!(type instanceof PsiClassType))     continue;
+    final PsiClassType.ClassResolveResult delegateResult=((PsiClassType)type).resolveGenerics();
+    final PsiClass delegate=delegateResult.getElement();
+    if (delegate == null)     continue;
+    DelegateProcessor processor=new DelegateProcessor(context,delegate,annotation);
+    delegate.processDeclarations(processor,ResolveState.initial().put(PsiSubstitutor.KEY,delegateResult.getSubstitutor()),null,context.getCodeClass());
+    if (!processor.myInterfaces)     continue;
+    Set<PsiClass> visited=ContainerUtil.newHashSet();
+    Queue<Pair<PsiClass,PsiSubstitutor>> queue=ContainerUtil.newLinkedList(Pair.create(delegate,delegateResult.getSubstitutor()));
+    while (!queue.isEmpty()) {
+      Pair<PsiClass,PsiSubstitutor> pair=queue.poll();
+      PsiClass currentClass=pair.first;
+      PsiSubstitutor substitutor=pair.second;
+      if (visited.add(currentClass) && currentClass.isInterface()) {
+        context.addInterface(new PsiImmediateClassType(currentClass,substitutor));
+        continue;
+      }
+      for (      PsiClassType superType : currentClass.getSuperTypes()) {
+        PsiClassType.ClassResolveResult resolveResult=superType.resolveGenerics();
+        PsiClass superClass=resolveResult.getElement();
+        if (superClass != null) {
+          queue.offer(Pair.create(superClass,TypeConversionUtil.getSuperClassSubstitutor(superClass,currentClass,substitutor)));
+        }
+      }
+    }
+  }
+}

@@ -1,6 +1,7 @@
 {
   if (PlatformDataKeys.HELP_ID.is(dataId))   return HELP_ID;
   if (DATA_KEY.is(dataId))   return this;
+  if (ExclusionHandler.EXCLUSION_HANDLER.is(dataId))   return myExclusionHandler;
   if (myTree == null)   return null;
   TreePath[] paths=myTree.getSelectionPaths();
   if (paths == null || paths.length == 0)   return null;
@@ -12,6 +13,9 @@
   }
   TreePath path=paths[0];
   InspectionTreeNode selectedNode=(InspectionTreeNode)path.getLastPathComponent();
+  if (!CommonDataKeys.NAVIGATABLE.is(dataId) && !CommonDataKeys.PSI_ELEMENT.is(dataId)) {
+    return null;
+  }
   if (selectedNode instanceof RefElementNode) {
     final RefElementNode refElementNode=(RefElementNode)selectedNode;
     RefEntity refElement=refElementNode.getElement();
@@ -20,11 +24,19 @@
     if (!item.isValid())     return null;
     PsiElement psiElement=item instanceof RefElement ? ((RefElement)item).getElement() : null;
     if (psiElement == null)     return null;
-    final CommonProblemDescriptor problem=refElementNode.getProblem();
+    final CommonProblemDescriptor problem=refElementNode.getDescriptor();
     if (problem != null) {
       if (problem instanceof ProblemDescriptor) {
-        psiElement=((ProblemDescriptor)problem).getPsiElement();
-        if (psiElement == null)         return null;
+        PsiElement elementFromDescriptor=((ProblemDescriptor)problem).getPsiElement();
+        if (elementFromDescriptor == null) {
+          final InspectionTreeNode node=(InspectionTreeNode)refElementNode.getChildAt(0);
+          if (node.isValid()) {
+            return null;
+          }
+        }
+ else {
+          psiElement=elementFromDescriptor;
+        }
       }
  else {
         return null;
@@ -38,7 +50,8 @@
     }
   }
  else   if (selectedNode instanceof ProblemDescriptionNode && CommonDataKeys.NAVIGATABLE.is(dataId)) {
-    return getSelectedNavigatable(((ProblemDescriptionNode)selectedNode).getDescriptor());
+    Navigatable navigatable=getSelectedNavigatable(((ProblemDescriptionNode)selectedNode).getDescriptor());
+    return navigatable == null ? InspectionResultsViewUtil.getNavigatableForInvalidNode((ProblemDescriptionNode)selectedNode) : navigatable;
   }
   return null;
 }

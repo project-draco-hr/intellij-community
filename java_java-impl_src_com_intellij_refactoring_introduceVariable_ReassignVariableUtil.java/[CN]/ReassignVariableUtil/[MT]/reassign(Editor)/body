@@ -5,20 +5,41 @@
   if (type != null) {
     VariablesProcessor proc=findVariablesOfType(declaration,type);
     if (proc.size() > 0) {
-      if (proc.size() == 1) {
+      List<PsiVariable> vars=new ArrayList<>();
+      for (int i=0; i < proc.size(); i++) {
+        final PsiVariable variable=proc.getResult(i);
+        PsiElement outerCodeBlock=PsiUtil.getVariableCodeBlock(variable,null);
+        if (outerCodeBlock == null)         continue;
+        if (ReferencesSearch.search(variable,new LocalSearchScope(outerCodeBlock)).forEach(new Processor<PsiReference>(){
+          @Override public boolean process(          PsiReference reference){
+            final PsiElement element=reference.getElement();
+            if (element != null) {
+              return HighlightControlFlowUtil.getInnerClassVariableReferencedFrom(variable,element) == null;
+            }
+            return true;
+          }
+        }
+)) {
+          vars.add(variable);
+        }
+      }
+      if (vars.isEmpty()) {
+        return true;
+      }
+      if (vars.size() == 1) {
         replaceWithAssignment(declaration,proc.getResult(0),editor);
         return true;
       }
-      final DefaultListModel model=new DefaultListModel();
-      for (int i=0; i < proc.size(); i++) {
-        model.addElement(proc.getResult(i));
+      final DefaultListModel<PsiVariable> model=new DefaultListModel<>();
+      for (      PsiVariable var : vars) {
+        model.addElement(var);
       }
-      final JList list=new JBList(model);
-      list.setCellRenderer(new ListCellRendererWrapper(){
-        @Override public void customize(        JList list,        Object value,        int index,        boolean selected,        boolean hasFocus){
-          if (value instanceof PsiVariable) {
-            setText(((PsiVariable)value).getName());
-            setIcon(((PsiVariable)value).getIcon(0));
+      final JBList list=new JBList(model);
+      list.setCellRenderer(new ListCellRendererWrapper<PsiVariable>(){
+        @Override public void customize(        JList list,        PsiVariable value,        int index,        boolean selected,        boolean hasFocus){
+          if (value != null) {
+            setText(value.getName());
+            setIcon(value.getIcon(0));
           }
         }
       }

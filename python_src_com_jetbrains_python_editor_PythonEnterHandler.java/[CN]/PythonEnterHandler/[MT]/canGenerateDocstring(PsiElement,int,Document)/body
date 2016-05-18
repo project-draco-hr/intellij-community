@@ -1,0 +1,42 @@
+{
+  if (firstQuoteOffset < 0 || firstQuoteOffset > document.getTextLength() - 3) {
+    return DocstringState.NONE;
+  }
+  final String quotes=document.getText(TextRange.from(firstQuoteOffset,3));
+  if (!quotes.equals("\"\"\"") && !quotes.equals("'''")) {
+    return DocstringState.NONE;
+  }
+  final PyStringLiteralExpression pyString=DocStringUtil.getParentDefinitionDocString(element);
+  if (pyString != null) {
+    String nodeText=element.getText();
+    final int prefixLength=PyStringLiteralExpressionImpl.getPrefixLength(nodeText);
+    nodeText=nodeText.substring(prefixLength);
+    final String literalText=pyString.getText();
+    if (literalText.endsWith(nodeText) && nodeText.startsWith(quotes)) {
+      if (firstQuoteOffset == pyString.getTextOffset() + prefixLength) {
+        PsiErrorElement error=PsiTreeUtil.getNextSiblingOfType(pyString,PsiErrorElement.class);
+        if (error == null) {
+          error=PsiTreeUtil.getNextSiblingOfType(pyString.getParent(),PsiErrorElement.class);
+        }
+        if (error != null) {
+          return DocstringState.INCOMPLETE;
+        }
+        if (nodeText.equals(quotes + quotes)) {
+          return DocstringState.EMPTY;
+        }
+        if (nodeText.length() < 6 || !nodeText.endsWith(quotes)) {
+          return DocstringState.INCOMPLETE;
+        }
+        final String docstringIndent=PyIndentUtil.getLineIndent(document,document.getLineNumber(firstQuoteOffset));
+        for (        String line : LineTokenizer.tokenizeIntoList(nodeText,false)) {
+          final String lineIndent=PyIndentUtil.getLineIndent(line);
+          final String lineContent=line.substring(lineIndent.length());
+          if ((lineContent.startsWith("def ") || lineContent.startsWith("class ")) && docstringIndent.length() > lineIndent.length() && docstringIndent.startsWith(lineIndent)) {
+            return DocstringState.INCOMPLETE;
+          }
+        }
+      }
+    }
+  }
+  return DocstringState.NONE;
+}

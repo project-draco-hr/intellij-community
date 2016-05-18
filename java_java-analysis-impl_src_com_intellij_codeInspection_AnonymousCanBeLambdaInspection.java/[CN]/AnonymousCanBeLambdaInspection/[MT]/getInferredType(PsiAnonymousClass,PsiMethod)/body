@@ -8,24 +8,25 @@
   while (topExpr.getParent() instanceof PsiParenthesizedExpression) {
     topExpr=(PsiExpression)topExpr.getParent();
   }
-  final PsiElement parent=topExpr.getParent();
-  if (parent instanceof PsiExpressionList) {
-    PsiExpressionList expressionList=(PsiExpressionList)parent;
-    final PsiElement callExpr=expressionList.getParent();
-    if (callExpr instanceof PsiCallExpression) {
-      PsiExpression[] expressions=expressionList.getExpressions();
-      int i=ArrayUtilRt.find(expressions,topExpr);
-      if (i < 0)       return null;
-      final PsiCallExpression copy=(PsiCallExpression)callExpr.copy();
-      final PsiExpressionList argumentList=copy.getArgumentList();
-      if (argumentList != null) {
-        final PsiExpression classArg=argumentList.getExpressions()[i];
-        PsiExpression lambda=JavaPsiFacade.getElementFactory(aClass.getProject()).createExpressionFromText(ReplaceWithLambdaFix.composeLambdaText(method),expression);
-        lambda=(PsiExpression)classArg.replace(lambda);
-        ((PsiLambdaExpression)lambda).getBody().replace(method.getBody());
-        return LambdaUtil.getFunctionalInterfaceType(lambda,true);
+  final PsiCall call=LambdaUtil.treeWalkUp(topExpr);
+  if (call != null && call.resolveMethod() != null) {
+    final int offsetInTopCall=aClass.getTextRange().getStartOffset() - call.getTextRange().getStartOffset();
+    PsiCall copyCall=LambdaUtil.copyTopLevelCall(call);
+    if (copyCall == null)     return null;
+    final PsiAnonymousClass classArg=PsiTreeUtil.getParentOfType(copyCall.findElementAt(offsetInTopCall),PsiAnonymousClass.class);
+    if (classArg != null) {
+      PsiExpression lambda=JavaPsiFacade.getElementFactory(aClass.getProject()).createExpressionFromText(ReplaceWithLambdaFix.composeLambdaText(method),expression);
+      lambda=(PsiExpression)classArg.getParent().replace(lambda);
+      ((PsiLambdaExpression)lambda).getBody().replace(method.getBody());
+      final PsiType interfaceType;
+      if (copyCall.resolveMethod() == null) {
+        interfaceType=null;
       }
+ else {
+        interfaceType=((PsiLambdaExpression)lambda).getFunctionalInterfaceType();
+      }
+      return interfaceType;
     }
   }
-  return null;
+  return PsiType.NULL;
 }

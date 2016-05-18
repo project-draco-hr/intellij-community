@@ -1,0 +1,25 @@
+{
+  final String expressionBody=value.substring(2,value.length() - 1);
+  final List<String> propertyNames=StringUtil.split(expressionBody,".",true,false);
+  if (JavaFxPropertyAttributeDescriptor.isIncompletePropertyChain(propertyNames))   return PsiReference.EMPTY_ARRAY;
+  if (propertyNames.size() == 1) {
+    return getSinglePropertyReferences(xmlAttributeValue,fileIds,expressionBody,2);
+  }
+  final PsiClass controllerClass=JavaFxPsiUtil.getControllerClass(element.getContainingFile());
+  final String firstPropertyName=propertyNames.get(0);
+  int positionInExpression=2;
+  final List<PsiReference> result=new ArrayList<>();
+  final PsiReferenceBase firstReference=getIdReferenceBase(xmlAttributeValue,firstPropertyName,fileIds,Collections.emptyMap(),controllerClass);
+  positionInExpression=adjustTextRange(firstPropertyName,firstReference,positionInExpression);
+  PsiClass propertyOwnerClass=FxmlConstants.CONTROLLER.equals(firstPropertyName) ? controllerClass : JavaFxPsiUtil.getTagClass(fileIds.get(firstPropertyName));
+  result.add(firstReference);
+  final List<String> remainingPropertyNames=propertyNames.subList(1,propertyNames.size());
+  for (  String propertyName : remainingPropertyNames) {
+    final JavaFxExpressionReferenceBase reference=new JavaFxExpressionReferenceBase(xmlAttributeValue,propertyOwnerClass,propertyName);
+    positionInExpression=adjustTextRange(propertyName,reference,positionInExpression);
+    final PsiType propertyType=JavaFxPsiUtil.getReadablePropertyType(reference.resolve());
+    propertyOwnerClass=propertyType instanceof PsiClassType ? ((PsiClassType)propertyType).resolve() : null;
+    result.add(reference);
+  }
+  return result.toArray(PsiReference.EMPTY_ARRAY);
+}

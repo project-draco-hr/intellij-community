@@ -2,21 +2,24 @@
   if (file == null)   return null;
   final List<JsonSchemaObjectCodeInsightWrapper> wrappers=new ArrayList<>();
   JsonSchemaProviderFactory[] factories=getProviderFactories();
-  for (  JsonSchemaProviderFactory factory : factories) {
-    for (    JsonSchemaFileProvider provider : factory.getProviders(myProject)) {
-      if (provider.isAvailable(file)) {
-        JsonSchemaObjectCodeInsightWrapper wrapper=myWrappers.get(provider);
-        if (wrapper == null) {
-          JsonSchemaObjectCodeInsightWrapper newWrapper=createWrapper(provider);
-          if (newWrapper == null)           return null;
-          myWrappers.putIfAbsent(provider,newWrapper);
-          wrapper=myWrappers.get(provider);
-        }
-        if (wrapper != null) {
+synchronized (myLock) {
+    final Set<VirtualFile> files=mySchemaFiles.isEmpty() ? new HashSet<>() : null;
+    for (    JsonSchemaProviderFactory factory : factories) {
+      for (      JsonSchemaFileProvider provider : factory.getProviders(myProject)) {
+        final VirtualFile key=provider.getSchemaFile();
+        if (files != null)         files.add(key);
+        if (provider.isAvailable(myProject,file)) {
+          JsonSchemaObjectCodeInsightWrapper wrapper=myWrappers.get(key);
+          if (wrapper == null) {
+            wrapper=createWrapper(provider);
+            if (wrapper == null)             return null;
+            myWrappers.putIfAbsent(key,wrapper);
+          }
           wrappers.add(wrapper);
         }
       }
     }
+    if (files != null)     mySchemaFiles.addAll(files);
   }
   return wrappers;
 }

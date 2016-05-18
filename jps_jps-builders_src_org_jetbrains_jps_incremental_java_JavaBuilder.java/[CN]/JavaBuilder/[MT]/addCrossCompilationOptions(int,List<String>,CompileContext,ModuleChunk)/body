@@ -1,0 +1,56 @@
+{
+  final JpsJavaCompilerConfiguration compilerConfiguration=JpsJavaExtensionService.getInstance().getOrCreateCompilerConfiguration(context.getProjectDescriptor().getProject());
+  final String langLevel=getLanguageLevel(chunk.getModules().iterator().next());
+  final int chunkSdkVersion=getChunkSdkVersion(chunk);
+  final int targetLanguageLevel=JpsJavaSdkType.parseVersion(langLevel);
+  if (shouldUseReleaseOption(context,compilerSdkVersion,chunkSdkVersion,targetLanguageLevel)) {
+    options.add("-release");
+    options.add(String.valueOf(targetLanguageLevel));
+    return;
+  }
+  if (!StringUtil.isEmpty(langLevel)) {
+    options.add("-source");
+    options.add(langLevel);
+  }
+  String bytecodeTarget=null;
+  for (  JpsModule module : chunk.getModules()) {
+    final String moduleTarget=compilerConfiguration.getByteCodeTargetLevel(module.getName());
+    if (moduleTarget == null) {
+      continue;
+    }
+    if (bytecodeTarget == null) {
+      bytecodeTarget=moduleTarget;
+    }
+ else {
+      if (moduleTarget.compareTo(bytecodeTarget) < 0) {
+        bytecodeTarget=moduleTarget;
+      }
+    }
+  }
+  if (bytecodeTarget == null) {
+    if (!StringUtil.isEmpty(langLevel)) {
+      bytecodeTarget=langLevel;
+    }
+ else {
+      bytecodeTarget=USER_DEFINED_BYTECODE_TARGET.get(context);
+    }
+  }
+  if (bytecodeTarget != null) {
+    options.add("-target");
+    if (chunkSdkVersion > 0 && compilerSdkVersion > chunkSdkVersion) {
+      final int userSpecifiedTargetVersion=JpsJavaSdkType.parseVersion(bytecodeTarget);
+      if (userSpecifiedTargetVersion > 0 && userSpecifiedTargetVersion <= compilerSdkVersion) {
+        if (userSpecifiedTargetVersion > chunkSdkVersion) {
+          bytecodeTarget="1." + chunkSdkVersion;
+        }
+      }
+    }
+    options.add(bytecodeTarget);
+  }
+ else {
+    if (chunkSdkVersion > 0 && compilerSdkVersion > chunkSdkVersion) {
+      options.add("-target");
+      options.add("1." + chunkSdkVersion);
+    }
+  }
+}

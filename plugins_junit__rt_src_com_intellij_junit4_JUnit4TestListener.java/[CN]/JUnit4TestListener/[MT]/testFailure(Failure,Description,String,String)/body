@@ -1,0 +1,36 @@
+{
+  final boolean isIgnored=MapSerializerUtil.TEST_IGNORED.equals(messageName);
+  if (startedInParallel(description)) {
+    TestEvent testEvent=(TestEvent)myWaitingQueue.get(description);
+    if (testEvent == null) {
+      testEvent=new TestEvent();
+      myWaitingQueue.put(description,testEvent);
+    }
+    testEvent.setIgnored(isIgnored);
+    testEvent.setFailure(failure);
+    return;
+  }
+  final Map attrs=new HashMap();
+  attrs.put("name",methodName);
+  final long duration=currentTime() - myCurrentTestStart;
+  if (duration > 0) {
+    attrs.put("duration",Long.toString(duration));
+  }
+  try {
+    if (failure != null) {
+      final String trace=getTrace(failure);
+      final Throwable ex=failure.getException();
+      final ComparisonFailureData notification=ExpectedPatterns.createExceptionNotification(ex);
+      ComparisonFailureData.registerSMAttributes(notification,trace,failure.getMessage(),attrs,ex);
+    }
+  }
+ catch (  Throwable e) {
+    final StringWriter stringWriter=new StringWriter();
+    final PrintWriter writer=new PrintWriter(stringWriter);
+    e.printStackTrace(writer);
+    ComparisonFailureData.registerSMAttributes(null,stringWriter.toString(),e.getMessage(),attrs,e);
+  }
+ finally {
+    myPrintStream.println("\n" + MapSerializerUtil.asString(messageName,attrs));
+  }
+}
