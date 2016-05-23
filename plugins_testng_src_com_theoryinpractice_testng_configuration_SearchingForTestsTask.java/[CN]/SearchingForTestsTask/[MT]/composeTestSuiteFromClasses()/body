@@ -1,2 +1,65 @@
 {
+  Map<String,Map<String,List<String>>> map=new LinkedHashMap<String,Map<String,List<String>>>();
+  final boolean findTestMethodsForClass=shouldSearchForTestMethods();
+  for (  final Map.Entry<PsiClass,Map<PsiMethod,List<String>>> entry : myClasses.entrySet()) {
+    final Map<PsiMethod,List<String>> depMethods=entry.getValue();
+    LinkedHashMap<String,List<String>> methods=new LinkedHashMap<String,List<String>>();
+    for (    Map.Entry<PsiMethod,List<String>> method : depMethods.entrySet()) {
+      methods.put(method.getKey().getName(),method.getValue());
+    }
+    if (findTestMethodsForClass && depMethods.isEmpty()) {
+      for (      PsiMethod method : entry.getKey().getMethods()) {
+        if (TestNGUtil.hasTest(method)) {
+          methods.put(method.getName(),Collections.<String>emptyList());
+        }
+      }
+    }
+    final String className=ApplicationManager.getApplication().runReadAction(new Computable<String>(){
+      @Nullable public String compute(){
+        return ClassUtil.getJVMClassName(entry.getKey());
+      }
+    }
+);
+    if (className != null) {
+      map.put(className,methods);
+    }
+  }
+  Collection<String> groupNames=myConfig.calculateGroupNames();
+  Map<String,String> testParams=buildTestParameters();
+  int logLevel=1;
+  try {
+    final Properties properties=new Properties();
+    properties.load(new ByteArrayInputStream(myConfig.getPersistantData().VM_PARAMETERS.getBytes()));
+    final String verbose=properties.getProperty("-Dtestng.verbose");
+    if (verbose != null) {
+      logLevel=Integer.parseInt(verbose);
+    }
+  }
+ catch (  Exception e) {
+    logLevel=1;
+  }
+  File xmlFile;
+  if (groupNames != null) {
+    final LinkedHashMap<String,Collection<String>> methodNames=new LinkedHashMap<String,Collection<String>>();
+    for (    Map.Entry<String,Map<String,List<String>>> entry : map.entrySet()) {
+      methodNames.put(entry.getKey(),entry.getValue().keySet());
+    }
+    LaunchSuite suite=SuiteGenerator.createSuite(myProject.getName(),null,methodNames,groupNames,testParams,"jdk",logLevel);
+    xmlFile=suite.save(new File(PathManager.getSystemPath()));
+  }
+ else {
+    xmlFile=TestNGXmlSuiteHelper.writeSuite(map,testParams,myProject.getName(),PathManager.getSystemPath(),new TestNGXmlSuiteHelper.Logger(){
+      @Override public void log(      Throwable e){
+        LOG.error(e);
+      }
+    }
+);
+  }
+  String path=xmlFile.getAbsolutePath() + "\n";
+  try {
+    FileUtil.writeToFile(myTempFile,path.getBytes(CharsetToolkit.UTF8_CHARSET),true);
+  }
+ catch (  IOException e) {
+    LOG.error(e);
+  }
 }
