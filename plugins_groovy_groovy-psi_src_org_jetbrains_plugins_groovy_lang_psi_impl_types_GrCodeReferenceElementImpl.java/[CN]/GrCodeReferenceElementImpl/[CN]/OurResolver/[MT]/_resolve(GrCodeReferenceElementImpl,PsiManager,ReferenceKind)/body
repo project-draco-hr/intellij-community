@@ -1,2 +1,76 @@
 {
+  final String refName=ref.getReferenceName();
+  if (refName == null) {
+    return GroovyResolveResult.EMPTY_ARRAY;
+  }
+switch (kind) {
+case CLASS_OR_PACKAGE_FQ:
+case CLASS_FQ:
+case PACKAGE_FQ:
+    String qName=PsiUtil.getQualifiedReferenceText(ref);
+  LOG.assertTrue(qName != null,ref.getText());
+PsiElement element=resolveClassOrPackagePreferInner(ref,kind,qName,JavaPsiFacade.getInstance(manager.getProject()));
+if (element != null) {
+boolean accessible=!(element instanceof PsiClass) || PsiUtil.isAccessible(ref,(PsiClass)element);
+return new GroovyResolveResult[]{new GroovyResolveResultImpl(element,accessible)};
+}
+break;
+case CLASS:
+{
+EnumSet<ElementClassHint.DeclarationKind> kinds=ClassHint.RESOLVE_KINDS_CLASS;
+ResolverProcessor processor=new ClassResolverProcessor(refName,ref,kinds);
+GrCodeReferenceElement qualifier=ref.getQualifier();
+if (qualifier != null) {
+PsiElement qualifierResolved=qualifier.resolve();
+if (qualifierResolved instanceof PsiPackage || qualifierResolved instanceof PsiClass) {
+qualifierResolved.processDeclarations(processor,ResolveState.initial(),null,ref);
+return processor.getCandidates();
+}
+}
+ else {
+PsiElement placeToStartWalking=isAnnotationRef(ref) ? getContainingFileSkippingStubFiles(ref) : ref;
+if (placeToStartWalking != null) {
+ResolveUtil.treeWalkUp(placeToStartWalking,processor,false);
+GroovyResolveResult[] candidates=processor.getCandidates();
+if (candidates.length > 0) return candidates;
+}
+}
+break;
+}
+case CLASS_OR_PACKAGE:
+{
+GroovyResolveResult[] classResult=_resolve(ref,manager,ReferenceKind.CLASS);
+if (classResult.length == 1 && !classResult[0].isAccessible()) {
+GroovyResolveResult[] packageResult=_resolve(ref,manager,ReferenceKind.PACKAGE_FQ);
+if (packageResult.length != 0) {
+return packageResult;
+}
+}
+ else if (classResult.length == 0) {
+return _resolve(ref,manager,ReferenceKind.PACKAGE_FQ);
+}
+return classResult;
+}
+case STATIC_MEMBER_FQ:
+{
+final GrCodeReferenceElement qualifier=ref.getQualifier();
+if (qualifier != null) {
+final PsiElement resolved=qualifier.resolve();
+if (resolved instanceof PsiClass) {
+final PsiClass clazz=(PsiClass)resolved;
+PsiResolveHelper helper=JavaPsiFacade.getInstance(clazz.getProject()).getResolveHelper();
+List<GroovyResolveResult> result=new ArrayList<GroovyResolveResult>();
+processFields(ref,refName,clazz,helper,result);
+processMethods(ref,refName,clazz,helper,result);
+processInnerClasses(ref,refName,clazz,helper,result);
+if (result.isEmpty()) {
+processAccessors(ref,refName,clazz,helper,result);
+}
+return result.toArray(new GroovyResolveResult[result.size()]);
+}
+}
+break;
+}
+}
+return GroovyResolveResult.EMPTY_ARRAY;
 }
