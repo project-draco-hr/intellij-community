@@ -39,4 +39,35 @@
     }
   }
 );
+  session.addSessionListener(new XDebugSessionListener(){
+    @Override public void stackFrameChanged(){
+      String currentFrameThreadId=null;
+      final XStackFrame currentFrame=session.getCurrentStackFrame();
+      if (currentFrame instanceof PyStackFrame) {
+        currentFrameThreadId=((PyStackFrame)currentFrame).getThreadId();
+      }
+      final XExecutionStack activeStack=session.getSuspendContext().getActiveExecutionStack();
+      if ((activeStack == null) || (currentFrameThreadId == null)) {
+        return;
+      }
+      final XStackFrame frameFromSuspendContext=activeStack.getTopFrame();
+      String activeStackThreadId=null;
+      if (frameFromSuspendContext instanceof PyStackFrame) {
+        activeStackThreadId=((PyStackFrame)frameFromSuspendContext).getThreadId();
+      }
+      if (!currentFrameThreadId.equals(activeStackThreadId)) {
+        PyThreadInfo threadInfo=null;
+        for (        PyThreadInfo info : mySuspendedThreads) {
+          if (info.getId().equals(currentFrameThreadId)) {
+            threadInfo=info;
+            break;
+          }
+        }
+        if (threadInfo != null) {
+          getSession().positionReached(createSuspendContext(threadInfo));
+        }
+      }
+    }
+  }
+);
 }
