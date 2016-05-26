@@ -1,41 +1,48 @@
 {
-  if (!appIsLoaded()) {
-    try {
-      super.dispatchEvent(e);
+  try {
+    if (!appIsLoaded()) {
+      try {
+        super.dispatchEvent(e);
+      }
+ catch (      Throwable t) {
+        processException(t);
+      }
+      return;
+    }
+    e=InertialMouseRouter.changeSourceIfNeeded(e);
+    e=fixNonEnglishKeyboardLayouts(e);
+    e=mapEvent(e);
+    if (Registry.is("keymap.windows.as.meta")) {
+      e=mapMetaState(e);
+    }
+    boolean wasInputEvent=myIsInInputEvent;
+    myIsInInputEvent=e instanceof InputEvent || e instanceof InputMethodEvent || e instanceof WindowEvent|| e instanceof ActionEvent;
+    if (myIsInInputEvent) {
+      HeavyProcessLatch.INSTANCE.prioritizeUiActivity();
+    }
+    AWTEvent oldEvent=myCurrentEvent;
+    myCurrentEvent=e;
+    boolean userActivity=myIsInInputEvent || e instanceof ItemEvent;
+    try (AccessToken ignored=startActivity(userActivity)){
+      _dispatchEvent(e,false);
     }
  catch (    Throwable t) {
       processException(t);
     }
-    return;
-  }
-  e=InertialMouseRouter.changeSourceIfNeeded(e);
-  e=fixNonEnglishKeyboardLayouts(e);
-  e=mapEvent(e);
-  if (Registry.is("keymap.windows.as.meta")) {
-    e=mapMetaState(e);
-  }
-  boolean wasInputEvent=myIsInInputEvent;
-  myIsInInputEvent=e instanceof InputEvent || e instanceof InputMethodEvent || e instanceof WindowEvent|| e instanceof ActionEvent;
-  if (myIsInInputEvent) {
-    HeavyProcessLatch.INSTANCE.prioritizeUiActivity();
-  }
-  AWTEvent oldEvent=myCurrentEvent;
-  myCurrentEvent=e;
-  boolean userActivity=myIsInInputEvent || e instanceof ItemEvent;
-  try (AccessToken ignored=startActivity(userActivity)){
-    _dispatchEvent(e,false);
-  }
- catch (  Throwable t) {
-    processException(t);
-  }
  finally {
-    myIsInInputEvent=wasInputEvent;
-    myCurrentEvent=oldEvent;
-    for (    EventDispatcher each : myPostProcessors) {
-      each.dispatch(e);
+      myIsInInputEvent=wasInputEvent;
+      myCurrentEvent=oldEvent;
+      for (      EventDispatcher each : myPostProcessors) {
+        each.dispatch(e);
+      }
+      if (e instanceof KeyEvent) {
+        maybeReady();
+      }
     }
-    if (e instanceof KeyEvent) {
-      maybeReady();
+  }
+  finally {
+    if (isKeyboardEvent(e)) {
+      myKeyboardEventsInTheQueue--;
     }
   }
 }
