@@ -1,20 +1,29 @@
 {
-  myNewMarkup.ranges.clear();
-  myOldMarkup.document=beforeDocument;
-  myNewMarkup.document=currentDocument;
-  List<LineFragment> lineFragments;
+  CharSequence beforeText=beforeDocument.getCharsSequence();
+  CharSequence currentText=currentDocument.getCharsSequence();
   try {
-    lineFragments=myCompareProcessor.process(beforeDocument.getText(),currentDocument.getText());
+    ComparisonManager manager=ComparisonManager.getInstance();
+    List<LineFragment> lineFragments=manager.compareLinesInner(beforeText,currentText,ComparisonPolicy.DEFAULT,DumbProgressIndicator.INSTANCE);
+    List<TextRange> modifiedRanges=new ArrayList<>();
+    for (    LineFragment lineFragment : lineFragments) {
+      int fragmentStartOffset=lineFragment.getStartOffset2();
+      int fragmentEndOffset=lineFragment.getEndOffset2();
+      List<DiffFragment> innerFragments=lineFragment.getInnerFragments();
+      if (innerFragments != null) {
+        for (        DiffFragment innerFragment : innerFragments) {
+          int innerFragmentStartOffset=fragmentStartOffset + innerFragment.getStartOffset2();
+          int innerFragmentEndOffset=fragmentStartOffset + innerFragment.getEndOffset2();
+          modifiedRanges.add(calculateChangeHighlightRange(currentText,innerFragmentStartOffset,innerFragmentEndOffset));
+        }
+      }
+ else {
+        modifiedRanges.add(calculateChangeHighlightRange(currentText,fragmentStartOffset,fragmentEndOffset));
+      }
+    }
+    return modifiedRanges;
   }
- catch (  FilesTooBigForDiffException e) {
+ catch (  DiffTooBigException e) {
     LOG.info(e);
     return Collections.emptyList();
   }
-  final FragmentHighlighterImpl fragmentHighlighter=new FragmentHighlighterImpl(myOldMarkup,myNewMarkup);
-  for (Iterator<LineFragment> iterator=lineFragments.iterator(); iterator.hasNext(); ) {
-    LineFragment fragment=iterator.next();
-    fragmentHighlighter.setIsLast(!iterator.hasNext());
-    fragment.highlight(fragmentHighlighter);
-  }
-  return new ArrayList<TextRange>(myNewMarkup.ranges);
 }
