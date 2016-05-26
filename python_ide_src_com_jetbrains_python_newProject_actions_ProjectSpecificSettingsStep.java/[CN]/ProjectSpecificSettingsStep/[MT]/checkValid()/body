@@ -4,12 +4,7 @@
     return false;
   }
   final Sdk sdk=getSdk();
-  if (myProjectGenerator instanceof PythonProjectGenerator) {
-    final ValidationResult warningResult=((PythonProjectGenerator)myProjectGenerator).warningValidation(sdk);
-    if (!warningResult.isOk()) {
-      setWarningText(warningResult.getErrorMessage());
-    }
-  }
+  final List<String> warningList=new ArrayList<>();
   final boolean isPy3k=sdk != null && PythonSdkType.getLanguageLevelForSdk(sdk).isPy3K();
   if (sdk != null && PythonSdkType.isRemote(sdk) && !acceptsRemoteSdk(myProjectGenerator)) {
     setErrorText("Please choose a local interpreter");
@@ -20,7 +15,7 @@
     String frameworkName=frameworkProjectGenerator.getFrameworkTitle();
     if (sdk != null && !isFrameworkInstalled(sdk)) {
       if (PyPackageUtil.packageManagementEnabled(sdk)) {
-        String warningText=frameworkName + " will be installed on the selected interpreter";
+        warningList.add(frameworkName + " will be installed on the selected interpreter");
         myInstallFramework=true;
         final PyPackageManager packageManager=PyPackageManager.getInstance(sdk);
         boolean hasManagement=false;
@@ -30,13 +25,22 @@
  catch (        ExecutionException ignored) {
         }
         if (!hasManagement) {
-          warningText="Python packaging tools and " + warningText;
+          warningList.add("Python packaging tools and " + warningList);
         }
-        setWarningText(warningText);
       }
  else {
-        setWarningText(frameworkName + " is not installed on the selected interpreter");
+        warningList.add(frameworkName + " is not installed on the selected interpreter");
       }
+    }
+    if (myProjectGenerator instanceof PythonProjectGenerator) {
+      final ValidationResult warningResult=((PythonProjectGenerator)myProjectGenerator).warningValidation(sdk);
+      if (!warningResult.isOk()) {
+        warningList.add(warningResult.getErrorMessage());
+      }
+    }
+    if (!warningList.isEmpty()) {
+      final String warning=StringUtil.join(warningList,"<br/>");
+      setWarningText(warning);
     }
     if (isPy3k && !((PyFrameworkProjectGenerator)myProjectGenerator).supportsPython3()) {
       setErrorText(frameworkName + " is not supported for the selected interpreter");
