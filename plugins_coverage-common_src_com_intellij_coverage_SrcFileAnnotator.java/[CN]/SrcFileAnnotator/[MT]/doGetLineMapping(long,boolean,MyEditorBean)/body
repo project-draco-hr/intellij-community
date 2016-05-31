@@ -1,0 +1,37 @@
+{
+  VirtualFile virtualFile=editorBean.getVFile();
+  final byte[] oldContent;
+synchronized (LOCK) {
+    if (myOldContent == null) {
+      if (ApplicationManager.getApplication().isDispatchThread())       return null;
+      final LocalHistory localHistory=LocalHistory.getInstance();
+      byte[] byteContent=localHistory.getByteContent(virtualFile,new FileRevisionTimestampComparator(){
+        public boolean isSuitable(        long revisionTimestamp){
+          return revisionTimestamp < date;
+        }
+      }
+);
+      if (byteContent == null && virtualFile.getTimeStamp() > date) {
+        byteContent=loadFromVersionControl(date,virtualFile);
+      }
+      myOldContent=new SoftReference<byte[]>(byteContent);
+    }
+    oldContent=myOldContent.get();
+  }
+  if (oldContent == null)   return null;
+  String[] coveredLines=getCoveredLines(oldContent,virtualFile);
+  final Document document=editorBean.getDocument();
+  if (document == null)   return null;
+  String[] currentLines=getUpToDateLines(document);
+  String[] oldLines=oldToNew ? coveredLines : currentLines;
+  String[] newLines=oldToNew ? currentLines : coveredLines;
+  Diff.Change change;
+  try {
+    change=Diff.buildChanges(oldLines,newLines);
+  }
+ catch (  FilesTooBigForDiffException e) {
+    LOG.info(e);
+    return null;
+  }
+  return new SoftReference<TIntIntHashMap>(getCoverageVersionToCurrentLineMapping(change,oldLines.length));
+}
