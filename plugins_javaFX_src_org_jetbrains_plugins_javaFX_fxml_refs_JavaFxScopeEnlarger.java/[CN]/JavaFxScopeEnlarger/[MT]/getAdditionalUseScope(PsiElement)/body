@@ -3,6 +3,9 @@
   if (element instanceof PsiField) {
     containingClass=((PsiField)element).getContainingClass();
   }
+ else   if (element instanceof PsiMethod) {
+    containingClass=((PsiMethod)element).getContainingClass();
+  }
  else   if (element instanceof PsiParameter) {
     final PsiElement declarationScope=((PsiParameter)element).getDeclarationScope();
     if (declarationScope instanceof PsiMethod && PropertyUtil.isSimplePropertySetter((PsiMethod)declarationScope)) {
@@ -10,17 +13,10 @@
     }
   }
   if (containingClass != null) {
-    if (element instanceof PsiField && !((PsiField)element).hasModifierProperty(PsiModifier.PUBLIC) && AnnotationUtil.isAnnotated((PsiField)element,JavaFxCommonNames.JAVAFX_FXML_ANNOTATION,false) || element instanceof PsiParameter) {
-      final Project project=element.getProject();
-      final String qualifiedName=containingClass.getQualifiedName();
-      if (qualifiedName != null && !JavaFxControllerClassIndex.findFxmlWithController(project,qualifiedName).isEmpty()) {
-        final GlobalSearchScope projectScope=GlobalSearchScope.projectScope(project);
-        return new DelegatingGlobalSearchScope(projectScope){
-          @Override public boolean contains(          @NotNull VirtualFile file){
-            return super.contains(file) && JavaFxFileTypeFactory.isFxml(file);
-          }
-        }
-;
+    if (element instanceof PsiField && needToEnlargeFieldScope((PsiField)element) || element instanceof PsiMethod && needToEnlargeMethodScope((PsiMethod)element) || element instanceof PsiParameter) {
+      if (InheritanceUtil.isInheritor(containingClass,JavaFxCommonNames.JAVAFX_SCENE_NODE) || isControllerClass(containingClass)) {
+        final GlobalSearchScope projectScope=GlobalSearchScope.projectScope(element.getProject());
+        return new GlobalFxmlSearchScope(projectScope);
       }
     }
   }

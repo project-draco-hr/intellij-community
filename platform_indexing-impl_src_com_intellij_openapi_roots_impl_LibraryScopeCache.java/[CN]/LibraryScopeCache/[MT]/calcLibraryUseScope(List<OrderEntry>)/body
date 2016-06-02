@@ -1,14 +1,20 @@
 {
+  Set<Module> modulesWithLibrary=new THashSet<>(entries.size());
+  Set<Module> modulesWithSdk=new THashSet<>(entries.size());
+  for (  OrderEntry entry : entries) {
+    (entry instanceof JdkOrderEntry ? modulesWithSdk : modulesWithLibrary).add(entry.getOwnerModule());
+  }
+  modulesWithSdk.removeAll(modulesWithLibrary);
+  if (modulesWithSdk.size() + modulesWithLibrary.size() == ModuleManager.getInstance(myProject).getModules().length) {
+    return GlobalSearchScope.allScope(myProject);
+  }
   List<GlobalSearchScope> united=ContainerUtil.newArrayList();
   united.add(getLibrariesOnlyScope());
-  Set<Module> modulesInvolved=new THashSet<>(entries.size());
-  for (  OrderEntry entry : entries) {
-    Module ownerModule=entry.getOwnerModule();
-    united.add(GlobalSearchScope.moduleWithDependentsScope(ownerModule));
-    modulesInvolved.add(ownerModule);
+  if (!modulesWithSdk.isEmpty()) {
+    united.add(new ModulesScope(modulesWithSdk,myProject));
   }
-  if (modulesInvolved.size() == ModuleManager.getInstance(myProject).getModules().length) {
-    return GlobalSearchScope.allScope(myProject);
+  for (  Module module : modulesWithLibrary) {
+    united.add(GlobalSearchScope.moduleWithDependentsScope(module));
   }
   return GlobalSearchScope.union(united.toArray(new GlobalSearchScope[united.size()]));
 }

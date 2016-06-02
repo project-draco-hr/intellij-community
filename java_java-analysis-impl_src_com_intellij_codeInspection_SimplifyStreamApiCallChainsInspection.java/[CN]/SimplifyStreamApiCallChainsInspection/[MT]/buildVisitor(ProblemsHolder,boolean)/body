@@ -1,0 +1,28 @@
+{
+  if (!PsiUtil.isLanguageLevel8OrHigher(holder.getFile())) {
+    return PsiElementVisitor.EMPTY_VISITOR;
+  }
+  return new JavaElementVisitor(){
+    @Override public void visitMethodCallExpression(    PsiMethodCallExpression methodCall){
+      if (isCallOf(methodCall,CommonClassNames.JAVA_UTIL_COLLECTION,STREAM_METHOD,0)) {
+        final PsiMethodCallExpression qualifierCall=getQualifierMethodCall(methodCall);
+        if (isCallOf(qualifierCall,CommonClassNames.JAVA_UTIL_ARRAYS,AS_LIST_METHOD,1)) {
+          final PsiExpression[] argumentExpressions=qualifierCall.getArgumentList().getExpressions();
+          if (argumentExpressions.length == 1 && argumentExpressions[0].getType() instanceof PsiArrayType) {
+            holder.registerProblem(methodCall,null,"Arrays.asList().stream() can be replaced with Arrays.stream()",new ArraysAsListSingleArrayFix());
+          }
+ else {
+            holder.registerProblem(methodCall,null,"Arrays.asList().stream() can be replaced with Stream.of()",new ArraysAsListVarargFix());
+          }
+        }
+      }
+ else       if (isCallOf(methodCall,CommonClassNames.JAVA_UTIL_STREAM_STREAM,FOR_EACH_METHOD,1)) {
+        final PsiMethodCallExpression qualifierCall=getQualifierMethodCall(methodCall);
+        if (isCallOf(qualifierCall,CommonClassNames.JAVA_UTIL_COLLECTION,STREAM_METHOD,0)) {
+          holder.registerProblem(methodCall,getCallChainRange(methodCall,qualifierCall),"Collection.stream().forEach() can be replaced with Collection.forEach()",new CollectionForEachFix());
+        }
+      }
+    }
+  }
+;
+}

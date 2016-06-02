@@ -16,39 +16,30 @@
     }
   }
   if (!checkDeep) {
-    final boolean cInt=candidateClass.isInterface();
-    final boolean bInt=baseClass.isInterface();
     if (candidateClass instanceof PsiCompiledElement) {
       String baseQName=baseClass.getQualifiedName();
       if (baseQName == null)       return false;
-      GlobalSearchScope scope=candidateClass.getResolveScope();
-      if (CommonClassNames.JAVA_LANG_ENUM.equals(baseQName) && candidateClass.isEnum() && facade.findClass(baseQName,scope) != null) {
+      if (CommonClassNames.JAVA_LANG_ENUM.equals(baseQName)) {
+        return candidateClass.isEnum();
+      }
+      if (CommonClassNames.JAVA_LANG_ANNOTATION_ANNOTATION.equals(baseQName)) {
+        return candidateClass.isAnnotationType();
+      }
+      boolean isCandidateInterface=candidateClass.isInterface();
+      boolean isBaseInterface=baseClass.isInterface();
+      if (isCandidateInterface == isBaseInterface && checkReferenceListWithQualifiedNamesInClsClass(baseQName,candidateClass.getExtendsList(),facade)) {
         return true;
       }
-      if (CommonClassNames.JAVA_LANG_ANNOTATION_ANNOTATION.equals(baseQName) && candidateClass.isAnnotationType() && facade.findClass(baseQName,scope) != null) {
-        return true;
-      }
-      if (cInt == bInt && checkReferenceListWithQualifiedNames(baseQName,candidateClass.getExtendsList(),scope,facade))       return true;
-      return bInt && !cInt && checkReferenceListWithQualifiedNames(baseQName,candidateClass.getImplementsList(),scope,facade);
+      return isBaseInterface && !isCandidateInterface && checkReferenceListWithQualifiedNamesInClsClass(baseQName,candidateClass.getImplementsList(),facade);
     }
+    boolean isCandidateInterface=candidateClass.isInterface();
+    boolean isBaseInterface=baseClass.isInterface();
     String baseName=baseClass.getName();
-    if (cInt == bInt) {
-      for (      PsiClassType type : candidateClass.getExtendsListTypes()) {
-        if (Comparing.equal(type.getClassName(),baseName)) {
-          if (manager.areElementsEquivalent(baseClass,type.resolve())) {
-            return true;
-          }
-        }
-      }
+    if (isCandidateInterface == isBaseInterface) {
+      return PsiClassImplUtil.isInExtendsList(candidateClass,baseClass,baseName,manager);
     }
- else     if (!cInt) {
-      for (      PsiClassType type : candidateClass.getImplementsListTypes()) {
-        if (Comparing.equal(type.getClassName(),baseName)) {
-          if (manager.areElementsEquivalent(baseClass,type.resolve())) {
-            return true;
-          }
-        }
-      }
+    if (!isCandidateInterface) {
+      return PsiClassImplUtil.isInReferenceList(candidateClass.getImplementsList(),baseClass,baseName,manager);
     }
     return false;
   }

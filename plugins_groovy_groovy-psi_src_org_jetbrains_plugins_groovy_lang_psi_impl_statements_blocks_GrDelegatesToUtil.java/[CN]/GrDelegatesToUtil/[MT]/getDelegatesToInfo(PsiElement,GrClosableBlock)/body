@@ -1,7 +1,7 @@
 {
   GrCall call=getContainingCall(closableBlock);
   if (call == null)   return null;
-  GroovyResolveResult result=call.advancedResolve();
+  GroovyResolveResult result=resolveActualCall(call);
   if (GdkMethodUtil.isWithOrIdentity(result.getElement())) {
     final GrExpression qualifier=inferCallQualifier((GrMethodCall)call);
     if (qualifier == null)     return null;
@@ -13,12 +13,18 @@
   if (map == null)   return null;
   final PsiParameter parameter=findParameter(closableBlock,map,result);
   if (parameter == null)   return null;
+  final String delegateFqnData=parameter.getUserData(DELEGATES_TO_KEY);
+  final Integer strategyData=parameter.getUserData(DELEGATES_TO_STRATEGY_KEY);
+  if (delegateFqnData != null) {
+    return new DelegatesToInfo(TypesUtil.createType(delegateFqnData,place),strategyData == null ? Closure.OWNER_FIRST : strategyData);
+  }
   final PsiModifierList modifierList=parameter.getModifierList();
   if (modifierList == null)   return null;
   final PsiAnnotation delegatesTo=modifierList.findAnnotation(GroovyCommonClassNames.GROOVY_LANG_DELEGATES_TO);
   if (delegatesTo == null)   return null;
-  final PsiType type=inferDelegateType(delegatesTo,signature,map);
-  if (type == null)   return null;
+  PsiType delegateType=getFromValue(delegatesTo);
+  if (delegateType == null)   delegateType=getFromTarget(delegatesTo,signature,map);
+  if (delegateType == null)   delegateType=getFromType(result,delegatesTo);
   final int strategyValue=getStrategyValue(delegatesTo.findAttributeValue("strategy"));
-  return new DelegatesToInfo(type,strategyValue);
+  return new DelegatesToInfo(delegateType,strategyValue);
 }

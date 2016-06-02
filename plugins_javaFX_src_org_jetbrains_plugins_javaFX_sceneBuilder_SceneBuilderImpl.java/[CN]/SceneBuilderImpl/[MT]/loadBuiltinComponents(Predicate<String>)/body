@@ -1,0 +1,51 @@
+{
+  final Map<String,BuiltinComponent> components=new THashMap<>();
+  for (  LibraryItem item : BuiltinLibrary.getLibrary().getItems()) {
+    final Ref<String> refQualifiedName=new Ref<>();
+    final List<String> imports=new ArrayList<>();
+    final Map<String,String> attributes=new THashMap<>();
+    final Ref<Boolean> rootTagProcessed=new Ref<>(false);
+    NanoXmlUtil.parse(new StringReader(item.getFxmlText()),new NanoXmlUtil.IXMLBuilderAdapter(){
+      @Override public void newProcessingInstruction(      String target,      Reader reader) throws Exception {
+        if ("import".equals(target)) {
+          final String imported=StreamUtil.readTextFrom(reader);
+          imports.add(imported);
+        }
+      }
+      @Override public void addAttribute(      String key,      String nsPrefix,      String nsURI,      String value,      String type) throws Exception {
+        if (rootTagProcessed.get())         return;
+        if (key != null && value != null && StringUtil.isEmpty(nsPrefix)) {
+          attributes.put(key,value);
+        }
+      }
+      @Override public void elementAttributesProcessed(      String name,      String nsPrefix,      String nsURI) throws Exception {
+        rootTagProcessed.set(true);
+      }
+      @Override public void startElement(      String name,      String nsPrefix,      String nsURI,      String systemID,      int lineNr) throws Exception {
+        if (rootTagProcessed.get())         return;
+        for (        String imported : imports) {
+          if (imported.equals(name) || imported.endsWith("." + name)) {
+            refQualifiedName.set(imported);
+            break;
+          }
+          if (imported.endsWith(".*")) {
+            String className=imported.substring(0,imported.length() - 1) + name;
+            if (psiClassExists.test(className)) {
+              refQualifiedName.set(className);
+              break;
+            }
+          }
+        }
+      }
+    }
+);
+    final String qualifiedName=refQualifiedName.get();
+    if (!StringUtil.isEmpty(qualifiedName)) {
+      final BuiltinComponent previous=components.get(qualifiedName);
+      if (previous == null || previous.getAttributes().size() < attributes.size()) {
+        components.put(qualifiedName,new BuiltinComponent(attributes));
+      }
+    }
+  }
+  return components;
+}

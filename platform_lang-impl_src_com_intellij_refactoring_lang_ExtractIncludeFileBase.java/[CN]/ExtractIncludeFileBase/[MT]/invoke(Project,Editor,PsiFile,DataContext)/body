@@ -1,68 +1,9 @@
 {
-  myIncludingFile=file;
-  if (!editor.getSelectionModel().hasSelection()) {
-    String message=RefactoringBundle.getCannotRefactorMessage(RefactoringBundle.message("no.selection"));
-    CommonRefactoringUtil.showErrorHint(project,editor,message,getRefactoringName(),HELP_ID);
-    return;
+  try {
+    myIncludingFile=file;
+    doInvoke(project,editor,file);
   }
-  final int start=editor.getSelectionModel().getSelectionStart();
-  final int end=editor.getSelectionModel().getSelectionEnd();
-  final Pair<T,T> children=findPairToExtract(start,end);
-  if (children == null) {
-    String message=RefactoringBundle.getCannotRefactorMessage(RefactoringBundle.message("selection.does.not.form.a.fragment.for.extraction"));
-    CommonRefactoringUtil.showErrorHint(project,editor,message,getRefactoringName(),HELP_ID);
-    return;
-  }
-  if (!verifyChildRange(children.getFirst(),children.getSecond())) {
-    String message=RefactoringBundle.getCannotRefactorMessage(RefactoringBundle.message("cannot.extract.selected.elements.into.include.file"));
-    CommonRefactoringUtil.showErrorHint(project,editor,message,getRefactoringName(),HELP_ID);
-    return;
-  }
-  final FileType fileType=getFileType(getLanguageForExtract(children.getFirst()));
-  if (!(fileType instanceof LanguageFileType)) {
-    String message=RefactoringBundle.message("the.language.for.selected.elements.has.no.associated.file.type");
-    CommonRefactoringUtil.showErrorHint(project,editor,message,getRefactoringName(),HELP_ID);
-    return;
-  }
-  if (!CommonRefactoringUtil.checkReadOnlyStatus(project,file))   return;
-  ExtractIncludeDialog dialog=createDialog(file.getContainingDirectory(),getExtractExtension(fileType,children.first));
-  dialog.show();
-  if (dialog.getExitCode() == DialogWrapper.OK_EXIT_CODE) {
-    final PsiDirectory targetDirectory=dialog.getTargetDirectory();
-    LOG.assertTrue(targetDirectory != null);
-    final String targetfileName=dialog.getTargetFileName();
-    CommandProcessor.getInstance().executeCommand(project,new Runnable(){
-      @Override public void run(){
-        ApplicationManager.getApplication().runWriteAction(new Runnable(){
-          @Override public void run(){
-            try {
-              final List<IncludeDuplicate<T>> duplicates=new ArrayList<IncludeDuplicate<T>>();
-              final T first=children.getFirst();
-              final T second=children.getSecond();
-              PsiEquivalenceUtil.findChildRangeDuplicates(first,second,file,new PairConsumer<PsiElement,PsiElement>(){
-                @Override public void consume(                final PsiElement start,                final PsiElement end){
-                  duplicates.add(new IncludeDuplicate<T>((T)start,(T)end));
-                }
-              }
-);
-              final String includePath=processPrimaryFragment(first,second,targetDirectory,targetfileName,file);
-              editor.getCaretModel().moveToOffset(first.getTextRange().getStartOffset());
-              ApplicationManager.getApplication().invokeLater(new Runnable(){
-                @Override public void run(){
-                  replaceDuplicates(includePath,duplicates,editor,project);
-                }
-              }
-);
-            }
- catch (            IncorrectOperationException e) {
-              CommonRefactoringUtil.showErrorMessage(getRefactoringName(),e.getMessage(),null,project);
-            }
-            editor.getSelectionModel().removeSelection();
-          }
-        }
-);
-      }
-    }
-,getRefactoringName(),null);
+  finally {
+    myIncludingFile=null;
   }
 }

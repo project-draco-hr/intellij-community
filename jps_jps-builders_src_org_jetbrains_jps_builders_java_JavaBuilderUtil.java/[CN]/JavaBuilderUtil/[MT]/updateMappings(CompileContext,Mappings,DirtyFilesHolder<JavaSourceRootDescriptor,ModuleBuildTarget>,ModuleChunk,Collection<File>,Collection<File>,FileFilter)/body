@@ -1,5 +1,6 @@
 {
   try {
+    boolean performIntegrate=true;
     boolean additionalPassRequired=false;
     final Set<String> removedPaths=getRemovedPaths(chunk,dirtyFilesHolder);
     final Mappings globalMappings=context.getProjectDescriptor().dataManager.getMappings();
@@ -14,8 +15,10 @@
         allAffectedFiles.removeAll(successfullyCompiled);
         final Set<File> affectedBeforeDif=new THashSet<File>(FileUtil.FILE_HASHING_STRATEGY);
         affectedBeforeDif.addAll(allAffectedFiles);
+        final Set<File> compiledWithErrors=getFilesContainer(context,COMPILED_WITH_ERRORS_KEY);
+        COMPILED_WITH_ERRORS_KEY.set(context,null);
         final ModulesBasedFileFilter moduleBasedFilter=new ModulesBasedFileFilter(context,chunk);
-        final boolean incremental=globalMappings.differentiateOnIncrementalMake(delta,removedPaths,filesToCompile,allCompiledFiles,allAffectedFiles,moduleBasedFilter,CONSTANT_SEARCH_SERVICE.get(context));
+        final boolean incremental=globalMappings.differentiateOnIncrementalMake(delta,removedPaths,filesToCompile,compiledWithErrors,allCompiledFiles,allAffectedFiles,moduleBasedFilter,CONSTANT_SEARCH_SERVICE.get(context));
         if (LOG.isDebugEnabled()) {
           LOG.debug("Differentiate Results:");
           LOG.debug("   Compiled Files:");
@@ -59,7 +62,14 @@
           final String messageText="Marking " + chunk.getPresentableShortName() + " and direct dependants for recompilation";
           LOG.info("Non-incremental mode: " + messageText);
           context.processMessage(new ProgressMessage(messageText));
-          additionalPassRequired=isCompileJavaIncrementally(context);
+          final boolean alreadyMarkedDirty=FSOperations.isMarkedDirty(context,chunk);
+          additionalPassRequired=isCompileJavaIncrementally(context) && !alreadyMarkedDirty;
+          if (alreadyMarkedDirty) {
+            globalMappings.differentiateOnNonIncrementalMake(delta,removedPaths,filesToCompile);
+          }
+ else {
+            performIntegrate=false;
+          }
           FileFilter toBeMarkedFilter=skipMarkingDirtyFilter == null ? null : new NegationFileFilter(skipMarkingDirtyFilter);
           FSOperations.markDirtyRecursively(context,CompilationRound.NEXT,chunk,toBeMarkedFilter);
         }
@@ -78,8 +88,10 @@
     if (errorsDetected) {
       return false;
     }
-    context.processMessage(new ProgressMessage("Updating dependency information... [" + chunk.getPresentableShortName() + "]"));
-    globalMappings.integrate(delta);
+    if (performIntegrate) {
+      context.processMessage(new ProgressMessage("Updating dependency information... [" + chunk.getPresentableShortName() + "]"));
+      globalMappings.integrate(delta);
+    }
     return additionalPassRequired;
   }
  catch (  BuildDataCorruptedException e) {

@@ -1,22 +1,37 @@
 {
-  List selection=getSelection();
-  final VcsFileRevision revision;
-  if (selection.size() != 1) {
-    revision=null;
+  List<TreeNodeOnVcsRevision> selection=getSelection();
+  if (selection.isEmpty()) {
     myComments.setText("");
     myOriginalComment="";
+    return;
+  }
+  boolean addRevisionInfo=selection.size() > 1;
+  StringBuilder original=new StringBuilder();
+  StringBuilder html=new StringBuilder();
+  for (  TreeNodeOnVcsRevision revision : selection) {
+    String message=revision.getCommitMessage();
+    if (StringUtil.isEmpty(message))     continue;
+    if (original.length() > 0) {
+      original.append("\n\n");
+      html.append("<br/><br/>");
+    }
+    if (addRevisionInfo) {
+      String revisionInfo=getRevisionInfo(revision);
+      html.append("<font color=\"#").append(Integer.toHexString(JBColor.gray.getRGB()).substring(2)).append("\">").append(getHtmlWithFonts(revisionInfo)).append("</font><br/>");
+      original.append(revisionInfo).append("\n");
+    }
+    original.append(message);
+    html.append(getHtmlWithFonts(formatTextWithLinks(myVcs.getProject(),message)));
+  }
+  myOriginalComment=original.toString();
+  if (StringUtil.isEmpty(myOriginalComment)) {
+    myComments.setText("");
   }
  else {
-    revision=getFirstSelectedRevision();
-    if (revision != null) {
-      final String message=revision.getCommitMessage();
-      myOriginalComment=message;
-      @NonNls final String text=message == null ? "" : "<html><head>" + UIUtil.getCssFontDeclaration(UIUtil.getLabelFont()) + "</head><body>"+ FontUtil.getHtmlWithFonts(IssueLinkHtmlRenderer.formatTextWithLinks(myVcs.getProject(),message))+ "</body></html>";
-      myComments.setText(text);
-      myComments.setCaretPosition(0);
-    }
+    myComments.setText("<html><head>" + UIUtil.getCssFontDeclaration(VcsHistoryUtil.getCommitDetailsFont()) + "</head><body>"+ html.toString()+ "</body></html>");
+    myComments.setCaretPosition(0);
   }
   if (myListener != null) {
-    myListener.consume(revision);
+    myListener.consume(selection.get(0).getRevision());
   }
 }

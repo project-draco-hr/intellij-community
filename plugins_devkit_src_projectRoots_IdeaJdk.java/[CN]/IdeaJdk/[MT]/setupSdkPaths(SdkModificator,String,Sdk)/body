@@ -2,12 +2,39 @@
   addClasses(sdkModificator,internalJava);
   addDocs(sdkModificator,internalJava);
   addSources(sdkModificator,internalJava);
-  if (!isFromIDEAProject(sdkHome)) {
-    final VirtualFile[] ideaLib=getIdeaLibrary(sdkHome);
-    if (ideaLib != null) {
-      for (      VirtualFile aIdeaLib : ideaLib) {
-        sdkModificator.addRoot(aIdeaLib,OrderRootType.CLASSES);
+  if (isFromIDEAProject(sdkHome)) {
+    JarFileSystem jarFileSystem=JarFileSystem.getInstance();
+    for (    String prefix : Arrays.asList("community","")) {
+      for (      String path : Arrays.asList("lib","build/kotlinc/lib/kotlin-runtime.jar","xml/relaxng/lib")) {
+        File libDir=new File(sdkHome,FileUtil.toSystemDependentName(prefix + "/" + path));
+        if (!libDir.exists())         continue;
+        for (        File file : JBIterable.of(libDir.listFiles()).append(libDir)) {
+          if (file.isDirectory())           continue;
+          if (!StringUtil.endsWithIgnoreCase(file.getName(),".jar"))           continue;
+          String jarPath=FileUtil.toSystemIndependentName(file.getPath()) + JarFileSystem.JAR_SEPARATOR;
+          VirtualFile jar=jarFileSystem.findFileByPath(jarPath);
+          if (jar == null)           continue;
+          sdkModificator.addRoot(jar,OrderRootType.CLASSES);
+        }
       }
+    }
+    LocalFileSystem localFileSystem=LocalFileSystem.getInstance();
+    VirtualFile out=localFileSystem.refreshAndFindFileByPath(sdkHome + OUT_CLASSES);
+    if (out != null) {
+      List<String> suppressed=Arrays.asList("jps-plugin-system");
+      for (      VirtualFile dir : JBIterable.of(out.findChild("resources")).append(out.getChildren())) {
+        if (!dir.isDirectory())         continue;
+        String name=dir.getName();
+        if (name.endsWith("-ide") || suppressed.contains(name))         continue;
+        if (!name.equals("ultimate-resources") && FileUtil.exists(toSystemDependentName(dir.getPath() + "/META-INF/plugin.xml")))         continue;
+        sdkModificator.addRoot(dir,OrderRootType.CLASSES);
+      }
+    }
+  }
+ else {
+    VirtualFile[] ideaLib=getIdeaLibrary(sdkHome);
+    for (    VirtualFile aIdeaLib : ideaLib) {
+      sdkModificator.addRoot(aIdeaLib,OrderRootType.CLASSES);
     }
     addSources(new File(sdkHome),sdkModificator);
   }

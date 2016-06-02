@@ -23,6 +23,22 @@
  else   if (methodName.equals("filter")) {
     descriptorBase=FluentIterableConversionUtil.getFilterDescriptor(method);
   }
+ else   if (methodName.equals("isEmpty")) {
+    descriptorBase=new TypeConversionDescriptor("$q$.isEmpty()",null){
+      @Override public PsiExpression replace(      PsiExpression expression,      TypeEvaluator evaluator){
+        final PsiElement parent=expression.getParent();
+        boolean isDoubleNegation=false;
+        if (parent instanceof PsiExpression && DoubleNegationInspection.isNegation((PsiExpression)parent)) {
+          isDoubleNegation=true;
+          expression=(PsiExpression)parent.replace(expression);
+        }
+        setReplaceByString((isDoubleNegation ? "" : "!") + "$q$.findAny().isPresent()");
+        return super.replace(expression,evaluator);
+      }
+    }
+;
+    needSpecifyType=false;
+  }
  else   if (methodName.equals("transformAndConcat")) {
     descriptorBase=new FluentIterableConversionUtil.TransformAndConcatConversionRule();
   }
@@ -88,15 +104,12 @@
   if (descriptorBase == null) {
     return FluentIterableConversionUtil.createToCollectionDescriptor(methodName,context);
   }
-  if (descriptorBase != null) {
-    if (needSpecifyType) {
-      if (conversionType == null) {
-        PsiMethodCallExpression methodCall=(PsiMethodCallExpression)(context instanceof PsiMethodCallExpression ? context : context.getParent());
-        conversionType=GuavaConversionUtil.addTypeParameters(GuavaTypeConversionDescriptor.isIterable(methodCall) ? CommonClassNames.JAVA_LANG_ITERABLE : StreamApiConstants.JAVA_UTIL_STREAM_STREAM,context.getType(),context);
-      }
-      descriptorBase.withConversionType(conversionType);
+  if (needSpecifyType) {
+    if (conversionType == null) {
+      PsiMethodCallExpression methodCall=(PsiMethodCallExpression)(context instanceof PsiMethodCallExpression ? context : context.getParent());
+      conversionType=GuavaConversionUtil.addTypeParameters(GuavaTypeConversionDescriptor.isIterable(methodCall) ? CommonClassNames.JAVA_LANG_ITERABLE : StreamApiConstants.JAVA_UTIL_STREAM_STREAM,context.getType(),context);
     }
-    return descriptorBase;
+    descriptorBase.withConversionType(conversionType);
   }
-  return null;
+  return descriptorBase;
 }
