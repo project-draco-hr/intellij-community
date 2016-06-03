@@ -1,0 +1,32 @@
+{
+  final EditorFactory editorFactory=EditorFactory.getInstance();
+  MessageBus bus=project.getMessageBus();
+  EditorSettingsManager editorSettingsManager=new EditorSettingsManager(project);
+  EncodingManager encodingManager=new EncodingManager(project);
+  LineEndingsManager lineEndingsManager=new LineEndingsManager(project);
+  bus.connect().subscribe(AppTopics.FILE_DOCUMENT_SYNC,encodingManager);
+  bus.connect().subscribe(AppTopics.FILE_DOCUMENT_SYNC,editorSettingsManager);
+  bus.connect().subscribe(AppTopics.FILE_DOCUMENT_SYNC,lineEndingsManager);
+  VirtualFileManager.getInstance().addVirtualFileListener(new VirtualFileAdapter(){
+    @Override public void fileCreated(    @NotNull VirtualFileEvent event){
+      updateOpenEditors(event);
+    }
+    @Override public void fileDeleted(    @NotNull VirtualFileEvent event){
+      updateOpenEditors(event);
+    }
+    @Override public void contentsChanged(    @NotNull VirtualFileEvent event){
+      updateOpenEditors(event);
+    }
+    private void updateOpenEditors(    VirtualFileEvent event){
+      final VirtualFile file=event.getFile();
+      if (".editorconfig".equals(file.getName())) {
+        if (ProjectRootManager.getInstance(project).getFileIndex().isInContent(file) || !Registry.is("editor.config.stop.at.project.root")) {
+          for (          Editor editor : editorFactory.getAllEditors()) {
+            ((EditorEx)editor).reinitSettings();
+          }
+        }
+      }
+    }
+  }
+,project);
+}
