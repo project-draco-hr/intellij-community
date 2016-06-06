@@ -1,13 +1,13 @@
 {
   int offsetIgnoringComments=0;
   int offsetIgnoringCommentsAndStrings=0;
-  int lineLength=0;
   int unneededWhitespaceCount=0;
   String lastTokenText=null;
   IElementType lastTokenType=null;
   TokenSet whitespaceTokens=parserDefinition.getWhitespaceTokens();
   TokenSet stringLiteralElements=parserDefinition.getStringLiteralElements();
   TokenSet commentTokens=parserDefinition.getCommentTokens();
+  boolean lastWhiteSpaceWasHandled=false;
   for (IElementType tokenType=lexer.getTokenType(); tokenType != null; lexer.advance(), tokenType=lexer.getTokenType()) {
     if (commentTokens.contains(tokenType)) {
       lastTokenType=tokenType;
@@ -16,14 +16,11 @@
     }
     int tokenLength=lexer.getTokenEnd() - lexer.getTokenStart();
     offsetIgnoringComments+=tokenLength;
-    if (stringLiteralElements.contains(tokenType)) {
-      lineLength+=tokenLength;
-      lastTokenType=tokenType;
-      lastTokenText=lexer.getTokenText();
-      continue;
+    if (!stringLiteralElements.contains(tokenType)) {
+      offsetIgnoringCommentsAndStrings+=tokenLength;
     }
-    offsetIgnoringCommentsAndStrings+=tokenLength;
     if (whitespaceTokens.contains(tokenType)) {
+      lastWhiteSpaceWasHandled=false;
       if (!commentTokens.contains(lastTokenType) && tokenLength > 1) {
         lexer.advance();
         if (lexer.getTokenType() == null) {
@@ -33,21 +30,20 @@
           return false;
         }
       }
-      if (tokenLength == 1 && StringUtil.equals(lastTokenText,"\n") && StringUtil.equals(lexer.getTokenText(),"\n")) {
+      if (tokenLength == 1 && StringUtil.equals(lastTokenText,"\n") && StringUtil.equals(lexer.getTokenText(),"\n") || tokenLength > 0 && noWSRequireAfterTokenSet.contains(lastTokenType)) {
         unneededWhitespaceCount++;
-      }
- else       if (tokenLength > 0 && noWSRequireAfterTokenSet.contains(lastTokenType)) {
-        unneededWhitespaceCount++;
-      }
-      if (lexer.getTokenText().contains("\n")) {
-        if (lineLength > MIN_LINE_LENGTH) {
-          break;
-        }
-        lineLength=0;
+        lastWhiteSpaceWasHandled=true;
       }
     }
  else {
-      lineLength+=tokenLength;
+      if (!lastWhiteSpaceWasHandled && whitespaceTokens.contains(lastTokenType) && StringUtil.isNotEmpty(lastTokenText)&& noWSRequireBeforeTokenSet.contains(tokenType)) {
+        unneededWhitespaceCount++;
+      }
+    }
+    if (stringLiteralElements.contains(tokenType)) {
+      lastTokenType=tokenType;
+      lastTokenText=lexer.getTokenText();
+      continue;
     }
     if (offsetIgnoringComments >= MAX_OFFSET) {
       break;
