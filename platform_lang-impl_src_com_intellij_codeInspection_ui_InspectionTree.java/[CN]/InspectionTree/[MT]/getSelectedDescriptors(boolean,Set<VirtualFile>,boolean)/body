@@ -1,2 +1,57 @@
 {
+  final TreePath[] paths=getSelectionPaths();
+  if (paths == null)   return CommonProblemDescriptor.EMPTY_ARRAY;
+  final TreePath[] selectionPaths=TreeUtil.selectMaximals(paths);
+  final LinkedHashSet<CommonProblemDescriptor> descriptors=new LinkedHashSet<CommonProblemDescriptor>();
+  MultiMap<Object,ProblemDescriptionNode> parentToChildNode=new MultiMap<>();
+  final List<InspectionTreeNode> nonDescriptorNodes=new SmartList<>();
+  for (  TreePath path : selectionPaths) {
+    final Object[] pathAsArray=path.getPath();
+    final int length=pathAsArray.length;
+    final Object node=pathAsArray[length - 1];
+    if (node instanceof ProblemDescriptionNode) {
+      if (isNodeValidAndIncluded((ProblemDescriptionNode)node,allowResolved)) {
+        if (length >= 2) {
+          parentToChildNode.putValue(pathAsArray[length - 2],(ProblemDescriptionNode)node);
+        }
+ else {
+          parentToChildNode.putValue(node,(ProblemDescriptionNode)node);
+        }
+      }
+    }
+ else {
+      nonDescriptorNodes.add((InspectionTreeNode)node);
+    }
+  }
+  for (  InspectionTreeNode node : nonDescriptorNodes) {
+    processChildDescriptorsDeep(node,descriptors,sortedByPosition,allowResolved,readOnlyFilesSink);
+  }
+  for (  Map.Entry<Object,Collection<ProblemDescriptionNode>> entry : parentToChildNode.entrySet()) {
+    final Collection<ProblemDescriptionNode> siblings=entry.getValue();
+    if (siblings.size() == 1) {
+      final ProblemDescriptionNode descriptorNode=ContainerUtil.getFirstItem(siblings);
+      LOG.assertTrue(descriptorNode != null);
+      CommonProblemDescriptor descriptor=descriptorNode.getDescriptor();
+      if (descriptor != null) {
+        descriptors.add(descriptor);
+        if (readOnlyFilesSink != null) {
+          checkDescriptorFileIsWritable(descriptor,readOnlyFilesSink);
+        }
+      }
+    }
+ else {
+      Collection<CommonProblemDescriptor> currentDescriptors=sortedByPosition ? new TreeSet<>(DESCRIPTOR_COMPARATOR) : new ArrayList<>();
+      for (      ProblemDescriptionNode sibling : siblings) {
+        final CommonProblemDescriptor descriptor=sibling.getDescriptor();
+        if (descriptor != null) {
+          if (readOnlyFilesSink != null) {
+            checkDescriptorFileIsWritable(descriptor,readOnlyFilesSink);
+          }
+          currentDescriptors.add(descriptor);
+        }
+      }
+      descriptors.addAll(currentDescriptors);
+    }
+  }
+  return descriptors.toArray(new CommonProblemDescriptor[descriptors.size()]);
 }
