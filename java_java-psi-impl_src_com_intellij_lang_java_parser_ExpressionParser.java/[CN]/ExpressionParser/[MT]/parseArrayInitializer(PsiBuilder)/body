@@ -2,8 +2,7 @@
   if (builder.getTokenType() != JavaTokenType.LBRACE)   return null;
   final PsiBuilder.Marker arrayInit=builder.mark();
   builder.advanceLexer();
-  boolean expressionMissed=false;
-  PsiBuilder.Marker lastComma=null;
+  boolean first=true;
   while (true) {
     if (builder.getTokenType() == JavaTokenType.RBRACE) {
       builder.advanceLexer();
@@ -13,22 +12,20 @@
       error(builder,JavaErrorMessages.message("expected.rbrace"));
       break;
     }
-    if (expressionMissed && lastComma != null) {
-      lastComma.precede().errorBefore(JavaErrorMessages.message("expected.expression"),lastComma);
-      lastComma.drop();
-      lastComma=null;
-    }
-    final PsiBuilder.Marker arg=parse(builder);
-    if (arg == null) {
+    if (parse(builder) == null) {
       if (builder.getTokenType() == JavaTokenType.COMMA) {
-        expressionMissed=true;
-        lastComma=builder.mark();
+        if (first && builder.lookAhead(1) == JavaTokenType.RBRACE) {
+          advance(builder,2);
+          break;
+        }
+        builder.error(JavaErrorMessages.message("expected.expression"));
       }
- else {
+ else       if (builder.getTokenType() != JavaTokenType.RBRACE) {
         error(builder,JavaErrorMessages.message("expected.rbrace"));
         break;
       }
     }
+    first=false;
     final IElementType tokenType=builder.getTokenType();
     if (tokenType == JavaTokenType.COMMA) {
       builder.advanceLexer();
@@ -36,9 +33,6 @@
  else     if (tokenType != JavaTokenType.RBRACE) {
       error(builder,JavaErrorMessages.message("expected.comma"));
     }
-  }
-  if (lastComma != null) {
-    lastComma.drop();
   }
   arrayInit.done(JavaElementType.ARRAY_INITIALIZER_EXPRESSION);
   return arrayInit;
