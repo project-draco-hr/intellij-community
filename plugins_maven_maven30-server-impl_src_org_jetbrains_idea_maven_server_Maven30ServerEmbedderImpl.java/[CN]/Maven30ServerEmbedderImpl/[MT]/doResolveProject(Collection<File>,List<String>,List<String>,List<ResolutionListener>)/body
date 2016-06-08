@@ -12,13 +12,27 @@
         modelInterpolator.setLocalRepository(request.getLocalRepositoryPath().getAbsolutePath());
         List<ProjectBuildingResult> buildingResults;
         try {
-          buildingResults=builder.build(new ArrayList<File>(files),false,request.getProjectBuildingRequest());
+          ProjectBuildingRequest projectBuildingRequest=request.getProjectBuildingRequest();
+          projectBuildingRequest.setValidationLevel(ModelBuildingRequest.VALIDATION_LEVEL_MINIMAL);
+          buildingResults=builder.build(new ArrayList<File>(files),false,projectBuildingRequest);
         }
-  finally {
+ catch (        ProjectBuildingException e) {
+          buildingResults=e.getResults();
+        }
+ finally {
           modelInterpolator.setLocalRepository(savedLocalRepository);
         }
         for (        ProjectBuildingResult buildingResult : buildingResults) {
           MavenProject project=buildingResult.getProject();
+          if (project == null) {
+            List<Exception> exceptions=new ArrayList<Exception>();
+            for (            ModelProblem problem : buildingResult.getProblems()) {
+              exceptions.add(problem.getException());
+            }
+            MavenExecutionResult mavenExecutionResult=new MavenExecutionResult(buildingResult.getPomFile(),exceptions);
+            executionResults.add(mavenExecutionResult);
+            continue;
+          }
           RepositorySystemSession repositorySession=getComponent(LegacySupport.class).getRepositorySession();
           if (repositorySession instanceof DefaultRepositorySystemSession) {
             ((DefaultRepositorySystemSession)repositorySession).setTransferListener(new Maven30TransferListenerAdapter(myCurrentIndicator));

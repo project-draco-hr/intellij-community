@@ -1,7 +1,7 @@
 {
   final PsiElement element=psiFile == null ? psiElement : psiFile;
   final InspectionProfile currentProfile=InspectionProjectProfileManager.getInstance(project).getInspectionProfile();
-  final InspectionToolWrapper toolWrapper=currentProfile.getInspectionTool(shortName,project);
+  final InspectionToolWrapper toolWrapper=element != null ? currentProfile.getInspectionTool(shortName,element) : currentProfile.getInspectionTool(shortName,project);
   LOGGER.assertTrue(toolWrapper != null,"Missed inspection: " + shortName);
   final InspectionManagerEx managerEx=(InspectionManagerEx)InspectionManager.getInstance(project);
   final Module module=virtualFile != null ? ModuleUtilCore.findModuleForFile(virtualFile,project) : null;
@@ -28,8 +28,20 @@
   fileFilterPanel.init(options);
   final AnalysisScope initialAnalysisScope=analysisScope;
   final BaseAnalysisActionDialog dialog=new BaseAnalysisActionDialog("Run '" + toolWrapper.getDisplayName() + "'",AnalysisScopeBundle.message("analysis.scope.title",InspectionsBundle.message("inspection.action.noun")),project,analysisScope,module != null ? module.getName() : null,true,options,psiElement){
-    @Override protected JComponent getAdditionalActionSettings(    Project project){
-      return fileFilterPanel.getPanel();
+    private InheritOptionsForToolPanel myToolOptionsPanel;
+    @Nullable @Override protected JComponent getAdditionalActionSettings(    Project project){
+      final JPanel fileFilter=fileFilterPanel.getPanel();
+      if (toolWrapper.getTool().createOptionsPanel() != null) {
+        JPanel additionPanel=new JPanel();
+        additionPanel.setLayout(new BoxLayout(additionPanel,BoxLayout.Y_AXIS));
+        additionPanel.add(fileFilter);
+        myToolOptionsPanel=new InheritOptionsForToolPanel((InspectionProfileImpl)currentProfile,toolWrapper.getShortName(),project);
+        additionPanel.add(myToolOptionsPanel);
+        return additionPanel;
+      }
+ else {
+        return fileFilter;
+      }
     }
     @NotNull @Override public AnalysisScope getScope(    @NotNull AnalysisUIOptions uiOptions,    @NotNull AnalysisScope defaultScope,    @NotNull Project project,    Module module){
       final AnalysisScope scope=super.getScope(uiOptions,defaultScope,project,module);
@@ -41,8 +53,10 @@
       return scope;
     }
     private AnalysisScope getScope(){
-      final AnalysisUIOptions uiOptions=options;
-      return getScope(uiOptions,initialAnalysisScope,project,module);
+      return getScope(options,initialAnalysisScope,project,module);
+    }
+    private InspectionToolWrapper getToolWrapper(){
+      return myToolOptionsPanel == null ? toolWrapper : myToolOptionsPanel.getSelectedWrapper();
     }
     @NotNull @Override protected Action[] createActions(){
       final List<Action> actions=new ArrayList<Action>();
@@ -52,7 +66,7 @@
           putValue(DEFAULT_ACTION,Boolean.TRUE);
         }
         @Override public void actionPerformed(        ActionEvent e){
-          RunInspectionIntention.rerunInspection(toolWrapper,managerEx,getScope(),element);
+          RunInspectionIntention.rerunInspection(getToolWrapper(),managerEx,getScope(),null);
           close(DialogWrapper.OK_EXIT_CODE);
         }
       }
@@ -60,7 +74,9 @@
       if (hasFixAll) {
         actions.add(new AbstractAction("Fix All"){
           @Override public void actionPerformed(          ActionEvent e){
-            managerEx.createNewGlobalContext(false).codeCleanup(project,getScope(),currentProfile,"Cleanup by " + toolWrapper.getDisplayName(),null,false);
+            InspectionToolWrapper wrapper=getToolWrapper();
+            InspectionProfileImpl cleanupToolProfile=RunInspectionIntention.createProfile(wrapper,managerEx,null);
+            managerEx.createNewGlobalContext(false).codeCleanup(getScope(),cleanupToolProfile,"Cleanup by " + wrapper.getDisplayName(),null,false);
             close(DialogWrapper.OK_EXIT_CODE);
           }
         }
