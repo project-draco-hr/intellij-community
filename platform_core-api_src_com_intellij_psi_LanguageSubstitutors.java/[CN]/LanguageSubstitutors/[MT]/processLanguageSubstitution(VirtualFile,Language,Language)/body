@@ -1,17 +1,24 @@
 {
+  if (file instanceof VirtualFileWindow) {
+    return;
+  }
   Language prevSubstitutedLang=SUBSTITUTED_LANG_KEY.get(file);
   final Language prevLang=ObjectUtils.notNull(prevSubstitutedLang,originalLang);
-  if (!substitutedLang.equals(prevLang)) {
-    if (ApplicationManager.getApplication().isDispatchThread() && myReparsingInProgress) {
-      return;
-    }
+  if (!prevLang.is(substitutedLang)) {
     if (file.replace(SUBSTITUTED_LANG_KEY,prevSubstitutedLang,substitutedLang)) {
-      invokeLaterIfNeeded(new Runnable(){
+      if (prevSubstitutedLang == null) {
+        return;
+      }
+      if (ApplicationManager.getApplication().isUnitTestMode()) {
+        return;
+      }
+      file.putUserData(REPARSING_SCHEDULED,true);
+      ApplicationManager.getApplication().invokeLater(new Runnable(){
         @Override public void run(){
-          LOG.info("Reparsing " + file.getPath() + " because of language substitution "+ prevLang.getID()+ "->"+ substitutedLang.getID());
-          myReparsingInProgress=true;
-          FileContentUtilCore.reparseFiles(file);
-          myReparsingInProgress=false;
+          if (file.replace(REPARSING_SCHEDULED,true,null)) {
+            LOG.info("Reparsing " + file.getPath() + " because of language substitution "+ prevLang.getID()+ "->"+ substitutedLang.getID());
+            FileContentUtilCore.reparseFiles(file);
+          }
         }
       }
 ,ModalityState.defaultModalityState());
