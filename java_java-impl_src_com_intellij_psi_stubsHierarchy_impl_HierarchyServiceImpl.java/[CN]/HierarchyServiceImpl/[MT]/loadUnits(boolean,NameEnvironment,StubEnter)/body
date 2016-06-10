@@ -1,0 +1,22 @@
+{
+  GlobalSearchScope scope=new DelegatingGlobalSearchScope(new EverythingGlobalScope(myProject)){
+    @Override public boolean contains(    @NotNull VirtualFile file){
+      return sourceMode ? myFileIndex.isInSourceContent(file) : myFileIndex.isInLibraryClasses(file);
+    }
+  }
+;
+  ProgressIndicator indicator=ProgressIndicatorProvider.getGlobalProgressIndicator();
+  FileBasedIndex index=FileBasedIndex.getInstance();
+  for (  String packageName : index.getAllKeys(StubHierarchyIndex.INDEX_ID,myProject)) {
+    QualifiedName pkg=StringUtil.isEmpty(packageName) ? null : names.fromString(packageName,true);
+    index.processValues(StubHierarchyIndex.INDEX_ID,packageName,null,new FileBasedIndex.ValueProcessor<IndexTree.Unit>(){
+      int count=0;
+      @Override public boolean process(      VirtualFile file,      IndexTree.Unit unit){
+        if (indicator != null && ++count % 128 == 0)         indicator.checkCanceled();
+        stubEnter.unitEnter(Translator.internNames(names,unit,((VirtualFileWithId)file).getId(),pkg));
+        return true;
+      }
+    }
+,scope);
+  }
+}
