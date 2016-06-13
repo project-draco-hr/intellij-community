@@ -63,7 +63,7 @@
         String paramName=paramNames == null ? null : paramNames.get(param);
         String descrPattern=state.message != null ? state.message : paramName != null ? NULL_ARG_MESSAGE_NAMED : NULL_ARG_MESSAGE_INDEXED;
         String[] args=state.message != null ? EMPTY_STRING_ARRAY : new String[]{paramName != null ? paramName : String.valueOf(param - mySyntheticCount),myClassName,name};
-        generateThrow(state.exceptionType,end,descrPattern,args);
+        reportError(state.exceptionType,end,descrPattern,args);
       }
     }
     @Override public void visitLocalVariable(    String name,    String desc,    String signature,    Label start,    Label end,    int index){
@@ -80,26 +80,17 @@
           mv.visitJumpInsn(IFNONNULL,skipLabel);
           String descrPattern=myMethodNotNull.message != null ? myMethodNotNull.message : NULL_RESULT_MESSAGE;
           String[] args=myMethodNotNull.message != null ? EMPTY_STRING_ARRAY : new String[]{myClassName,name};
-          generateThrow(myMethodNotNull.exceptionType,skipLabel,descrPattern,args);
+          reportError(myMethodNotNull.exceptionType,skipLabel,descrPattern,args);
         }
       }
       mv.visitInsn(opcode);
     }
-    private void generateThrow(    final String exceptionClass,    final Label end,    final String descrPattern,    final String[] args){
-      mv.visitTypeInsn(NEW,exceptionClass);
-      mv.visitInsn(DUP);
-      mv.visitLdcInsn(descrPattern);
-      mv.visitLdcInsn(args.length);
-      mv.visitTypeInsn(ANEWARRAY,OBJECT_CLASS_NAME);
-      for (int i=0; i < args.length; i++) {
-        mv.visitInsn(DUP);
-        mv.visitLdcInsn(i);
-        mv.visitLdcInsn(args[i]);
-        mv.visitInsn(AASTORE);
+    private void reportError(    final String exceptionClass,    final Label end,    final String descrPattern,    final String[] args){
+      for (      String arg : args) {
+        mv.visitLdcInsn(arg);
       }
-      mv.visitMethodInsn(INVOKESTATIC,STRING_CLASS_NAME,"format","(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;",false);
-      mv.visitMethodInsn(INVOKESPECIAL,exceptionClass,CONSTRUCTOR_NAME,EXCEPTION_INIT_SIGNATURE,false);
-      mv.visitInsn(ATHROW);
+      ReportingMethod method=new ReportingMethod(exceptionClass,descrPattern,args.length);
+      mv.visitMethodInsn(INVOKESTATIC,myClassName,myAuxGenerator.suggestReportingMethod(method),method.getMethodDesc(),false);
       mv.visitLabel(end);
       myIsModification=true;
       processPostponedErrors();
