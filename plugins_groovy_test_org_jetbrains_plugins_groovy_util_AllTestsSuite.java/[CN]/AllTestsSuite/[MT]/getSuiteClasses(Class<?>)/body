@@ -1,9 +1,26 @@
 {
+  TestPackage annotation=klass.getAnnotation(TestPackage.class);
+  if (annotation == null)   throw new InitializationError("No test package specified");
+  String testPackage=annotation.value();
+  SlowPolicy policy=annotation.policy();
+  TestCaseLoader loader=new TestCaseLoader("",true);
   try {
-    Method method=klass.getMethod("suite");
-    return ((List<Class<?>>)method.invoke(null)).toArray(ArrayUtil.EMPTY_CLASS_ARRAY);
+    TestAll.fillTestCases(loader,testPackage,TestAll.getClassRoots());
   }
- catch (  NoSuchMethodException|InvocationTargetException|IllegalAccessException e) {
+ catch (  IOException e) {
     throw new InitializationError(e);
   }
+  List<Class<?>> result=ContainerUtil.newArrayList();
+  for (  Class aClass : loader.getClasses()) {
+    if (policy == SlowPolicy.ALL) {
+      result.add(aClass);
+    }
+ else {
+      boolean slow=isSlow(aClass);
+      if (slow && policy == SlowPolicy.SLOW_ONLY || !slow && policy == SlowPolicy.FAST_ONLY) {
+        result.add(aClass);
+      }
+    }
+  }
+  return result.toArray(ArrayUtil.EMPTY_CLASS_ARRAY);
 }
