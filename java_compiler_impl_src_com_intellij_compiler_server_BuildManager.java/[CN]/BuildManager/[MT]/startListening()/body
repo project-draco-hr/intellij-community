@@ -1,5 +1,14 @@
 {
-  final ServerBootstrap bootstrap=NettyKt.serverBootstrap(new NioEventLoopGroup(1,ConcurrencyUtil.newNamedThreadFactory("External compiler")));
+  EventLoopGroup group;
+  BuiltInServer mainServer=StartupUtil.getServer();
+  boolean isOwnEventLoopGroup=!Registry.is("compiler.shared.event.group",false) || mainServer == null || mainServer.getEventLoopGroup() instanceof OioEventLoopGroup;
+  if (isOwnEventLoopGroup) {
+    group=new NioEventLoopGroup(1,ConcurrencyUtil.newNamedThreadFactory("External compiler"));
+  }
+ else {
+    group=mainServer.getEventLoopGroup();
+  }
+  final ServerBootstrap bootstrap=NettyKt.serverBootstrap(group);
   bootstrap.childHandler(new ChannelInitializer(){
     @Override protected void initChannel(    @NotNull Channel channel) throws Exception {
       channel.pipeline().addLast(myChannelRegistrar,new ProtobufVarint32FrameDecoder(),new ProtobufDecoder(CmdlineRemoteProto.Message.getDefaultInstance()),new ProtobufVarint32LengthFieldPrepender(),new ProtobufEncoder(),myMessageDispatcher);
@@ -7,6 +16,6 @@
   }
 );
   Channel serverChannel=bootstrap.bind(InetAddress.getLoopbackAddress(),0).syncUninterruptibly().channel();
-  myChannelRegistrar.add(serverChannel);
+  myChannelRegistrar.add(serverChannel,isOwnEventLoopGroup);
   return ((InetSocketAddress)serverChannel.localAddress()).getPort();
 }
