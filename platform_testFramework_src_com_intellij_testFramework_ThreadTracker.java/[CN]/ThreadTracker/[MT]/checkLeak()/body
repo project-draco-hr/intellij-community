@@ -1,2 +1,43 @@
 {
+  NettyUtil.awaitQuiescenceOfGlobalEventExecutor(100,TimeUnit.SECONDS);
+  ShutDownTracker.getInstance().waitFor(100,TimeUnit.SECONDS);
+  try {
+    if (myDefaultProjectInitialized != ((ProjectManagerImpl)ProjectManager.getInstance()).isDefaultProjectInitialized())     return;
+    Collection<Thread> after=new THashSet<>(getThreads());
+    after.removeAll(before);
+    for (    final Thread thread : after) {
+      if (thread == Thread.currentThread())       continue;
+      ThreadGroup group=thread.getThreadGroup();
+      if (group != null && "system".equals(group.getName()))       continue;
+      if (isWellKnownOffender(thread))       continue;
+      if (!thread.isAlive())       continue;
+      if (thread.getStackTrace().length == 0) {
+        thread.interrupt();
+        if (new WaitFor(10000){
+          @Override protected boolean condition(){
+            return !thread.isAlive();
+          }
+        }
+.isConditionRealized()) {
+          continue;
+        }
+      }
+      StackTraceElement[] stackTrace=thread.getStackTrace();
+      if (stackTrace.length == 0) {
+        continue;
+      }
+      if (isIdleApplicationPoolThread(thread,stackTrace)) {
+        continue;
+      }
+      @SuppressWarnings("NonConstantStringShouldBeStringBuffer") String trace="Thread leaked: " + thread + "; "+ thread.getState()+ " ("+ thread.isAlive()+ ")\n--- its stacktrace:\n";
+      for (      final StackTraceElement stackTraceElement : stackTrace) {
+        trace+=" at " + stackTraceElement + "\n";
+      }
+      trace+="---\n";
+      Assert.fail(trace);
+    }
+  }
+  finally {
+    before.clear();
+  }
 }
