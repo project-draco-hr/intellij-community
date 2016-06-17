@@ -1,0 +1,50 @@
+{
+  if (psiElement != null) {
+    final List<LocalInspectionToolWrapper> intentionTools=new ArrayList<>();
+    final InspectionProfile profile=InspectionProjectProfileManager.getInstance(project).getInspectionProfile();
+    final InspectionToolWrapper[] tools=profile.getInspectionTools(hostFile);
+    for (    InspectionToolWrapper toolWrapper : tools) {
+      if (toolWrapper instanceof LocalInspectionToolWrapper && !((LocalInspectionToolWrapper)toolWrapper).isUnfair()) {
+        final HighlightDisplayKey key=HighlightDisplayKey.find(toolWrapper.getShortName());
+        if (profile.isToolEnabled(key,hostFile) && HighlightDisplayLevel.DO_NOT_SHOW.equals(profile.getErrorLevel(key,hostFile))) {
+          intentionTools.add((LocalInspectionToolWrapper)toolWrapper);
+        }
+      }
+    }
+    if (!intentionTools.isEmpty()) {
+      final List<PsiElement> elements=new ArrayList<>();
+      PsiElement el=psiElement;
+      while (el != null) {
+        elements.add(el);
+        el=el.getParent();
+      }
+      final LocalInspectionToolSession session=new LocalInspectionToolSession(hostFile,0,hostFile.getTextLength());
+      for (      LocalInspectionToolWrapper toolWrapper : intentionTools) {
+        final LocalInspectionTool localInspectionTool=toolWrapper.getTool();
+        final HighlightDisplayKey key=HighlightDisplayKey.find(toolWrapper.getShortName());
+        final String displayName=toolWrapper.getDisplayName();
+        final ProblemsHolder holder=new ProblemsHolder(InspectionManager.getInstance(project),hostFile,true){
+          @Override public void registerProblem(          @NotNull ProblemDescriptor problemDescriptor){
+            super.registerProblem(problemDescriptor);
+            if (problemDescriptor instanceof ProblemDescriptorBase) {
+              final TextRange range=((ProblemDescriptorBase)problemDescriptor).getTextRange();
+              if (range != null && range.contains(offset)) {
+                final QuickFix[] fixes=problemDescriptor.getFixes();
+                if (fixes != null) {
+                  for (int k=0; k < fixes.length; k++) {
+                    final IntentionAction intentionAction=QuickFixWrapper.wrap(problemDescriptor,k);
+                    final HighlightInfo.IntentionActionDescriptor actionDescriptor=new HighlightInfo.IntentionActionDescriptor(intentionAction,null,displayName,null,key,null,HighlightSeverity.INFORMATION);
+                    intentions.intentionsToShow.add(actionDescriptor);
+                  }
+                }
+              }
+            }
+          }
+        }
+;
+        InspectionEngine.createVisitorAndAcceptElements(localInspectionTool,holder,true,session,elements,InspectionEngine.calcElementDialectIds(elements),InspectionEngine.getDialectIdsSpecifiedForTool(toolWrapper));
+        localInspectionTool.inspectionFinished(session,holder);
+      }
+    }
+  }
+}
