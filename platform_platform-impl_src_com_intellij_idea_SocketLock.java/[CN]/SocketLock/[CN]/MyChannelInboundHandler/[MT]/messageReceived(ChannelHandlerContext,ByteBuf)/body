@@ -30,10 +30,18 @@ case CONTENT:
       context.writeAndFlush(buffer);
     }
     if (StringUtil.startsWith(command,ACTIVATE_COMMAND)) {
-      List<String> args=StringUtil.split(command.subSequence(ACTIVATE_COMMAND.length(),command.length()).toString(),"\0");
-      Consumer<List<String>> listener=myActivateListener.get();
-      if (listener != null) {
-        listener.consume(args);
+      String data=command.subSequence(ACTIVATE_COMMAND.length(),command.length()).toString();
+      List<String> args=StringUtil.split(data,data.contains("\0") ? "\0" : "\uFFFD");
+      boolean tokenOK=!args.isEmpty() && myToken.equals(args.get(0));
+      if (!tokenOK) {
+        log(new UnsupportedOperationException("unauthorized request: " + command));
+        Notifications.Bus.notify(new Notification(Notifications.SYSTEM_MESSAGES_GROUP_ID,IdeBundle.message("activation.auth.title"),IdeBundle.message("activation.auth.message"),NotificationType.WARNING));
+      }
+ else {
+        Consumer<List<String>> listener=myActivateListener.get();
+        if (listener != null) {
+          listener.consume(args.subList(1,args.size()));
+        }
       }
       ByteBuf buffer=context.alloc().ioBuffer(4);
       ByteBufOutputStream out=new ByteBufOutputStream(buffer);

@@ -54,33 +54,34 @@
     }
   }
 );
-  final PsiViewerSettings settings=PsiViewerSettings.getSettings();
-  final String type=myFileType != null ? myFileType : settings.type;
+  PsiViewerSettings settings=PsiViewerSettings.getSettings();
+  VirtualFile file=myExternalDocument ? FileDocumentManager.getInstance().getFile(myEditor.getDocument()) : null;
+  Language curLanguage=LanguageUtil.getLanguageForPsi(myProject,file);
+  String type=curLanguage != null ? curLanguage.getDisplayName() : settings.type;
   SourceWrapper lastUsed=null;
   for (  PsiViewerExtension extension : Extensions.getExtensions(PsiViewerExtension.EP_NAME)) {
-    final SourceWrapper wrapper=new SourceWrapper(extension);
+    SourceWrapper wrapper=new SourceWrapper(extension);
     mySourceWrappers.add(wrapper);
   }
-  final Set<FileType> allFileTypes=ContainerUtil.newHashSet();
+  Set<FileType> allFileTypes=ContainerUtil.newHashSet();
   Collections.addAll(allFileTypes,FileTypeManager.getInstance().getRegisteredFileTypes());
   for (  Language language : Language.getRegisteredLanguages()) {
-    final FileType fileType=language.getAssociatedFileType();
+    FileType fileType=language.getAssociatedFileType();
     if (fileType != null) {
       allFileTypes.add(fileType);
     }
   }
-  Language curLanguage=myCurrentFile != null ? myCurrentFile.getLanguage() : null;
   for (  FileType fileType : allFileTypes) {
     if (fileType != StdFileTypes.GUI_DESIGNER_FORM && fileType != StdFileTypes.IDEA_MODULE && fileType != StdFileTypes.IDEA_PROJECT && fileType != StdFileTypes.IDEA_WORKSPACE && fileType != FileTypes.ARCHIVE && fileType != FileTypes.UNKNOWN && fileType != FileTypes.PLAIN_TEXT && !(fileType instanceof AbstractFileType) && !fileType.isBinary() && !fileType.isReadOnly()) {
       final SourceWrapper wrapper=new SourceWrapper(fileType);
       mySourceWrappers.add(wrapper);
       if (lastUsed == null && wrapper.getText().equals(type))       lastUsed=wrapper;
-      if (myCurrentFile != null && wrapper.myFileType instanceof LanguageFileType && wrapper.myFileType.equals(curLanguage.getAssociatedFileType())) {
+      if (myExternalDocument && wrapper.myFileType instanceof LanguageFileType && wrapper.myFileType.equals(curLanguage.getAssociatedFileType())) {
         lastUsed=wrapper;
       }
     }
   }
-  myFileTypeComboBox.setModel(new CollectionComboBoxModel(ContainerUtil.newArrayList(mySourceWrappers),lastUsed));
+  myFileTypeComboBox.setModel(new CollectionComboBoxModel<SourceWrapper>(ContainerUtil.newArrayList(mySourceWrappers),lastUsed));
   myFileTypeComboBox.setRenderer(new ListCellRendererWrapper<SourceWrapper>(){
     @Override public void customize(    JList list,    SourceWrapper value,    int index,    boolean selected,    boolean hasFocus){
       if (value != null) {
@@ -111,7 +112,7 @@
   }
 );
   myFileTypeComboBox.addFocusListener(new AutoExpandFocusListener(myFileTypeComboBox));
-  if (myCurrentFile == null && lastUsed == null && mySourceWrappers.size() > 0) {
+  if (!myExternalDocument && lastUsed == null && mySourceWrappers.size() > 0) {
     myFileTypeComboBox.setSelectedIndex(0);
   }
   myDialectComboBox.setRenderer(new ListCellRendererWrapper<Language>(){
@@ -128,7 +129,7 @@
   }
 );
   myExtensionComboBox.addFocusListener(new AutoExpandFocusListener(myExtensionComboBox));
-  final ViewerTreeStructure psiTreeStructure=(ViewerTreeStructure)myPsiTreeBuilder.getTreeStructure();
+  final ViewerTreeStructure psiTreeStructure=getTreeStructure();
   myShowWhiteSpacesBox.addActionListener(new ActionListener(){
     @Override public void actionPerformed(    @NotNull ActionEvent e){
       psiTreeStructure.setShowWhiteSpaces(myShowWhiteSpacesBox.isSelected());
@@ -164,15 +165,6 @@
 );
   myTextPanel.setLayout(new BorderLayout());
   myTextPanel.add(myEditor.getComponent(),BorderLayout.CENTER);
-  final String text=myCurrentFile == null ? settings.text : myInitText;
-  final AccessToken token=ApplicationManager.getApplication().acquireWriteActionLock(getClass());
-  try {
-    myEditor.getDocument().setText(text);
-    myEditor.getSelectionModel().setSelection(0,text.length());
-  }
-  finally {
-    token.finish();
-  }
   updateDialectsCombo(settings.dialect);
   updateExtensionsCombo();
   registerCustomKeyboardActions();
