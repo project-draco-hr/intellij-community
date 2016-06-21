@@ -1,17 +1,34 @@
 {
-  myExpression.append(code.getText());
-  exec(new ConsoleCodeFragment(myExpression.toString(),false),new PyDebugCallback<Pair<String,Boolean>>(){
-    @Override public void ok(    Pair<String,Boolean> executed){
-      boolean more=executed.second;
-      if (!more) {
-        myExpression.setLength(0);
+  if (waitingForInput) {
+    final OutputStream processInput=myDebugProcess.getProcessHandler().getProcessInput();
+    if (processInput != null) {
+      try {
+        final Charset defaultCharset=EncodingProjectManager.getInstance(myDebugProcess.getProject()).getDefaultCharset();
+        String text=code.getText();
+        processInput.write((text + "\n").getBytes(defaultCharset));
+        processInput.flush();
       }
-      callback.fun(new InterpreterResponse(more,isWaitingForInput()));
+ catch (      IOException e) {
+        LOG.error(e.getMessage());
+      }
     }
-    @Override public void error(    PyDebuggerException exception){
-      myExpression.setLength(0);
-      callback.fun(new InterpreterResponse(false,isWaitingForInput()));
-    }
+    waitingForInput=false;
   }
+ else {
+    myExpression.append(code.getText());
+    exec(new ConsoleCodeFragment(myExpression.toString(),false),new PyDebugCallback<Pair<String,Boolean>>(){
+      @Override public void ok(      Pair<String,Boolean> executed){
+        boolean more=executed.second;
+        if (!more) {
+          myExpression.setLength(0);
+        }
+        callback.fun(new InterpreterResponse(more,isWaitingForInput()));
+      }
+      @Override public void error(      PyDebuggerException exception){
+        myExpression.setLength(0);
+        callback.fun(new InterpreterResponse(false,isWaitingForInput()));
+      }
+    }
 );
+  }
 }
