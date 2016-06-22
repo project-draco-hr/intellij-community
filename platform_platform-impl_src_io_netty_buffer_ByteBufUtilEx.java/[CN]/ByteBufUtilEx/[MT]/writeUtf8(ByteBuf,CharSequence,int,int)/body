@@ -28,7 +28,43 @@
   }
   int writerIndex=oldWriterIndex;
   for (int i=start; i < end; i++) {
-    writerIndex=writeChar(buffer,writerIndex,seq.charAt(i));
+    char c=seq.charAt(i);
+    if (c < 0x80) {
+      buffer._setByte(writerIndex++,(byte)c);
+    }
+ else     if (c < 0x800) {
+      buffer._setByte(writerIndex++,(byte)(0xc0 | (c >> 6)));
+      buffer._setByte(writerIndex++,(byte)(0x80 | (c & 0x3f)));
+    }
+ else     if (isSurrogate(c)) {
+      if (!Character.isHighSurrogate(c)) {
+        buffer._setByte(writerIndex++,WRITE_UTF_UNKNOWN);
+        continue;
+      }
+      final char c2;
+      try {
+        c2=seq.charAt(++i);
+      }
+ catch (      IndexOutOfBoundsException e) {
+        buffer._setByte(writerIndex++,WRITE_UTF_UNKNOWN);
+        break;
+      }
+      if (!Character.isLowSurrogate(c2)) {
+        buffer._setByte(writerIndex++,WRITE_UTF_UNKNOWN);
+        buffer._setByte(writerIndex++,Character.isHighSurrogate(c2) ? WRITE_UTF_UNKNOWN : c2);
+        continue;
+      }
+      int codePoint=Character.toCodePoint(c,c2);
+      buffer._setByte(writerIndex++,(byte)(0xf0 | (codePoint >> 18)));
+      buffer._setByte(writerIndex++,(byte)(0x80 | ((codePoint >> 12) & 0x3f)));
+      buffer._setByte(writerIndex++,(byte)(0x80 | ((codePoint >> 6) & 0x3f)));
+      buffer._setByte(writerIndex++,(byte)(0x80 | (codePoint & 0x3f)));
+    }
+ else {
+      buffer._setByte(writerIndex++,(byte)(0xe0 | (c >> 12)));
+      buffer._setByte(writerIndex++,(byte)(0x80 | ((c >> 6) & 0x3f)));
+      buffer._setByte(writerIndex++,(byte)(0x80 | (c & 0x3f)));
+    }
   }
   if (buf == buffer) {
     buffer.writerIndex=writerIndex;

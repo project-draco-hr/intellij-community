@@ -4,9 +4,35 @@
   final long started=IOStatistics.DEBUG ? System.currentTimeMillis() : 0;
   myStorageLockContext.myStorageLock.invalidateBuffer(myStorageIndex | (int)(oldSize / myPageSize));
   final long unmapAllFinished=IOStatistics.DEBUG ? System.currentTimeMillis() : 0;
-  resizeFile(newSize);
+  mySize=-1;
   long delta=newSize - oldSize;
-  if (delta > 0)   fillWithZeros(oldSize,delta);
+  if (delta > 0) {
+    byte[] buff=new byte[MAX_FILLER_SIZE];
+    Arrays.fill(buff,(byte)0);
+    FileOutputStream stream=new FileOutputStream(myFile,true);
+    try {
+      while (delta > 0) {
+        final int filled=Math.min((int)delta,MAX_FILLER_SIZE);
+        stream.write(buff,0,filled);
+        delta-=filled;
+      }
+    }
+  finally {
+      stream.getFD().sync();
+      stream.close();
+    }
+  }
+ else {
+    RandomAccessFile raf=new RandomAccessFile(myFile,RW);
+    try {
+      raf.setLength(newSize);
+      raf.getFD().sync();
+    }
+  finally {
+      raf.close();
+    }
+  }
+  mySize=newSize;
   if (IOStatistics.DEBUG) {
     long finished=System.currentTimeMillis();
     if (finished - started > IOStatistics.MIN_IO_TIME_TO_REPORT) {

@@ -1,0 +1,39 @@
+{
+  if (!mySuspendedThreads.contains(threadInfo)) {
+    mySuspendedThreads.add(threadInfo);
+    final List<PyStackFrameInfo> frames=threadInfo.getFrames();
+    if (frames != null) {
+      final PySuspendContext suspendContext=createSuspendContext(threadInfo);
+      XBreakpoint<?> breakpoint=null;
+      if (threadInfo.isStopOnBreakpoint()) {
+        final PySourcePosition position=frames.get(0).getPosition();
+        breakpoint=myRegisteredBreakpoints.get(position);
+        if (breakpoint == null) {
+          myDebugger.removeTempBreakpoint(position.getFile(),position.getLine());
+        }
+      }
+ else       if (threadInfo.isExceptionBreak()) {
+        String exceptionName=threadInfo.getMessage();
+        threadInfo.setMessage(null);
+        if (exceptionName != null) {
+          breakpoint=myRegisteredExceptionBreakpoints.get(exceptionName);
+        }
+      }
+      if (breakpoint != null) {
+        if (breakpoint.getSuspendPolicy() == SuspendPolicy.ALL) {
+          suspendAllOtherThreads(threadInfo);
+        }
+      }
+      if (updateSourcePosition) {
+        if (breakpoint != null) {
+          if (!getSession().breakpointReached(breakpoint,threadInfo.getMessage(),suspendContext)) {
+            resume(suspendContext);
+          }
+        }
+ else {
+          getSession().positionReached(suspendContext);
+        }
+      }
+    }
+  }
+}
