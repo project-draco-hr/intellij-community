@@ -1,0 +1,51 @@
+{
+  super.update(e);
+  Project project=e.getProject();
+  VcsLog log=e.getData(VcsLogDataKeys.VCS_LOG);
+  VcsLogData data=(VcsLogData)e.getData(VcsLogDataKeys.VCS_LOG_DATA_PROVIDER);
+  VcsLogUi ui=e.getData(VcsLogDataKeys.VCS_LOG_UI);
+  if (project == null || log == null || data == null || ui == null) {
+    e.getPresentation().setEnabledAndVisible(false);
+    return;
+  }
+  int selectedCommits=log.getSelectedShortDetails().size();
+  if (selectedCommits != 1) {
+    e.getPresentation().setEnabledAndVisible(false);
+    return;
+  }
+  VcsShortCommitDetails commit=log.getSelectedShortDetails().get(0);
+  Hash hash=commit.getId();
+  VirtualFile root=commit.getRoot();
+  GitRepository repository=getRepositoryManager(project).getRepositoryForRoot(commit.getRoot());
+  if (repository == null) {
+    e.getPresentation().setEnabledAndVisible(false);
+    return;
+  }
+  DataPack dataPack=(DataPack)((VisiblePack)ui.getDataPack()).getDataPack();
+  List<Integer> children=dataPack.getPermanentGraph().getChildren(data.getCommitIndex(hash,root));
+  if (!children.isEmpty()) {
+    e.getPresentation().setEnabledAndVisible(false);
+    return;
+  }
+  int parents=commit.getParents().size();
+  if (parents != 1) {
+    e.getPresentation().setEnabled(false);
+    e.getPresentation().setDescription("Selected commit has " + parents + " parents");
+    return;
+  }
+  List<String> branches=data.getContainingBranchesGetter().getContainingBranchesFromCache(root,hash);
+  if (branches != null) {
+    if (!branches.contains(HEAD)) {
+      e.getPresentation().setEnabled(false);
+      e.getPresentation().setDescription(COMMIT_NOT_IN_HEAD);
+      return;
+    }
+    String protectedBranch=findProtectedRemoteBranch(repository,branches);
+    if (protectedBranch != null) {
+      e.getPresentation().setEnabled(false);
+      e.getPresentation().setDescription(COMMIT_PUSHED_TO_PROTECTED + protectedBranch);
+      return;
+    }
+  }
+  e.getPresentation().setEnabledAndVisible(true);
+}
