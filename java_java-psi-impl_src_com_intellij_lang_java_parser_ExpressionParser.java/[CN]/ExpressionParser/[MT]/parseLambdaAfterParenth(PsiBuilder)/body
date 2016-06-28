@@ -1,0 +1,55 @@
+{
+  final boolean isLambda;
+  final boolean isTyped;
+  final IElementType nextToken1=builder.lookAhead(1);
+  final IElementType nextToken2=builder.lookAhead(2);
+  if (nextToken1 == JavaTokenType.RPARENTH && nextToken2 == JavaTokenType.ARROW) {
+    isLambda=true;
+    isTyped=false;
+  }
+ else   if (nextToken1 == JavaTokenType.AT || ElementType.MODIFIER_BIT_SET.contains(nextToken1) || ElementType.PRIMITIVE_TYPE_BIT_SET.contains(nextToken1)) {
+    isLambda=true;
+    isTyped=true;
+  }
+ else   if (nextToken1 == JavaTokenType.IDENTIFIER) {
+    if (nextToken2 == JavaTokenType.COMMA || nextToken2 == JavaTokenType.RPARENTH && builder.lookAhead(3) == JavaTokenType.ARROW) {
+      isLambda=true;
+      isTyped=false;
+    }
+ else     if (nextToken2 == JavaTokenType.ARROW) {
+      isLambda=false;
+      isTyped=false;
+    }
+ else {
+      boolean lambda=false;
+      PsiBuilder.Marker marker=builder.mark();
+      builder.advanceLexer();
+      ReferenceParser.TypeInfo typeInfo=myParser.getReferenceParser().parseTypeInfo(builder,ReferenceParser.EAT_LAST_DOT | ReferenceParser.WILDCARD);
+      if (typeInfo != null) {
+        while (!builder.eof()) {
+          IElementType t=builder.getTokenType();
+          if (t == JavaTokenType.COMMA || t == JavaTokenType.ARROW) {
+            lambda=true;
+            break;
+          }
+          if (t == JavaTokenType.RPARENTH) {
+            lambda=builder.lookAhead(1) == JavaTokenType.ARROW;
+            break;
+          }
+ else           if (t == JavaTokenType.LPARENTH || t == JavaTokenType.SEMICOLON || t == JavaTokenType.LBRACE || t == JavaTokenType.RBRACE) {
+            break;
+          }
+          builder.advanceLexer();
+        }
+      }
+      marker.rollbackTo();
+      isLambda=lambda;
+      isTyped=true;
+    }
+  }
+ else {
+    isLambda=false;
+    isTyped=false;
+  }
+  return isLambda ? parseLambdaExpression(builder,isTyped) : null;
+}
