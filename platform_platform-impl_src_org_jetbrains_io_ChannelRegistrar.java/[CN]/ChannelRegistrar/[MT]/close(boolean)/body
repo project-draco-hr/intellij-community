@@ -1,22 +1,42 @@
 {
-  EventLoopGroup eventLoopGroup=null;
-  if (shutdownEventLoopGroup) {
-    for (    Channel channel : openChannels) {
-      if (channel instanceof ServerChannel) {
-        eventLoopGroup=channel.eventLoop().parent();
-        break;
-      }
-    }
+  ServerChannel serverChannel=this.serverChannel.get();
+  if (serverChannel == null) {
+    LOG.assertTrue(clientChannels.isEmpty());
+    return;
   }
-  Future<?> result;
+ else   if (!this.serverChannel.compareAndSet(serverChannel,null)) {
+    return;
+  }
+  EventLoopGroup eventLoopGroup=shutdownEventLoopGroup ? serverChannel.eventLoop().parent() : null;
   try {
     long start=System.currentTimeMillis();
-    Object[] channels=openChannels.toArray(new Channel[]{});
-    ChannelGroupFuture groupFuture=openChannels.close();
-    if (!groupFuture.awaitUninterruptibly(10,TimeUnit.SECONDS)) {
-      LOG.warn("Cannot close all channels for 10 seconds, channels: " + Arrays.toString(channels));
+    Channel[] clientChannels=this.clientChannels.toArray(new Channel[]{});
+    this.clientChannels.clear();
+    final CountDownLatch countDown=new CountDownLatch(clientChannels.length + 1);
+    GenericFutureListener<ChannelFuture> listener=new GenericFutureListener<ChannelFuture>(){
+      @Override public void operationComplete(      @NotNull ChannelFuture future) throws Exception {
+        try {
+          Throwable cause=future.cause();
+          if (cause != null) {
+            LOG.warn(cause);
+          }
+        }
+  finally {
+          countDown.countDown();
+        }
+      }
     }
-    result=groupFuture;
+;
+    serverChannel.close().addListener(listener);
+    for (    Channel channel : clientChannels) {
+      channel.close().addListener(listener);
+    }
+    try {
+      countDown.await(5,TimeUnit.SECONDS);
+    }
+ catch (    InterruptedException e) {
+      LOG.warn("Cannot close all channels for 10 seconds, channels: " + Arrays.toString(clientChannels));
+    }
     long duration=System.currentTimeMillis() - start;
     if (duration > 1000) {
       LOG.info("Close all channels took " + duration + " ms: "+ (duration / 60000)+ " min "+ ((duration % 60000) / 1000)+ "sec");
@@ -24,8 +44,7 @@
   }
   finally {
     if (eventLoopGroup != null) {
-      result=eventLoopGroup.shutdownGracefully(1,2,TimeUnit.NANOSECONDS);
+      eventLoopGroup.shutdownGracefully(1,2,TimeUnit.NANOSECONDS);
     }
   }
-  return result;
 }
