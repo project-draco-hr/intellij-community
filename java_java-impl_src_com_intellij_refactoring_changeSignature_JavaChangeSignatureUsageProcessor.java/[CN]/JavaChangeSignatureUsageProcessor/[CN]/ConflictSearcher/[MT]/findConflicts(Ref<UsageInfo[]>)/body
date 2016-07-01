@@ -1,6 +1,6 @@
 {
   MultiMap<PsiElement,String> conflictDescriptions=new MultiMap<PsiElement,String>();
-  addMethodConflicts(conflictDescriptions);
+  final PsiMethod prototype=addMethodConflicts(conflictDescriptions);
   Set<UsageInfo> usagesSet=new HashSet<UsageInfo>(Arrays.asList(refUsages.get()));
   RenameUtil.removeConflictUsages(usagesSet);
   if (myChangeInfo.isVisibilityChanged()) {
@@ -11,6 +11,11 @@
       LOG.error(e);
     }
   }
+  final boolean[] toRemove=myChangeInfo.toRemoveParm();
+  final boolean checkUnusedParameter=myChangeInfo.checkUnusedParameter();
+  if (checkUnusedParameter) {
+    checkParametersToDelete(myChangeInfo.getMethod(),toRemove,conflictDescriptions);
+  }
   checkContract(conflictDescriptions,myChangeInfo.getMethod());
   for (  UsageInfo usageInfo : usagesSet) {
     final PsiElement element=usageInfo.getElement();
@@ -19,9 +24,14 @@
       final PsiMethod baseMethod=((OverriderUsageInfo)usageInfo).getBaseMethod();
       final int delta=baseMethod.getParameterList().getParametersCount() - method.getParameterList().getParametersCount();
       if (delta > 0) {
-        final boolean[] toRemove=myChangeInfo.toRemoveParm();
         if (toRemove[toRemove.length - 1]) {
           conflictDescriptions.putValue(baseMethod,"Implicit last parameter should not be deleted");
+        }
+      }
+ else       if (prototype != null && baseMethod == myChangeInfo.getMethod()) {
+        ConflictsUtil.checkMethodConflicts(method.getContainingClass(),method,prototype,conflictDescriptions);
+        if (checkUnusedParameter) {
+          checkParametersToDelete(method,toRemove,conflictDescriptions);
         }
       }
       checkContract(conflictDescriptions,method);
