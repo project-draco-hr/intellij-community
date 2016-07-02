@@ -1,0 +1,53 @@
+{
+  if (!FileModificationService.getInstance().prepareFileForWrite(file))   return;
+  final PsiExpression iteratedValue=myStatement.getIteratedValue();
+  if (iteratedValue == null) {
+    return;
+  }
+  final PsiType iteratedValueType=iteratedValue.getType();
+  if (iteratedValueType == null) {
+    return;
+  }
+  final PsiParameter iterationParameter=myStatement.getIterationParameter();
+  final String iterationParameterName=iterationParameter.getName();
+  if (iterationParameterName == null) {
+    return;
+  }
+  final PsiStatement forEachBody=myStatement.getBody();
+  final PsiElementFactory elementFactory=JavaPsiFacade.getInstance(project).getElementFactory();
+  final JavaCodeStyleManager javaStyleManager=JavaCodeStyleManager.getInstance(project);
+  final String name=javaStyleManager.suggestUniqueVariableName("it",myStatement,true);
+  PsiForStatement newForLoop=(PsiForStatement)elementFactory.createStatementFromText("for (Iterator " + name + " = initializer; "+ name+ ".hasNext();) { Object next = "+ name+ ".next(); }",myStatement);
+  final PsiDeclarationStatement newDeclaration=(PsiDeclarationStatement)newForLoop.getInitialization();
+  if (newDeclaration == null)   return;
+  final PsiLocalVariable newIteratorVariable=(PsiLocalVariable)newDeclaration.getDeclaredElements()[0];
+  final PsiTypeElement newIteratorTypeElement=elementFactory.createTypeElement(iteratedValueType);
+  newIteratorVariable.getTypeElement().replace(newIteratorTypeElement);
+  newIteratorVariable.setInitializer(iteratedValue);
+  final PsiBlockStatement newBody=(PsiBlockStatement)newForLoop.getBody();
+  if (newBody == null)   return;
+  final PsiCodeBlock newBodyBlock=newBody.getCodeBlock();
+  final PsiDeclarationStatement newFirstStatement=(PsiDeclarationStatement)newBodyBlock.getStatements()[0];
+  final PsiLocalVariable newItemVariable=(PsiLocalVariable)newFirstStatement.getDeclaredElements()[0];
+  final PsiTypeElement newItemTypeElement=elementFactory.createTypeElement(iterationParameter.getType());
+  newItemVariable.getTypeElement().replace(newItemTypeElement);
+  newItemVariable.setName(iterationParameterName);
+  final CodeStyleSettings codeStyleSettings=CodeStyleSettingsManager.getSettings(project);
+  if (codeStyleSettings.GENERATE_FINAL_LOCALS) {
+    final PsiModifierList modifierList=newItemVariable.getModifierList();
+    if (modifierList != null)     modifierList.setModifierProperty(PsiModifier.FINAL,true);
+  }
+  final CodeStyleManager styleManager=CodeStyleManager.getInstance(project);
+  newForLoop=(PsiForStatement)javaStyleManager.shortenClassReferences(newForLoop);
+  newForLoop=(PsiForStatement)styleManager.reformat(newForLoop);
+  if (forEachBody instanceof PsiBlockStatement) {
+    final PsiStatement[] statements=((PsiBlockStatement)forEachBody).getCodeBlock().getStatements();
+    for (int i=statements.length - 1; i >= 0; i--) {
+      newBodyBlock.addAfter(statements[i],newFirstStatement);
+    }
+  }
+ else   if (forEachBody != null && !(forEachBody instanceof PsiEmptyStatement)) {
+    newBodyBlock.addAfter(forEachBody,newFirstStatement);
+  }
+  myStatement.replace(newForLoop);
+}

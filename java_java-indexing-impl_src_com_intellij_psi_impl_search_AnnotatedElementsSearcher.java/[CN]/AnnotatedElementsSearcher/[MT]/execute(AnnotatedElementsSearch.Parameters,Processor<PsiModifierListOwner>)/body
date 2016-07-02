@@ -1,2 +1,43 @@
 {
+  final PsiClass annClass=p.getAnnotationClass();
+  if (!annClass.isAnnotationType())   throw new IllegalArgumentException("Annotation type should be passed to annotated members search but got: " + annClass);
+  String annotationFQN=ApplicationManager.getApplication().runReadAction(new Computable<String>(){
+    @Override public String compute(){
+      return annClass.getQualifiedName();
+    }
+  }
+);
+  if (annotationFQN == null)   throw new IllegalArgumentException("FQN is null for " + annClass);
+  final PsiManager psiManager=ApplicationManager.getApplication().runReadAction(new Computable<PsiManager>(){
+    @Override public PsiManager compute(){
+      return annClass.getManager();
+    }
+  }
+);
+  final SearchScope useScope=p.getScope();
+  final Class<? extends PsiModifierListOwner>[] types=p.getTypes();
+  for (  final PsiAnnotation ann : getAnnotationCandidates(annClass,useScope,psiManager.getProject())) {
+    final PsiModifierListOwner candidate=ApplicationManager.getApplication().runReadAction(new Computable<PsiModifierListOwner>(){
+      @Override public PsiModifierListOwner compute(){
+        PsiElement parent=ann.getParent();
+        if (!(parent instanceof PsiModifierList)) {
+          return null;
+        }
+        final PsiElement owner=parent.getParent();
+        if (!isInstanceof(owner,types)) {
+          return null;
+        }
+        final PsiJavaCodeReferenceElement ref=ann.getNameReferenceElement();
+        if (ref == null || !psiManager.areElementsEquivalent(ref.resolve(),annClass)) {
+          return null;
+        }
+        return (PsiModifierListOwner)owner;
+      }
+    }
+);
+    if (candidate != null && !consumer.process(candidate)) {
+      return false;
+    }
+  }
+  return true;
 }
