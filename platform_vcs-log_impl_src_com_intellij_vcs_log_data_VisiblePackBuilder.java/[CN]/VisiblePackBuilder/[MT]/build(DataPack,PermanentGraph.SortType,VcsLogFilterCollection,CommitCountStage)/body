@@ -5,33 +5,39 @@
   }
   Set<Integer> matchingHeads=getMatchingHeads(dataPack.getRefsModel(),dataPack.getLogProviders().keySet(),filters);
   List<VcsLogDetailsFilter> detailsFilters=filters.getDetailsFilters();
-  Collection<CommitId> matchingCommits=null;
+  Set<Integer> matchingCommits=null;
   boolean canRequestMore=false;
   if (!detailsFilters.isEmpty()) {
-    if (commitCount == CommitCountStage.INITIAL) {
-      matchingCommits=filterInMemory(dataPack.getPermanentGraph(),detailsFilters,matchingHeads);
-      if (matchingCommits.size() < commitCount.getCount()) {
-        commitCount=commitCount.next();
-        matchingCommits=null;
-      }
+    if (myIndex.canFilter(detailsFilters)) {
+      matchingCommits=myIndex.filter(detailsFilters);
+      canRequestMore=false;
     }
-    if (matchingCommits == null) {
-      try {
-        matchingCommits=getFilteredDetailsFromTheVcs(myLogProviders,filters,commitCount.getCount());
+ else {
+      if (commitCount == CommitCountStage.INITIAL) {
+        matchingCommits=getMatchedCommitIndex(filterInMemory(dataPack.getPermanentGraph(),detailsFilters,matchingHeads));
+        if (matchingCommits.size() < commitCount.getCount()) {
+          commitCount=commitCount.next();
+          matchingCommits=null;
+        }
       }
- catch (      VcsException e) {
-        matchingCommits=Collections.emptyList();
-        LOG.error(e);
+      if (matchingCommits == null) {
+        try {
+          matchingCommits=getMatchedCommitIndex(getFilteredDetailsFromTheVcs(myLogProviders,filters,commitCount.getCount()));
+        }
+ catch (        VcsException e) {
+          matchingCommits=Collections.emptySet();
+          LOG.error(e);
+        }
       }
+      canRequestMore=matchingCommits.size() >= commitCount.getCount();
     }
-    canRequestMore=matchingCommits.size() >= commitCount.getCount();
   }
   VisibleGraph<Integer> visibleGraph;
   if (matchesNothing(matchingHeads) || matchesNothing(matchingCommits)) {
     visibleGraph=EmptyVisibleGraph.getInstance();
   }
  else {
-    visibleGraph=dataPack.getPermanentGraph().createVisibleGraph(sortType,matchingHeads,getMatchedCommitIndex(matchingCommits));
+    visibleGraph=dataPack.getPermanentGraph().createVisibleGraph(sortType,matchingHeads,matchingCommits);
   }
   return Pair.create(new VisiblePack(dataPack,visibleGraph,canRequestMore,filters),commitCount);
 }
