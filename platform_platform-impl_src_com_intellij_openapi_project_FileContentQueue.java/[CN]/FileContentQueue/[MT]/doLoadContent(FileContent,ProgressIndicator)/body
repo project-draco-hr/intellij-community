@@ -2,22 +2,20 @@
   final long contentLength=content.getLength();
   boolean counterUpdated=false;
   try {
+    while (myLoadedBytesInQueue.get() > MAX_SIZE_OF_BYTES_IN_QUEUE) {
+      indicator.checkCanceled();
 synchronized (myProceedWithLoadingLock) {
-      while (myLoadedBytesInQueue > MAX_SIZE_OF_BYTES_IN_QUEUE) {
-        indicator.checkCanceled();
         myProceedWithLoadingLock.wait(300);
       }
-      myLoadedBytesInQueue+=contentLength;
-      counterUpdated=true;
     }
+    myLoadedBytesInQueue.addAndGet(contentLength);
+    counterUpdated=true;
     content.getBytes();
     return true;
   }
  catch (  Throwable e) {
     if (counterUpdated) {
-synchronized (myProceedWithLoadingLock) {
-        myLoadedBytesInQueue-=contentLength;
-      }
+      myLoadedBytesInQueue.addAndGet(-contentLength);
     }
     if (e instanceof ProcessCanceledException) {
       throw (ProcessCanceledException)e;
