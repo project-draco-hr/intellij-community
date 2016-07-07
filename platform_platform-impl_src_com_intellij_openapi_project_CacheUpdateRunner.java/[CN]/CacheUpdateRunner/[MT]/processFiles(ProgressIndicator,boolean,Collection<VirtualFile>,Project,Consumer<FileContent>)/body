@@ -3,14 +3,17 @@
   final FileContentQueue queue=new FileContentQueue(files,indicator);
   final double total=files.size();
   queue.startLoading();
-  Consumer<VirtualFile> progressUpdater=new Consumer<VirtualFile>(){
-    final Set<VirtualFile> processed=new THashSet<VirtualFile>();
+  ProgressUpdater progressUpdater=new ProgressUpdater(){
+    final Set<VirtualFile> myFilesBeingProcessed=new THashSet<VirtualFile>();
+    final AtomicInteger myNumberOfFilesProcessed=new AtomicInteger();
     private boolean fileNameWasShown;
-    @Override public void consume(    VirtualFile virtualFile){
+    @Override public void processingStarted(    VirtualFile virtualFile){
       indicator.checkCanceled();
-synchronized (processed) {
-        boolean added=processed.add(virtualFile);
-        indicator.setFraction(processed.size() / total);
+synchronized (myFilesBeingProcessed) {
+        boolean added=myFilesBeingProcessed.add(virtualFile);
+        if (added) {
+          indicator.setFraction(myNumberOfFilesProcessed.incrementAndGet() / total);
+        }
         if (!added || (virtualFile.isValid() && virtualFile.getLength() > FILE_SIZE_TO_SHOW_THRESHOLD)) {
           indicator.setText2(virtualFile.getPresentableUrl());
           fileNameWasShown=true;
@@ -19,6 +22,12 @@ synchronized (processed) {
           indicator.setText2("");
           fileNameWasShown=false;
         }
+      }
+    }
+    @Override public void processingSuccessfullyFinished(    VirtualFile virtualFile){
+synchronized (myFilesBeingProcessed) {
+        boolean removed=myFilesBeingProcessed.remove(virtualFile);
+        assert removed;
       }
     }
   }
