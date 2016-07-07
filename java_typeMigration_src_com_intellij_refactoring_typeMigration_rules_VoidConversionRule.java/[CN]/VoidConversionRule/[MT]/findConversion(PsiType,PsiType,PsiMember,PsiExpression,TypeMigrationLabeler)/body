@@ -1,0 +1,44 @@
+{
+  if (PsiType.VOID.equals(to) && context.getParent() instanceof PsiReturnStatement) {
+    final boolean isPure=PsiTreeUtil.processElements(context,new PsiElementProcessor(){
+      @Override public boolean execute(      @NotNull PsiElement element){
+        if (element instanceof PsiPrefixExpression) {
+          return analyzeUnaryExpressionOperand(((PsiPrefixExpression)element).getOperand());
+        }
+        if (element instanceof PsiPostfixExpression) {
+          return analyzeUnaryExpressionOperand(((PsiPostfixExpression)element).getOperand());
+        }
+        if (element instanceof PsiMethodCallExpression) {
+          final PsiMethod method=((PsiMethodCallExpression)element).resolveMethod();
+          return method != null && ControlFlowAnalyzer.isPure(method);
+        }
+        return true;
+      }
+      private boolean analyzeUnaryExpressionOperand(      PsiExpression operand){
+        if (!(operand instanceof PsiReferenceExpression))         return false;
+        final PsiElement resolved=((PsiReferenceExpression)operand).resolve();
+        return !(resolved instanceof PsiField);
+      }
+    }
+);
+    if (isPure) {
+      return new TypeConversionDescriptorBase(){
+        @Override public PsiExpression replace(        PsiExpression expression,        @NotNull TypeEvaluator evaluator) throws IncorrectOperationException {
+          final PsiElement parent=expression.getParent();
+          if (parent instanceof PsiReturnStatement) {
+            expression.delete();
+            if (UnnecessaryReturnInspection.isReturnRedundant((PsiReturnStatement)parent,false,null)) {
+              parent.delete();
+            }
+          }
+          return null;
+        }
+      }
+;
+    }
+ else {
+      return null;
+    }
+  }
+  return null;
+}
