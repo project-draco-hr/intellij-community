@@ -1,10 +1,34 @@
 {
-  return buildFileStub(file,bytes,new Function<ClassReader,PsiJavaFileStub>(){
-    @Override public PsiJavaFileStub fun(    ClassReader reader){
-      String packageName=getPackageName(reader.getClassName());
-      LanguageLevel level=ClsParsingUtil.getLanguageLevelByVersion(reader.readShort(6));
-      return new PsiJavaFileStubImpl(null,packageName,level,true);
+  try {
+    if (ClassFileViewProvider.isInnerClass(file,bytes)) {
+      return null;
     }
+    ClassReader reader=new ClassReader(bytes);
+    String className=file.getNameWithoutExtension();
+    String internalName=reader.getClassName();
+    boolean module=internalName.endsWith("/module-info") && BitUtil.isSet(reader.getAccess(),Opcodes.ACC_MODULE);
+    String packageName=getPackageName(internalName);
+    LanguageLevel level=ClsParsingUtil.getLanguageLevelByVersion(reader.readShort(6));
+    if (module) {
+      PsiJavaFileStub stub=new PsiJavaFileStubImpl(null,"",level,true);
+      ModuleStubBuildingVisitor visitor=new ModuleStubBuildingVisitor(stub,packageName);
+      reader.accept(visitor,EMPTY_ATTRIBUTES,ClassReader.SKIP_FRAMES);
+      if (visitor.getResult() != null)       return stub;
+    }
+ else {
+      PsiJavaFileStub stub=new PsiJavaFileStubImpl(null,packageName,level,true);
+      try {
+        FileContentPair source=new FileContentPair(file,bytes);
+        StubBuildingVisitor<FileContentPair> visitor=new StubBuildingVisitor<FileContentPair>(source,STRATEGY,stub,0,className);
+        reader.accept(visitor,EMPTY_ATTRIBUTES,ClassReader.SKIP_FRAMES);
+        if (visitor.getResult() != null)         return stub;
+      }
+ catch (      OutOfOrderInnerClassException ignored) {
+      }
+    }
+    return null;
   }
-);
+ catch (  Exception e) {
+    throw new ClsFormatException(file.getPath() + ": " + e.getMessage(),e);
+  }
 }
