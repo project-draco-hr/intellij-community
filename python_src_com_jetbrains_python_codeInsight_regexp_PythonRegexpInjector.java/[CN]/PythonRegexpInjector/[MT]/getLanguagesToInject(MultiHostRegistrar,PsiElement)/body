@@ -1,30 +1,11 @@
 {
-  final PsiElement contextParent=context.getParent();
-  if (PyInjectionUtil.getLargestStringLiteral(context) == context && contextParent instanceof PyArgumentList) {
-    final PyExpression[] args=((PyArgumentList)contextParent).getArguments();
-    int index=ArrayUtil.indexOf(args,context);
-    PyCallExpression call=PsiTreeUtil.getParentOfType(context,PyCallExpression.class);
+  final PyArgumentList argumentList=PyUtil.as(context.getParent(),PyArgumentList.class);
+  if (PyInjectionUtil.getLargestStringLiteral(context) == context && argumentList != null) {
+    final PyCallExpression call=PsiTreeUtil.getParentOfType(context,PyCallExpression.class);
     if (call != null) {
-      final PyExpression callee=call.getCallee();
-      if (callee instanceof PyReferenceExpression && canBeRegexpCall(callee)) {
-        final PsiPolyVariantReference ref=((PyReferenceExpression)callee).getReference(PyResolveContext.noImplicits());
-        if (ref != null) {
-          final PsiElement element=ref.resolve();
-          if (element != null && ScopeUtil.getScopeOwner(element) instanceof PyFile && element.getContainingFile().getName().equals("re.py") && isRegexpMethod(element,index)) {
-            final Language language=isVerbose(call) ? PythonVerboseRegexpLanguage.INSTANCE : PythonRegexpLanguage.INSTANCE;
-            registrar.startInjecting(language);
-            final PyInjectionUtil.InjectionResult result=PyInjectionUtil.registerStringLiteralInjection(context,registrar);
-            if (result.isInjected()) {
-              registrar.doneInjecting();
-              if (!result.isStrict()) {
-                final PsiFile file=getInjectedFile(registrar);
-                if (file != null) {
-                  file.putUserData(InjectedLanguageUtil.FRANKENSTEIN_INJECTION,Boolean.TRUE);
-                }
-              }
-            }
-          }
-        }
+      final RegexpMethodDescriptor methodDescriptor=findRegexpMethodDescriptor(resolvePossibleRegexpCall(call));
+      if (methodDescriptor != null && methodDescriptor.argIndex == ArrayUtil.indexOf(argumentList.getArguments(),context)) {
+        injectRegexpLanguage(registrar,context,isVerbose(call));
       }
     }
   }
