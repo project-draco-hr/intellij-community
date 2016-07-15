@@ -1,0 +1,34 @@
+{
+  final List<AbstractTreeNode> children=new ArrayList<AbstractTreeNode>();
+  final Project project=psiDirectory.getProject();
+  final ProjectFileIndex fileIndex=ProjectRootManager.getInstance(project).getFileIndex();
+  final Module module=fileIndex.getModuleForFile(psiDirectory.getVirtualFile());
+  final ModuleFileIndex moduleFileIndex=module == null ? null : ModuleRootManager.getInstance(module).getFileIndex();
+  if (!settings.isFlattenPackages() || skipDirectory(psiDirectory)) {
+    processPsiDirectoryChildren(psiDirectory,directoryChildrenInProject(psiDirectory,settings),children,fileIndex,null,settings,withSubDirectories,filter);
+  }
+ else {
+    final PsiDirectory parentDir=psiDirectory.getParentDirectory();
+    if (parentDir == null || skipDirectory(parentDir) && withSubDirectories) {
+      addAllSubpackages(children,psiDirectory,moduleFileIndex,settings,filter);
+    }
+    if (withSubDirectories) {
+      PsiDirectory[] subdirs=psiDirectory.getSubdirectories();
+      for (      PsiDirectory subdir : subdirs) {
+        if (!skipDirectory(subdir) || filter != null && !filter.value(subdir)) {
+          continue;
+        }
+        VirtualFile directoryFile=subdir.getVirtualFile();
+        if (Registry.is("ide.hide.excluded.files")) {
+          if (fileIndex.isExcluded(directoryFile))           continue;
+        }
+ else {
+          if (FileTypeRegistry.getInstance().isFileIgnored(directoryFile))           continue;
+        }
+        children.add(new PsiDirectoryNode(project,subdir,settings,filter));
+      }
+    }
+    processPsiDirectoryChildren(psiDirectory,psiDirectory.getFiles(),children,fileIndex,moduleFileIndex,settings,withSubDirectories,filter);
+  }
+  return children;
+}
