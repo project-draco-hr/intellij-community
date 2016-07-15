@@ -2,7 +2,7 @@
   if (ranges.isEmpty()) {
     return;
   }
-  boolean isFullReformat=ranges.size() == 1 && file.getTextRange().equals(ranges.iterator().next());
+  boolean isFullReformat=ranges.isFullReformat(file);
   ApplicationManager.getApplication().assertWriteAccessAllowed();
   PsiDocumentManager.getInstance(getProject()).commitAllDocuments();
   CheckUtil.checkWritable(file);
@@ -21,10 +21,12 @@
   if (editor != null) {
     caretKeeper=new CaretPositionKeeper(editor,getSettings(),file.getLanguage());
   }
-  Collection<TextRange> correctedRanges=FormatterUtil.isFormatterCalledExplicitly() ? removeEndingWhiteSpaceFromEachRange(file,ranges) : ranges;
+  if (FormatterUtil.isFormatterCalledExplicitly()) {
+    removeEndingWhiteSpaceFromEachRange(file,ranges);
+  }
   final SmartPointerManager smartPointerManager=SmartPointerManager.getInstance(getProject());
-  List<RangeFormatInfo> infos=new ArrayList<RangeFormatInfo>();
-  for (  TextRange range : correctedRanges) {
+  List<RangeFormatInfo> infos=new ArrayList<>();
+  for (  TextRange range : ranges.getTextRanges()) {
     final PsiElement start=findElementInTreeWithFormatterEnabled(file,range.getStartOffset());
     final PsiElement end=findElementInTreeWithFormatterEnabled(file,range.getEndOffset());
     if (start != null && !start.isValid()) {
@@ -37,11 +39,7 @@
     boolean formatToEnd=range.getEndOffset() == file.getTextLength();
     infos.add(new RangeFormatInfo(start == null ? null : smartPointerManager.createSmartPsiElementPointer(start),end == null ? null : smartPointerManager.createSmartPsiElementPointer(end),formatFromStart,formatToEnd));
   }
-  FormatTextRanges formatRanges=new FormatTextRanges(diffInfo);
-  for (  TextRange range : correctedRanges) {
-    formatRanges.add(range,true);
-  }
-  codeFormatter.processText(file,formatRanges,true);
+  codeFormatter.processText(file,ranges,true);
   for (  RangeFormatInfo info : infos) {
     final PsiElement startElement=info.startPointer == null ? null : info.startPointer.getElement();
     final PsiElement endElement=info.endPointer == null ? null : info.endPointer.getElement();
