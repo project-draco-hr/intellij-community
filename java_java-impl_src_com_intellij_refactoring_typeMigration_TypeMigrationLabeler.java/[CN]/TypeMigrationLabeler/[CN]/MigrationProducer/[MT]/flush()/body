@@ -1,0 +1,28 @@
+{
+  for (  Map.Entry<PsiTypeElement,Collection<TypeMigrationUsageInfo>> entry : myVariableMigration.entrySet()) {
+    final PsiTypeElement typeElement=entry.getKey();
+    if (!typeElement.isValid())     continue;
+    final Collection<TypeMigrationUsageInfo> migrations=entry.getValue();
+    if (migrations.size() != 1) {
+      MultiMap<PsiType,PsiVariable> variablesByMigrationType=new MultiMap<>();
+      for (      TypeMigrationUsageInfo migration : migrations) {
+        final PsiElement var=migration.getElement();
+        if (var == null || !(var instanceof PsiLocalVariable || var instanceof PsiField)) {
+          continue;
+        }
+        final PsiType type=getTypeEvaluator().getType(migration);
+        variablesByMigrationType.putValue(type,(PsiVariable)var);
+      }
+      if (variablesByMigrationType.size() == 1) {
+        final Map.Entry<PsiType,Collection<PsiVariable>> migrationTypeAndVariables=ContainerUtil.getFirstItem(variablesByMigrationType.entrySet());
+        LOG.assertTrue(migrationTypeAndVariables != null);
+        final PsiVariable[] variables=PsiTreeUtil.getChildrenOfType(typeElement.getParent().getParent(),PsiVariable.class);
+        if (variables != null && variables.length == migrationTypeAndVariables.getValue().size()) {
+          typeElement.replace(JavaPsiFacade.getElementFactory(variables[0].getProject()).createTypeElement(migrationTypeAndVariables.getKey()));
+          continue;
+        }
+      }
+    }
+    for (    TypeMigrationUsageInfo info : entry.getValue())     migrateMultiDeclarationVariable(info);
+  }
+}
