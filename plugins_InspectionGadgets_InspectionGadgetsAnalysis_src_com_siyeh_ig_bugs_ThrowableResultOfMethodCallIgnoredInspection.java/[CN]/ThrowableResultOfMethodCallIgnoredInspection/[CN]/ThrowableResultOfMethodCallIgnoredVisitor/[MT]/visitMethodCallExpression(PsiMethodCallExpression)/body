@@ -1,17 +1,19 @@
 {
   super.visitMethodCallExpression(expression);
-  PsiElement parent=expression.getParent();
-  while (parent instanceof PsiParenthesizedExpression || parent instanceof PsiTypeCastExpression || parent instanceof PsiConditionalExpression) {
-    parent=parent.getParent();
-  }
-  if (!TypeUtils.expressionHasTypeOrSubtype(expression,CommonClassNames.JAVA_LANG_THROWABLE)) {
-    return;
-  }
-  if (canBeThrown(parent)) {
+  if (!isIgnoredThrowable(expression)) {
     return;
   }
   final PsiMethod method=expression.resolveMethod();
-  if (method == null || PropertyUtil.isSimpleGetter(method)) {
+  if (method == null) {
+    return;
+  }
+  final PsiType type=method.getReturnType();
+  if (!(type instanceof PsiClassType)) {
+    return;
+  }
+  final PsiClassType classType=(PsiClassType)type;
+  final PsiClass aClass=classType.resolve();
+  if (aClass instanceof PsiTypeParameter) {
     return;
   }
   final PsiClass containingClass=method.getContainingClass();
@@ -23,23 +25,6 @@
   }
   if ("propagate".equals(method.getName()) && "com.google.common.base.Throwables".equals(containingClass.getQualifiedName())) {
     return;
-  }
-  final PsiElement var=getVariable(parent,expression);
-  if (var == null) {
-    return;
-  }
-  if (var instanceof PsiLocalVariable) {
-    final Query<PsiReference> query=ReferencesSearch.search(var,var.getUseScope());
-    for (    PsiReference reference : query) {
-      final PsiElement usage=reference.getElement();
-      PsiElement usageParent=usage.getParent();
-      while (usageParent instanceof PsiParenthesizedExpression) {
-        usageParent=usageParent.getParent();
-      }
-      if (canBeThrown(usageParent)) {
-        return;
-      }
-    }
   }
   registerMethodCallError(expression);
 }
