@@ -1,0 +1,42 @@
+{
+  MultiMap<PsiFileNode,PsiFileNode> parentToChildren=null;
+  Set<PsiFileNode> allChildNodes=null;
+  Map<Pair<String,NestingRule>,Edge<PsiFileNode>> baseNameAndRuleToEdge=null;
+  for (  AbstractTreeNode node : nodes) {
+    if (!(node instanceof PsiFileNode))     continue;
+    final PsiFile file=((PsiFileNode)node).getValue();
+    if (file == null)     continue;
+    for (    NestingRule rule : rules) {
+      final String fileName=file.getName();
+      boolean matchesParent=!fileName.equals(rule.myParentFileSuffix) && fileName.endsWith(rule.myParentFileSuffix);
+      boolean matchesChild=!fileName.equals(rule.myChildFileSuffix) && fileName.endsWith(rule.myChildFileSuffix);
+      if (!matchesChild && !matchesParent)       continue;
+      if (matchesParent && matchesChild) {
+        if (rule.myParentFileSuffix.length() > rule.myChildFileSuffix.length()) {
+          matchesChild=false;
+        }
+ else {
+          matchesParent=false;
+        }
+      }
+      if (baseNameAndRuleToEdge == null) {
+        baseNameAndRuleToEdge=new THashMap<>();
+        parentToChildren=new MultiMap<>();
+        allChildNodes=new THashSet<>();
+      }
+      if (matchesParent) {
+        final String baseName=fileName.substring(0,fileName.length() - rule.myParentFileSuffix.length());
+        final Edge<PsiFileNode> edge=getOrCreateEdge(baseNameAndRuleToEdge,baseName,rule);
+        edge.from=(PsiFileNode)node;
+        updateInfoIfEdgeComplete(parentToChildren,allChildNodes,edge);
+      }
+      if (matchesChild) {
+        final String baseName=fileName.substring(0,fileName.length() - rule.myChildFileSuffix.length());
+        final Edge<PsiFileNode> edge=getOrCreateEdge(baseNameAndRuleToEdge,baseName,rule);
+        edge.to=(PsiFileNode)node;
+        updateInfoIfEdgeComplete(parentToChildren,allChildNodes,edge);
+      }
+    }
+  }
+  return parentToChildren == null ? MultiMap.empty() : parentToChildren;
+}
