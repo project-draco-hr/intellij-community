@@ -2,32 +2,29 @@
   if (head1.equals(head2)) {
     return 0;
   }
-  Collection<VcsRef> refs1=myRefsModel.refsToHead(head1);
-  Collection<VcsRef> refs2=myRefsModel.refsToHead(head2);
-  boolean firstEmpty=isEmptyRefs(refs1,head1);
-  boolean secondEmpty=isEmptyRefs(refs2,head2);
-  if (firstEmpty && secondEmpty) {
-    return head1 - head2;
-  }
-  if (firstEmpty) {
+  VcsRef ref1=myRefsModel.bestRefToHead(head1);
+  VcsRef ref2=myRefsModel.bestRefToHead(head2);
+  if (ref1 == null) {
+    reportNoRefs(head1);
+    if (ref2 == null) {
+      reportNoRefs(head2);
+      return head1 - head2;
+    }
     return 1;
   }
-  if (secondEmpty) {
+  if (ref2 == null) {
+    reportNoRefs(head2);
     return -1;
   }
-  VirtualFile root1=getFirstRoot(refs1);
-  VirtualFile root2=getFirstRoot(refs2);
+  if (ref1.equals(ref2)) {
+    LOG.warn("Different heads " + myHashGetter.fun(head1) + " and "+ myHashGetter.fun(head2)+ " contain the same reference "+ ref1);
+  }
+  VirtualFile root1=ref1.getRoot();
+  VirtualFile root2=ref2.getRoot();
   VcsLogRefManager refManager1=myRefManagers.get(root1);
   VcsLogRefManager refManager2=myRefManagers.get(root2);
   if (!refManager1.equals(refManager2)) {
     return refManager1.toString().compareTo(refManager2.toString());
   }
-  VcsRef bestRef=ContainerUtil.sorted(ContainerUtil.concat(refs1,refs2),refManager1.getBranchLayoutComparator()).get(0);
-  if (refs1.contains(bestRef)) {
-    if (refs2.contains(bestRef)) {
-      LOG.error("Different heads " + myHashGetter.fun(head1) + " and "+ myHashGetter.fun(head2)+ " contain the same reference "+ bestRef);
-    }
-    return -1;
-  }
-  return 1;
+  return refManager1.getBranchLayoutComparator().compare(ref1,ref2);
 }
