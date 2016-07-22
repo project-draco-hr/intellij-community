@@ -2,36 +2,32 @@
   super.save(out);
   myType.save(out);
   try {
-    if (myValue instanceof String) {
-      out.writeByte(STRING);
-      String value=(String)myValue;
-      RW.writeUTF(out,value);
-    }
- else     if (myValue instanceof Integer) {
-      out.writeByte(INTEGER);
-      DataInputOutputUtil.writeINT(out,((Integer)myValue).intValue());
-    }
- else     if (myValue instanceof Long) {
-      out.writeByte(LONG);
-      out.writeLong(((Long)myValue).longValue());
-    }
- else     if (myValue instanceof Float) {
-      out.writeByte(FLOAT);
-      out.writeFloat(((Float)myValue).floatValue());
-    }
- else     if (myValue instanceof Double) {
-      out.writeByte(DOUBLE);
-      out.writeDouble(((Double)myValue).doubleValue());
-    }
- else     if (myValue instanceof Type) {
-      out.writeByte(TYPE);
-      RW.writeUTF(out,((Type)myValue).getDescriptor());
+    final Object val=myValue;
+    final Class valueType=val != null ? val.getClass() : null;
+    if (valueType != null && valueType.isArray()) {
+      final int length=Array.getLength(val);
+      final Class dataType=length > 0 ? Array.get(val,0).getClass() : valueType.getComponentType();
+      final DataDescriptor descriptor=DataDescriptor.findByValueType(dataType);
+      out.writeByte(-descriptor.getId());
+      if (descriptor != DataDescriptor.NONE) {
+        DataInputOutputUtil.writeINT(out,length);
+        for (int idx=0; idx < length; idx++) {
+          final Object element=Array.get(val,idx);
+          descriptor.save(out,element);
+        }
+      }
     }
  else {
-      out.writeByte(NONE);
+      final DataDescriptor descriptor=DataDescriptor.findByValueType(valueType);
+      out.writeByte(descriptor.getId());
+      descriptor.save(out,val);
     }
   }
  catch (  IOException e) {
     throw new BuildDataCorruptedException(e);
   }
+catch (  Exception e) {
+    throw new RuntimeException(e);
+  }
+  RW.save(myAnnotations,out);
 }
