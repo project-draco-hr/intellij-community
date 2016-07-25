@@ -1,25 +1,59 @@
 {
   final Ref<Object> defaultValue=Ref.create();
+  final Collection<TypeRepr.ClassType> annotations=new SmartList<TypeRepr.ClassType>();
+  final Collection<ParamAnnotation> paramAnnotations=new SmartList<ParamAnnotation>();
   processSignature(signature);
-  return new MethodVisitor(Opcodes.ASM5){
+  return new MethodVisitor(ASM_API_VERSION){
     @Override public void visitEnd(){
       if ((access & Opcodes.ACC_SYNTHETIC) == 0 || (access & Opcodes.ACC_BRIDGE) > 0) {
-        myMethods.add(new MethodRepr(myContext,access,myContext.get(n),myContext.get(signature),desc,exceptions,defaultValue.get()));
+        myMethods.add(new MethodRepr(myContext,access,myContext.get(n),myContext.get(signature),desc,annotations,paramAnnotations,exceptions,defaultValue.get()));
       }
     }
     @Override public AnnotationVisitor visitAnnotation(    String desc,    boolean visible){
-      return new AnnotationCrawler((TypeRepr.ClassType)TypeRepr.getType(myContext,desc),"<init>".equals(n) ? ElemType.CONSTRUCTOR : ElemType.METHOD);
+      final TypeRepr.ClassType annotType=(TypeRepr.ClassType)TypeRepr.getType(myContext,desc);
+      annotations.add(annotType);
+      return new AnnotationCrawler(annotType,"<init>".equals(n) ? ElemType.CONSTRUCTOR : ElemType.METHOD);
     }
     @Override public AnnotationVisitor visitAnnotationDefault(){
-      return new AnnotationVisitor(Opcodes.ASM5){
+      return new AnnotationVisitor(ASM_API_VERSION){
+        @Nullable private List myAcc;
         public void visit(        String name,        Object value){
-          defaultValue.set(value);
+          collectValue(value);
+        }
+        @Override public void visitEnum(        String name,        String desc,        String value){
+          collectValue(value);
+        }
+        @Override public AnnotationVisitor visitArray(        String name){
+          myAcc=new SmartList();
+          return this;
+        }
+        @Override public void visitEnd(){
+          if (myAcc != null) {
+            Object[] template=null;
+            if (!myAcc.isEmpty()) {
+              final Object elem=myAcc.get(0);
+              if (elem != null) {
+                template=(Object[])Array.newInstance(elem.getClass(),0);
+              }
+            }
+            defaultValue.set(template != null ? myAcc.toArray(template) : myAcc.toArray());
+          }
+        }
+        private void collectValue(        Object value){
+          if (myAcc != null) {
+            myAcc.add(value);
+          }
+ else {
+            defaultValue.set(value);
+          }
         }
       }
 ;
     }
     @Override public AnnotationVisitor visitParameterAnnotation(    int parameter,    String desc,    boolean visible){
-      return new AnnotationCrawler((TypeRepr.ClassType)TypeRepr.getType(myContext,desc),ElemType.PARAMETER);
+      final TypeRepr.ClassType annotType=(TypeRepr.ClassType)TypeRepr.getType(myContext,desc);
+      paramAnnotations.add(new ParamAnnotation(parameter,annotType));
+      return new AnnotationCrawler(annotType,ElemType.PARAMETER);
     }
     @Override public void visitLdcInsn(    Object cst){
       if (cst instanceof Type) {
