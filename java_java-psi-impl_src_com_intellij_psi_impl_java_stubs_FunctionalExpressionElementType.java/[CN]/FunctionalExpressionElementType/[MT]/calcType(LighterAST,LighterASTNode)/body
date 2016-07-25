@@ -1,0 +1,36 @@
+{
+  if (funExpr.getTokenType() == METHOD_REF_EXPRESSION)   return CoarseType.UNKNOWN;
+  LighterASTNode block=LightTreeUtil.firstChildOfType(tree,funExpr,CODE_BLOCK);
+  if (block == null)   return CoarseType.UNKNOWN;
+  final Ref<Boolean> returnsSomething=Ref.create(null);
+  final AtomicBoolean isBoolean=new AtomicBoolean();
+  final AtomicBoolean hasStatements=new AtomicBoolean();
+  new RecursiveLighterASTNodeWalkingVisitor(tree){
+    @Override public void visitNode(    @NotNull LighterASTNode element){
+      IElementType type=element.getTokenType();
+      if (type == LAMBDA_EXPRESSION || ElementType.MEMBER_BIT_SET.contains(type) || !returnsSomething.isNull()) {
+        return;
+      }
+      if (type == RETURN_STATEMENT) {
+        LighterASTNode expr=LightTreeUtil.firstChildOfType(tree,element,ElementType.EXPRESSION_BIT_SET);
+        returnsSomething.set(expr != null);
+        if (isBooleanLiteral(tree,expr)) {
+          isBoolean.set(true);
+        }
+        return;
+      }
+      if (ElementType.JAVA_STATEMENT_BIT_SET.contains(type) && type != THROW_STATEMENT) {
+        hasStatements.set(true);
+      }
+      super.visitNode(element);
+    }
+  }
+.visitNode(block);
+  if (isBoolean.get()) {
+    return CoarseType.BOOLEAN;
+  }
+  if (returnsSomething.isNull()) {
+    return hasStatements.get() ? CoarseType.VOID : CoarseType.UNKNOWN;
+  }
+  return returnsSomething.get() ? CoarseType.NON_VOID : CoarseType.VOID;
+}
