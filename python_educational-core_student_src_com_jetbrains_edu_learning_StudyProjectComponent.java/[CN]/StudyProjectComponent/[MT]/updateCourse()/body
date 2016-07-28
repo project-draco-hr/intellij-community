@@ -2,43 +2,36 @@
   final Course currentCourse=StudyTaskManager.getInstance(myProject).getCourse();
   final CourseInfo info=CourseInfo.fromCourse(currentCourse);
   if (info == null)   return;
-  final File resourceDirectory=new File(currentCourse.getCourseDirectory());
+  final File resourceDirectory=StudyUtils.getCourseDirectory(myProject,currentCourse);
   if (resourceDirectory.exists()) {
     FileUtil.delete(resourceDirectory);
   }
   final Course course=EduStepicConnector.getCourse(myProject,info);
   if (course == null)   return;
   flushCourse(myProject,course);
-  course.initCourse(true);
+  course.initCourse(false);
   StudyLanguageManager manager=StudyUtils.getLanguageManager(course);
   if (manager == null) {
     LOG.info("Study Language Manager is null for " + course.getLanguageById().getDisplayName());
     return;
   }
-  final File[] files=resourceDirectory.listFiles();
-  if (files == null)   return;
-  for (  File lessonDir : files) {
-    final String testHelper=manager.getTestHelperFileName();
-    final String testFileName=manager.getTestFileName();
-    if (lessonDir.getName().equals(testHelper)) {
-      copyFile(lessonDir,new File(myProject.getBasePath(),testHelper));
-    }
-    if (lessonDir.getName().startsWith(EduNames.LESSON)) {
-      final Lesson lesson=currentCourse.getLesson(lessonDir.getName());
-      final File[] tasks=lessonDir.listFiles();
-      if (tasks == null)       continue;
-      for (      File taskDir : tasks) {
-        final Task task=lesson.getTask(taskDir.getName());
-        if (task.getStatus().equals(StudyStatus.Solved))         continue;
-        final File taskDescrFrom=StudyUtils.getTaskDescriptionFile(taskDir);
-        if (taskDescrFrom != null) {
-          final File taskTests=new File(taskDir,testFileName);
-          final File taskDescrTo=StudyUtils.getTaskDescriptionFile(new File(new File(myProject.getBasePath(),lessonDir.getName()),taskDir.getName()));
-          if (taskDescrTo != null) {
-            copyFile(taskDescrFrom,taskDescrTo);
-            copyFile(taskTests,new File(new File(new File(myProject.getBasePath(),lessonDir.getName()),taskDir.getName()),testFileName));
-          }
-        }
+  for (  Lesson lesson : course.getLessons()) {
+    final Lesson studentLesson=currentCourse.getLesson(lesson.getName());
+    final File lessonDir=new File(myProject.getBasePath(),lesson.getName());
+    for (    Task task : lesson.getTaskList()) {
+      final Task studentTask=studentLesson.getTask(task.getName());
+      if (studentTask == null || StudyStatus.Solved.equals(studentTask.getStatus()))       continue;
+      task.initTask(studentLesson,false);
+      task.setIndex(studentTask.getIndex());
+      studentLesson.updateTask(studentTask,task);
+      final File toTask=new File(lessonDir,task.getName());
+      final String taskPath=FileUtil.join(resourceDirectory.getPath(),lesson.getName(),task.getName());
+      final File taskDir=new File(taskPath);
+      if (!taskDir.exists())       return;
+      final File[] taskFiles=taskDir.listFiles();
+      if (taskFiles == null)       continue;
+      for (      File fromFile : taskFiles) {
+        copyFile(fromFile,new File(toTask,fromFile.getName()));
       }
     }
   }
