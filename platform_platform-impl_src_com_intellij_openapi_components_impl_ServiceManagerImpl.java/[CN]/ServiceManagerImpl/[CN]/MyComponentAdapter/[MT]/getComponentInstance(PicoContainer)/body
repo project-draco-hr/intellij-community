@@ -3,36 +3,27 @@
   if (instance != null) {
     return instance;
   }
-  boolean useReadActionToInitService=isUseReadActionToInitService();
-  AccessToken readToken=useReadActionToInitService ? ReadAction.start() : null;
-  try {
 synchronized (this) {
-      instance=myInitializedComponentInstance;
-      if (instance != null) {
-        return instance;
-      }
-      ComponentAdapter delegate=getDelegate();
-      if (!useReadActionToInitService && LOG.isDebugEnabled() && ApplicationManager.getApplication().isWriteAccessAllowed()&& !ApplicationManager.getApplication().isUnitTestMode()&& PersistentStateComponent.class.isAssignableFrom(delegate.getComponentImplementation())) {
-        LOG.warn(new Throwable("Getting service from write-action leads to possible deadlock. Service implementation " + myDescriptor.getImplementation()));
-      }
-      AccessToken token=HeavyProcessLatch.INSTANCE.processStarted("Creating component '" + myDescriptor.getImplementation() + "'");
-      try {
-        instance=delegate.getComponentInstance(container);
-        if (instance instanceof Disposable) {
-          Disposer.register(myComponentManager,(Disposable)instance);
-        }
-        myComponentManager.initializeComponent(instance,true);
-        myInitializedComponentInstance=instance;
-        return instance;
-      }
-  finally {
-        token.finish();
-      }
+    instance=myInitializedComponentInstance;
+    if (instance != null) {
+      return instance;
     }
-  }
+    ComponentAdapter delegate=getDelegate();
+    if (LOG.isDebugEnabled() && ApplicationManager.getApplication().isWriteAccessAllowed() && !ApplicationManager.getApplication().isUnitTestMode()&& PersistentStateComponent.class.isAssignableFrom(delegate.getComponentImplementation())) {
+      LOG.warn(new Throwable("Getting service from write-action leads to possible deadlock. Service implementation " + myDescriptor.getImplementation()));
+    }
+    AccessToken token=HeavyProcessLatch.INSTANCE.processStarted("Creating component '" + myDescriptor.getImplementation() + "'");
+    try {
+      instance=delegate.getComponentInstance(container);
+      if (instance instanceof Disposable) {
+        Disposer.register(myComponentManager,(Disposable)instance);
+      }
+      myComponentManager.initializeComponent(instance,true);
+      myInitializedComponentInstance=instance;
+      return instance;
+    }
   finally {
-    if (readToken != null) {
-      readToken.finish();
+      token.finish();
     }
   }
 }
