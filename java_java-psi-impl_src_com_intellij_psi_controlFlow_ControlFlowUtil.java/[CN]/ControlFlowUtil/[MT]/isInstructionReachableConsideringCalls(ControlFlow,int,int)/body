@@ -1,0 +1,39 @@
+{
+class MyVisitor extends InstructionClientVisitor<Boolean> {
+    final int size=flow.getInstructions().size();
+    final TIntHashSet[] transitions=new TIntHashSet[size];
+    @Override public void visitInstruction(    Instruction instruction,    int offset,    int nextOffset){
+      if (nextOffset > size)       nextOffset=size;
+      if (transitions[offset] == null) {
+        transitions[offset]=new TIntHashSet(2);
+      }
+      transitions[offset].add(nextOffset);
+    }
+    @Override public Boolean getResult(){
+      Arrays.fill(processedInstructions,false);
+      WalkThroughStack walkThroughStack=new WalkThroughStack(size / 2);
+      walkThroughStack.push(startOffset);
+      while (!walkThroughStack.isEmpty()) {
+        int oldOffset=walkThroughStack.peekOldOffset();
+        int newOffset=walkThroughStack.popNewOffset();
+        if (oldOffset < size && !processedInstructions[oldOffset] && newOffset < 0) {
+          processedInstructions[oldOffset]=true;
+          if (transitions[oldOffset] != null) {
+            for (TIntIterator it=transitions[oldOffset].iterator(); it.hasNext(); ) {
+              int nextOffset=it.next();
+              if (nextOffset == instructionOffset) {
+                return true;
+              }
+              walkThroughStack.push(oldOffset,nextOffset);
+              walkThroughStack.push(nextOffset);
+            }
+          }
+        }
+      }
+      return false;
+    }
+  }
+  MyVisitor visitor=new MyVisitor();
+  depthFirstSearch(flow,visitor,0,flow.getSize());
+  return visitor.getResult().booleanValue();
+}

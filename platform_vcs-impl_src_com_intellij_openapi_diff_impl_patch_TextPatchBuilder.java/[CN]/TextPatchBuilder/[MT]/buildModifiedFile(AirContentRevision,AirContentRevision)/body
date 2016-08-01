@@ -1,0 +1,36 @@
+{
+  String beforeContent=getContent(beforeRevision);
+  String afterContent=getContent(afterRevision);
+  TextFilePatch patch=buildPatchHeading(beforeRevision,afterRevision);
+  if (beforeContent.equals(afterContent)) {
+    if (beforeRevision.getPath().getPath().equals(afterRevision.getPath().getPath()))     return null;
+    patch.addHunk(new PatchHunk(0,0,0,0));
+    return patch;
+  }
+  if (beforeContent.isEmpty()) {
+    patch.addHunk(createWholeFileHunk(afterContent,true,true));
+    return patch;
+  }
+  if (afterContent.isEmpty()) {
+    patch.addHunk(createWholeFileHunk(beforeContent,false,true));
+    return patch;
+  }
+  List<String> beforeLines=tokenize(beforeContent);
+  List<String> afterLines=tokenize(afterContent);
+  boolean beforeNoNewlineAtEOF=!beforeContent.endsWith("\n");
+  boolean afterNoNewlineAtEOF=!afterContent.endsWith("\n");
+  List<Range> fragments;
+  try {
+    fragments=compareLines(beforeLines,afterLines,beforeNoNewlineAtEOF,afterNoNewlineAtEOF);
+  }
+ catch (  DiffTooBigException e) {
+    throw new VcsException("File '" + myBasePath + "' is too big and there are too many changes to build diff",e);
+  }
+  int hunkStart=0;
+  while (hunkStart < fragments.size()) {
+    List<Range> hunkFragments=getAdjacentFragments(fragments,hunkStart);
+    patch.addHunk(createHunk(hunkFragments,beforeLines,afterLines,beforeNoNewlineAtEOF,afterNoNewlineAtEOF));
+    hunkStart+=hunkFragments.size();
+  }
+  return patch;
+}

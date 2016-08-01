@@ -1,0 +1,43 @@
+{
+  final FilePath[] result=new FilePath[1];
+  final boolean[] pathAmbiguous=new boolean[1];
+  GitLineHandler h=new GitLineHandler(myProject,root,GitCommand.LS_TREE);
+  h.addParameters(revision.asString());
+  if (file != null) {
+    h.endOptions();
+    h.addRelativeFiles(Collections.singleton(file));
+  }
+ else {
+    h.addParameters("-r");
+    h.endOptions();
+  }
+  h.addLineListener(new GitLineHandlerAdapter(){
+    @Override public void onLineAvailable(    String line,    Key outputType){
+      if (outputType != ProcessOutputTypes.STDOUT)       return;
+      if (!line.contains(blob))       return;
+      if (pathAmbiguous[0])       return;
+      try {
+        StringScanner s=new StringScanner(line);
+        s.spaceToken();
+        String type=s.spaceToken();
+        String recordBlob=s.tabToken();
+        FilePath file=VcsUtil.getFilePath(root,GitUtil.unescapePath(s.line()));
+        if (!"blob".equals(type))         return;
+        if (!blob.equals(recordBlob))         return;
+        if (result[0] == null) {
+          result[0]=file;
+        }
+ else {
+          pathAmbiguous[0]=true;
+        }
+      }
+ catch (      VcsException e) {
+        LOG.warn(e);
+      }
+    }
+  }
+);
+  h.runInCurrentThread(null);
+  if (pathAmbiguous[0])   return null;
+  return result[0];
+}
