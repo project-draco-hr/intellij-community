@@ -1,8 +1,6 @@
 {
-  final IntArrayList oldOffsets=new IntArrayList(instructions.size() / 2);
-  final IntArrayList newOffsets=new IntArrayList(instructions.size() / 2);
-  oldOffsets.add(offset);
-  newOffsets.add(-1);
+  final WalkThroughStack walkThroughStack=new WalkThroughStack(instructions.size() / 2);
+  walkThroughStack.push(startOffset);
 synchronized (instructions) {
     final IntArrayList currentProcedureReturnOffsets=new IntArrayList();
     ControlFlowInstructionVisitor getNextOffsetVisitor=new ControlFlowInstructionVisitor(){
@@ -14,51 +12,39 @@ synchronized (instructions) {
           clientVisitor.processedInstructions[i]=false;
         }
         clientVisitor.procedureEntered(instruction.procBegin,i);
-        oldOffsets.add(offset);
-        newOffsets.add(newOffset);
-        oldOffsets.add(newOffset);
-        newOffsets.add(-1);
+        walkThroughStack.push(offset,newOffset);
+        walkThroughStack.push(newOffset);
         currentProcedureReturnOffsets.add(offset + 1);
       }
       @Override public void visitReturnInstruction(      ReturnInstruction instruction,      int offset,      int nextOffset){
         int newOffset=instruction.execute(false);
         if (newOffset != -1) {
-          oldOffsets.add(offset);
-          newOffsets.add(newOffset);
-          oldOffsets.add(newOffset);
-          newOffsets.add(-1);
+          walkThroughStack.push(offset,newOffset);
+          walkThroughStack.push(newOffset);
         }
       }
       @Override public void visitBranchingInstruction(      BranchingInstruction instruction,      int offset,      int nextOffset){
         int newOffset=instruction.offset;
-        oldOffsets.add(offset);
-        newOffsets.add(newOffset);
-        oldOffsets.add(newOffset);
-        newOffsets.add(-1);
+        walkThroughStack.push(offset,newOffset);
+        walkThroughStack.push(newOffset);
       }
       @Override public void visitConditionalBranchingInstruction(      ConditionalBranchingInstruction instruction,      int offset,      int nextOffset){
         int newOffset=instruction.offset;
-        oldOffsets.add(offset);
-        newOffsets.add(newOffset);
-        oldOffsets.add(offset);
-        newOffsets.add(offset + 1);
-        oldOffsets.add(newOffset);
-        newOffsets.add(-1);
-        oldOffsets.add(offset + 1);
-        newOffsets.add(-1);
+        walkThroughStack.push(offset,newOffset);
+        walkThroughStack.push(offset,offset + 1);
+        walkThroughStack.push(newOffset);
+        walkThroughStack.push(offset + 1);
       }
       @Override public void visitInstruction(      Instruction instruction,      int offset,      int nextOffset){
         int newOffset=offset + 1;
-        oldOffsets.add(offset);
-        newOffsets.add(newOffset);
-        oldOffsets.add(newOffset);
-        newOffsets.add(-1);
+        walkThroughStack.push(offset,newOffset);
+        walkThroughStack.push(newOffset);
       }
     }
 ;
-    while (!oldOffsets.isEmpty()) {
-      offset=oldOffsets.remove(oldOffsets.size() - 1);
-      int newOffset=newOffsets.remove(newOffsets.size() - 1);
+    while (!walkThroughStack.isEmpty()) {
+      final int offset=walkThroughStack.peekOldOffset();
+      final int newOffset=walkThroughStack.popNewOffset();
       if (offset >= endOffset) {
         continue;
       }
