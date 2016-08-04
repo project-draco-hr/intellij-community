@@ -1,39 +1,32 @@
 {
-  final PyExpression value=node.getAssignedValue();
-  if (value instanceof PyBinaryExpression) {
-    final PyExpression target=node.getLeftHandSideExpression();
-    final PyBinaryExpression expression=(PyBinaryExpression)value;
-    PyExpression leftExpression=expression.getLeftExpression();
-    PyExpression rightExpression=expression.getRightExpression();
-    if (rightExpression instanceof PyParenthesizedExpression) {
-      rightExpression=((PyParenthesizedExpression)rightExpression).getContainedExpression();
-    }
-    if (rightExpression == null || target == null) {
+  final PyExpression target=node.getLeftHandSideExpression();
+  final PyBinaryExpression value=PyUtil.as(node.getAssignedValue(),PyBinaryExpression.class);
+  if (target != null && value != null) {
+    final PyExpression leftExpression=value.getLeftExpression();
+    final PyExpression rightExpression=PyPsiUtils.flattenParens(value.getRightExpression());
+    if (leftExpression == null || rightExpression == null) {
       return;
     }
-    boolean changedParts=false;
     final String targetText=target.getText();
-    final String rightText=rightExpression.getText();
-    if (rightText.equals(targetText)) {
-      final PyExpression tmp=rightExpression;
-      rightExpression=leftExpression;
-      leftExpression=tmp;
+    final PyExpression mainOperandExpression;
+    final PyExpression otherOperandExpression;
+    final boolean changedParts;
+    if (targetText.equals(leftExpression.getText())) {
+      mainOperandExpression=leftExpression;
+      otherOperandExpression=rightExpression;
+      changedParts=false;
+    }
+ else     if (targetText.equals(rightExpression.getText())) {
+      mainOperandExpression=rightExpression;
+      otherOperandExpression=leftExpression;
       changedParts=true;
     }
-    final PyElementType op=expression.getOperator();
-    final TokenSet operations=TokenSet.create(PyTokenTypes.PLUS,PyTokenTypes.MINUS,PyTokenTypes.MULT,PyTokenTypes.FLOORDIV,PyTokenTypes.DIV,PyTokenTypes.PERC,PyTokenTypes.AND,PyTokenTypes.OR,PyTokenTypes.XOR,PyTokenTypes.LTLT,PyTokenTypes.GTGT,PyTokenTypes.EXP);
-    final TokenSet commutativeOperations=TokenSet.create(PyTokenTypes.PLUS,PyTokenTypes.MULT,PyTokenTypes.OR,PyTokenTypes.AND);
-    if ((operations.contains(op) && !changedParts) || (changedParts && commutativeOperations.contains(op))) {
-      if (leftExpression.getText().equals(targetText) && (leftExpression instanceof PyReferenceExpression || leftExpression instanceof PySubscriptionExpression)) {
-        final PyType type=myTypeEvalContext.getType(rightExpression);
-        if (type != null && !PyTypeChecker.isUnknown(type)) {
-          final PyBuiltinCache cache=PyBuiltinCache.getInstance(rightExpression);
-          final LanguageLevel languageLevel=LanguageLevel.forElement(rightExpression);
-          if (isNumeric(type,cache) || (isString(type,cache,languageLevel) && !changedParts)) {
-            registerProblem(node,"Assignment can be replaced with augmented assignment",new AugmentedAssignmentQuickFix());
-          }
-        }
-      }
+ else {
+      return;
+    }
+    final PyElementType operator=value.getOperator();
+    if (operator != null && assignmentCanBeReplaced(mainOperandExpression,otherOperandExpression,operator,changedParts)) {
+      registerProblem(node,"Assignment can be replaced with augmented assignment",new AugmentedAssignmentQuickFix());
     }
   }
 }
