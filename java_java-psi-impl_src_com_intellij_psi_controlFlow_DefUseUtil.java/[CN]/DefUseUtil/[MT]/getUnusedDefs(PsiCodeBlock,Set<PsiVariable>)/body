@@ -32,10 +32,8 @@
       readVariables.add(readInstruction.variable);
     }
   }
-  Map<InstructionKey,InstructionState> stateMap=getStates(instructions);
-  InstructionState[] states=stateMap.values().toArray(new InstructionState[0]);
-  Arrays.sort(states);
-  BitSet usefulWrites=new BitSet(instructions.size());
+  InstructionState[] states=getStates(instructions);
+  boolean[] defsArmed=new boolean[instructions.size()];
   Queue<InstructionState> queue=new Queue<InstructionState>(8);
   for (int i=states.length - 1; i >= 0; i--) {
     final InstructionState outerState=states[i];
@@ -43,7 +41,7 @@
     outerState.touch();
     for (    PsiVariable psiVariable : assignedVariables) {
       if (psiVariable instanceof PsiField) {
-        outerState.addUsed(psiVariable);
+        outerState.mergeUseArmed(psiVariable);
       }
     }
     queue.addLast(outerState);
@@ -51,31 +49,32 @@
       ProgressManager.checkCanceled();
       InstructionState state=queue.pullFirst();
       state.markVisited();
-      InstructionKey key=state.getInstructionKey();
-      if (key.getOffset() < instructions.size()) {
-        Instruction instruction=instructions.get(key.getOffset());
+      int idx=state.getInstructionIdx();
+      if (idx < instructions.size()) {
+        Instruction instruction=instructions.get(idx);
         if (instruction instanceof WriteVariableInstruction) {
           WriteVariableInstruction writeInstruction=(WriteVariableInstruction)instruction;
           PsiVariable psiVariable=writeInstruction.variable;
           outUsedVariables.add(psiVariable);
-          if (state.removeUsed(psiVariable)) {
-            usefulWrites.set(key.getOffset());
+          if (state.mergeUseDisarmed(psiVariable)) {
+            defsArmed[idx]=true;
           }
         }
  else         if (instruction instanceof ReadVariableInstruction) {
           ReadVariableInstruction readInstruction=(ReadVariableInstruction)instruction;
-          state.addUsed(readInstruction.variable);
+          state.mergeUseArmed(readInstruction.variable);
           outUsedVariables.add(readInstruction.variable);
         }
  else {
           state.touch();
         }
       }
-      List<InstructionKey> backwardTraces=state.getBackwardTraces();
-      for (      InstructionKey prevKeys : backwardTraces) {
-        InstructionState prevState=stateMap.get(prevKeys);
-        if (prevState != null && !prevState.contains(state)) {
-          prevState.addUsedFrom(state);
+      IntArrayList backwardTraces=state.getBackwardTraces();
+      for (int j=0; j < backwardTraces.size(); j++) {
+        int prevIdx=backwardTraces.get(j);
+        InstructionState prevState=states[prevIdx];
+        if (!prevState.contains(state)) {
+          prevState.merge(state);
           queue.addLast(prevState);
         }
       }
@@ -86,7 +85,7 @@
     Instruction instruction=instructions.get(i);
     if (instruction instanceof WriteVariableInstruction) {
       WriteVariableInstruction writeInstruction=(WriteVariableInstruction)instruction;
-      if (!usefulWrites.get(i)) {
+      if (!defsArmed[i]) {
         PsiElement context=PsiTreeUtil.getNonStrictParentOfType(flow.getElement(i),PsiStatement.class,PsiAssignmentExpression.class,PsiPostfixExpression.class,PsiPrefixExpression.class);
         PsiVariable psiVariable=writeInstruction.variable;
         if (context != null && !(context instanceof PsiTryStatement)) {
