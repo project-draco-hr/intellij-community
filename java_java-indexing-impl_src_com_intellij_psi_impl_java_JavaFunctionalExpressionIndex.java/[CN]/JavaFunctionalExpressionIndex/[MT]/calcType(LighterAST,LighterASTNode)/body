@@ -1,0 +1,39 @@
+{
+  if (funExpr.getTokenType() == METHOD_REF_EXPRESSION)   return FunctionalExpressionKey.CoarseType.UNKNOWN;
+  LighterASTNode block=LightTreeUtil.firstChildOfType(tree,funExpr,CODE_BLOCK);
+  if (block == null) {
+    LighterASTNode expr=findExpressionChild(funExpr,tree);
+    return isBooleanExpression(tree,expr) ? FunctionalExpressionKey.CoarseType.BOOLEAN : FunctionalExpressionKey.CoarseType.UNKNOWN;
+  }
+  final Ref<Boolean> returnsSomething=Ref.create(null);
+  final AtomicBoolean isBoolean=new AtomicBoolean();
+  final AtomicBoolean hasStatements=new AtomicBoolean();
+  new RecursiveLighterASTNodeWalkingVisitor(tree){
+    @Override public void visitNode(    @NotNull LighterASTNode element){
+      IElementType type=element.getTokenType();
+      if (type == LAMBDA_EXPRESSION || ElementType.MEMBER_BIT_SET.contains(type)) {
+        return;
+      }
+      if (type == RETURN_STATEMENT) {
+        LighterASTNode expr=findExpressionChild(element,tree);
+        returnsSomething.set(expr != null);
+        if (isBooleanExpression(tree,expr)) {
+          isBoolean.set(true);
+        }
+        return;
+      }
+      if (type == EXPRESSION_STATEMENT) {
+        hasStatements.set(true);
+      }
+      super.visitNode(element);
+    }
+  }
+.visitNode(block);
+  if (isBoolean.get()) {
+    return FunctionalExpressionKey.CoarseType.BOOLEAN;
+  }
+  if (returnsSomething.isNull()) {
+    return hasStatements.get() ? FunctionalExpressionKey.CoarseType.VOID : FunctionalExpressionKey.CoarseType.UNKNOWN;
+  }
+  return returnsSomething.get() ? FunctionalExpressionKey.CoarseType.NON_VOID : FunctionalExpressionKey.CoarseType.VOID;
+}

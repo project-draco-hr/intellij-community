@@ -1,9 +1,34 @@
 {
   String path=toSelect != null ? toSelect.getCanonicalPath() : null;
   myFileDialog.setFile(path);
-  myFileDialog.setVisible(true);
+  final CommandProcessorEx commandProcessor=ApplicationManager.getApplication() != null ? (CommandProcessorEx)CommandProcessor.getInstance() : null;
+  final boolean appStarted=commandProcessor != null;
+  if (appStarted) {
+    commandProcessor.enterModal();
+    LaterInvocator.enterModal(myFileDialog);
+  }
+  try {
+    myFileDialog.setVisible(true);
+  }
+  finally {
+    if (appStarted) {
+      commandProcessor.leaveModal();
+      LaterInvocator.leaveModal(myFileDialog);
+    }
+  }
   File[] files=myFileDialog.getFiles();
+  List<VirtualFile> virtualFilesList=getChosenFiles(Stream.of(files));
+  try {
+    myFileChooserDescriptor.validateSelectedFiles(virtualFilesList.toArray(VirtualFile.EMPTY_ARRAY));
+  }
+ catch (  Exception e) {
+    Messages.showErrorDialog(myParent,e.getMessage(),myTitle);
+    return;
+  }
   if (!ArrayUtil.isEmpty(files)) {
-    callback.consume(getChosenFiles(Stream.of(files)));
+    callback.consume(virtualFilesList);
+  }
+ else   if (callback instanceof FileChooser.FileChooserConsumer) {
+    ((FileChooser.FileChooserConsumer)callback).cancelled();
   }
 }
