@@ -7,21 +7,34 @@
   if (returnValue != Messages.OK)   return;
   Arrays.sort(files,FileComparator.getInstance());
   final List<String> problems=ContainerUtil.newLinkedList();
-  new WriteCommandAction.Simple(project){
-    @Override protected void run() throws Throwable {
-      for (      final VirtualFile file : files) {
-        try {
-          file.delete(this);
+  new Task.Modal(project,"Deleting Files...",true){
+    @Override public void run(    @NotNull ProgressIndicator indicator){
+      for (      VirtualFile file : files) {
+        new WriteCommandAction.Simple(project){
+          @Override protected void run() throws Throwable {
+            try {
+              file.delete(this);
+            }
+ catch (            Exception e) {
+              LOG.info(e);
+              problems.add(file.getName());
+            }
+          }
         }
- catch (        Exception e) {
-          LOG.info(e);
-          problems.add(file.getName());
-        }
+.execute();
+      }
+    }
+    @Override public void onSuccess(){
+      reportProblems();
+    }
+    @Override public void onCancel(){
+      reportProblems();
+    }
+    private void reportProblems(){
+      if (!problems.isEmpty()) {
+        reportDeletionProblem(problems);
       }
     }
   }
-.execute();
-  if (!problems.isEmpty()) {
-    reportDeletionProblem(problems);
-  }
+.queue();
 }
