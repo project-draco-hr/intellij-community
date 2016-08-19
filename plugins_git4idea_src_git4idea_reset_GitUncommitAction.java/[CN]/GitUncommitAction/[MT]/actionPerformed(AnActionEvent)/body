@@ -1,0 +1,25 @@
+{
+  Project project=e.getRequiredData(CommonDataKeys.PROJECT);
+  VcsLogData data=(VcsLogData)e.getRequiredData(VcsLogDataKeys.VCS_LOG_DATA_PROVIDER);
+  VcsLog log=e.getRequiredData(VcsLogDataKeys.VCS_LOG);
+  VcsShortCommitDetails commit=assertNotNull(getFirstItem(log.getSelectedShortDetails()));
+  VirtualFile root=commit.getRoot();
+  Hash hash=commit.getId();
+  GitRepository repository=assertNotNull(getRepositoryManager(project).getRepositoryForRoot(commit.getRoot()));
+  List<String> branches=findContainingBranches(data,root,hash);
+  if (!branches.contains(HEAD)) {
+    Messages.showErrorDialog(project,COMMIT_NOT_IN_HEAD,FAILURE_TITLE);
+    return;
+  }
+  String protectedBranch=findProtectedRemoteBranch(repository,branches);
+  if (protectedBranch != null) {
+    Messages.showErrorDialog(project,COMMIT_PUSHED_TO_PROTECTED + protectedBranch,FAILURE_TITLE);
+    return;
+  }
+  ChangeListChooser chooser=new ChangeListChooser(project,ChangeListManager.getInstance(project).getChangeListsCopy(),null,"Select Target Changelist",commit.getSubject());
+  chooser.show();
+  LocalChangeList selectedList=chooser.getSelectedList();
+  if (selectedList != null) {
+    resetInBackground(data,repository,commit,selectedList);
+  }
+}

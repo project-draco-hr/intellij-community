@@ -11,10 +11,15 @@
   if (leastConcreteSuperMethod == null) {
     return;
   }
-  final PsiClass objectClass=ClassUtils.findObjectClass(method);
-  final PsiMethod[] superMethods=method.findSuperMethods(objectClass);
-  if (superMethods.length > 0) {
-    return;
+  final String methodName=method.getName();
+  if (!HardcodedMethodConstants.CLONE.equals(methodName)) {
+    final PsiClass superClass=leastConcreteSuperMethod.getContainingClass();
+    if (superClass != null) {
+      final String superClassName=superClass.getQualifiedName();
+      if (CommonClassNames.JAVA_LANG_OBJECT.equals(superClassName)) {
+        return;
+      }
+    }
   }
   if (ignoreEmptySuperMethods) {
     final PsiElement element=leastConcreteSuperMethod.getNavigationElement();
@@ -23,12 +28,16 @@
       return;
     }
   }
-  if (onlyReportWhenAnnotated) {
+  if (onlyReportWhenAnnotated && !CloneUtils.isClone(method) && !isJUnitSetUpOrTearDown(method)&& !MethodUtils.isFinalize(method)) {
     if (!AnnotationUtil.isAnnotated(leastConcreteSuperMethod,annotations)) {
       return;
     }
   }
-  if (containsSuperCall(body,leastConcreteSuperMethod)) {
+  final PsiClass aClass=method.getContainingClass();
+  if ((aClass != null && aClass.hasModifierProperty(PsiModifier.FINAL) || method.hasModifierProperty(PsiModifier.FINAL)) && MethodUtils.isTrivial(method,true)) {
+    return;
+  }
+  if (MethodCallUtils.containsSuperMethodCall(method)) {
     return;
   }
   registerMethodError(method);

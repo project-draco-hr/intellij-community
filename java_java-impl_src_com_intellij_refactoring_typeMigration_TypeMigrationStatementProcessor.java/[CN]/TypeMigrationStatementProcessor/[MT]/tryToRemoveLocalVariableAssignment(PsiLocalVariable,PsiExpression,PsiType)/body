@@ -1,0 +1,33 @@
+{
+  final PsiCodeBlock codeBlock=PsiTreeUtil.getParentOfType(variable,PsiCodeBlock.class);
+  final PsiElement[] refs=DefUseUtil.getRefs(codeBlock,variable,valueExpression);
+  if (refs.length == 0) {
+    myLabeler.setConversionMapping(valueExpression,new TypeConversionDescriptorBase(){
+      @Override public PsiExpression replace(      PsiExpression expression,      @NotNull TypeEvaluator evaluator) throws IncorrectOperationException {
+        final PsiElement parent=expression.getParent();
+        if (parent instanceof PsiLocalVariable) {
+          final PsiLocalVariable var=(PsiLocalVariable)parent;
+          final PsiDeclarationStatement decl=PsiTreeUtil.getParentOfType(var,PsiDeclarationStatement.class);
+          if (decl == null)           return null;
+          final Project project=var.getProject();
+          final PsiAssignmentExpression assignment=SplitDeclarationAction.invokeOnDeclarationStatement(decl,PsiManager.getInstance(project),project);
+          final PsiExpression rExpression=assignment.getRExpression();
+          if (rExpression == null)           return null;
+          assignment.replace(rExpression);
+          if (ReferencesSearch.search(var,var.getUseScope()).forEach(new CommonProcessors.FindFirstProcessor<>())) {
+            var.delete();
+          }
+        }
+ else         if (parent instanceof PsiAssignmentExpression) {
+          final PsiExpression rExpression=((PsiAssignmentExpression)parent).getRExpression();
+          return rExpression == null ? null : (PsiExpression)parent.replace(rExpression);
+        }
+        return null;
+      }
+    }
+);
+  }
+ else {
+    myLabeler.markFailedConversion(Pair.pair(null,migrationType),valueExpression);
+  }
+}

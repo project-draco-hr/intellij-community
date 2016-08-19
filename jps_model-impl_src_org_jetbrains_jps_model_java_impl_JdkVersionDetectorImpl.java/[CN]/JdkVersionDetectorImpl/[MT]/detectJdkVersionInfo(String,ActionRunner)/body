@@ -1,4 +1,42 @@
 {
-  String[] command={homePath + File.separator + "bin"+ File.separator+ "java","-version"};
-  return readVersionInfoFromProcessOutput(homePath,command,null,actionRunner);
+  File releaseFile=new File(homePath,"release");
+  if (releaseFile.isFile()) {
+    try {
+      Properties p=new Properties();
+      p.load(new FileInputStream(releaseFile));
+      String version=p.getProperty("JAVA_FULL_VERSION",p.getProperty("JAVA_VERSION"));
+      if (version != null) {
+        version=StringUtil.unquoteString(version);
+        int i=version.indexOf('+');
+        if (i > 0) {
+          version=version.substring(0,i);
+        }
+        String arch=StringUtil.unquoteString(p.getProperty("OS_ARCH",""));
+        boolean x64="x86_64".equals(arch) || "amd64".equals(arch);
+        return new JdkVersionInfo("java version \"" + version + "\"",x64 ? Bitness.x64 : Bitness.x32);
+      }
+    }
+ catch (    IOException e) {
+      LOG.info(e);
+    }
+  }
+  String javaExe=homePath + File.separator + "bin"+ File.separator+ (SystemInfo.isWindows ? "java.exe" : "java");
+  if (new File(javaExe).canExecute()) {
+    try {
+      Process process=new ProcessBuilder(javaExe,"-version").redirectErrorStream(true).start();
+      VersionOutputReader reader=new VersionOutputReader(process.getInputStream(),runner);
+      try {
+        process.waitFor();
+      }
+ catch (      InterruptedException e) {
+        LOG.info(e);
+        process.destroy();
+      }
+      return reader.getVersionInfo();
+    }
+ catch (    IOException e) {
+      LOG.info(e);
+    }
+  }
+  return null;
 }

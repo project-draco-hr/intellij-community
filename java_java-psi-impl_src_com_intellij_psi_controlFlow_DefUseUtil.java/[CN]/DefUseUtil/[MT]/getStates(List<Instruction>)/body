@@ -1,16 +1,80 @@
 {
-  final InstructionState[] states=new InstructionState[instructions.size()];
-  for (int i=0; i < states.length; i++) {
-    states[i]=new InstructionState(i);
+class WalkThroughStack {
+    private final com.intellij.util.containers.Stack<InstructionKey> myFrom;
+    private final com.intellij.util.containers.Stack<InstructionKey> myNext;
+    WalkThroughStack(    int size){
+      if (size < 2)       size=2;
+      myFrom=new Stack<InstructionKey>(size);
+      myNext=new Stack<InstructionKey>(size);
+    }
+    void push(    InstructionKey fromKey,    InstructionKey nextKey){
+      myFrom.push(fromKey);
+      myNext.push(nextKey);
+    }
+    InstructionKey peekFrom(){
+      return myFrom.peek();
+    }
+    InstructionKey popNext(){
+      myFrom.pop();
+      return myNext.pop();
+    }
+    boolean isEmpty(){
+      return myFrom.isEmpty();
+    }
   }
-  for (int i=0; i < instructions.size(); i++) {
-    final Instruction instruction=instructions.get(i);
-    for (int j=0; j != instruction.nNext(); ++j) {
-      final int next=instruction.getNext(i,j);
-      if (next < states.length) {
-        states[next].addBackwardTrace(i);
+class Walker {
+    private final Map<InstructionKey,InstructionState> myStates;
+    private final WalkThroughStack myWalkThroughStack;
+    Walker(){
+      myStates=new THashMap<InstructionKey,InstructionState>(instructions.size());
+      myWalkThroughStack=new WalkThroughStack(instructions.size() / 2);
+    }
+    Map<InstructionKey,InstructionState> walk(){
+      InstructionKey startKey=InstructionKey.create(0);
+      myStates.put(startKey,new InstructionState(startKey));
+      myWalkThroughStack.push(InstructionKey.create(-1),startKey);
+      Set<InstructionKey> visited=new THashSet<InstructionKey>(instructions.size());
+      while (!myWalkThroughStack.isEmpty()) {
+        InstructionKey fromKey=myWalkThroughStack.peekFrom();
+        InstructionKey nextKey=myWalkThroughStack.popNext();
+        addBackwardTrace(fromKey,nextKey);
+        if (!visited.contains(nextKey)) {
+          visit(nextKey);
+          visited.add(nextKey);
+        }
+      }
+      return myStates;
+    }
+    private void visit(    InstructionKey fromKey){
+      if (fromKey.getOffset() >= instructions.size())       return;
+      final Instruction instruction=instructions.get(fromKey.getOffset());
+      if (instruction instanceof CallInstruction) {
+        int nextOffset=((CallInstruction)instruction).offset;
+        LOG.assertTrue(nextOffset != 0);
+        int returnOffset=fromKey.getOffset() + 1;
+        InstructionKey nextKey=fromKey.push(nextOffset,returnOffset);
+        myWalkThroughStack.push(fromKey,nextKey);
+      }
+ else       if (instruction instanceof ReturnInstruction) {
+        int overriddenOffset=((ReturnInstruction)instruction).offset;
+        InstructionKey nextKey=fromKey.pop(overriddenOffset);
+        myWalkThroughStack.push(fromKey,nextKey);
+      }
+ else {
+        for (int no=0; no != instruction.nNext(); no++) {
+          final int nextOffset=instruction.getNext(fromKey.getOffset(),no);
+          InstructionKey nextKey=fromKey.next(nextOffset);
+          myWalkThroughStack.push(fromKey,nextKey);
+        }
+      }
+    }
+    private void addBackwardTrace(    InstructionKey fromKey,    InstructionKey nextKey){
+      if (fromKey.getOffset() >= 0 && nextKey.getOffset() < instructions.size()) {
+        InstructionState state=myStates.get(nextKey);
+        if (state == null)         myStates.put(nextKey,state=new InstructionState(nextKey));
+        state.addBackwardTrace(fromKey);
       }
     }
   }
-  return states;
+  return new Walker().walk();
 }

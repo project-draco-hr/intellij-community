@@ -1,0 +1,30 @@
+{
+  final List<PsiExpression> mentionedInExpressions=getMentionedExpressions(data.variable,scope,inputVariables);
+  if (mentionedInExpressions == null)   return false;
+  int currentRank=0;
+  PsiExpression mostRanked=null;
+  for (int i=mentionedInExpressions.size() - 1; i >= 0; i--) {
+    PsiExpression expression=mentionedInExpressions.get(i);
+    boolean arrayAccess=expression instanceof PsiArrayAccessExpression && !isConditional(expression,scope);
+    if (arrayAccess) {
+      myFoldingSelectedByDefault=true;
+    }
+    final int r=findUsedVariables(data,inputVariables,expression).size();
+    if (currentRank < r || arrayAccess && currentRank == r) {
+      currentRank=r;
+      mostRanked=expression;
+    }
+  }
+  if (mostRanked != null) {
+    myExpressions.put(data.variable,mostRanked);
+    myArgs.put(data.variable,mostRanked.getText());
+    data.type=RefactoringChangeUtil.getTypeByExpression(mostRanked);
+    final JavaCodeStyleManager codeStyleManager=JavaCodeStyleManager.getInstance(mostRanked.getProject());
+    final SuggestedNameInfo nameInfo=codeStyleManager.suggestVariableName(VariableKind.PARAMETER,null,mostRanked,data.type);
+    if (nameInfo.names.length > 0 && !Comparing.equal(nameInfo.names[0],data.name) && !Comparing.equal(nameInfo.names[0],defaultName)) {
+      data.name=nameInfo.names[0];
+      setUniqueName(data,nameGenerator,scope,mostRanked);
+    }
+  }
+  return mostRanked != null;
+}

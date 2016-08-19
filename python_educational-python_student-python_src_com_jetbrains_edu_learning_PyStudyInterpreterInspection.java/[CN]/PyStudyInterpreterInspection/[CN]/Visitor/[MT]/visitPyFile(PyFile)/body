@@ -1,0 +1,38 @@
+{
+  super.visitPyFile(node);
+  if (PlatformUtils.isPyCharmEducational()) {
+    final Course course=StudyTaskManager.getInstance(node.getProject()).getCourse();
+    if (course == null)     return;
+    final Module module=ModuleUtilCore.findModuleForPsiElement(node);
+    if (module != null) {
+      final Sdk sdk=PythonSdkType.findPythonSdk(module);
+      if (sdk == null)       return;
+      final PythonSdkFlavor flavor=PythonSdkFlavor.getFlavor(sdk);
+      if (flavor == null)       return;
+      final String versionString=flavor.getVersionString(sdk.getHomePath());
+      if (versionString == null)       return;
+      final String prefix=flavor.getName() + " ";
+      if (!versionString.startsWith(prefix)) {
+        return;
+      }
+      final LanguageLevel projectLanguageLevel=LanguageLevel.fromPythonVersion(versionString.substring(prefix.length()));
+      final String version=course.getLanguageVersion();
+      if (PyStudyLanguageManager.PYTHON_2.equals(version)) {
+        if (projectLanguageLevel.isPy3K()) {
+          registerProblem(node,"Course is available for Python 2, but Python 3 is selected as project interpreter",new ConfigureInterpreterFix());
+        }
+      }
+ else       if (PyStudyLanguageManager.PYTHON_3.equals(version)) {
+        if (!projectLanguageLevel.isPy3K()) {
+          registerProblem(node,"Course is available for Python 3, but Python 2 is selected as project interpreter",new ConfigureInterpreterFix());
+        }
+      }
+ else       if (version != null) {
+        final LanguageLevel level=LanguageLevel.fromPythonVersion(version);
+        if (!level.equals(projectLanguageLevel)) {
+          registerProblem(node,"Course is available for Python " + level.toString() + ", but Python "+ projectLanguageLevel.toString()+ " is selected as project interpreter",new ConfigureInterpreterFix());
+        }
+      }
+    }
+  }
+}

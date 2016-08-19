@@ -6,22 +6,14 @@
   executeWithMavenSession(request,new Runnable(){
     @Override public void run(){
       try {
-        ProjectBuilder builder=getComponent(ProjectBuilder.class);
-        CustomMaven3ModelInterpolator2 modelInterpolator=(CustomMaven3ModelInterpolator2)getComponent(ModelInterpolator.class);
-        String savedLocalRepository=modelInterpolator.getLocalRepository();
-        modelInterpolator.setLocalRepository(request.getLocalRepositoryPath().getAbsolutePath());
-        List<ProjectBuildingResult> buildingResults;
-        try {
-          ProjectBuildingRequest projectBuildingRequest=request.getProjectBuildingRequest();
-          projectBuildingRequest.setValidationLevel(ModelBuildingRequest.VALIDATION_LEVEL_MINIMAL);
-          buildingResults=builder.build(new ArrayList<File>(files),false,projectBuildingRequest);
+        RepositorySystemSession repositorySession=getComponent(LegacySupport.class).getRepositorySession();
+        if (repositorySession instanceof DefaultRepositorySystemSession) {
+          ((DefaultRepositorySystemSession)repositorySession).setTransferListener(new Maven30TransferListenerAdapter(myCurrentIndicator));
+          if (myWorkspaceMap != null) {
+            ((DefaultRepositorySystemSession)repositorySession).setWorkspaceReader(new Maven30WorkspaceReader(myWorkspaceMap));
+          }
         }
- catch (        ProjectBuildingException e) {
-          buildingResults=e.getResults();
-        }
- finally {
-          modelInterpolator.setLocalRepository(savedLocalRepository);
-        }
+        List<ProjectBuildingResult> buildingResults=getProjectBuildingResults(request,files);
         for (        ProjectBuildingResult buildingResult : buildingResults) {
           MavenProject project=buildingResult.getProject();
           if (project == null) {
@@ -33,30 +25,11 @@
             executionResults.add(mavenExecutionResult);
             continue;
           }
-          RepositorySystemSession repositorySession=getComponent(LegacySupport.class).getRepositorySession();
-          if (repositorySession instanceof DefaultRepositorySystemSession) {
-            ((DefaultRepositorySystemSession)repositorySession).setTransferListener(new Maven30TransferListenerAdapter(myCurrentIndicator));
-            if (myWorkspaceMap != null) {
-              ((DefaultRepositorySystemSession)repositorySession).setWorkspaceReader(new Maven30WorkspaceReader(myWorkspaceMap));
-            }
-          }
           List<Exception> exceptions=new ArrayList<Exception>();
           loadExtensions(project,exceptions);
           project.setDependencyArtifacts(project.createArtifacts(getComponent(ArtifactFactory.class),null,null));
           if (USE_MVN2_COMPATIBLE_DEPENDENCY_RESOLVING) {
-            ArtifactResolutionRequest resolutionRequest=new ArtifactResolutionRequest();
-            resolutionRequest.setArtifactDependencies(project.getDependencyArtifacts());
-            resolutionRequest.setArtifact(project.getArtifact());
-            resolutionRequest.setManagedVersionMap(project.getManagedVersionMap());
-            resolutionRequest.setLocalRepository(myLocalRepository);
-            resolutionRequest.setRemoteRepositories(project.getRemoteArtifactRepositories());
-            resolutionRequest.setListeners(listeners);
-            resolutionRequest.setResolveRoot(false);
-            resolutionRequest.setResolveTransitively(true);
-            ArtifactResolver resolver=getComponent(ArtifactResolver.class);
-            ArtifactResolutionResult result=resolver.resolve(resolutionRequest);
-            project.setArtifacts(result.getArtifacts());
-            executionResults.add(new MavenExecutionResult(project,exceptions));
+            addMvn2CompatResults(project,exceptions,listeners,myLocalRepository,executionResults);
           }
  else {
             final DependencyResolutionResult dependencyResolutionResult=resolveDependencies(project,repositorySession);
