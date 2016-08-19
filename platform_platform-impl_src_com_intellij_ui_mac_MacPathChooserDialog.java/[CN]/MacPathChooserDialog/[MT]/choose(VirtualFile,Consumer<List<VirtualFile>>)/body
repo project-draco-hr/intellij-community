@@ -1,12 +1,16 @@
 {
-  String path=toSelect != null ? toSelect.getCanonicalPath() : null;
-  myFileDialog.setFile(path);
+  if (toSelect != null && toSelect.getParent() != null) {
+    myFileDialog.setDirectory(toSelect.getParent().getCanonicalPath());
+    myFileDialog.setFile(toSelect.getPath());
+  }
+  myFileDialog.setMultipleMode(myFileChooserDescriptor.isChooseMultiple());
   final CommandProcessorEx commandProcessor=ApplicationManager.getApplication() != null ? (CommandProcessorEx)CommandProcessor.getInstance() : null;
   final boolean appStarted=commandProcessor != null;
   if (appStarted) {
     commandProcessor.enterModal();
     LaterInvocator.enterModal(myFileDialog);
   }
+  Component parent=myParent.get();
   try {
     myFileDialog.setVisible(true);
   }
@@ -14,21 +18,33 @@
     if (appStarted) {
       commandProcessor.leaveModal();
       LaterInvocator.leaveModal(myFileDialog);
+      if (parent != null)       parent.requestFocus();
     }
   }
   File[] files=myFileDialog.getFiles();
-  List<VirtualFile> virtualFilesList=getChosenFiles(Stream.of(files));
-  try {
-    myFileChooserDescriptor.validateSelectedFiles(virtualFilesList.toArray(VirtualFile.EMPTY_ARRAY));
-  }
- catch (  Exception e) {
-    Messages.showErrorDialog(myParent,e.getMessage(),myTitle);
-    return;
-  }
-  if (!ArrayUtil.isEmpty(files)) {
-    callback.consume(virtualFilesList);
-  }
- else   if (callback instanceof FileChooser.FileChooserConsumer) {
-    ((FileChooser.FileChooserConsumer)callback).cancelled();
+  List<VirtualFile> virtualFileList=getChosenFiles(Stream.of(files));
+  virtualFiles=virtualFileList.toArray(VirtualFile.EMPTY_ARRAY);
+  if (!virtualFileList.isEmpty()) {
+    try {
+      if (virtualFileList.size() == 1) {
+        myFileChooserDescriptor.isFileSelectable(virtualFileList.get(0));
+      }
+      myFileChooserDescriptor.validateSelectedFiles(virtualFiles);
+    }
+ catch (    Exception e) {
+      if (parent == null) {
+        Messages.showErrorDialog(myProject,e.getMessage(),myTitle);
+      }
+ else {
+        Messages.showErrorDialog(parent,e.getMessage(),myTitle);
+      }
+      return;
+    }
+    if (!ArrayUtil.isEmpty(files)) {
+      callback.consume(virtualFileList);
+    }
+ else     if (callback instanceof FileChooser.FileChooserConsumer) {
+      ((FileChooser.FileChooserConsumer)callback).cancelled();
+    }
   }
 }

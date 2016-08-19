@@ -1,2 +1,132 @@
 {
+  startElement(statement);
+  PsiCodeBlock[] catchBlocks=statement.getCatchBlocks();
+  PsiParameter[] catchBlockParameters=statement.getCatchBlockParameters();
+  int catchNum=Math.min(catchBlocks.length,catchBlockParameters.length);
+  myUnhandledExceptionCatchBlocks.push(null);
+  for (int i=catchNum - 1; i >= 0; i--) {
+    ProgressManager.checkCanceled();
+    myCatchParameters.push(catchBlockParameters[i]);
+    myCatchBlocks.push(catchBlocks[i]);
+    final PsiType type=catchBlockParameters[i].getType();
+    if (type instanceof PsiClassType && ExceptionUtil.isUncheckedExceptionOrSuperclass((PsiClassType)type)) {
+      myUnhandledExceptionCatchBlocks.push(catchBlocks[i]);
+    }
+ else     if (type instanceof PsiDisjunctionType) {
+      final PsiType lub=((PsiDisjunctionType)type).getLeastUpperBound();
+      if (lub instanceof PsiClassType && ExceptionUtil.isUncheckedExceptionOrSuperclass((PsiClassType)lub)) {
+        myUnhandledExceptionCatchBlocks.push(catchBlocks[i]);
+      }
+ else       if (lub instanceof PsiIntersectionType) {
+        for (        PsiType conjunct : ((PsiIntersectionType)lub).getConjuncts()) {
+          if (conjunct instanceof PsiClassType && ExceptionUtil.isUncheckedExceptionOrSuperclass((PsiClassType)conjunct)) {
+            myUnhandledExceptionCatchBlocks.push(catchBlocks[i]);
+            break;
+          }
+        }
+      }
+    }
+  }
+  PsiCodeBlock finallyBlock=statement.getFinallyBlock();
+  if (finallyBlock != null) {
+    myFinallyBlocks.push(finallyBlock);
+  }
+  PsiResourceList resourceList=statement.getResourceList();
+  if (resourceList != null) {
+    generateCheckedExceptionJumps(resourceList);
+    resourceList.accept(this);
+  }
+  PsiCodeBlock tryBlock=statement.getTryBlock();
+  if (tryBlock != null) {
+    generateCheckedExceptionJumps(tryBlock);
+    tryBlock.accept(this);
+  }
+  while (myUnhandledExceptionCatchBlocks.pop() != null)   ;
+  myCurrentFlow.addInstruction(new GoToInstruction(finallyBlock == null ? 0 : -6));
+  if (finallyBlock == null) {
+    addElementOffsetLater(statement,false);
+  }
+ else {
+    addElementOffsetLater(finallyBlock,true);
+  }
+  for (int i=0; i < catchNum; i++) {
+    myCatchParameters.pop();
+    myCatchBlocks.pop();
+  }
+  for (int i=catchNum - 1; i >= 0; i--) {
+    ProgressManager.checkCanceled();
+    if (myPolicy.isParameterAccepted(catchBlockParameters[i])) {
+      generateWriteInstruction(catchBlockParameters[i]);
+    }
+    PsiCodeBlock catchBlock=catchBlocks[i];
+    if (catchBlock != null) {
+      catchBlock.accept(this);
+    }
+ else {
+      LOG.error("Catch body is null (" + i + ") "+ statement.getText());
+    }
+    myCurrentFlow.addInstruction(new GoToInstruction(finallyBlock == null ? 0 : -6));
+    if (finallyBlock == null) {
+      addElementOffsetLater(statement,false);
+    }
+ else {
+      addElementOffsetLater(finallyBlock,true);
+    }
+  }
+  if (finallyBlock != null) {
+    myFinallyBlocks.pop();
+  }
+  if (finallyBlock != null) {
+    myCurrentFlow.addInstruction(new CallInstruction(0,0,myStack));
+    addElementOffsetLater(finallyBlock,true);
+    myCurrentFlow.addInstruction(new GoToInstruction(0));
+    addElementOffsetLater(statement,false);
+    myCurrentFlow.addInstruction(new CallInstruction(0,0,myStack));
+    addElementOffsetLater(finallyBlock,true);
+    addReturnInstruction(statement);
+    myCurrentFlow.addInstruction(new CallInstruction(0,0,myStack));
+    addElementOffsetLater(finallyBlock,true);
+    final GoToInstruction gotoUncheckedRethrow=new GoToInstruction(0);
+    myCurrentFlow.addInstruction(gotoUncheckedRethrow);
+    addElementOffsetLater(finallyBlock,false);
+    finallyBlock.accept(this);
+    final int procStart=myCurrentFlow.getStartOffset(finallyBlock);
+    final int procEnd=myCurrentFlow.getEndOffset(finallyBlock);
+    int offset=procStart - 6;
+    final List<Instruction> instructions=myCurrentFlow.getInstructions();
+    CallInstruction callInstruction=(CallInstruction)instructions.get(offset);
+    callInstruction.procBegin=procStart;
+    callInstruction.procEnd=procEnd;
+    offset+=2;
+    callInstruction=(CallInstruction)instructions.get(offset);
+    callInstruction.procBegin=procStart;
+    callInstruction.procEnd=procEnd;
+    offset+=2;
+    callInstruction=(CallInstruction)instructions.get(offset);
+    callInstruction.procBegin=procStart;
+    callInstruction.procEnd=procEnd;
+    myCurrentFlow.addInstruction(new ReturnInstruction(0,myStack,callInstruction));
+    myCurrentFlow.addInstruction(new ReturnInstruction(procStart - 3,myStack,callInstruction));
+    myCurrentFlow.addInstruction(new ReturnInstruction(procStart - 1,myStack,callInstruction));
+    final List<PsiElement> unhandledExceptionCatchBlocks=finallyBlockToUnhandledExceptions.remove(finallyBlock);
+    for (int i=0; unhandledExceptionCatchBlocks != null && i < unhandledExceptionCatchBlocks.size(); i++) {
+      ProgressManager.checkCanceled();
+      PsiElement catchBlock=unhandledExceptionCatchBlocks.get(i);
+      final ReturnInstruction returnInstruction=new ReturnInstruction(0,myStack,callInstruction);
+      returnInstruction.setRethrowFromFinally();
+      myCurrentFlow.addInstruction(returnInstruction);
+      if (catchBlock == null) {
+        returnInstruction.offset=procStart - 1;
+      }
+ else {
+        returnInstruction.offset--;
+        addElementOffsetLater(catchBlock,true);
+      }
+    }
+    gotoUncheckedRethrow.offset=myCurrentFlow.getSize();
+    generateUncheckedExceptionJumps(statement,false);
+    myCurrentFlow.addInstruction(new ThrowToInstruction(0));
+    addElementOffsetLater(myCodeFragment,false);
+  }
+  finishElement(statement);
 }
