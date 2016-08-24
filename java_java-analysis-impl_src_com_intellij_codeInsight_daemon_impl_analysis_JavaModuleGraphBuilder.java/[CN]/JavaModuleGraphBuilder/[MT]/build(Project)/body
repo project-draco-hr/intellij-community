@@ -1,0 +1,31 @@
+{
+  Set<PsiJavaModule> projectModules=ContainerUtil.newHashSet();
+  for (  Module module : ModuleManager.getInstance(project).getModules()) {
+    Collection<VirtualFile> files=FilenameIndex.getVirtualFilesByName(project,MODULE_INFO_FILE,new ModulesScope(module));
+    if (files.size() > 1) {
+      return null;
+    }
+    VirtualFile vFile=ContainerUtil.getFirstItem(files);
+    if (vFile != null) {
+      PsiFile psiFile=PsiManager.getInstance(project).findFile(vFile);
+      if (psiFile instanceof PsiJavaFile) {
+        PsiJavaModule moduleDeclaration=((PsiJavaFile)psiFile).getModuleDeclaration();
+        if (moduleDeclaration != null) {
+          projectModules.add(moduleDeclaration);
+        }
+      }
+    }
+  }
+  MultiMap<PsiJavaModule,PsiJavaModule> relations=MultiMap.create();
+  for (  PsiJavaModule moduleDeclaration : projectModules) {
+    for (PsiElement child=moduleDeclaration.getFirstChild(); child != null; child=child.getNextSibling()) {
+      if (child instanceof PsiRequiresStatement) {
+        PsiJavaModule dependency=resolveDependency((PsiRequiresStatement)child);
+        if (dependency != null && projectModules.contains(dependency)) {
+          relations.putValue(moduleDeclaration,dependency);
+        }
+      }
+    }
+  }
+  return new JavaModuleGraph(relations);
+}
