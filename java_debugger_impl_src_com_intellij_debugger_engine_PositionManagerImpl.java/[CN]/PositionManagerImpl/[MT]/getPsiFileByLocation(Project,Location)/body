@@ -7,13 +7,30 @@
     return null;
   }
   final String originalQName=refType.name();
-  final GlobalSearchScope searchScope=myDebugProcess.getSearchScope();
-  PsiClass psiClass=DebuggerUtils.findClass(originalQName,project,searchScope);
+  PsiClass psiClass=null;
+  Sdk alternativeJre=myDebugProcess.getSession().getAlternativeJre();
+  if (alternativeJre != null) {
+    try {
+      psiClass=ContainerUtil.getFirstItem(StubIndex.getElements(JavaStubIndexKeys.CLASS_FQN,originalQName.hashCode(),project,AlternativeJreIndexHelper.getSearchScope(alternativeJre),PsiClass.class));
+      if (psiClass instanceof ClsClassImpl) {
+        PsiFile psiSource=findSourceFile((ClsClassImpl)psiClass,alternativeJre);
+        if (psiSource != null) {
+          return psiSource;
+        }
+      }
+    }
+ catch (    IndexNotReadyException ignored) {
+    }
+  }
   if (psiClass == null) {
-    int dollar=originalQName.indexOf('$');
-    if (dollar > 0) {
-      final String qName=originalQName.substring(0,dollar);
-      psiClass=DebuggerUtils.findClass(qName,project,searchScope);
+    GlobalSearchScope searchScope=myDebugProcess.getSearchScope();
+    psiClass=DebuggerUtils.findClass(originalQName,project,searchScope);
+    if (psiClass == null) {
+      int dollar=originalQName.indexOf('$');
+      if (dollar > 0) {
+        final String qName=originalQName.substring(0,dollar);
+        psiClass=DebuggerUtils.findClass(qName,project,searchScope);
+      }
     }
   }
   if (psiClass != null) {
