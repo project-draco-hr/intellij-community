@@ -1,17 +1,15 @@
 {
+  final long cleanStart=System.currentTimeMillis();
   final MultiMap<File,BuildTarget<?>> rootsToDelete=MultiMap.createSet();
   final Set<File> allSourceRoots=new HashSet<File>();
-  ProjectDescriptor projectDescriptor=context.getProjectDescriptor();
-  List<? extends BuildTarget<?>> allTargets=projectDescriptor.getBuildTargetIndex().getAllTargets();
+  final ProjectDescriptor projectDescriptor=context.getProjectDescriptor();
+  final List<? extends BuildTarget<?>> allTargets=projectDescriptor.getBuildTargetIndex().getAllTargets();
   for (  BuildTarget<?> target : allTargets) {
-    if (context.getScope().isAffected(target)) {
-      final Collection<File> outputs=target.getOutputRoots(context);
-      for (      File file : outputs) {
-        rootsToDelete.putValue(file,target);
-      }
+    for (    File file : target.getOutputRoots(context)) {
+      rootsToDelete.putValue(file,target);
     }
   }
-  ModuleExcludeIndex moduleIndex=projectDescriptor.getModuleExcludeIndex();
+  final ModuleExcludeIndex moduleIndex=projectDescriptor.getModuleExcludeIndex();
   for (  BuildTarget<?> target : allTargets) {
     for (    BuildRootDescriptor descriptor : projectDescriptor.getBuildRootIndex().getTargetRoots(target,context)) {
       if (!descriptor.isGenerated()) {
@@ -22,12 +20,24 @@
       }
     }
   }
+  final CompileScope compileScope=context.getScope();
   final List<File> filesToDelete=new ArrayList<File>();
+  final Predicate<BuildTarget<?>> forcedBuild=new Predicate<BuildTarget<?>>(){
+    public boolean apply(    BuildTarget<?> input){
+      return compileScope.isBuildForced(input);
+    }
+  }
+;
   for (  Map.Entry<File,Collection<BuildTarget<?>>> entry : rootsToDelete.entrySet()) {
     context.checkCanceled();
-    boolean okToDelete=true;
     final File outputRoot=entry.getKey();
-    if (!moduleIndex.isExcluded(outputRoot)) {
+    final Collection<BuildTarget<?>> rootTargets=entry.getValue();
+    final Applicability applicability=Applicability.calculate(forcedBuild,rootTargets);
+    if (applicability == Applicability.NONE) {
+      continue;
+    }
+    boolean okToDelete=applicability == Applicability.ALL;
+    if (okToDelete && !moduleIndex.isExcluded(outputRoot)) {
       if (JpsPathUtil.isUnder(allSourceRoots,outputRoot)) {
         okToDelete=false;
       }
@@ -55,25 +65,31 @@
           filesToDelete.add(outputRoot);
         }
       }
-      registerTargetsWithClearedOutput(context,entry.getValue());
+      registerTargetsWithClearedOutput(context,rootTargets);
     }
  else {
-      context.processMessage(new CompilerMessage("",BuildMessage.Kind.WARNING,"Output path " + outputRoot.getPath() + " intersects with a source root. Only files that were created by build will be cleaned."));
-      for (      BuildTarget<?> target : entry.getValue()) {
-        clearOutputFilesUninterruptibly(context,target);
+      if (applicability == Applicability.ALL) {
+        context.processMessage(new CompilerMessage("",BuildMessage.Kind.WARNING,"Output path " + outputRoot.getPath() + " intersects with a source root. Only files that were created by build will be cleaned."));
+      }
+      context.processMessage(new ProgressMessage("Cleaning output directories..."));
+      for (      BuildTarget<?> target : rootTargets) {
+        if (compileScope.isBuildForced(target)) {
+          clearOutputFilesUninterruptibly(context,target);
+        }
       }
     }
   }
-  context.processMessage(new ProgressMessage("Cleaning output directories..."));
-  final long cleanStart=System.currentTimeMillis();
-  if (SYNC_DELETE) {
-    for (    File file : filesToDelete) {
-      context.checkCanceled();
-      FileUtil.delete(file);
+  if (!filesToDelete.isEmpty()) {
+    context.processMessage(new ProgressMessage("Cleaning output directories..."));
+    if (SYNC_DELETE) {
+      for (      File file : filesToDelete) {
+        context.checkCanceled();
+        FileUtil.delete(file);
+      }
+    }
+ else {
+      myAsyncTasks.add(FileUtil.asyncDelete(filesToDelete));
     }
   }
- else {
-    myAsyncTasks.add(FileUtil.asyncDelete(filesToDelete));
-  }
-  LOG.info("Cleaned output directories in " + (System.currentTimeMillis() - cleanStart));
+  LOG.info("Cleaned output directories in " + (System.currentTimeMillis() - cleanStart) + " ms");
 }

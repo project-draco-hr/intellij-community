@@ -20,9 +20,15 @@
         joinInstructions.add(myInstructions[index + 1]);
       }
     }
+    if (LOG.isTraceEnabled()) {
+      LOG.trace("Analyzing code block: " + psiBlock.getText());
+      for (int i=0; i < myInstructions.length; i++) {
+        LOG.trace(i + ": " + myInstructions[i]);
+      }
+    }
     Integer tooExpensiveHash=psiBlock.getUserData(TOO_EXPENSIVE_HASH);
     if (tooExpensiveHash != null && tooExpensiveHash == psiBlock.getText().hashCode()) {
-      LOG.debug("Too complex because hasn't changed since being too complex already");
+      LOG.trace("Too complex because hasn't changed since being too complex already");
       return RunnerResult.TOO_COMPLEX;
     }
     final StateQueue queue=new StateQueue();
@@ -38,11 +44,14 @@
       List<DfaInstructionState> states=queue.getNextInstructionStates(joinInstructions);
       for (      DfaInstructionState instructionState : states) {
         if (count++ % 1024 == 0 && measurer.isTimeOver()) {
-          LOG.debug("Too complex because the analysis took too long");
+          LOG.trace("Too complex because the analysis took too long");
           psiBlock.putUserData(TOO_EXPENSIVE_HASH,psiBlock.getText().hashCode());
           return RunnerResult.TOO_COMPLEX;
         }
         ProgressManager.checkCanceled();
+        if (LOG.isTraceEnabled()) {
+          LOG.trace(instructionState.toString());
+        }
         Instruction instruction=instructionState.getInstruction();
         if (instruction instanceof BranchingInstruction) {
           BranchingInstruction branching=(BranchingInstruction)instruction;
@@ -51,7 +60,7 @@
             continue;
           }
           if (processed.size() > MAX_STATES_PER_BRANCH) {
-            LOG.debug("Too complex because too many different possible states");
+            LOG.trace("Too complex because too many different possible states");
             return RunnerResult.TOO_COMPLEX;
           }
           if (loopNumber[branching.getIndex()] != 0) {
@@ -79,6 +88,7 @@
       }
     }
     psiBlock.putUserData(TOO_EXPENSIVE_HASH,null);
+    LOG.trace("Analysis ok");
     return RunnerResult.OK;
   }
  catch (  ArrayIndexOutOfBoundsException|EmptyStackException e) {

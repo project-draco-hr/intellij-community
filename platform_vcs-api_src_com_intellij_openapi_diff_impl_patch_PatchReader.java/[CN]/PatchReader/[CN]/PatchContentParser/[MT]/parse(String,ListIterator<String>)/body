@@ -1,8 +1,38 @@
 {
-  final TextFilePatch patch=readPatch(start,iterator);
-  if (patch != null) {
-    myPatches.add(patch);
+  String next=start;
+  if (myGitDiffFormat) {
+    Couple<String> beforeAfterName=parseNamesFromGitHeaderLine(next);
+    FileStatus parsedStatus=FileStatus.MODIFIED;
+    Couple<String> sha1Indexes=null;
+    if (beforeAfterName == null) {
+      throw new PatchSyntaxException(iterator.previousIndex(),"Can't detect file names from git format header line");
+    }
+    while (iterator.hasNext()) {
+      next=iterator.next();
+      Matcher indexMatcher=ourIndexHeaderLinePattern.matcher(next);
+      Matcher fileStatusMatcher=ourFileStatusPattern.matcher(next);
+      if (fileStatusMatcher.matches()) {
+        parsedStatus=parseFileStatus(fileStatusMatcher.group(1));
+      }
+ else       if (indexMatcher.matches()) {
+        myIndexLike=true;
+        sha1Indexes=Couple.of(indexMatcher.group(1),indexMatcher.group(2));
+      }
+ else {
+        if (next.startsWith(ourGitBinaryContentStart)) {
+          FilePatch patch=BinaryPatchContentParser.readGitBinaryFormatPatch(iterator,parsedStatus);
+          patch.setBeforeName(beforeAfterName.getFirst());
+          patch.setAfterName(beforeAfterName.getSecond());
+          if (sha1Indexes != null) {
+            patch.setBeforeVersionId(sha1Indexes.getFirst());
+            patch.setAfterVersionId(sha1Indexes.getSecond());
+          }
+          addPatchAndResetSettings(patch);
+          return;
+        }
+ else         if (testIsStart(next))         break;
+      }
+    }
   }
-  myDiffCommandLike=false;
-  myIndexLike=false;
+  addPatchAndResetSettings(readTextPatch(next,iterator));
 }
