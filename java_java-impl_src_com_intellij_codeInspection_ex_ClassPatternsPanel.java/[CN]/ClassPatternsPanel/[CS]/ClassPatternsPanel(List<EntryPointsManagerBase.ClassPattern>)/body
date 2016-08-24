@@ -2,14 +2,26 @@
   super(new BorderLayout());
   myModifiedPatterns=patterns;
   final JBTable table=createTableForPatterns();
+  final String addPatternMessage="Add Class Name Pattern";
+  final String addClassMessage="Add Class";
   final ToolbarDecorator toolbarDecorator=ToolbarDecorator.createDecorator(table).setAddAction(new AnActionButtonRunnable(){
     @Override public void run(    AnActionButton button){
-      myModifiedPatterns.add(new EntryPointsManagerBase.ClassPattern());
-      AbstractTableModel model=(AbstractTableModel)table.getModel();
-      final int row=myModifiedPatterns.size() - 1;
-      model.fireTableRowsInserted(row,row);
-      table.setRowSelectionInterval(row,row);
-      table.editCellAt(row,1);
+      Project project=CommonDataKeys.PROJECT.getData(DataManager.getInstance().getDataContext(table));
+      if (project == null)       project=ProjectManager.getInstance().getDefaultProject();
+      TreeClassChooser chooser=TreeClassChooserFactory.getInstance(project).createWithInnerClassesScopeChooser(addClassMessage,GlobalSearchScope.projectScope(project),ClassFilter.ALL,null);
+      chooser.showDialog();
+      final PsiClass selected=chooser.getSelected();
+      if (selected != null) {
+        insertRow(selected.getQualifiedName(),table);
+      }
+    }
+  }
+).setAddActionName(addClassMessage).setAddIcon(IconUtil.getAddClassIcon()).addExtraAction(new AnActionButton(addPatternMessage,IconUtil.getAddPatternIcon()){
+    @Override public void actionPerformed(    AnActionEvent e){
+      String selectedPattern=Messages.showInputDialog("Pattern:","Class Name Pattern",Messages.getQuestionIcon());
+      if (selectedPattern != null) {
+        insertRow(selectedPattern,table);
+      }
     }
   }
 ).setRemoveAction(new AnActionButtonRunnable(){
@@ -23,8 +35,8 @@
       return table.getSelectedRow() >= 0;
     }
   }
-).setButtonComparator("Add","Remove");
-  add(SeparatorFactory.createSeparator("Mark class as entry point if name matches",null),BorderLayout.NORTH);
+).setButtonComparator(addClassMessage,addPatternMessage,"Remove");
+  add(SeparatorFactory.createSeparator("Mark class as entry point if qualified name matches",null),BorderLayout.NORTH);
   add(toolbarDecorator.createPanel(),BorderLayout.CENTER);
   setPreferredSize(new JBDimension(-1,250));
 }
