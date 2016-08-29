@@ -1,0 +1,44 @@
+{
+  if (name == null) {
+    return -1;
+  }
+  final Method method=ReflectionUtil.getMethod(Character.class,"codePointOf",String.class);
+  if (method != null) {
+    try {
+      return (int)method.invoke(null,name);
+    }
+ catch (    IllegalArgumentException e) {
+      return -1;
+    }
+catch (    IllegalAccessException|InvocationTargetException e) {
+      throw new RuntimeException(e);
+    }
+  }
+  try {
+    final Class<?> aClass=Class.forName("java.lang.CharacterName");
+    final Method initNamePool=ReflectionUtil.getDeclaredMethod(aClass,"initNamePool");
+    if (initNamePool == null) {
+      return -1;
+    }
+    byte[] namePool=(byte[])initNamePool.invoke(null);
+    name=name.trim().toUpperCase(Locale.ROOT);
+    byte[] key=name.getBytes(StandardCharsets.ISO_8859_1);
+    final int[][] lookup=ReflectionUtil.getField(aClass,null,int[][].class,"lookup");
+    if (lookup == null)     throw new RuntimeException();
+    for (int i=0; i < lookup.length; i++) {
+      int[] indexes=lookup[i];
+      if (indexes != null) {
+        for (int j=0; j < indexes.length; j++) {
+          int index=indexes[j];
+          if ((index & 0xFF) == key.length && matches(namePool,index >>> 8,key)) {
+            return i << 8 | j;
+          }
+        }
+      }
+    }
+    return getUnnamedUnicodeCharacterCodePoint(name);
+  }
+ catch (  ClassNotFoundException|InvocationTargetException|IllegalAccessException e) {
+    throw new RuntimeException(e);
+  }
+}
