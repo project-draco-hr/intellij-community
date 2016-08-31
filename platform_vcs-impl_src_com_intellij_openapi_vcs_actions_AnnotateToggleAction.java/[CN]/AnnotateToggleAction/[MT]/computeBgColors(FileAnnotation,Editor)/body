@@ -1,30 +1,35 @@
 {
-  final List<? extends VcsRevisionDescription> fileRevisionList=fileAnnotation.getRevisionDescriptions();
-  if (ContainerUtil.isEmpty(fileRevisionList))   return null;
-  final Map<VcsRevisionNumber,Color> commitOrderColors=new HashMap<>();
-  final Map<VcsRevisionNumber,Color> commitAuthorColors=new HashMap<>();
-  final Map<String,Color> authorColors=new HashMap<>();
+  Map<VcsRevisionNumber,Color> commitOrderColors=new HashMap<>();
+  Map<VcsRevisionNumber,Color> commitAuthorColors=new HashMap<>();
   EditorColorsScheme colorScheme=editor.getColorsScheme();
   AnnotationsSettings settings=AnnotationsSettings.getInstance();
   List<Color> authorsColorPalette=settings.getAuthorsColors(colorScheme);
   List<Color> orderedColorPalette=settings.getOrderedColors(colorScheme);
-  final int revisionsCount=fileRevisionList.size();
-  for (int i=0; i < fileRevisionList.size(); i++) {
-    VcsRevisionDescription revision=fileRevisionList.get(i);
-    final VcsRevisionNumber number=revision.getRevisionNumber();
-    final String author=revision.getAuthor();
-    if (number == null)     continue;
-    if (!commitAuthorColors.containsKey(number)) {
-      if (author != null && !authorColors.containsKey(author)) {
-        final int index=authorColors.size();
-        Color color=authorsColorPalette.get(index % authorsColorPalette.size());
-        authorColors.put(author,color);
-      }
-      commitAuthorColors.put(number,authorColors.get(author));
+  FileAnnotation.AuthorsMappingProvider authorsMappingProvider=fileAnnotation.getAuthorsMappingProvider();
+  if (authorsMappingProvider != null) {
+    Map<VcsRevisionNumber,String> authorsMap=authorsMappingProvider.getAuthors();
+    Map<String,Color> authorColors=new HashMap<>();
+    for (    String author : ContainerUtil.newTreeSet(authorsMap.values())) {
+      int index=authorColors.size();
+      Color color=authorsColorPalette.get(index % authorsColorPalette.size());
+      authorColors.put(author,color);
     }
-    if (!commitOrderColors.containsKey(number)) {
-      Color color=orderedColorPalette.get(orderedColorPalette.size() * i / revisionsCount);
-      commitOrderColors.put(number,color);
+    for (    Map.Entry<VcsRevisionNumber,String> entry : authorsMap.entrySet()) {
+      VcsRevisionNumber revision=entry.getKey();
+      String author=entry.getValue();
+      Color color=authorColors.get(author);
+      commitAuthorColors.put(revision,color);
+    }
+  }
+  FileAnnotation.RevisionsOrderProvider revisionsOrderProvider=fileAnnotation.getRevisionsOrderProvider();
+  if (revisionsOrderProvider != null) {
+    List<List<VcsRevisionNumber>> orderedRevisions=revisionsOrderProvider.getOrderedRevisions();
+    int revisionsCount=orderedRevisions.size();
+    for (int index=0; index < revisionsCount; index++) {
+      Color color=orderedColorPalette.get(orderedColorPalette.size() * index / revisionsCount);
+      for (      VcsRevisionNumber number : orderedRevisions.get(index)) {
+        commitOrderColors.put(number,color);
+      }
     }
   }
   return Couple.of(commitOrderColors.size() > 1 ? commitOrderColors : null,commitAuthorColors.size() > 1 ? commitAuthorColors : null);
