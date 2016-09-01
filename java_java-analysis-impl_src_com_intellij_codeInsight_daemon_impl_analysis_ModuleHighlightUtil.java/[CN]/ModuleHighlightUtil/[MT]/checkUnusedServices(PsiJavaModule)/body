@@ -1,0 +1,29 @@
+{
+  List<HighlightInfo> results=ContainerUtil.newSmartList();
+  Set<String> exports=ContainerUtil.newTroveSet(), uses=ContainerUtil.newTroveSet();
+  for (  PsiElement child : psiTraverser().children(module)) {
+    if (child instanceof PsiExportsStatement) {
+      PsiJavaCodeReferenceElement ref=((PsiExportsStatement)child).getPackageReference();
+      if (ref != null)       exports.add(refText(ref));
+    }
+ else     if (child instanceof PsiUsesStatement) {
+      PsiJavaCodeReferenceElement ref=((PsiUsesStatement)child).getClassReference();
+      if (ref != null)       uses.add(refText(ref));
+    }
+  }
+  Module host=ModuleUtilCore.findModuleForPsiElement(module);
+  for (  PsiProvidesStatement statement : psiTraverser().children(module).filter(PsiProvidesStatement.class)) {
+    PsiJavaCodeReferenceElement ref=statement.getInterfaceReference();
+    if (ref != null) {
+      PsiElement target=ref.resolve();
+      if (target instanceof PsiClass && ModuleUtilCore.findModuleForPsiElement(target) == host) {
+        String className=refText(ref), packageName=StringUtil.getPackageName(className);
+        if (!exports.contains(packageName) && !uses.contains(className)) {
+          String message=JavaErrorMessages.message("module.service.unused");
+          results.add(HighlightInfo.newHighlightInfo(HighlightInfoType.WARNING).range(range(ref)).description(message).create());
+        }
+      }
+    }
+  }
+  return results;
+}

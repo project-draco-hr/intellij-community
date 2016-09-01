@@ -1,2 +1,50 @@
 {
+  if (parameters.getCompletionType() != CompletionType.BASIC) {
+    return;
+  }
+  final PsiElement position=parameters.getPosition();
+  if (!isInJavaContext(position)) {
+    return;
+  }
+  if (AFTER_NUMBER_LITERAL.accepts(position) || UNEXPECTED_REFERENCE_AFTER_DOT.accepts(position)) {
+    _result.stopHere();
+    return;
+  }
+  final CompletionResultSet result=JavaCompletionSorting.addJavaSorting(parameters,_result);
+  JavaCompletionSession session=new JavaCompletionSession(result);
+  if (ANNOTATION_ATTRIBUTE_NAME.accepts(position) && !JavaKeywordCompletion.isAfterPrimitiveOrArrayType(position)) {
+    JavaKeywordCompletion.addExpectedTypeMembers(parameters,result);
+    JavaKeywordCompletion.addPrimitiveTypes(result,position,session);
+    completeAnnotationAttributeName(result,position,parameters);
+    result.stopHere();
+    return;
+  }
+  PrefixMatcher matcher=result.getPrefixMatcher();
+  PsiElement parent=position.getParent();
+  if (JavaModuleCompletion.isModuleFile(parameters.getOriginalFile())) {
+    JavaModuleCompletion.addVariants(position,result);
+    result.stopHere();
+    return;
+  }
+  if (position instanceof PsiIdentifier) {
+    addIdentifierVariants(parameters,position,result,matcher,parent,session);
+  }
+  Set<String> usedWords=addReferenceVariants(parameters,result,session);
+  if (psiElement().inside(PsiLiteralExpression.class).accepts(position)) {
+    PsiReference reference=position.getContainingFile().findReferenceAt(parameters.getOffset());
+    if (reference == null || reference.isSoft()) {
+      WordCompletionContributor.addWordCompletionVariants(result,parameters,usedWords);
+    }
+  }
+  if (position instanceof PsiIdentifier) {
+    JavaGenerateMemberCompletionContributor.fillCompletionVariants(parameters,result);
+  }
+  addAllClasses(parameters,result,session);
+  if (position instanceof PsiIdentifier) {
+    FunctionalExpressionCompletionProvider.addFunctionalVariants(parameters,false,true,result);
+  }
+  if (position instanceof PsiIdentifier && parent instanceof PsiReferenceExpression && !((PsiReferenceExpression)parent).isQualified()&& parameters.isExtendedCompletion()&& StringUtil.isNotEmpty(matcher.getPrefix())) {
+    new JavaStaticMemberProcessor(parameters).processStaticMethodsGlobally(matcher,result);
+  }
+  result.stopHere();
 }
