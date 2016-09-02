@@ -1,2 +1,61 @@
 {
+  final PsiForeachStatement foreachStatement=PsiTreeUtil.getParentOfType(descriptor.getPsiElement(),PsiForeachStatement.class);
+  if (foreachStatement != null) {
+    if (!FileModificationService.getInstance().preparePsiElementForWrite(foreachStatement))     return;
+    final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
+    PsiStatement body=foreachStatement.getBody();
+    final PsiExpression iteratedValue=foreachStatement.getIteratedValue();
+    if (body != null && iteratedValue != null) {
+      final PsiType iteratedValueType=iteratedValue.getType();
+      final PsiParameter parameter=foreachStatement.getIterationParameter();
+      TerminalBlock tb=TerminalBlock.from(parameter,body);
+      List<String> intermediateOps=tb.extractOperationReplacements(elementFactory);
+      final PsiMethodCallExpression methodCallExpression=tb.getSingleMethodCall();
+      if (methodCallExpression == null)       return;
+      if (intermediateOps.isEmpty() && isAddAllCall(tb)) {
+        restoreComments(foreachStatement,body);
+        final PsiExpression qualifierExpression=methodCallExpression.getMethodExpression().getQualifierExpression();
+        final String qualifierText=qualifierExpression != null ? qualifierExpression.getText() : "";
+        final String collectionText=iteratedValueType instanceof PsiArrayType ? "java.util.Arrays.asList(" + iteratedValue.getText() + ")" : getIteratedValueText(iteratedValue);
+        final String callText=StringUtil.getQualifiedName(qualifierText,"addAll(" + collectionText + ");");
+        PsiElement result=foreachStatement.replace(elementFactory.createStatementFromText(callText,foreachStatement));
+        reformatWhenNeeded(project,result);
+        return;
+      }
+      intermediateOps.add(createMapperFunctionalExpressionText(tb.getVariable(),methodCallExpression.getArgumentList().getExpressions()[0]));
+      final StringBuilder builder=generateStream(iteratedValue,intermediateOps);
+      builder.append(".collect(java.util.stream.Collectors.");
+      PsiElement result=null;
+      try {
+        final PsiExpression qualifierExpression=methodCallExpression.getMethodExpression().getQualifierExpression();
+        if (qualifierExpression instanceof PsiReferenceExpression) {
+          final PsiElement resolve=((PsiReferenceExpression)qualifierExpression).resolve();
+          if (resolve instanceof PsiVariable) {
+            if (resolve instanceof PsiLocalVariable && foreachStatement.equals(PsiTreeUtil.skipSiblingsForward(resolve.getParent(),PsiWhiteSpace.class,PsiComment.class))) {
+              final PsiExpression initializer=((PsiVariable)resolve).getInitializer();
+              if (initializer instanceof PsiNewExpression) {
+                final PsiExpressionList argumentList=((PsiNewExpression)initializer).getArgumentList();
+                if (argumentList != null && argumentList.getExpressions().length == 0) {
+                  restoreComments(foreachStatement,body);
+                  final String callText=builder.toString() + createInitializerReplacementText(((PsiVariable)resolve).getType(),initializer) + ")";
+                  result=initializer.replace(elementFactory.createExpressionFromText(callText,null));
+                  simplifyRedundantCast(result);
+                  foreachStatement.delete();
+                  return;
+                }
+              }
+            }
+          }
+        }
+        restoreComments(foreachStatement,body);
+        final String qualifierText=qualifierExpression != null ? qualifierExpression.getText() : "";
+        final String callText=StringUtil.getQualifiedName(qualifierText,"addAll(" + builder.toString() + "toList()));");
+        result=foreachStatement.replace(elementFactory.createStatementFromText(callText,foreachStatement));
+        simplifyRedundantCast(result);
+      }
+  finally {
+        reformatWhenNeeded(project,result);
+      }
+    }
+  }
 }
