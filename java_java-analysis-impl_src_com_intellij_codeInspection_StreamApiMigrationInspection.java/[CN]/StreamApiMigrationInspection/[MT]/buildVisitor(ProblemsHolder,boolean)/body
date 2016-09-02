@@ -23,14 +23,16 @@
                   }
                 }
                 if (ExceptionUtil.getThrownCheckedExceptions(new PsiElement[]{body}).isEmpty()) {
-                  if (!isRawSubstitution(iteratedValueType,collectionClass) && isCollectCall(body,statement.getIterationParameter())) {
-                    boolean addAll=isAddAllCall(statement,body);
+                  TerminalBlock tb=TerminalBlock.from(statement.getIterationParameter(),body);
+                  List<Operation> operations=tb.extractOperations();
+                  if (!isRawSubstitution(iteratedValueType,collectionClass) && isCollectCall(tb,operations)) {
+                    boolean addAll=operations.isEmpty() && isAddAllCall(tb);
                     holder.registerProblem(iteratedValue,"Can be replaced with " + (addAll ? "addAll call" : "collect call"),ProblemHighlightType.GENERIC_ERROR_OR_WARNING,addAll ? new ReplaceWithAddAllFix() : new ReplaceWithCollectFix());
                   }
- else                   if (REPLACE_TRIVIAL_FOREACH || !isTrivial(body,statement.getIterationParameter())) {
+ else                   if (REPLACE_TRIVIAL_FOREACH || !operations.isEmpty() || !isTrivial(body,statement.getIterationParameter())) {
                     final List<LocalQuickFix> fixes=new ArrayList<>();
                     fixes.add(new ReplaceWithForeachCallFix("forEach"));
-                    if (extractIfStatement(body) != null) {
+                    if (!operations.isEmpty()) {
                       fixes.add(new ReplaceWithForeachCallFix("forEachOrdered"));
                     }
                     holder.registerProblem(iteratedValue,"Can be replaced with foreach call",ProblemHighlightType.GENERIC_ERROR_OR_WARNING,fixes.toArray(new LocalQuickFix[fixes.size()]));

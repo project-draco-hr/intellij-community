@@ -1,0 +1,57 @@
+{
+  if (getSingleStatement() instanceof PsiIfStatement) {
+    PsiIfStatement ifStatement=(PsiIfStatement)getSingleStatement();
+    if (ifStatement.getElseBranch() != null || ifStatement.getCondition() == null)     return null;
+    replaceWith(ifStatement.getThenBranch());
+    return new FilterOp(ifStatement.getCondition(),myVariable);
+  }
+  if (getSingleStatement() instanceof PsiForeachStatement) {
+    PsiForeachStatement foreachStatement=(PsiForeachStatement)getSingleStatement();
+    final PsiExpression iteratedValue=foreachStatement.getIteratedValue();
+    final PsiStatement body=foreachStatement.getBody();
+    if (iteratedValue != null && body != null) {
+      final PsiType iteratedValueType=iteratedValue.getType();
+      Operation op=null;
+      if (iteratedValueType instanceof PsiArrayType) {
+        op=new ArrayFlatMapOp(iteratedValue,myVariable);
+      }
+ else {
+        final PsiClass iteratorClass=PsiUtil.resolveClassInClassTypeOnly(iteratedValueType);
+        final PsiClass collectionClass=JavaPsiFacade.getInstance(body.getProject()).findClass(CommonClassNames.JAVA_UTIL_COLLECTION,foreachStatement.getResolveScope());
+        if (collectionClass != null && InheritanceUtil.isInheritorOrSelf(iteratorClass,collectionClass,true)) {
+          op=new FlatMapOp(iteratedValue,myVariable);
+        }
+      }
+      if (op != null && ReferencesSearch.search(myVariable,new LocalSearchScope(body)).findFirst() == null) {
+        myVariable=foreachStatement.getIterationParameter();
+        myStatements=new PsiStatement[]{body};
+        myFrom=0;
+        myTo=1;
+        flatten();
+        return op;
+      }
+    }
+  }
+  if (myTo > myFrom + 1) {
+    PsiStatement first=myStatements[myFrom];
+    if (first instanceof PsiDeclarationStatement) {
+      PsiDeclarationStatement decl=(PsiDeclarationStatement)first;
+      PsiElement[] elements=decl.getDeclaredElements();
+      if (elements.length == 1) {
+        PsiElement element=elements[0];
+        if (element instanceof PsiLocalVariable) {
+          PsiLocalVariable declaredVar=(PsiLocalVariable)element;
+          PsiExpression initializer=declaredVar.getInitializer();
+          if (initializer != null && ReferencesSearch.search(myVariable,new LocalSearchScope(Arrays.copyOfRange(myStatements,myFrom + 1,myTo))).findFirst() == null) {
+            MapOp op=new MapOp(initializer,myVariable);
+            myVariable=declaredVar;
+            myFrom++;
+            flatten();
+            return op;
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
