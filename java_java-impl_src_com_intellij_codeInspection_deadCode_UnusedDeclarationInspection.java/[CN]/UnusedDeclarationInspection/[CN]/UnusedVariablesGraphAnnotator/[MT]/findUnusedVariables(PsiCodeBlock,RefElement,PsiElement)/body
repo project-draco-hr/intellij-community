@@ -1,0 +1,38 @@
+{
+  Tools tools=myTools.get(getShortName());
+  if (tools.isEnabled(element)) {
+    InspectionToolWrapper toolWrapper=tools.getInspectionTool(element);
+    InspectionToolPresentation presentation=myContext.getPresentation(toolWrapper);
+    if (((UnusedDeclarationInspection)toolWrapper.getTool()).getSharedLocalInspectionTool().LOCAL_VARIABLE) {
+      List<CommonProblemDescriptor> descriptors=new ArrayList<>();
+      final Set<PsiVariable> usedVariables=new THashSet<>();
+      List<DefUseUtil.Info> unusedDefs=DefUseUtil.getUnusedDefs(body,usedVariables);
+      if (unusedDefs != null && !unusedDefs.isEmpty()) {
+        for (        DefUseUtil.Info info : unusedDefs) {
+          PsiElement parent=info.getContext();
+          PsiVariable psiVariable=info.getVariable();
+          if (parent instanceof PsiDeclarationStatement || parent instanceof PsiResourceVariable) {
+            if (!info.isRead()) {
+              descriptors.add(createProblemDescriptor(psiVariable));
+            }
+          }
+        }
+      }
+      body.accept(new JavaRecursiveElementWalkingVisitor(){
+        @Override public void visitClass(        PsiClass aClass){
+        }
+        @Override public void visitLambdaExpression(        PsiLambdaExpression expression){
+        }
+        @Override public void visitLocalVariable(        PsiLocalVariable variable){
+          if (!usedVariables.contains(variable) && variable.getInitializer() == null) {
+            descriptors.add(createProblemDescriptor(variable));
+          }
+        }
+      }
+);
+      if (!descriptors.isEmpty()) {
+        presentation.addProblemElement(refElement,descriptors.toArray(CommonProblemDescriptor.EMPTY_ARRAY));
+      }
+    }
+  }
+}
