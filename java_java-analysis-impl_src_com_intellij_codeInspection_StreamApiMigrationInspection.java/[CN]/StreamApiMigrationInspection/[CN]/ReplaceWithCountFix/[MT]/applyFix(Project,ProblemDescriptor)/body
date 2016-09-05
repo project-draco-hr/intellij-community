@@ -1,0 +1,40 @@
+{
+  final PsiForeachStatement foreachStatement=PsiTreeUtil.getParentOfType(descriptor.getPsiElement(),PsiForeachStatement.class);
+  if (foreachStatement != null) {
+    if (!FileModificationService.getInstance().preparePsiElementForWrite(foreachStatement))     return;
+    final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
+    PsiStatement body=foreachStatement.getBody();
+    final PsiExpression iteratedValue=foreachStatement.getIteratedValue();
+    if (body != null && iteratedValue != null) {
+      final PsiParameter parameter=foreachStatement.getIterationParameter();
+      TerminalBlock tb=TerminalBlock.from(parameter,body);
+      List<String> intermediateOps=tb.extractOperationReplacements(elementFactory);
+      PsiExpression operand=extractIncrementedExpression(tb.getSingleStatement());
+      if (!(operand instanceof PsiReferenceExpression))       return;
+      PsiElement element=((PsiReferenceExpression)operand).resolve();
+      if (!(element instanceof PsiLocalVariable))       return;
+      PsiLocalVariable var=(PsiLocalVariable)element;
+      final StringBuilder builder=generateStream(iteratedValue,intermediateOps);
+      builder.append(".count()");
+      PsiElement declaration=var.getParent();
+      if (declaration instanceof PsiDeclarationStatement) {
+        PsiElement[] elements=((PsiDeclarationStatement)declaration).getDeclaredElements();
+        if (elements[elements.length - 1] == var && foreachStatement.equals(PsiTreeUtil.skipSiblingsForward(declaration,PsiWhiteSpace.class,PsiComment.class))) {
+          PsiExpression initializer=var.getInitializer();
+          if (initializer != null && initializer.getText().equals("0")) {
+            String typeStr=var.getType().getCanonicalText();
+            String replacement=(typeStr.equals("long") ? "" : "(" + typeStr + ") ") + builder;
+            initializer.replace(elementFactory.createExpressionFromText(replacement,foreachStatement));
+            simplifyRedundantCast(var);
+            foreachStatement.delete();
+            reformatWhenNeeded(project,var);
+            return;
+          }
+        }
+      }
+      PsiElement result=foreachStatement.replace(elementFactory.createStatementFromText(var.getName() + "+=" + builder+ ";",foreachStatement));
+      simplifyRedundantCast(result);
+      reformatWhenNeeded(project,result);
+    }
+  }
+}
