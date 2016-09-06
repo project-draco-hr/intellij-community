@@ -2,29 +2,24 @@
   if (!(file instanceof PyFile)) {
     return false;
   }
-  PyFunction function=PsiTreeUtil.getParentOfType(file.findElementAt(editor.getCaretModel().getOffset()),PyFunction.class);
+  final PsiElement element=file.findElementAt(editor.getCaretModel().getOffset());
+  final PyFunction function=PsiTreeUtil.getParentOfType(element,PyFunction.class);
   if (function != null) {
-    PyParameter[] parameterList=function.getParameterList().getParameters();
-    for (    PyParameter parameter : parameterList) {
-      if (parameter instanceof PyNamedParameter) {
-        if (((PyNamedParameter)parameter).isKeywordContainer()) {
-          List<PySubscriptionExpression> subscriptions=fillSubscriptions(function);
-          List<PyCallExpression> callElements=fillCallExpressions(function);
-          if ((subscriptions.size() + callElements.size()) != 0) {
-            for (            PyCallExpression element : callElements) {
-              final PyExpression[] arguments=element.getArguments();
-              if (arguments.length < 1)               return false;
-              if (!PyNames.isIdentifierString(PythonStringUtil.getStringValue(arguments[0])))               return false;
-            }
-            for (            PySubscriptionExpression subscription : subscriptions) {
-              final PyExpression expression=subscription.getIndexExpression();
-              if (expression == null || !PyNames.isIdentifierString(PythonStringUtil.getStringValue(expression)))               return false;
-            }
-          }
-          return true;
-        }
+    for (    PyCallExpression call : findKeywordContainerCalls(function)) {
+      final PyExpression firstArgument=ArrayUtil.getFirstElement(call.getArguments());
+      final String firstArgumentValue=PythonStringUtil.getStringValue(firstArgument);
+      if (firstArgumentValue == null || !PyNames.isIdentifierString(firstArgumentValue)) {
+        return false;
       }
     }
+    for (    PySubscriptionExpression subscription : findKeywordContainerSubscriptions(function)) {
+      final PyExpression indexExpression=subscription.getIndexExpression();
+      final String indexValue=PythonStringUtil.getStringValue(indexExpression);
+      if (indexValue == null || !PyNames.isIdentifierString(indexValue)) {
+        return false;
+      }
+    }
+    return getKeywordContainer(function) != null;
   }
   return false;
 }
