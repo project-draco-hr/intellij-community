@@ -1,0 +1,24 @@
+{
+  if (!PsiUtil.isLanguageLevel8OrHigher(holder.getFile())) {
+    return PsiElementVisitor.EMPTY_VISITOR;
+  }
+  return new JavaElementVisitor(){
+    @Override public void visitMethodCallExpression(    PsiMethodCallExpression methodCall){
+      final PsiMethod method=methodCall.resolveMethod();
+      if (isCallOf(method,CommonClassNames.JAVA_UTIL_STREAM_STREAM,COUNT_METHOD,0)) {
+        final PsiMethodCallExpression qualifierCall=getQualifierMethodCall(methodCall);
+        if (qualifierCall == null)         return;
+        final PsiMethod qualifier=qualifierCall.resolveMethod();
+        if (isCallOf(qualifier,CommonClassNames.JAVA_UTIL_COLLECTION,STREAM_METHOD,0)) {
+          final StreamCountFix fix=new StreamCountFix();
+          holder.registerProblem(methodCall,getCallChainRange(methodCall,qualifierCall),fix.getMessage(),fix);
+        }
+ else         if (isCallOf(qualifier,CommonClassNames.JAVA_UTIL_STREAM_STREAM,FLAT_MAP_METHOD,1) && doesFlatMapCallCollectionStream(qualifierCall)) {
+          FlatMapCountFix fix=new FlatMapCountFix();
+          holder.registerProblem(methodCall,getCallChainRange(methodCall,qualifierCall),fix.getMessage(),fix);
+        }
+      }
+    }
+  }
+;
+}
