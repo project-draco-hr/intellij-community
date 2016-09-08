@@ -15,29 +15,17 @@
   }
   intermediateOps.add(createMapperFunctionalExpressionText(tb.getVariable(),methodCallExpression.getArgumentList().getExpressions()[0]));
   final StringBuilder builder=generateStream(iteratedValue,intermediateOps);
-  builder.append(".collect(java.util.stream.Collectors.");
   final PsiExpression qualifierExpression=methodCallExpression.getMethodExpression().getQualifierExpression();
-  if (qualifierExpression instanceof PsiReferenceExpression) {
-    final PsiElement resolve=((PsiReferenceExpression)qualifierExpression).resolve();
-    if (resolve instanceof PsiLocalVariable) {
-      PsiLocalVariable var=(PsiLocalVariable)resolve;
-      if (isDeclarationJustBefore(var,foreachStatement)) {
-        final PsiExpression initializer=var.getInitializer();
-        if (initializer instanceof PsiNewExpression) {
-          final PsiExpressionList argumentList=((PsiNewExpression)initializer).getArgumentList();
-          if (argumentList != null && argumentList.getExpressions().length == 0) {
-            final String callText=builder.toString() + createInitializerReplacementText(var.getType(),initializer) + ")";
-            PsiElement result=initializer.replace(elementFactory.createExpressionFromText(callText,null));
-            simplifyAndFormat(project,result);
-            foreachStatement.delete();
-            return;
-          }
-        }
-      }
-    }
+  final PsiExpression initializer=extractReplaceableCollectionInitializer(qualifierExpression,foreachStatement);
+  if (initializer != null) {
+    String callText=builder.append(".collect(java.util.stream.Collectors.").append(createInitializerReplacementText(qualifierExpression.getType(),initializer)).append(")").toString();
+    PsiElement result=initializer.replace(elementFactory.createExpressionFromText(callText,null));
+    simplifyAndFormat(project,result);
+    foreachStatement.delete();
+    return;
   }
-  final String qualifierText=qualifierExpression != null ? qualifierExpression.getText() : "";
-  final String callText=StringUtil.getQualifiedName(qualifierText,"addAll(" + builder.toString() + "toList()));");
+  final String qualifierText=qualifierExpression != null ? qualifierExpression.getText() : "this";
+  final String callText=builder.append(".forEach(").append(qualifierText).append("::add);").toString();
   PsiElement result=foreachStatement.replace(elementFactory.createStatementFromText(callText,foreachStatement));
   simplifyAndFormat(project,result);
 }
