@@ -14,6 +14,25 @@
   if (!(stream instanceof PsiMethodCallExpression))   return;
   PsiElement nameElement=((PsiMethodCallExpression)stream).getMethodExpression().getReferenceNameElement();
   if (nameElement != null && nameElement.getText().equals("filter")) {
+    if (!foundResult) {
+      PsiExpression[] expressions=((PsiMethodCallExpression)stream).getArgumentList().getExpressions();
+      if (expressions.length == 1 && expressions[0] instanceof PsiLambdaExpression) {
+        PsiLambdaExpression lambda=(PsiLambdaExpression)expressions[0];
+        PsiElement lambdaBody=lambda.getBody();
+        if (lambdaBody instanceof PsiExpression && BoolUtils.isNegation((PsiExpression)lambdaBody)) {
+          PsiExpression negated=BoolUtils.getNegated((PsiExpression)lambdaBody);
+          LOG.assertTrue(negated != null);
+          String methodReferenceText=LambdaCanBeMethodReferenceInspection.convertToMethodReference(negated,lambda.getParameterList().getParameters(),lambda.getFunctionalInterfaceType(),lambda);
+          if (methodReferenceText != null) {
+            lambda.replace(elementFactory.createExpressionFromText(methodReferenceText,lambda));
+          }
+ else {
+            lambdaBody.replace(negated);
+          }
+          methodName="allMatch";
+        }
+      }
+    }
     nameElement.replace(elementFactory.createIdentifier(methodName));
     streamText=stream.getText();
   }
