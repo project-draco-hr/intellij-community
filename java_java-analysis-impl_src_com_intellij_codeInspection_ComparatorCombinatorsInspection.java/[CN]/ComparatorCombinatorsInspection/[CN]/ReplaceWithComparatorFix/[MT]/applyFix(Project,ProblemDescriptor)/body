@@ -1,0 +1,22 @@
+{
+  PsiElement element=descriptor.getStartElement();
+  if (!(element instanceof PsiLambdaExpression))   return;
+  PsiLambdaExpression lambda=(PsiLambdaExpression)element;
+  PsiElement body=lambda.getBody();
+  if (!(body instanceof PsiMethodCallExpression))   return;
+  PsiMethodCallExpression methodCall=(PsiMethodCallExpression)body;
+  if (!PsiMethodUtil.isCompareToCall(methodCall))   return;
+  PsiExpression qualifier=methodCall.getMethodExpression().getQualifierExpression();
+  if (!(qualifier instanceof PsiMethodCallExpression))   return;
+  PsiMethodCallExpression call=(PsiMethodCallExpression)qualifier;
+  if (call.getArgumentList().getExpressions().length != 0)   return;
+  PsiMethod method=call.resolveMethod();
+  if (method == null)   return;
+  PsiClass methodClass=method.getContainingClass();
+  if (methodClass == null)   return;
+  if (!FileModificationService.getInstance().preparePsiElementForWrite(element))   return;
+  PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
+  PsiExpression replacement=factory.createExpressionFromText("java.util.Comparator.comparing(" + methodClass.getQualifiedName() + "::"+ method.getName()+ ")",element);
+  PsiElement result=lambda.replace(replacement);
+  CodeStyleManager.getInstance(project).reformat(JavaCodeStyleManager.getInstance(project).shortenClassReferences(result));
+}
