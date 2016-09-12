@@ -1,0 +1,32 @@
+{
+  return new JavaElementVisitor(){
+    @Override public void visitLambdaExpression(    PsiLambdaExpression lambda){
+      super.visitLambdaExpression(lambda);
+      PsiType type=lambda.getFunctionalInterfaceType();
+      if (type instanceof PsiClassType && ((PsiClassType)type).rawType().equalsToText(CommonClassNames.JAVA_UTIL_COMPARATOR)) {
+        PsiElement body=lambda.getBody();
+        if (body instanceof PsiMethodCallExpression) {
+          PsiMethodCallExpression methodCall=(PsiMethodCallExpression)body;
+          if (PsiMethodUtil.isCompareToCall(methodCall)) {
+            PsiExpression left=methodCall.getMethodExpression().getQualifierExpression();
+            PsiExpression right=methodCall.getArgumentList().getExpressions()[0];
+            if (left instanceof PsiMethodCallExpression && right instanceof PsiMethodCallExpression) {
+              PsiMethodCallExpression leftCall=(PsiMethodCallExpression)left;
+              PsiMethodCallExpression rightCall=(PsiMethodCallExpression)right;
+              if (leftCall.getArgumentList().getExpressions().length == 0 && rightCall.getArgumentList().getExpressions().length == 0) {
+                PsiMethod leftMethod=leftCall.resolveMethod();
+                PsiMethod rightMethod=rightCall.resolveMethod();
+                if (leftMethod != null && rightMethod != null && leftMethod == rightMethod) {
+                  if (areLambdaParameters(lambda,leftCall.getMethodExpression().getQualifierExpression(),rightCall.getMethodExpression().getQualifierExpression())) {
+                    holder.registerProblem(lambda,"Can be replaced with Comparator.comparing",new ReplaceWithComparatorFix());
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+;
+}
