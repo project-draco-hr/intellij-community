@@ -1,48 +1,13 @@
 {
   if (GreclipseBuilder.useGreclipse(context))   return ExitCode.NOTHING_DONE;
-  long start=0;
   try {
-    JpsGroovySettings settings=JpsGroovySettings.getSettings(context.getProjectDescriptor().getProject());
-    Ref<Boolean> hasStubExcludes=Ref.create(false);
-    final List<File> toCompile=collectChangedFiles(context,dirtyFilesHolder,myForStubs,false,hasStubExcludes);
-    if (toCompile.isEmpty()) {
-      return hasFilesToCompileForNextRound(context) ? ExitCode.ADDITIONAL_PASS_REQUIRED : ExitCode.NOTHING_DONE;
+    ExitCode code=myHelper.doBuild(context,chunk,dirtyFilesHolder,this,new DefaultOutputConsumer(outputConsumer));
+    if ((code == ExitCode.OK || code == ExitCode.NOTHING_DONE) && hasFilesToCompileForNextRound(context)) {
+      return ExitCode.ADDITIONAL_PASS_REQUIRED;
     }
-    if (Utils.IS_TEST_MODE || LOG.isDebugEnabled()) {
-      LOG.info("forStubs=" + myForStubs);
-    }
-    Map<ModuleBuildTarget,String> finalOutputs=getCanonicalModuleOutputs(context,chunk,this);
-    if (finalOutputs == null) {
-      return ExitCode.ABORT;
-    }
-    start=System.currentTimeMillis();
-    Map<ModuleBuildTarget,String> generationOutputs=myForStubs ? getStubGenerationOutputs(chunk,context) : finalOutputs;
-    String compilerOutput=generationOutputs.get(chunk.representativeTarget());
-    GroovycOutputParser parser=runGroovycOrContinuation(context,chunk,settings,finalOutputs,compilerOutput,toCompile,hasStubExcludes.get());
-    Map<ModuleBuildTarget,Collection<GroovycOutputParser.OutputItem>> compiled=processCompiledFiles(context,chunk,generationOutputs,compilerOutput,parser.getSuccessfullyCompiled());
-    if (checkChunkRebuildNeeded(context,parser)) {
-      clearContinuation(context,chunk);
-      return ExitCode.CHUNK_REBUILD_REQUIRED;
-    }
-    if (myForStubs) {
-      addStubRootsToJavacSourcePath(context,generationOutputs);
-      rememberStubSources(context,compiled);
-    }
-    for (    CompilerMessage message : parser.getCompilerMessages()) {
-      context.processMessage(message);
-    }
-    if (!myForStubs) {
-      updateDependencies(context,toCompile,compiled,outputConsumer,this);
-    }
-    return hasFilesToCompileForNextRound(context) ? ExitCode.ADDITIONAL_PASS_REQUIRED : ExitCode.OK;
+    return code;
   }
- catch (  Exception e) {
-    throw new ProjectBuildException(e);
-  }
- finally {
-    if (start > 0 && LOG.isDebugEnabled()) {
-      LOG.debug(myBuilderName + " took " + (System.currentTimeMillis() - start)+ " on "+ chunk.getName());
-    }
+  finally {
     if (!myForStubs) {
       FILES_MARKED_DIRTY_FOR_NEXT_ROUND.set(context,null);
     }
