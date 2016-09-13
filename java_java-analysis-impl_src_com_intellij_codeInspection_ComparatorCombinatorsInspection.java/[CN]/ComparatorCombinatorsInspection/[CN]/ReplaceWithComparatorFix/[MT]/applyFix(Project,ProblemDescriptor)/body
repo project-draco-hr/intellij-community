@@ -5,18 +5,46 @@
   PsiElement body=lambda.getBody();
   if (!(body instanceof PsiMethodCallExpression))   return;
   PsiMethodCallExpression methodCall=(PsiMethodCallExpression)body;
-  if (!MethodUtils.isCompareToCall(methodCall))   return;
-  PsiExpression qualifier=methodCall.getMethodExpression().getQualifierExpression();
-  if (!(qualifier instanceof PsiMethodCallExpression))   return;
-  PsiMethodCallExpression call=(PsiMethodCallExpression)qualifier;
-  if (call.getArgumentList().getExpressions().length != 0)   return;
-  PsiMethod method=call.resolveMethod();
-  if (method == null)   return;
-  PsiClass methodClass=method.getContainingClass();
-  if (methodClass == null)   return;
-  if (!FileModificationService.getInstance().preparePsiElementForWrite(element))   return;
-  PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
-  PsiExpression replacement=factory.createExpressionFromText("java.util.Comparator.comparing(" + methodClass.getQualifiedName() + "::"+ method.getName()+ ")",element);
-  PsiElement result=lambda.replace(replacement);
-  CodeStyleManager.getInstance(project).reformat(JavaCodeStyleManager.getInstance(project).shortenClassReferences(result));
+  PsiExpression keyExtractor=null;
+  String methodName=null;
+  if (MethodUtils.isCompareToCall(methodCall)) {
+    methodName="comparing";
+    keyExtractor=methodCall.getMethodExpression().getQualifierExpression();
+  }
+ else {
+    PsiMethod method=methodCall.resolveMethod();
+    if (method != null && method.getName().equals("compare")) {
+      PsiClass containingClass=method.getContainingClass();
+      if (containingClass != null) {
+        String className=containingClass.getQualifiedName();
+        if (className != null) {
+          PsiExpression[] args=methodCall.getArgumentList().getExpressions();
+          if (args.length != 2)           return;
+          keyExtractor=args[0];
+switch (className) {
+case CommonClassNames.JAVA_LANG_LONG:
+            methodName="comparingLong";
+          break;
+case CommonClassNames.JAVA_LANG_INTEGER:
+        methodName="comparingInt";
+      break;
+case CommonClassNames.JAVA_LANG_DOUBLE:
+    methodName="comparingDouble";
+  break;
+default :
+return;
+}
+}
+}
+}
+}
+if (methodName == null || keyExtractor == null) return;
+if (!FileModificationService.getInstance().preparePsiElementForWrite(element)) return;
+PsiParameter parameter=lambda.getParameterList().getParameters()[0];
+String parameterName=parameter.getName();
+PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
+PsiExpression replacement=factory.createExpressionFromText("java.util.Comparator." + methodName + "("+ parameterName+ " -> "+ keyExtractor.getText()+ ")",element);
+PsiElement result=lambda.replace(replacement);
+normalizeLambda(((PsiMethodCallExpression)result).getArgumentList().getExpressions()[0],factory);
+CodeStyleManager.getInstance(project).reformat(JavaCodeStyleManager.getInstance(project).shortenClassReferences(result));
 }
