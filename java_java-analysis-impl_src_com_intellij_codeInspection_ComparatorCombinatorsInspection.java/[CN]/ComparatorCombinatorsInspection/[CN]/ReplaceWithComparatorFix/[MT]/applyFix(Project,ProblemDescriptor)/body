@@ -2,6 +2,8 @@
   PsiElement element=descriptor.getStartElement();
   if (!(element instanceof PsiLambdaExpression))   return;
   PsiLambdaExpression lambda=(PsiLambdaExpression)element;
+  PsiParameter[] parameters=lambda.getParameterList().getParameters();
+  if (parameters.length != 2)   return;
   PsiElement body=LambdaUtil.extractSingleExpressionFromBody(lambda.getBody());
   if (!(body instanceof PsiMethodCallExpression))   return;
   PsiMethodCallExpression methodCall=(PsiMethodCallExpression)body;
@@ -10,6 +12,15 @@
   if (MethodUtils.isCompareToCall(methodCall)) {
     methodName="comparing";
     keyExtractor=methodCall.getMethodExpression().getQualifierExpression();
+    if (keyExtractor instanceof PsiReferenceExpression) {
+      PsiElement keyElement=((PsiReferenceExpression)keyExtractor).resolve();
+      if (keyElement == parameters[0]) {
+        methodName="naturalOrder";
+      }
+ else       if (keyElement == parameters[1]) {
+        methodName="reverseOrder";
+      }
+    }
   }
  else {
     PsiMethod method=methodCall.resolveMethod();
@@ -40,11 +51,17 @@ return;
 }
 if (methodName == null || keyExtractor == null) return;
 if (!FileModificationService.getInstance().preparePsiElementForWrite(element)) return;
-PsiParameter parameter=lambda.getParameterList().getParameters()[0];
-String parameterName=parameter.getName();
+String parameterName=parameters[0].getName();
 PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
-PsiExpression replacement=factory.createExpressionFromText("java.util.Comparator." + methodName + "("+ parameterName+ " -> "+ keyExtractor.getText()+ ")",element);
-PsiElement result=lambda.replace(replacement);
+PsiElement result;
+if (!methodName.startsWith("comparing")) {
+result=lambda.replace(factory.createExpressionFromText("java.util.Comparator." + methodName + "()",element));
+}
+ else {
+String newLambda=parameterName + " -> " + keyExtractor.getText();
+PsiExpression replacement=factory.createExpressionFromText("java.util.Comparator." + methodName + "("+ newLambda+ ")",element);
+result=lambda.replace(replacement);
 normalizeLambda(((PsiMethodCallExpression)result).getArgumentList().getExpressions()[0],factory);
+}
 CodeStyleManager.getInstance(project).reformat(JavaCodeStyleManager.getInstance(project).shortenClassReferences(result));
 }

@@ -3,40 +3,55 @@
     @SuppressWarnings("DialogTitleCapitalization") @Override public void visitLambdaExpression(    PsiLambdaExpression lambda){
       super.visitLambdaExpression(lambda);
       PsiType type=lambda.getFunctionalInterfaceType();
-      if (type instanceof PsiClassType && ((PsiClassType)type).rawType().equalsToText(CommonClassNames.JAVA_UTIL_COMPARATOR)) {
-        PsiElement body=LambdaUtil.extractSingleExpressionFromBody(lambda.getBody());
-        if (body instanceof PsiMethodCallExpression) {
-          PsiMethodCallExpression methodCall=(PsiMethodCallExpression)body;
-          PsiExpression[] args=methodCall.getArgumentList().getExpressions();
-          if (args.length == 1 && MethodUtils.isCompareToCall(methodCall)) {
-            PsiExpression left=methodCall.getMethodExpression().getQualifierExpression();
-            PsiExpression right=args[0];
-            if (areEquivalent(lambda.getParameterList().getParameters(),left,right)) {
-              holder.registerProblem(lambda,"Can be replaced with Comparator.comparing",new ReplaceWithComparatorFix("comparing"));
+      PsiParameter[] parameters=lambda.getParameterList().getParameters();
+      if (parameters.length != 2 || !(type instanceof PsiClassType) || !((PsiClassType)type).rawType().equalsToText(CommonClassNames.JAVA_UTIL_COMPARATOR)) {
+        return;
+      }
+      PsiElement body=LambdaUtil.extractSingleExpressionFromBody(lambda.getBody());
+      if (body instanceof PsiMethodCallExpression) {
+        PsiMethodCallExpression methodCall=(PsiMethodCallExpression)body;
+        PsiExpression[] args=methodCall.getArgumentList().getExpressions();
+        String methodName=null;
+        if (args.length == 1 && MethodUtils.isCompareToCall(methodCall)) {
+          PsiExpression left=methodCall.getMethodExpression().getQualifierExpression();
+          PsiExpression right=args[0];
+          if (left instanceof PsiReferenceExpression && right instanceof PsiReferenceExpression) {
+            PsiElement leftElement=((PsiReferenceExpression)left).resolve();
+            PsiElement rightElement=((PsiReferenceExpression)right).resolve();
+            if (leftElement == parameters[0] && rightElement == parameters[1]) {
+              methodName="naturalOrder";
+            }
+ else             if (leftElement == parameters[1] && rightElement == parameters[0]) {
+              methodName="reverseOrder";
             }
           }
+          if (methodName == null && areEquivalent(parameters,left,right)) {
+            methodName="comparing";
+          }
+        }
  else {
-            PsiMethod method=methodCall.resolveMethod();
-            if (args.length == 2 && method != null && method.getName().equals("compare")) {
-              PsiClass compareClass=method.getContainingClass();
-              if (compareClass != null) {
-                String replacementMethodName;
-                if (CommonClassNames.JAVA_LANG_DOUBLE.equals(compareClass.getQualifiedName())) {
-                  replacementMethodName="comparingDouble";
-                }
- else                 if (CommonClassNames.JAVA_LANG_INTEGER.equals(compareClass.getQualifiedName())) {
-                  replacementMethodName="comparingInt";
-                }
- else                 if (CommonClassNames.JAVA_LANG_LONG.equals(compareClass.getQualifiedName())) {
-                  replacementMethodName="comparingLong";
-                }
- else                 return;
-                if (areEquivalent(lambda.getParameterList().getParameters(),args[0],args[1])) {
-                  holder.registerProblem(lambda,"Can be replaced with Comparator." + replacementMethodName,new ReplaceWithComparatorFix(replacementMethodName));
-                }
+          PsiMethod method=methodCall.resolveMethod();
+          if (args.length == 2 && method != null && method.getName().equals("compare")) {
+            PsiClass compareClass=method.getContainingClass();
+            if (compareClass != null) {
+              if (CommonClassNames.JAVA_LANG_DOUBLE.equals(compareClass.getQualifiedName())) {
+                methodName="comparingDouble";
               }
+ else               if (CommonClassNames.JAVA_LANG_INTEGER.equals(compareClass.getQualifiedName())) {
+                methodName="comparingInt";
+              }
+ else               if (CommonClassNames.JAVA_LANG_LONG.equals(compareClass.getQualifiedName())) {
+                methodName="comparingLong";
+              }
+ else {
+                return;
+              }
+              if (!areEquivalent(parameters,args[0],args[1]))               return;
             }
           }
+        }
+        if (methodName != null) {
+          holder.registerProblem(lambda,"Can be replaced with Comparator." + methodName,new ReplaceWithComparatorFix(methodName));
         }
       }
     }
