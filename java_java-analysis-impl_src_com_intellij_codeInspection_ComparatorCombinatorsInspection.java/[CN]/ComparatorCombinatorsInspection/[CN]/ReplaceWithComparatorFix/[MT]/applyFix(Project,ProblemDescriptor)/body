@@ -1,0 +1,74 @@
+{
+  PsiElement element=descriptor.getStartElement();
+  if (!(element instanceof PsiLambdaExpression))   return;
+  PsiLambdaExpression lambda=(PsiLambdaExpression)element;
+  PsiParameter[] parameters=lambda.getParameterList().getParameters();
+  if (parameters.length != 2)   return;
+  PsiElement body=LambdaUtil.extractSingleExpressionFromBody(lambda.getBody());
+  PsiExpression keyExtractor=null;
+  String methodName=null;
+  if (body instanceof PsiMethodCallExpression) {
+    PsiMethodCallExpression methodCall=(PsiMethodCallExpression)body;
+    if (MethodUtils.isCompareToCall(methodCall)) {
+      methodName="comparing";
+      keyExtractor=methodCall.getMethodExpression().getQualifierExpression();
+      if (keyExtractor instanceof PsiReferenceExpression) {
+        PsiElement keyElement=((PsiReferenceExpression)keyExtractor).resolve();
+        if (keyElement == parameters[0]) {
+          methodName="naturalOrder";
+        }
+ else         if (keyElement == parameters[1]) {
+          methodName="reverseOrder";
+        }
+      }
+    }
+ else {
+      PsiMethod method=methodCall.resolveMethod();
+      if (method != null && method.getName().equals("compare")) {
+        PsiClass containingClass=method.getContainingClass();
+        if (containingClass != null) {
+          String className=containingClass.getQualifiedName();
+          if (className != null) {
+            PsiExpression[] args=methodCall.getArgumentList().getExpressions();
+            if (args.length != 2)             return;
+            keyExtractor=args[0];
+switch (className) {
+case CommonClassNames.JAVA_LANG_LONG:
+              methodName="comparingLong";
+            break;
+case CommonClassNames.JAVA_LANG_INTEGER:
+          methodName="comparingInt";
+        break;
+case CommonClassNames.JAVA_LANG_DOUBLE:
+      methodName="comparingDouble";
+    break;
+default :
+  return;
+}
+}
+}
+}
+}
+}
+ else if (body instanceof PsiBinaryExpression) {
+PsiBinaryExpression binOp=(PsiBinaryExpression)body;
+if (!binOp.getOperationTokenType().equals(JavaTokenType.MINUS)) return;
+methodName="comparingInt";
+keyExtractor=binOp.getLOperand();
+}
+if (methodName == null || keyExtractor == null) return;
+if (!FileModificationService.getInstance().preparePsiElementForWrite(element)) return;
+String parameterName=parameters[0].getName();
+PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
+PsiElement result;
+if (!methodName.startsWith("comparing")) {
+result=lambda.replace(factory.createExpressionFromText("java.util.Comparator." + methodName + "()",element));
+}
+ else {
+String newLambda=parameterName + " -> " + keyExtractor.getText();
+PsiExpression replacement=factory.createExpressionFromText("java.util.Comparator." + methodName + "("+ newLambda+ ")",element);
+result=lambda.replace(replacement);
+normalizeLambda(((PsiMethodCallExpression)result).getArgumentList().getExpressions()[0],factory);
+}
+CodeStyleManager.getInstance(project).reformat(JavaCodeStyleManager.getInstance(project).shortenClassReferences(result));
+}

@@ -1,0 +1,37 @@
+{
+  if (endOffset > text.length()) {
+    throw new IllegalArgumentException("end: " + endOffset + " > length: "+ text.length());
+  }
+  Map<StringSearcher,int[]> cachedMap=cache.get(text);
+  int[] cachedOccurrences=cachedMap == null ? null : cachedMap.get(searcher);
+  boolean hasCachedOccurrences=cachedOccurrences != null && cachedOccurrences[0] <= startOffset && cachedOccurrences[1] >= endOffset;
+  if (!hasCachedOccurrences) {
+    TIntArrayList occurrences=new TIntArrayList();
+    int newStart=Math.min(startOffset,cachedOccurrences == null ? startOffset : cachedOccurrences[0]);
+    int newEnd=Math.max(endOffset,cachedOccurrences == null ? endOffset : cachedOccurrences[1]);
+    occurrences.add(newStart);
+    occurrences.add(newEnd);
+    for (int index=newStart; index < newEnd; index++) {
+      if (progress != null)       progress.checkCanceled();
+      index=searcher.scan(text,index,newEnd);
+      if (index < 0)       break;
+      if (checkJavaIdentifier(text,0,text.length(),searcher,index)) {
+        occurrences.add(index);
+      }
+    }
+    cachedOccurrences=occurrences.toNativeArray();
+    if (cachedMap == null) {
+      cachedMap=ConcurrencyUtil.cacheOrGet(cache,text,ContainerUtil.createConcurrentSoftMap());
+    }
+    cachedMap.put(searcher,cachedOccurrences);
+  }
+  TIntArrayList offsets=new TIntArrayList(cachedOccurrences.length - 2);
+  for (int i=2; i < cachedOccurrences.length; i++) {
+    int occurrence=cachedOccurrences[i];
+    if (occurrence > endOffset - searcher.getPatternLength())     break;
+    if (occurrence >= startOffset) {
+      offsets.add(occurrence);
+    }
+  }
+  return offsets.toNativeArray();
+}

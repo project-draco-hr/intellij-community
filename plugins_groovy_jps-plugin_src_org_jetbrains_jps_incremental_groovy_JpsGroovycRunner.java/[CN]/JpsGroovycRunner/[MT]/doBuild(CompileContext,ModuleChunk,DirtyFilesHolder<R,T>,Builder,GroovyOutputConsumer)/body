@@ -1,0 +1,45 @@
+{
+  long start=0;
+  try {
+    JpsGroovySettings settings=JpsGroovySettings.getSettings(context.getProjectDescriptor().getProject());
+    Ref<Boolean> hasStubExcludes=Ref.create(false);
+    final List<File> toCompile=collectChangedFiles(context,dirtyFilesHolder,myForStubs,false,hasStubExcludes);
+    if (toCompile.isEmpty()) {
+      return ExitCode.NOTHING_DONE;
+    }
+    if (Utils.IS_TEST_MODE || LOG.isDebugEnabled()) {
+      LOG.info("forStubs=" + myForStubs);
+    }
+    Map<T,String> finalOutputs=getCanonicalOutputs(context,chunk,builder);
+    if (finalOutputs == null) {
+      return ExitCode.ABORT;
+    }
+    start=System.currentTimeMillis();
+    Map<T,String> generationOutputs=getGenerationOutputs(context,chunk,finalOutputs);
+    String compilerOutput=generationOutputs.get(representativeTarget(generationOutputs));
+    GroovycOutputParser parser=runGroovycOrContinuation(context,chunk,settings,finalOutputs,compilerOutput,toCompile,hasStubExcludes.get());
+    MultiMap<T,GroovycOutputParser.OutputItem> compiled=processCompiledFiles(context,chunk,generationOutputs,compilerOutput,parser.getSuccessfullyCompiled());
+    if (checkChunkRebuildNeeded(context,parser)) {
+      clearContinuation(context,chunk);
+      return ExitCode.CHUNK_REBUILD_REQUIRED;
+    }
+    for (    CompilerMessage message : parser.getCompilerMessages()) {
+      context.processMessage(message);
+    }
+    if (myForStubs) {
+      stubsGenerated(context,generationOutputs,compiled);
+    }
+ else {
+      updateDependencies(context,toCompile,compiled,outputConsumer,builder);
+    }
+    return ExitCode.OK;
+  }
+ catch (  Exception e) {
+    throw new ProjectBuildException(e);
+  }
+ finally {
+    if (start > 0 && LOG.isDebugEnabled()) {
+      LOG.debug(builder.getPresentableName() + " took " + (System.currentTimeMillis() - start)+ " on "+ chunk.getName());
+    }
+  }
+}

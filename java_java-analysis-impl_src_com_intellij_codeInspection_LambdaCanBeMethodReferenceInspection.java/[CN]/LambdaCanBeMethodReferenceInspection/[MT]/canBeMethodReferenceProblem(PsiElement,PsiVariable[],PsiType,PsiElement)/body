@@ -1,0 +1,64 @@
+{
+  final PsiExpression methodRefCandidate=extractMethodReferenceCandidateExpression(body);
+  if (methodRefCandidate instanceof PsiNewExpression) {
+    final PsiNewExpression newExpression=(PsiNewExpression)methodRefCandidate;
+    if (newExpression.getAnonymousClass() != null || newExpression.getArrayInitializer() != null) {
+      return null;
+    }
+  }
+  final String methodReferenceText=createMethodReferenceText(methodRefCandidate,functionalInterfaceType,parameters);
+  if (methodReferenceText != null) {
+    LOG.assertTrue(methodRefCandidate != null);
+    if (!(methodRefCandidate instanceof PsiCallExpression))     return methodRefCandidate;
+    PsiCallExpression callExpression=(PsiCallExpression)methodRefCandidate;
+    final PsiMethod method=callExpression.resolveMethod();
+    if (method != null) {
+      if (!isSimpleCall(parameters,callExpression,method)) {
+        return null;
+      }
+    }
+ else {
+      LOG.assertTrue(callExpression instanceof PsiNewExpression);
+      if (((PsiNewExpression)callExpression).getQualifier() != null) {
+        return null;
+      }
+      final PsiExpression[] dims=((PsiNewExpression)callExpression).getArrayDimensions();
+      if (dims.length == 1 && parameters.length == 1) {
+        if (!resolvesToParameter(dims[0],parameters[0])) {
+          return null;
+        }
+      }
+ else       if (dims.length > 0) {
+        return null;
+      }
+      if (callExpression.getTypeArguments().length > 0) {
+        return null;
+      }
+    }
+    final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(callExpression.getProject());
+    PsiMethodReferenceExpression methodReferenceExpression;
+    try {
+      methodReferenceExpression=(PsiMethodReferenceExpression)elementFactory.createExpressionFromText(methodReferenceText,context != null ? context : callExpression);
+    }
+ catch (    IncorrectOperationException e) {
+      LOG.error(callExpression.getText(),e);
+      return null;
+    }
+    final Map<PsiElement,PsiType> map=LambdaUtil.getFunctionalTypeMap();
+    try {
+      map.put(methodReferenceExpression,functionalInterfaceType);
+      final JavaResolveResult result=methodReferenceExpression.advancedResolve(false);
+      final PsiElement element=result.getElement();
+      if (element != null && result.isAccessible() && !(result instanceof MethodCandidateInfo && !((MethodCandidateInfo)result).isApplicable())) {
+        if (!(element instanceof PsiMethod)) {
+          return callExpression;
+        }
+        return method != null && MethodSignatureUtil.areSignaturesEqual((PsiMethod)element,method) ? callExpression : null;
+      }
+    }
+  finally {
+      map.remove(methodReferenceExpression);
+    }
+  }
+  return null;
+}
