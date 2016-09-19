@@ -1,3 +1,41 @@
 {
-  return myCalculator.getTask(new KeyData(repoUID,sourceUrl,targetUrl),consumer,VcsException.class);
+  KeyData in=new KeyData(repoUID,sourceUrl,targetUrl);
+  TransparentlyFailedValueI<WrapperInvertor,VcsException> value=new ThreadSafeTransparentlyFailedValue<>();
+  final TaskDescriptor pooled=new TaskDescriptor("Looking for branch origin",Where.POOLED){
+    @Override public void run(    ContinuationContext context){
+      try {
+        WrapperInvertor calculatedValue=new Loader(myProject).convert(in);
+        if (calculatedValue != null) {
+          myCache.setValue(calculatedValue,in);
+        }
+        value.set(calculatedValue);
+      }
+ catch (      Exception e) {
+        setException(value,e);
+      }
+      context.next(new TaskDescriptor("final part",Where.AWT){
+        @Override public void run(        ContinuationContext context){
+          consumer.consume(value);
+        }
+      }
+);
+    }
+  }
+;
+  return new TaskDescriptor("short part",Where.AWT){
+    @Override public void run(    ContinuationContext context){
+      try {
+        value.set(myCache.getValue(in));
+      }
+ catch (      Exception e) {
+        setException(value,e);
+      }
+      if (value.haveSomething()) {
+        consumer.consume(value);
+        return;
+      }
+      context.next(pooled);
+    }
+  }
+;
 }
