@@ -1,29 +1,29 @@
 {
   myPath=path;
   myRevision=-1;
-  final TransparentlyFailedValueI<CopyData,VcsException> result=new TransparentlyFailedValue<CopyData,VcsException>(){
-    @Override public void set(    CopyData copyData){
-      if (copyData == null)       return;
-      myRevision=copyData.getCopySourceRevision();
-      if (myRevision != -1) {
-        ApplicationManager.getApplication().invokeLater(new Runnable(){
-          public void run(){
-            if (vcs.getProject().isDisposed())             return;
-            vcs.getProject().getMessageBus().syncPublisher(SVN_MERGE_INFO_CACHE).copyRevisionUpdated();
-          }
-        }
-);
+  Task.Backgroundable task=new Task.Backgroundable(vcs.getProject(),"",false){
+    private CopyData myData;
+    @Override public void run(    @NotNull ProgressIndicator indicator){
+      try {
+        myData=new FirstInBranch(vcs,repositoryRoot,branchUrl,trunkUrl).run();
+      }
+ catch (      VcsException e) {
+        logAndShow(e);
       }
     }
-    @Override public void fail(    VcsException e){
-      LOG.info(e);
-      VcsBalloonProblemNotifier.showOverChangesView(vcs.getProject(),e.getMessage(),MessageType.ERROR);
+    @Override public void onSuccess(){
+      if (!vcs.getProject().isDisposed() && myData != null && myData.getCopySourceRevision() != -1) {
+        vcs.getProject().getMessageBus().syncPublisher(SVN_MERGE_INFO_CACHE).copyRevisionUpdated();
+      }
     }
-    @Override public void failRuntime(    RuntimeException e){
-      LOG.info(e);
-      VcsBalloonProblemNotifier.showOverChangesView(vcs.getProject(),e.getMessage(),MessageType.ERROR);
+    @Override public void onError(    @NotNull Exception error){
+      logAndShow(error);
+    }
+    private void logAndShow(    @NotNull Exception error){
+      LOG.info(error);
+      VcsBalloonProblemNotifier.showOverChangesView(vcs.getProject(),error.getMessage(),MessageType.ERROR);
     }
   }
 ;
-  ApplicationManager.getApplication().executeOnPooledThread(new FirstInBranch(vcs,repositoryRoot,branchUrl,trunkUrl,result));
+  ProgressManager.getInstance().runProcessWithProgressAsynchronously(task,new EmptyProgressIndicator());
 }
