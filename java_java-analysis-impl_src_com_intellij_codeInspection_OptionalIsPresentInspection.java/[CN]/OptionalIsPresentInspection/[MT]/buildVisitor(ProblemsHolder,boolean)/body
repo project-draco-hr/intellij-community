@@ -1,0 +1,29 @@
+{
+  if (!PsiUtil.isLanguageLevel8OrHigher(holder.getFile())) {
+    return PsiElementVisitor.EMPTY_VISITOR;
+  }
+  return new JavaElementVisitor(){
+    @Override public void visitIfStatement(    PsiIfStatement statement){
+      super.visitIfStatement(statement);
+      PsiExpression condition=PsiUtil.skipParenthesizedExprDown(statement.getCondition());
+      if (condition == null)       return;
+      boolean invert=false;
+      PsiExpression strippedCondition=condition;
+      if (BoolUtils.isNegation(condition)) {
+        strippedCondition=BoolUtils.getNegated(condition);
+        invert=true;
+      }
+      PsiVariable optionalVariable=extractOptionalFromIfPresentCheck(strippedCondition);
+      if (optionalVariable == null)       return;
+      PsiStatement thenStatement=extractThenStatement(statement,invert);
+      PsiStatement elseStatement=extractElseStatement(statement,invert);
+      for (      OptionalIfPresentCase scenario : CASES) {
+        String replacementName=scenario.getReplacementName(optionalVariable,thenStatement,elseStatement);
+        if (replacementName != null) {
+          holder.registerProblem(condition,"Can be replaced with " + replacementName,new OptionalIfPresentFix(scenario,replacementName));
+        }
+      }
+    }
+  }
+;
+}
