@@ -1,0 +1,40 @@
+{
+  try {
+    if (e.getKind() == TaskEvent.Kind.ANALYZE) {
+      if (myCurrentCompilationUnit != e.getCompilationUnit()) {
+        myCurrentCompilationUnit=(JCTree.JCCompilationUnit)e.getCompilationUnit();
+        myCurrentSize=myCurrentCompilationUnit.getTypeDecls().size() - 1;
+      }
+ else {
+        myCurrentSize--;
+      }
+      if (myCurrentSize == 0) {
+        final JavaFileObject sourceFile=e.getSourceFile();
+        final Set<JavacRefSymbol> symbols=new THashSet<JavacRefSymbol>();
+        scanImports(myCurrentCompilationUnit,symbols);
+        for (        JavacFileReferencesRegistrar listener : myOnlyImportsListeners) {
+          listener.registerReferences(sourceFile,symbols);
+        }
+        if (myFullASTListeners.length != 0) {
+          myAstScanner.scan(myCurrentCompilationUnit,new JavacTreeScannerSink(){
+            @Override public void sinkReference(            JavacRefSymbol ref){
+              symbols.add(ref);
+            }
+            @Override public void sinkClassDeclaration(            Symbol className,            Symbol[] supers){
+              for (              JavacFileReferencesRegistrar listener : myFullASTListeners) {
+                listener.registerClassDeclaration(className,supers);
+              }
+            }
+          }
+);
+          for (          JavacFileReferencesRegistrar listener : myFullASTListeners) {
+            listener.registerReferences(sourceFile,symbols);
+          }
+        }
+      }
+    }
+  }
+ catch (  Exception ex) {
+    throw new ClientCodeException(ex);
+  }
+}
