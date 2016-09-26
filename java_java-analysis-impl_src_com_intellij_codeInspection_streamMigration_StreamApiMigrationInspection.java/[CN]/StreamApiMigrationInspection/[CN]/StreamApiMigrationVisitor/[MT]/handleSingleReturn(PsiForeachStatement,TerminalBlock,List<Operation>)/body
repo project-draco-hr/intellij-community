@@ -1,0 +1,31 @@
+{
+  PsiReturnStatement returnStatement=(PsiReturnStatement)tb.getSingleStatement();
+  PsiExpression value=returnStatement.getReturnValue();
+  PsiReturnStatement nextReturnStatement=getNextReturnStatement(statement);
+  if (nextReturnStatement != null && (isLiteral(value,Boolean.TRUE) || isLiteral(value,Boolean.FALSE))) {
+    boolean foundResult=(boolean)((PsiLiteralExpression)value).getValue();
+    if (isLiteral(nextReturnStatement.getReturnValue(),!foundResult)) {
+      String methodName;
+      if (foundResult) {
+        methodName="anyMatch";
+      }
+ else {
+        methodName="noneMatch";
+        if (!operations.isEmpty()) {
+          Operation lastOp=operations.get(operations.size() - 1);
+          if (lastOp instanceof FilterOp && BoolUtils.isNegation(lastOp.getExpression())) {
+            methodName="allMatch";
+          }
+        }
+      }
+      registerProblem(statement,methodName,new ReplaceWithMatchFix(methodName));
+      return;
+    }
+  }
+  if (!isVariableReferenced(tb.getVariable(),value)) {
+    registerProblem(statement,"anyMatch",new ReplaceWithMatchFix("anyMatch"));
+  }
+  if (nextReturnStatement != null && ExpressionUtils.isSimpleExpression(nextReturnStatement.getReturnValue()) && (!(tb.getVariable().getType() instanceof PsiPrimitiveType) || isIdentityMapping(tb.getVariable(),value))) {
+    registerProblem(statement,"findFirst",new ReplaceWithFindFirstFix());
+  }
+}
