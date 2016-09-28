@@ -1,0 +1,40 @@
+{
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("enter: installToolWindow(" + id + ","+ component+ ","+ anchor+ "\")");
+  }
+  ApplicationManager.getApplication().assertIsDispatchThread();
+  if (myLayout.isToolWindowRegistered(id)) {
+    throw new IllegalArgumentException("window with id=\"" + id + "\" is already registered");
+  }
+  final WindowInfoImpl info=myLayout.register(id,anchor,sideTool);
+  final boolean wasActive=info.isActive();
+  final boolean wasVisible=info.isVisible();
+  info.setActive(false);
+  info.setVisible(false);
+  info.setShowStripeButton(shouldBeAvailable);
+  ToolWindowImpl toolWindow=new ToolWindowImpl(this,id,canCloseContent,component);
+  InternalDecorator decorator=new InternalDecorator(myProject,info.copy(),toolWindow,canWorkInDumbMode);
+  ActivateToolWindowAction.ensureToolWindowActionRegistered(toolWindow);
+  myId2InternalDecorator.put(id,decorator);
+  decorator.addInternalDecoratorListener(myInternalDecoratorListener);
+  toolWindow.addPropertyChangeListener(myToolWindowPropertyChangeListener);
+  myId2FocusWatcher.put(id,new ToolWindowFocusWatcher(toolWindow));
+  final StripeButton button=new StripeButton(decorator,myToolWindowsPane);
+  myId2StripeButton.put(id,button);
+  List<FinalizableCommand> commandsList=new ArrayList<>();
+  appendAddButtonCmd(button,info,commandsList);
+  if (!info.isAutoHide() && (info.isDocked() || info.isFloating())) {
+    if (wasActive) {
+      activateToolWindowImpl(info.getId(),commandsList,true,true);
+    }
+ else     if (wasVisible) {
+      showToolWindowImpl(info.getId(),false,commandsList);
+    }
+  }
+ else   if (wasActive) {
+    activateEditorComponentImpl(commandsList,true);
+  }
+  execute(commandsList);
+  fireToolWindowRegistered(id);
+  return toolWindow;
+}
