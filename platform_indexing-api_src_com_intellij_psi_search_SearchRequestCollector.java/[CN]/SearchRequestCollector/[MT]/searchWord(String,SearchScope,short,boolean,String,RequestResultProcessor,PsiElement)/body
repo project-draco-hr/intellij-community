@@ -1,0 +1,21 @@
+{
+  if (!makesSenseToSearch(word,searchScope))   return;
+  Collection<PsiSearchRequest> requests=null;
+  if (searchTarget != null && (searchScope instanceof GlobalSearchScope) && ((searchContext & UsageSearchContext.IN_CODE) != 0 || searchContext == UsageSearchContext.ANY)) {
+    for (    InCodeScopeOptimizer optimizer : InCodeScopeOptimizer.EP_NAME.getExtensions()) {
+      final GlobalSearchScope optimizedSourcesSearchScope=optimizer.getOptimizedScopeInCode(searchTarget);
+      if (optimizedSourcesSearchScope != null) {
+        short exceptCodeSearchContext=searchContext == UsageSearchContext.ANY ? (short)(searchContext ^ UsageSearchContext.IN_CODE) : (UsageSearchContext.IN_COMMENTS | UsageSearchContext.IN_STRINGS | UsageSearchContext.IN_FOREIGN_LANGUAGES| UsageSearchContext.IN_PLAIN_TEXT);
+        final GlobalSearchScope effectiveScopeWithSources=((GlobalSearchScope)searchScope).intersectWith(optimizedSourcesSearchScope);
+        final GlobalSearchScope effectiveScopeWithoutSources=((GlobalSearchScope)searchScope).intersectWith(GlobalSearchScope.notScope(optimizedSourcesSearchScope));
+        requests=ContainerUtil.list(new PsiSearchRequest(effectiveScopeWithSources,word,searchContext,caseSensitive,containerName,processor),new PsiSearchRequest(effectiveScopeWithoutSources,word,exceptCodeSearchContext,caseSensitive,containerName,processor));
+      }
+    }
+  }
+  if (requests == null) {
+    requests=Collections.singleton(new PsiSearchRequest(searchScope,word,searchContext,caseSensitive,containerName,processor));
+  }
+synchronized (lock) {
+    myWordRequests.addAll(requests);
+  }
+}
