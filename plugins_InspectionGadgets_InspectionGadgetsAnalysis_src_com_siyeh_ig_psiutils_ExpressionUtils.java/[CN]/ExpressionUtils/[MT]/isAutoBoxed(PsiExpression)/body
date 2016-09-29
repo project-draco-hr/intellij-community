@@ -1,0 +1,43 @@
+{
+  final PsiElement parent=expression.getParent();
+  if (parent instanceof PsiParenthesizedExpression) {
+    return false;
+  }
+  if (parent instanceof PsiExpressionList) {
+    final PsiElement grandParent=parent.getParent();
+    if (grandParent instanceof PsiMethodCallExpression) {
+      final PsiMethodCallExpression methodCallExpression=(PsiMethodCallExpression)grandParent;
+      final PsiMethod method=methodCallExpression.resolveMethod();
+      if (method != null && AnnotationUtil.isAnnotated(method,Collections.singletonList("java.lang.invoke.MethodHandle.PolymorphicSignature"))) {
+        return false;
+      }
+    }
+  }
+  final PsiType expressionType=expression.getType();
+  if (expressionType == null || expressionType.equals(PsiType.VOID) || !TypeConversionUtil.isPrimitiveAndNotNull(expressionType)) {
+    return false;
+  }
+  final PsiPrimitiveType primitiveType=(PsiPrimitiveType)expressionType;
+  final PsiClassType boxedType=primitiveType.getBoxedType(expression);
+  if (boxedType == null) {
+    return false;
+  }
+  final PsiType expectedType=ExpectedTypeUtils.findExpectedType(expression,false,true);
+  if (expectedType == null || ClassUtils.isPrimitive(expectedType)) {
+    return false;
+  }
+  if (!expectedType.isAssignableFrom(boxedType)) {
+    if (!(expectedType instanceof PsiClassType) || !PsiUtil.isConstantExpression(expression)) {
+      return false;
+    }
+    final PsiClassType classType=(PsiClassType)expectedType;
+    final String className=classType.getCanonicalText();
+    if (!convertableBoxedClassNames.contains(className)) {
+      return false;
+    }
+    if (!PsiType.BYTE.equals(expressionType) && !PsiType.CHAR.equals(expressionType) && !PsiType.SHORT.equals(expressionType)&& !PsiType.INT.equals(expressionType)) {
+      return false;
+    }
+  }
+  return true;
+}
