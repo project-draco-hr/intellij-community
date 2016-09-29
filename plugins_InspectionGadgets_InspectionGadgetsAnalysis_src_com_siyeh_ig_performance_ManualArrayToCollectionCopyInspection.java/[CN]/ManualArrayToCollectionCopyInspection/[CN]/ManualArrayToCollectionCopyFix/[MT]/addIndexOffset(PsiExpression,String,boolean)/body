@@ -1,0 +1,52 @@
+{
+  if (expression == null) {
+    return null;
+  }
+  if (plusOne) {
+    indexOffset=collapseConstant("(" + indexOffset + ") + 1",expression);
+  }
+  final String expressionText=expression.getText();
+  if ("0".equals(indexOffset)) {
+    return expressionText;
+  }
+  if (expression instanceof PsiBinaryExpression) {
+    final PsiBinaryExpression binaryExpression=(PsiBinaryExpression)expression;
+    final IElementType tokenType=binaryExpression.getOperationTokenType();
+    final PsiExpression lhs=binaryExpression.getLOperand();
+    final PsiExpression rhs=binaryExpression.getROperand();
+    if (tokenType == JavaTokenType.PLUS) {
+      Object rhConstant=ExpressionUtils.computeConstantExpression(rhs);
+      if (rhConstant != null) {
+        final String rhText=collapseConstant(rhConstant + " + (" + indexOffset+ ")",expression);
+        if ("0".equals(rhText)) {
+          return lhs.getText();
+        }
+        return lhs.getText() + getAddendum(rhText,expression);
+      }
+    }
+    if (tokenType == JavaTokenType.MINUS) {
+      Object rhConstant=ExpressionUtils.computeConstantExpression(rhs);
+      if (rhConstant != null) {
+        final String rhText=collapseConstant("(" + indexOffset + ") - "+ rhConstant,expression);
+        if ("0".equals(rhText)) {
+          return lhs.getText();
+        }
+        return lhs.getText() + getAddendum(rhText,expression);
+      }
+    }
+    if (rhs != null && (tokenType == JavaTokenType.PLUS || tokenType == JavaTokenType.MINUS)) {
+      Object lhConstant=ExpressionUtils.computeConstantExpression(lhs);
+      if (lhConstant != null) {
+        String lhText=collapseConstant(lhConstant + " + (" + indexOffset+ ")",expression);
+        if ("0".equals(lhText)) {
+          return tokenType == JavaTokenType.MINUS ? "-" + rhs.getText() : rhs.getText();
+        }
+        return lhText + (tokenType == JavaTokenType.MINUS ? " - " : " + ") + rhs.getText();
+      }
+    }
+  }
+  final String addendum=getAddendum(indexOffset,expression);
+  final int precedence=ParenthesesUtils.getPrecedence(expression);
+  final String text=precedence > ParenthesesUtils.ADDITIVE_PRECEDENCE ? '(' + expressionText + ")"+ addendum : expressionText + addendum;
+  return collapseConstant(text,expression);
+}
