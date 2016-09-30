@@ -1,0 +1,30 @@
+{
+  final ScopeOwner owner=ScopeUtil.getScopeOwner(pyString);
+  if (owner != null && !(owner instanceof PsiFile)) {
+    final PyStatement instrAnchor=PsiTreeUtil.getParentOfType(pyString,PyStatement.class);
+    if (instrAnchor == null)     return;
+    final Instruction[] instructions=ControlFlowCache.getControlFlow(owner).getInstructions();
+    final int startInstruction=ControlFlowUtil.findInstructionNumberByElement(instructions,instrAnchor);
+    if (startInstruction < 0)     return;
+    final Project project=pyString.getProject();
+    final List<Pair<PsiElement,TextRange>> pairs=InjectedLanguageManager.getInstance(project).getInjectedPsiFiles(pyString);
+    if (pairs != null) {
+      for (      Pair<PsiElement,TextRange> pair : pairs) {
+        pair.getFirst().accept(new PyRecursiveElementVisitor(){
+          @Override public void visitPyReferenceExpression(          PyReferenceExpression expr){
+            final PyExpression qualifier=expr.getQualifier();
+            if (qualifier != null) {
+              qualifier.accept(this);
+              return;
+            }
+            final String name=expr.getName();
+            if (name != null) {
+              analyzeReadsInScope(name,owner,instructions,startInstruction,pyString);
+            }
+          }
+        }
+);
+      }
+    }
+  }
+}
