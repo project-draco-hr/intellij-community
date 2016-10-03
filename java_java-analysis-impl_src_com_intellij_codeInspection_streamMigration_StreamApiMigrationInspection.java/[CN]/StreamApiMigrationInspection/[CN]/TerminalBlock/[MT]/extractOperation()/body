@@ -1,6 +1,6 @@
 {
-  FilterOp filter=extractFilter();
-  if (filter != null)   return filter;
+  TerminalBlock withFilter=extractFilter();
+  if (withFilter != null)   return withFilter;
   if (getSingleStatement() instanceof PsiForeachStatement) {
     if (myVariable.getType() instanceof PsiPrimitiveType)     return null;
     PsiForeachStatement foreachStatement=(PsiForeachStatement)getSingleStatement();
@@ -11,35 +11,29 @@
       FlatMapOp op=null;
       if (iteratedValueType instanceof PsiArrayType) {
         if (!isSupported(((PsiArrayType)iteratedValueType).getComponentType()))         return null;
-        op=new ArrayFlatMapOp(iteratedValue,myVariable,foreachStatement);
+        op=new ArrayFlatMapOp(myPreviousOp,iteratedValue,myVariable,foreachStatement);
       }
  else {
         final PsiClass iteratorClass=PsiUtil.resolveClassInClassTypeOnly(iteratedValueType);
         final PsiClass collectionClass=JavaPsiFacade.getInstance(body.getProject()).findClass(CommonClassNames.JAVA_UTIL_COLLECTION,foreachStatement.getResolveScope());
         if (collectionClass != null && InheritanceUtil.isInheritorOrSelf(iteratorClass,collectionClass,true)) {
-          op=new FlatMapOp(iteratedValue,myVariable,foreachStatement);
+          op=new FlatMapOp(myPreviousOp,iteratedValue,myVariable,foreachStatement);
         }
       }
       if (op != null) {
+        TerminalBlock withFlatMap=new TerminalBlock(op,foreachStatement.getIterationParameter(),body);
         if (ReferencesSearch.search(myVariable,new LocalSearchScope(body)).findFirst() == null) {
-          myVariable=foreachStatement.getIterationParameter();
-          replaceWith(body);
-          return op;
+          return withFlatMap;
         }
  else {
-          PsiStatement[] statements=myStatements;
-          myVariable=foreachStatement.getIterationParameter();
-          replaceWith(body);
-          FilterOp nextFilter=extractFilter();
-          myVariable=op.myVariable;
-          if (nextFilter != null) {
-            PsiStatement lastStatement=myStatements[myStatements.length - 1];
-            if (lastStatement instanceof PsiBreakStatement && op.breaksMe((PsiBreakStatement)lastStatement) && ReferencesSearch.search(nextFilter.myVariable,new LocalSearchScope(myStatements)).findFirst() == null) {
-              myStatements=Arrays.copyOfRange(myStatements,0,myStatements.length - 1);
-              return new CompoundFilterOp(nextFilter,op);
+          TerminalBlock withFlatMapFilter=withFlatMap.extractFilter();
+          if (withFlatMapFilter != null && !withFlatMapFilter.isEmpty()) {
+            PsiStatement[] statements=withFlatMapFilter.getStatements();
+            PsiStatement lastStatement=statements[statements.length - 1];
+            if (lastStatement instanceof PsiBreakStatement && op.breaksMe((PsiBreakStatement)lastStatement) && ReferencesSearch.search(withFlatMapFilter.getVariable(),new LocalSearchScope(statements)).findFirst() == null) {
+              return new TerminalBlock(new CompoundFilterOp((FilterOp)withFlatMapFilter.getLastOperation(),op),myVariable,Arrays.copyOfRange(statements,0,statements.length - 1));
             }
           }
-          myStatements=statements;
         }
       }
     }
@@ -57,11 +51,8 @@
             PsiExpression initializer=declaredVar.getInitializer();
             PsiStatement[] leftOver=Arrays.copyOfRange(myStatements,1,myStatements.length);
             if (initializer != null && ReferencesSearch.search(myVariable,new LocalSearchScope(leftOver)).findFirst() == null) {
-              MapOp op=new MapOp(initializer,myVariable,declaredVar.getType());
-              myVariable=declaredVar;
-              myStatements=leftOver;
-              flatten();
-              return op;
+              MapOp op=new MapOp(myPreviousOp,initializer,myVariable,declaredVar.getType());
+              return new TerminalBlock(op,declaredVar,leftOver);
             }
           }
         }
