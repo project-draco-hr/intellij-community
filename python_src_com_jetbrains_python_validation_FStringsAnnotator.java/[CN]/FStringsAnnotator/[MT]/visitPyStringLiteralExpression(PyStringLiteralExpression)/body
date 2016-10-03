@@ -3,14 +3,13 @@
     final StringNodeInfo nodeInfo=new StringNodeInfo(node);
     final String nodeText=node.getText();
     if (nodeInfo.isFormatted()) {
-      final int nodeOffset=node.getTextRange().getStartOffset();
       final int nodeContentEnd=nodeInfo.getContentRange().getEndOffset();
-      final List<FragmentOffsets> fragments=FStringParser.parse(nodeText);
+      final FStringParser.ParseResult result=FStringParser.parse(nodeText);
       boolean hasUnclosedBrace=false;
-      for (      FragmentOffsets fragment : fragments) {
+      for (      Fragment fragment : result.getFragments()) {
         final int fragContentEnd=fragment.getContentEndOffset();
         if (CharArrayUtil.isEmptyOrSpaces(nodeText,fragment.getLeftBraceOffset() + 1,fragment.getContentEndOffset())) {
-          report(fragment.getContentRange().shiftRight(nodeOffset),"Empty expressions are not allowed inside f-strings");
+          report("Empty expressions are not allowed inside f-strings",fragment.getContentRange(),node);
         }
         if (fragment.getRightBraceOffset() == -1) {
           hasUnclosedBrace=true;
@@ -18,25 +17,28 @@
         for (int i=fragment.getLeftBraceOffset() + 1; i < fragment.getContentEndOffset(); i++) {
           final char c=nodeText.charAt(i);
           if (c == '\\') {
-            reportCharacter(nodeOffset + i,"Expression fragments inside f-strings cannot include backslashes");
+            reportCharacter("Expression fragments inside f-strings cannot include backslashes",i,node);
           }
  else           if (c == '#') {
-            reportCharacter(nodeOffset + i,"Expressions fragments inside f-strings cannot include '#'");
+            reportCharacter("Expressions fragments inside f-strings cannot include '#'",i,node);
           }
         }
         if (fragContentEnd < nodeContentEnd && nodeText.charAt(fragContentEnd) == '!' && fragContentEnd + 1 < nodeContentEnd) {
           final char conversionChar=nodeText.charAt(fragContentEnd + 1);
-          final int offset=fragContentEnd + nodeOffset + 1;
+          final int offset=fragContentEnd + 1;
           if (fragContentEnd + 1 == fragment.getRightBraceOffset() || conversionChar == ':') {
-            reportEmpty(offset,"Conversion character is expected: should be one of 's', 'r', 'a'");
+            reportEmpty("Conversion character is expected: should be one of 's', 'r', 'a'",offset,node);
           }
  else           if ("sra".indexOf(conversionChar) < 0) {
-            reportCharacter(offset,"Illegal conversion character '" + conversionChar + "': should be one of 's', 'r', 'a'");
+            reportCharacter("Illegal conversion character '" + conversionChar + "': should be one of 's', 'r', 'a'",offset,node);
           }
         }
       }
+      for (      Integer offset : result.getSingleRightBraces()) {
+        reportCharacter("Single '}' is not allowed inside f-strings",offset,node);
+      }
       if (hasUnclosedBrace) {
-        reportEmpty(nodeContentEnd + nodeOffset,"'}' is expected");
+        reportEmpty("'}' is expected",nodeContentEnd,node);
       }
     }
   }
