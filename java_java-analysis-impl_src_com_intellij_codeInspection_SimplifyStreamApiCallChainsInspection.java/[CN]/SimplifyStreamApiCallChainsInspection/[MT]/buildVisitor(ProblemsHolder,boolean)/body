@@ -14,8 +14,34 @@
  else       if (isCallOf(method,CommonClassNames.JAVA_UTIL_OPTIONAL,IS_PRESENT_METHOD,0)) {
         handleOptionalIsPresent(methodCall);
       }
+ else       if (isCallOf(method,CommonClassNames.JAVA_UTIL_STREAM_STREAM,ANY_MATCH_METHOD,1)) {
+        if (isParentNegated(methodCall)) {
+          boolean argNegated=isArgumentLambdaNegated(methodCall);
+          registerMatchFix(methodCall,new SimplifyMatchNegationFix(argNegated ? "!Stream.anyMatch(x -> !(...))" : "!Stream.anyMatch(...)",argNegated ? ALL_MATCH_METHOD : NONE_MATCH_METHOD));
+        }
+      }
+ else       if (isCallOf(method,CommonClassNames.JAVA_UTIL_STREAM_STREAM,NONE_MATCH_METHOD,1)) {
+        if (isParentNegated(methodCall)) {
+          registerMatchFix(methodCall,new SimplifyMatchNegationFix("!Stream.noneMatch(...)",ANY_MATCH_METHOD));
+        }
+        if (isArgumentLambdaNegated(methodCall)) {
+          registerMatchFix(methodCall,new SimplifyMatchNegationFix("Stream.noneMatch(x -> !(...))",ALL_MATCH_METHOD));
+        }
+      }
+ else       if (isCallOf(method,CommonClassNames.JAVA_UTIL_STREAM_STREAM,ALL_MATCH_METHOD,1)) {
+        if (isArgumentLambdaNegated(methodCall)) {
+          boolean parentNegated=isParentNegated(methodCall);
+          registerMatchFix(methodCall,new SimplifyMatchNegationFix(parentNegated ? "!Stream.allMatch(x -> !(...))" : "Stream.allMatch(x -> !(...))",parentNegated ? ANY_MATCH_METHOD : NONE_MATCH_METHOD));
+        }
+      }
  else {
         handleStreamForEach(methodCall,method);
+      }
+    }
+    void registerMatchFix(    PsiMethodCallExpression methodCall,    SimplifyMatchNegationFix fix){
+      PsiElement nameElement=methodCall.getMethodExpression().getReferenceNameElement();
+      if (nameElement != null) {
+        holder.registerProblem(nameElement,fix.getMessage(),new SimplifyCallChainFix(fix));
       }
     }
     private void handleOptionalIsPresent(    PsiMethodCallExpression methodCall){

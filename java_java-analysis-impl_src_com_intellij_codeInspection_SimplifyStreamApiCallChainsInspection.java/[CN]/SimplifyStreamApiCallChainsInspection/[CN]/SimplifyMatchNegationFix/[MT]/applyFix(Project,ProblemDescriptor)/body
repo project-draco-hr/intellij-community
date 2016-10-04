@@ -1,0 +1,40 @@
+{
+  PsiElement element=descriptor.getStartElement();
+  if (element instanceof PsiIdentifier) {
+    String from=element.getText();
+    boolean removeParentNegation;
+    boolean removeLambdaNegation;
+switch (from) {
+case ALL_MATCH_METHOD:
+      removeLambdaNegation=true;
+    removeParentNegation=myTo.equals(ANY_MATCH_METHOD);
+  break;
+case ANY_MATCH_METHOD:
+removeParentNegation=true;
+removeLambdaNegation=myTo.equals(ALL_MATCH_METHOD);
+break;
+case NONE_MATCH_METHOD:
+removeParentNegation=myTo.equals(ANY_MATCH_METHOD);
+removeLambdaNegation=myTo.equals(ALL_MATCH_METHOD);
+break;
+default :
+return;
+}
+PsiMethodCallExpression methodCall=PsiTreeUtil.getParentOfType(element,PsiMethodCallExpression.class);
+if (methodCall == null) return;
+if (removeParentNegation && !isParentNegated(methodCall)) return;
+if (removeLambdaNegation && !isArgumentLambdaNegated(methodCall)) return;
+if (!FileModificationService.getInstance().preparePsiElementForWrite(element.getContainingFile())) return;
+PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
+element.replace(factory.createIdentifier(myTo));
+if (removeLambdaNegation) {
+PsiExpression body=(PsiExpression)((PsiLambdaExpression)methodCall.getArgumentList().getExpressions()[0]).getBody();
+PsiExpression negated=BoolUtils.getNegated(body);
+LOG.assertTrue(negated != null);
+body.replace(negated);
+}
+if (removeParentNegation) {
+PsiUtil.skipParenthesizedExprUp(methodCall.getParent()).replace(methodCall);
+}
+}
+}
