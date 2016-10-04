@@ -1,11 +1,6 @@
 {
-  if (getSingleStatement() instanceof PsiIfStatement) {
-    PsiIfStatement ifStatement=(PsiIfStatement)getSingleStatement();
-    if (ifStatement.getElseBranch() == null && ifStatement.getCondition() != null) {
-      replaceWith(ifStatement.getThenBranch());
-      return new FilterOp(ifStatement.getCondition(),myVariable,false);
-    }
-  }
+  TerminalBlock withFilter=extractFilter();
+  if (withFilter != null)   return withFilter;
   if (getSingleStatement() instanceof PsiForeachStatement) {
     if (myVariable.getType() instanceof PsiPrimitiveType)     return null;
     PsiForeachStatement foreachStatement=(PsiForeachStatement)getSingleStatement();
@@ -13,22 +8,33 @@
     final PsiStatement body=foreachStatement.getBody();
     if (iteratedValue != null && body != null) {
       final PsiType iteratedValueType=iteratedValue.getType();
-      Operation op=null;
+      FlatMapOp op=null;
       if (iteratedValueType instanceof PsiArrayType) {
         if (!isSupported(((PsiArrayType)iteratedValueType).getComponentType()))         return null;
-        op=new ArrayFlatMapOp(iteratedValue,myVariable);
+        op=new ArrayFlatMapOp(myPreviousOp,iteratedValue,myVariable,foreachStatement);
       }
  else {
         final PsiClass iteratorClass=PsiUtil.resolveClassInClassTypeOnly(iteratedValueType);
         final PsiClass collectionClass=JavaPsiFacade.getInstance(body.getProject()).findClass(CommonClassNames.JAVA_UTIL_COLLECTION,foreachStatement.getResolveScope());
         if (collectionClass != null && InheritanceUtil.isInheritorOrSelf(iteratorClass,collectionClass,true)) {
-          op=new FlatMapOp(iteratedValue,myVariable);
+          op=new FlatMapOp(myPreviousOp,iteratedValue,myVariable,foreachStatement);
         }
       }
-      if (op != null && ReferencesSearch.search(myVariable,new LocalSearchScope(body)).findFirst() == null) {
-        myVariable=foreachStatement.getIterationParameter();
-        replaceWith(body);
-        return op;
+      if (op != null) {
+        TerminalBlock withFlatMap=new TerminalBlock(op,foreachStatement.getIterationParameter(),body);
+        if (ReferencesSearch.search(myVariable,new LocalSearchScope(body)).findFirst() == null) {
+          return withFlatMap;
+        }
+ else {
+          TerminalBlock withFlatMapFilter=withFlatMap.extractFilter();
+          if (withFlatMapFilter != null && !withFlatMapFilter.isEmpty()) {
+            PsiStatement[] statements=withFlatMapFilter.getStatements();
+            PsiStatement lastStatement=statements[statements.length - 1];
+            if (lastStatement instanceof PsiBreakStatement && op.breaksMe((PsiBreakStatement)lastStatement) && ReferencesSearch.search(withFlatMapFilter.getVariable(),new LocalSearchScope(statements)).findFirst() == null) {
+              return new TerminalBlock(new CompoundFilterOp((FilterOp)withFlatMapFilter.getLastOperation(),op),myVariable,Arrays.copyOfRange(statements,0,statements.length - 1));
+            }
+          }
+        }
       }
     }
   }
@@ -45,33 +51,12 @@
             PsiExpression initializer=declaredVar.getInitializer();
             PsiStatement[] leftOver=Arrays.copyOfRange(myStatements,1,myStatements.length);
             if (initializer != null && ReferencesSearch.search(myVariable,new LocalSearchScope(leftOver)).findFirst() == null) {
-              MapOp op=new MapOp(initializer,myVariable,declaredVar.getType());
-              myVariable=declaredVar;
-              myStatements=leftOver;
-              flatten();
-              return op;
+              MapOp op=new MapOp(myPreviousOp,initializer,myVariable,declaredVar.getType());
+              return new TerminalBlock(op,declaredVar,leftOver);
             }
           }
         }
       }
-    }
-    if (first instanceof PsiIfStatement) {
-      PsiIfStatement ifStatement=(PsiIfStatement)first;
-      if (ifStatement.getCondition() == null)       return null;
-      PsiStatement branch=ifStatement.getThenBranch();
-      if (branch instanceof PsiBlockStatement) {
-        PsiStatement[] statements=((PsiBlockStatement)branch).getCodeBlock().getStatements();
-        if (statements.length == 1)         branch=statements[0];
-      }
-      if (!(branch instanceof PsiContinueStatement) || ((PsiContinueStatement)branch).getLabelIdentifier() != null)       return null;
-      if (ifStatement.getElseBranch() != null) {
-        myStatements[0]=ifStatement.getElseBranch();
-      }
- else {
-        myStatements=Arrays.copyOfRange(myStatements,1,myStatements.length);
-      }
-      flatten();
-      return new FilterOp(ifStatement.getCondition(),myVariable,true);
     }
   }
   return null;
