@@ -1,7 +1,8 @@
 {
   final Collection<JpsModule> allModules=model.getProject().getModules();
+  Map<File,JpsModule> contentToModule=new THashMap<File,JpsModule>(FileUtil.FILE_HASHING_STRATEGY);
   for (  final JpsModule module : allModules) {
-    final List<File> moduleExcludes=new ArrayList<File>();
+    final ArrayList<File> moduleExcludes=new ArrayList<File>();
     for (    String url : module.getExcludeRootsList().getUrls()) {
       moduleExcludes.add(JpsPathUtil.urlToFile(url));
     }
@@ -16,41 +17,16 @@
         moduleExcludes.add(JpsPathUtil.urlToFile(testOutputUrl));
       }
     }
-    myModuleToExcludesMap.put(module,moduleExcludes);
-    myExcludedRoots.addAll(moduleExcludes);
-  }
-  Map<File,JpsModule> contentToModule=new THashMap<File,JpsModule>(FileUtil.FILE_HASHING_STRATEGY);
-  for (  JpsModule module : allModules) {
-    for (    String contentUrl : module.getContentRootsList().getUrls()) {
+    List<String> contentUrls=module.getContentRootsList().getUrls();
+    final List<File> moduleContent=new ArrayList<File>(contentUrls.size());
+    for (    String contentUrl : contentUrls) {
       File contentRoot=JpsPathUtil.urlToFile(contentUrl);
+      moduleContent.add(contentRoot);
       contentToModule.put(contentRoot,module);
     }
-  }
-  List<File> parents=new ArrayList<File>();
-  for (  JpsModule module : allModules) {
-    for (    String contentUrl : module.getContentRootsList().getUrls()) {
-      File contentRoot=JpsPathUtil.urlToFile(contentUrl);
-      File parent=contentRoot.getParentFile();
-      JpsModule parentModule=null;
-      parents.clear();
-      while (parent != null) {
-        parents.add(parent);
-        if (contentToModule.containsKey(parent)) {
-          parentModule=contentToModule.get(parent);
-          break;
-        }
-        parent=parent.getParentFile();
-      }
-      if (parentModule != null) {
-        myModuleToExcludesMap.get(parentModule).add(contentRoot);
-      }
- else {
-        myContentRoots.add(contentRoot);
-      }
-      for (      File file : parents) {
-        contentToModule.put(file,parentModule);
-      }
-    }
+    myModuleToExcludesMap.put(module,moduleExcludes);
+    myModuleToContentMap.put(module,moduleContent);
+    myExcludedRoots.addAll(moduleExcludes);
   }
   JpsJavaProjectExtension projectExtension=JpsJavaExtensionService.getInstance().getProjectExtension(model.getProject());
   if (projectExtension != null) {
@@ -66,6 +42,37 @@
         parent=FileUtil.getParentFile(parent);
       }
       myExcludedRoots.add(excluded);
+    }
+  }
+  List<File> parents=new ArrayList<File>();
+  Set<File> notUnderExcludedCache=new THashSet<File>(FileUtil.FILE_HASHING_STRATEGY);
+  for (  JpsModule module : allModules) {
+    for (    File contentRoot : myModuleToContentMap.get(module)) {
+      File parent=contentRoot.getParentFile();
+      JpsModule parentModule=null;
+      parents.clear();
+      while (parent != null) {
+        parents.add(parent);
+        if (contentToModule.containsKey(parent)) {
+          parentModule=contentToModule.get(parent);
+          break;
+        }
+        parent=parent.getParentFile();
+      }
+      if (parentModule != null) {
+        if (!parentModule.equals(module)) {
+          myModuleToExcludesMap.get(parentModule).add(contentRoot);
+        }
+        if (isUnderExcluded(contentRoot,myExcludedRoots,notUnderExcludedCache)) {
+          myTopLevelContentRoots.add(contentRoot);
+        }
+      }
+ else {
+        myTopLevelContentRoots.add(contentRoot);
+      }
+      for (      File file : parents) {
+        contentToModule.put(file,parentModule);
+      }
     }
   }
   for (  List<File> files : myModuleToExcludesMap.values()) {
