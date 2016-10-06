@@ -1,24 +1,30 @@
 {
   Collection<? extends ProjectTask> buildTasks=tasksMap.get(ModuleBuildTask.class);
   if (!ContainerUtil.isEmpty(buildTasks)) {
-    List<Module> toMake=new SmartList<>();
-    List<Module> toCompile=new SmartList<>();
+    List<Module> modules=new SmartList<>();
+    Boolean isIncrementalBuild=null;
+    Boolean includeDependentModules=null;
+    Boolean includeRuntimeDependencies=null;
     for (    ProjectTask buildProjectTask : buildTasks) {
       ModuleBuildTask moduleBuildTask=(ModuleBuildTask)buildProjectTask;
-      if (moduleBuildTask.isIncrementalBuild()) {
-        toMake.add(moduleBuildTask.getModule());
+      assertModuleBuildSettings(moduleBuildTask,isIncrementalBuild,includeDependentModules,includeRuntimeDependencies);
+      modules.add(moduleBuildTask.getModule());
+      if (!moduleBuildTask.isIncrementalBuild()) {
+        isIncrementalBuild=false;
       }
- else {
-        toCompile.add(moduleBuildTask.getModule());
+      if (moduleBuildTask.isIncludeDependentModules()) {
+        includeDependentModules=true;
+      }
+      if (moduleBuildTask.isIncludeRuntimeDependencies()) {
+        includeRuntimeDependencies=true;
       }
     }
     CompilerManager compilerManager=CompilerManager.getInstance(project);
-    if (!toMake.isEmpty()) {
-      CompileScope scope=createScope(project,compilerManager,context,toMake);
+    CompileScope scope=createScope(compilerManager,context,modules,includeDependentModules != null,includeRuntimeDependencies != null);
+    if (isIncrementalBuild == null) {
       compilerManager.make(scope,compileNotification);
     }
-    if (!toCompile.isEmpty()) {
-      CompileScope scope=createScope(project,compilerManager,context,toCompile);
+ else {
       compilerManager.compile(scope,compileNotification);
     }
   }

@@ -1,0 +1,22 @@
+{
+  if (args == null)   return Collections.emptyList();
+  final PsiMethod method=properties.getMethod();
+  final PsiParameter[] parameters=method.getParameterList().getParameters();
+  final HashSet<InferenceVariable> dependencies=new HashSet<InferenceVariable>();
+  for (int i=0; i < args.length; i++) {
+    PsiExpression arg=args[i];
+    if (arg instanceof PsiLambdaExpression && !((PsiLambdaExpression)arg).hasFormalParameterTypes() || arg instanceof PsiMethodReferenceExpression && !((PsiMethodReferenceExpression)arg).isExact()) {
+      final PsiSubstitutor nestedSubstitutor=myInferenceSessionContainer.findNestedSubstitutor(arg,myInferenceSubstitution);
+      final PsiType parameterType=nestedSubstitutor.substitute(getParameterType(parameters,i,mySiteSubstitutor,properties.isVarargs()));
+      final PsiClassType.ClassResolveResult result=PsiUtil.resolveGenericsClassInType(parameterType);
+      final PsiMethod interfaceMethod=LambdaUtil.getFunctionalInterfaceMethod(result);
+      if (interfaceMethod != null) {
+        final PsiSubstitutor substitutor=LambdaUtil.getSubstitutor(interfaceMethod,result);
+        for (        PsiParameter parameter : interfaceMethod.getParameterList().getParameters()) {
+          collectDependencies(substitutor.substitute(parameter.getType()),dependencies);
+        }
+      }
+    }
+  }
+  return dependencies;
+}
