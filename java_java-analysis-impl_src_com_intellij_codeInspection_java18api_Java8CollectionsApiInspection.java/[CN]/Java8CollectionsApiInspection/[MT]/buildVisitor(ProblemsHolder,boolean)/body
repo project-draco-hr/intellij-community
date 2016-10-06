@@ -3,19 +3,6 @@
     return PsiElementVisitor.EMPTY_VISITOR;
   }
   return new JavaElementVisitor(){
-    @Override public void visitMethodCallExpression(    PsiMethodCallExpression expression){
-      super.visitMethodCallExpression(expression);
-      PsiElement nameElement=expression.getMethodExpression().getReferenceNameElement();
-      if (nameElement != null && expression.getArgumentList().getExpressions().length == 2 && "sort".equals(nameElement.getText())) {
-        PsiMethod method=expression.resolveMethod();
-        if (method != null) {
-          PsiClass containingClass=method.getContainingClass();
-          if (containingClass != null && CommonClassNames.JAVA_UTIL_COLLECTIONS.equals(containingClass.getQualifiedName())) {
-            holder.registerProblem(nameElement,QuickFixBundle.message("java.8.collections.api.inspection.sort.description"),new ReplaceWithListSortFix());
-          }
-        }
-      }
-    }
     @Override public void visitConditionalExpression(    PsiConditionalExpression expression){
       final ConditionInfo conditionInfo=extractConditionInfo(expression.getCondition());
       if (conditionInfo == null)       return;
@@ -25,7 +12,6 @@
       analyzeCorrespondenceOfPutAndGet(conditionInfo.isInverted() ? thenExpression : elseExpression,conditionInfo.isInverted() ? elseExpression : thenExpression,conditionInfo.getQualifier(),conditionInfo.getContainsKey(),holder,expression);
     }
     @Override public void visitIfStatement(    PsiIfStatement statement){
-      handleGetWithVariable(holder,statement);
       final PsiExpression condition=statement.getCondition();
       final ConditionInfo conditionInfo=extractConditionInfo(condition);
       if (conditionInfo == null)       return;
@@ -47,61 +33,6 @@
       }
       if (maybePutStatement != null) {
         analyzeCorrespondenceOfPutAndGet(maybePutStatement,maybeGetBranch,conditionInfo.getQualifier(),conditionInfo.getContainsKey(),holder,statement);
-      }
-    }
-    private PsiMethodCallExpression tryExtractMapGetCall(    PsiReferenceExpression target,    PsiElement element){
-      if (element instanceof PsiDeclarationStatement) {
-        PsiDeclarationStatement declaration=(PsiDeclarationStatement)element;
-        PsiElement[] elements=declaration.getDeclaredElements();
-        if (elements.length > 0) {
-          PsiElement lastDeclaration=elements[elements.length - 1];
-          if (lastDeclaration instanceof PsiLocalVariable && lastDeclaration == target.resolve()) {
-            PsiLocalVariable var=(PsiLocalVariable)lastDeclaration;
-            PsiExpression initializer=PsiUtil.skipParenthesizedExprDown(var.getInitializer());
-            if (initializer instanceof PsiMethodCallExpression && isJavaUtilMapMethodWithName((PsiMethodCallExpression)initializer,"get")) {
-              return (PsiMethodCallExpression)initializer;
-            }
-          }
-        }
-      }
-      if (element instanceof PsiExpressionStatement) {
-        PsiExpression expression=((PsiExpressionStatement)element).getExpression();
-        if (expression instanceof PsiAssignmentExpression) {
-          PsiAssignmentExpression assignment=(PsiAssignmentExpression)expression;
-          PsiExpression lValue=assignment.getLExpression();
-          if (lValue instanceof PsiReferenceExpression && EquivalenceChecker.getCanonicalPsiEquivalence().expressionsAreEquivalent(target,lValue)) {
-            PsiExpression rValue=PsiUtil.skipParenthesizedExprDown(assignment.getRExpression());
-            if (rValue instanceof PsiMethodCallExpression && isJavaUtilMapMethodWithName((PsiMethodCallExpression)rValue,"get")) {
-              return (PsiMethodCallExpression)rValue;
-            }
-          }
-        }
-      }
-      return null;
-    }
-    private void handleGetWithVariable(    ProblemsHolder holder,    PsiIfStatement statement){
-      if (statement.getElseBranch() != null)       return;
-      PsiExpression condition=statement.getCondition();
-      if (!(condition instanceof PsiBinaryExpression))       return;
-      PsiBinaryExpression binOp=(PsiBinaryExpression)condition;
-      if (!binOp.getOperationTokenType().equals(JavaTokenType.EQEQ))       return;
-      PsiExpression value=getValueComparedWithNull(binOp);
-      if (!(value instanceof PsiReferenceExpression))       return;
-      PsiElement previous=PsiTreeUtil.skipSiblingsBackward(statement,PsiWhiteSpace.class,PsiComment.class);
-      PsiMethodCallExpression getCall=tryExtractMapGetCall((PsiReferenceExpression)value,previous);
-      if (getCall == null)       return;
-      PsiExpression[] getArguments=getCall.getArgumentList().getExpressions();
-      if (getArguments.length != 1)       return;
-      PsiStatement thenBranch=ControlFlowUtils.stripBraces(statement.getThenBranch());
-      if (thenBranch instanceof PsiExpressionStatement) {
-        PsiExpression expression=((PsiExpressionStatement)thenBranch).getExpression();
-        if (expression instanceof PsiAssignmentExpression) {
-          PsiExpression lValue=((PsiAssignmentExpression)expression).getLExpression();
-          PsiExpression rValue=((PsiAssignmentExpression)expression).getRExpression();
-          if (ExpressionUtils.isSimpleExpression(rValue) && EquivalenceChecker.getCanonicalPsiEquivalence().expressionsAreEquivalent(lValue,value)) {
-            holder.registerProblem(getCall,QuickFixBundle.message("java.8.collections.api.inspection.description"),new ReplaceWithGetOrDefaultFix());
-          }
-        }
       }
     }
   }

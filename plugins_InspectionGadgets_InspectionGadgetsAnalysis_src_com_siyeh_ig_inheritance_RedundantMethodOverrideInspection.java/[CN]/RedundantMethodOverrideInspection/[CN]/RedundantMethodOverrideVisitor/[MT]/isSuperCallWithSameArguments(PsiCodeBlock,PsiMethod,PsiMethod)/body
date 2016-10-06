@@ -29,9 +29,29 @@
   final PsiMethodCallExpression methodCallExpression=(PsiMethodCallExpression)expression;
   if (!MethodCallUtils.isSuperMethodCall(methodCallExpression,method))   return false;
   if (superMethod.hasModifierProperty(PsiModifier.PROTECTED)) {
-    final PsiJavaFile superFile=(PsiJavaFile)superMethod.getContainingFile();
     final PsiJavaFile file=(PsiJavaFile)method.getContainingFile();
-    if (!superFile.getPackageName().equals(file.getPackageName()))     return false;
+    PsiPackage aPackage=JavaPsiFacade.getInstance(method.getProject()).findPackage(file.getPackageName());
+    if (aPackage == null) {
+      return false;
+    }
+    final PackageScope scope=new PackageScope(aPackage,false,false);
+    if (isOnTheFly()) {
+      final PsiSearchHelper searchHelper=PsiSearchHelper.SERVICE.getInstance(method.getProject());
+      final PsiSearchHelper.SearchCostResult cost=searchHelper.isCheapEnoughToSearch(method.getName(),scope,null,null);
+      if (cost == PsiSearchHelper.SearchCostResult.ZERO_OCCURRENCES) {
+        return true;
+      }
+      if (cost == PsiSearchHelper.SearchCostResult.TOO_MANY_OCCURRENCES) {
+        return false;
+      }
+    }
+    final Query<PsiReference> search=ReferencesSearch.search(method,scope);
+    final PsiClass containingClass=method.getContainingClass();
+    for (    PsiReference reference : search) {
+      if (!PsiTreeUtil.isAncestor(containingClass,reference.getElement(),true)) {
+        return false;
+      }
+    }
   }
   return areSameArguments(methodCallExpression,method);
 }

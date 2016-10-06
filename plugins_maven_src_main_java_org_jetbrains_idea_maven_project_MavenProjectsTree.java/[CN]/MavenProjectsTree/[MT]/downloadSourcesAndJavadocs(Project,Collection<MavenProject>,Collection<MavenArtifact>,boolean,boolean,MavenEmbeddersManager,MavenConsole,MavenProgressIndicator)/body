@@ -1,14 +1,23 @@
 {
-  MavenEmbedderWrapper embedder=embeddersManager.getEmbedder(MavenEmbeddersManager.FOR_DOWNLOAD);
-  embedder.customizeForResolve(console,process);
-  try {
-    MavenArtifactDownloader.DownloadResult result=MavenArtifactDownloader.download(project,this,projects,artifacts,downloadSources,downloadDocs,embedder,process);
-    for (    MavenProject each : projects) {
-      fireArtifactsDownloaded(each);
+  MultiMap<File,MavenProject> projectMultiMap=groupByBasedir(projects);
+  MavenArtifactDownloader.DownloadResult result=new MavenArtifactDownloader.DownloadResult();
+  for (  Map.Entry<File,Collection<MavenProject>> entry : projectMultiMap.entrySet()) {
+    String baseDir=entry.getKey().getPath();
+    MavenEmbedderWrapper embedder=embeddersManager.getEmbedder(MavenEmbeddersManager.FOR_DOWNLOAD,baseDir,baseDir);
+    try {
+      embedder.customizeForResolve(console,process);
+      MavenArtifactDownloader.DownloadResult result1=MavenArtifactDownloader.download(project,this,projects,artifacts,downloadSources,downloadDocs,embedder,process);
+      for (      MavenProject each : projects) {
+        fireArtifactsDownloaded(each);
+      }
+      result.resolvedDocs.addAll(result1.resolvedDocs);
+      result.resolvedSources.addAll(result1.resolvedSources);
+      result.unresolvedDocs.addAll(result1.unresolvedDocs);
+      result.unresolvedSources.addAll(result1.unresolvedSources);
     }
-    return result;
-  }
   finally {
-    embeddersManager.release(embedder);
+      embeddersManager.release(embedder);
+    }
   }
+  return result;
 }

@@ -1,11 +1,6 @@
 {
-  JavaResolveResult result;
-  try {
-    result=resolveOptimised(ref);
-  }
- catch (  IndexNotReadyException e) {
-    return null;
-  }
+  JavaResolveResult result=resolveOptimised(ref);
+  if (result == null)   return null;
   PsiElement resolved=result.getElement();
   PsiElement parent=ref.getParent();
   if (myRefCountHolder != null) {
@@ -32,7 +27,9 @@
   if (!myHolder.hasErrorResults())   myHolder.add(HighlightClassUtil.checkExtendsDuplicate(ref,resolved,myFile));
   if (!myHolder.hasErrorResults())   myHolder.add(HighlightClassUtil.checkClassExtendsForeignInnerClass(ref,resolved));
   if (!myHolder.hasErrorResults())   myHolder.add(GenericsHighlightUtil.checkSelectStaticClassFromParameterizedType(resolved,ref));
-  if (!myHolder.hasErrorResults())   myHolder.add(GenericsHighlightUtil.checkParameterizedReferenceTypeArguments(resolved,ref,result.getSubstitutor(),myJavaSdkVersion));
+  if (!myHolder.hasErrorResults()) {
+    myHolder.add(GenericsHighlightUtil.checkParameterizedReferenceTypeArguments(resolved,ref,result.getSubstitutor(),myJavaSdkVersion));
+  }
   if (!myHolder.hasErrorResults())   myHolder.add(GenericsHighlightUtil.checkCannotPassInner(ref));
   if (resolved != null && parent instanceof PsiReferenceList) {
     if (!myHolder.hasErrorResults()) {
@@ -46,11 +43,9 @@
   }
   if (resolved instanceof PsiVariable) {
     PsiVariable variable=(PsiVariable)resolved;
-    final PsiElement containingClass=PsiTreeUtil.getNonStrictParentOfType(ref,PsiClass.class,PsiLambdaExpression.class);
-    if ((containingClass instanceof PsiAnonymousClass || containingClass instanceof PsiLambdaExpression) && !PsiTreeUtil.isAncestor(containingClass,variable,false) && !(variable instanceof PsiField)) {
-      if (containingClass instanceof PsiLambdaExpression || !PsiTreeUtil.isAncestor(((PsiAnonymousClass)containingClass).getArgumentList(),ref,false)) {
-        myHolder.add(HighlightInfo.newHighlightInfo(JavaHighlightInfoTypes.IMPLICIT_ANONYMOUS_CLASS_PARAMETER).range(ref).create());
-      }
+    PsiElement containingClass=PsiTreeUtil.getNonStrictParentOfType(ref,PsiClass.class,PsiLambdaExpression.class);
+    if ((containingClass instanceof PsiAnonymousClass || containingClass instanceof PsiLambdaExpression) && !PsiTreeUtil.isAncestor(containingClass,variable,false) && !(variable instanceof PsiField)&& (containingClass instanceof PsiLambdaExpression || !PsiTreeUtil.isAncestor(((PsiAnonymousClass)containingClass).getArgumentList(),ref,false))) {
+      myHolder.add(HighlightInfo.newHighlightInfo(JavaHighlightInfoTypes.IMPLICIT_ANONYMOUS_CLASS_PARAMETER).range(ref).create());
     }
     if (variable instanceof PsiParameter && ref instanceof PsiExpression && PsiUtil.isAccessedForWriting((PsiExpression)ref)) {
       myReassignedParameters.put((PsiParameter)variable,2);
@@ -60,7 +55,10 @@
       myHolder.add(HighlightNamesUtil.highlightReassignedVariable(variable,ref));
     }
  else {
-      myHolder.add(HighlightNamesUtil.highlightVariableName(variable,ref.getReferenceNameElement(),colorsScheme));
+      PsiElement nameElement=ref.getReferenceNameElement();
+      if (nameElement != null) {
+        myHolder.add(HighlightNamesUtil.highlightVariableName(variable,nameElement,colorsScheme));
+      }
     }
     myHolder.add(HighlightNamesUtil.highlightClassNameInQualifier(ref,colorsScheme));
   }
@@ -68,7 +66,8 @@
     highlightReferencedMethodOrClassName(ref,resolved);
   }
   if (parent instanceof PsiNewExpression && !(resolved instanceof PsiClass) && resolved instanceof PsiNamedElement&& ((PsiNewExpression)parent).getClassOrAnonymousClassReference() == ref) {
-    myHolder.add(HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(ref).descriptionAndTooltip("Cannot find symbol " + ((PsiNamedElement)resolved).getName()).create());
+    String text=JavaErrorMessages.message("cannot.resolve.symbol",((PsiNamedElement)resolved).getName());
+    myHolder.add(HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(ref).descriptionAndTooltip(text).create());
   }
   if (!myHolder.hasErrorResults() && resolved instanceof PsiClass) {
     final PsiClass aClass=((PsiClass)resolved).getContainingClass();

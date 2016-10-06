@@ -1,0 +1,31 @@
+{
+  if (text.isEmpty()) {
+    throw new IllegalArgumentException("Cannot search for elements with empty text");
+  }
+  final ProgressIndicator progress=getOrCreateIndicator();
+  if (searchScope instanceof GlobalSearchScope) {
+    StringSearcher searcher=new StringSearcher(text,options.contains(Options.CASE_SENSITIVE_SEARCH),true,searchContext == UsageSearchContext.IN_STRINGS,options.contains(Options.PROCESS_ONLY_JAVA_IDENTIFIERS_IF_POSSIBLE));
+    return processElementsWithTextInGlobalScope(processor,(GlobalSearchScope)searchScope,searcher,searchContext,options.contains(Options.CASE_SENSITIVE_SEARCH),containerName,progress);
+  }
+  LocalSearchScope scope=(LocalSearchScope)searchScope;
+  PsiElement[] scopeElements=scope.getScope();
+  final StringSearcher searcher=new StringSearcher(text,options.contains(Options.CASE_SENSITIVE_SEARCH),true,searchContext == UsageSearchContext.IN_STRINGS,options.contains(Options.PROCESS_ONLY_JAVA_IDENTIFIERS_IF_POSSIBLE));
+  ReadActionProcessor<PsiElement> localProcessor=new ReadActionProcessor<PsiElement>(){
+    @Override public boolean processInReadAction(    PsiElement scopeElement){
+      if (!scopeElement.isValid())       return true;
+      if (!scopeElement.isPhysical()) {
+        scopeElement=scopeElement.getNavigationElement();
+      }
+      if (scopeElement.getTextRange() == null) {
+        LOG.debug("Element " + scopeElement + " of class "+ scopeElement.getClass()+ " has null range");
+        return true;
+      }
+      return processor.execute(scopeElement,LowLevelSearchUtil.getTextOccurrencesInScope(scopeElement,searcher,progress),searcher);
+    }
+    @Override public String toString(){
+      return processor.toString();
+    }
+  }
+;
+  return JobLauncher.getInstance().invokeConcurrentlyUnderProgress(Arrays.asList(scopeElements),progress,true,true,localProcessor);
+}

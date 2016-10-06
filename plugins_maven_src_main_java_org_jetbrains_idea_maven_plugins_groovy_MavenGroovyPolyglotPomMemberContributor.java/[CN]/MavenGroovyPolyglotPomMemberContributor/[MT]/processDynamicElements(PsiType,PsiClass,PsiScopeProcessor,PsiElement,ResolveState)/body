@@ -1,0 +1,28 @@
+{
+  if (!(aClass instanceof GroovyScriptClass)) {
+    return;
+  }
+  PsiFile file=aClass.getContainingFile();
+  if (file == null || !"pom.groovy".equals(file.getName()))   return;
+  List<String> methodCallInfo=MavenGroovyPomUtil.getGroovyMethodCalls(place);
+  MultiMap<String,String> multiMap=MultiMap.createLinked();
+  MultiMap<String,String> leafMap=MultiMap.createLinked();
+  String key=StringUtil.join(methodCallInfo,"->");
+  for (  Contributor contributor : contributors.getValue()) {
+    contributor.populate(place.getProject(),multiMap,leafMap);
+  }
+  for (  String classSource : multiMap.get(key)) {
+    DynamicMemberUtils.process(processor,false,place,classSource);
+  }
+  for (  String classSource : leafMap.get(key)) {
+    if (!(place.getParent() instanceof GrClosableBlock)) {
+      DynamicMemberUtils.process(processor,false,place,classSource);
+    }
+  }
+  if (!methodCallInfo.isEmpty() && StringUtil.endsWithIgnoreCase(ContainerUtil.getLastItem(methodCallInfo),CompletionUtilCore.DUMMY_IDENTIFIER_TRIMMED)) {
+    key=StringUtil.join(ContainerUtil.dropTail(methodCallInfo),"->");
+    for (    String classSource : multiMap.get(key)) {
+      DynamicMemberUtils.process(processor,false,place,classSource);
+    }
+  }
+}

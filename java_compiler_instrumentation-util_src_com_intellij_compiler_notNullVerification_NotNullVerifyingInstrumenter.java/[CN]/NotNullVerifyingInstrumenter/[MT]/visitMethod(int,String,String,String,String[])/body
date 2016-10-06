@@ -27,8 +27,8 @@
     }
     public AnnotationVisitor visitParameterAnnotation(    final int parameter,    final String anno,    final boolean visible){
       AnnotationVisitor av=mv.visitParameterAnnotation(parameter,anno,visible);
-      if (isReferenceType(args[parameter]) && anno.equals(myNotNullAnno)) {
-        NotNullState state=new NotNullState(IAE_CLASS_NAME);
+      if (isReferenceType(args[parameter]) && myNotNullAnnos.contains(anno)) {
+        NotNullState state=new NotNullState(anno,IAE_CLASS_NAME);
         myNotNullParams.put(new Integer(parameter),state);
         av=collectNotNullArgs(av,state);
       }
@@ -39,8 +39,8 @@
     }
     @Override public AnnotationVisitor visitAnnotation(    String anno,    boolean isRuntime){
       AnnotationVisitor av=mv.visitAnnotation(anno,isRuntime);
-      if (isReferenceType(returnType) && anno.equals(myNotNullAnno)) {
-        myMethodNotNull=new NotNullState(ISE_CLASS_NAME);
+      if (isReferenceType(returnType) && myNotNullAnnos.contains(anno)) {
+        myMethodNotNull=new NotNullState(anno,ISE_CLASS_NAME);
         av=collectNotNullArgs(av,myMethodNotNull);
       }
       return av;
@@ -61,7 +61,7 @@
         mv.visitJumpInsn(IFNONNULL,end);
         NotNullState state=entry.getValue();
         String paramName=paramNames == null ? null : paramNames.get(param);
-        String descrPattern=state.message != null ? state.message : paramName != null ? myNullArgMessageNamed : myNullArgMessageIndexed;
+        String descrPattern=state.getNullParamMessage(paramName);
         String[] args=state.message != null ? EMPTY_STRING_ARRAY : new String[]{paramName != null ? paramName : String.valueOf(param - mySyntheticCount),myClassName,name};
         reportError(state.exceptionType,end,descrPattern,args);
       }
@@ -78,7 +78,7 @@
           mv.visitInsn(DUP);
           final Label skipLabel=new Label();
           mv.visitJumpInsn(IFNONNULL,skipLabel);
-          String descrPattern=myMethodNotNull.message != null ? myMethodNotNull.message : myNullResultMessage;
+          String descrPattern=myMethodNotNull.getNullResultMessage();
           String[] args=myMethodNotNull.message != null ? EMPTY_STRING_ARRAY : new String[]{myClassName,name};
           reportError(myMethodNotNull.exceptionType,skipLabel,descrPattern,args);
         }

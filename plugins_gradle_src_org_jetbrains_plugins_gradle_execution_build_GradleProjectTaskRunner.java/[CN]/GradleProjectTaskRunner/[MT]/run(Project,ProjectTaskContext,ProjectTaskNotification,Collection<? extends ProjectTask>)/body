@@ -1,0 +1,41 @@
+{
+  String executionName="Gradle build";
+  MultiMap<String,String> buildTasksMap=MultiMap.createLinkedSet();
+  MultiMap<String,String> cleanTasksMap=MultiMap.createLinkedSet();
+  Map<Class<? extends ProjectTask>,List<ProjectTask>> taskMap=InternalProjectTaskRunner.groupBy(tasks);
+  addModulesBuildTasks(taskMap.get(ModuleBuildTask.class),cleanTasksMap,buildTasksMap);
+  addModulesBuildTasks(taskMap.get(ModuleFilesBuildTask.class),cleanTasksMap,buildTasksMap);
+  addArtifactsBuildTasks(taskMap.get(ArtifactBuildTask.class),cleanTasksMap,buildTasksMap);
+  Set<String> rootPaths=buildTasksMap.keySet();
+  AtomicInteger successCounter=new AtomicInteger();
+  AtomicInteger errorCounter=new AtomicInteger();
+  TaskCallback taskCallback=callback == null ? null : new TaskCallback(){
+    @Override public void onSuccess(){
+      handle(true);
+    }
+    @Override public void onFailure(){
+      handle(false);
+    }
+    private void handle(    boolean success){
+      int successes=success ? successCounter.incrementAndGet() : successCounter.get();
+      int errors=success ? errorCounter.get() : errorCounter.incrementAndGet();
+      if (successes + errors == rootPaths.size()) {
+        callback.finished(new ProjectTaskResult(false,errors,0));
+      }
+    }
+  }
+;
+  String gradleVmOptions=GradleSettings.getInstance(project).getGradleVmOptions();
+  for (  String rootProjectPath : rootPaths) {
+    Collection<String> buildTasks=buildTasksMap.get(rootProjectPath);
+    if (buildTasks.isEmpty())     continue;
+    Collection<String> cleanTasks=cleanTasksMap.get(rootProjectPath);
+    ExternalSystemTaskExecutionSettings settings=new ExternalSystemTaskExecutionSettings();
+    settings.setExecutionName(executionName);
+    settings.setExternalProjectPath(rootProjectPath);
+    settings.setTaskNames(ContainerUtil.collect(ContainerUtil.concat(cleanTasks,buildTasks).iterator()));
+    settings.setVmOptions(gradleVmOptions);
+    settings.setExternalSystemIdString(GradleConstants.SYSTEM_ID.getId());
+    ExternalSystemUtil.runTask(settings,DefaultRunExecutor.EXECUTOR_ID,project,GradleConstants.SYSTEM_ID,taskCallback,ProgressExecutionMode.IN_BACKGROUND_ASYNC,false);
+  }
+}

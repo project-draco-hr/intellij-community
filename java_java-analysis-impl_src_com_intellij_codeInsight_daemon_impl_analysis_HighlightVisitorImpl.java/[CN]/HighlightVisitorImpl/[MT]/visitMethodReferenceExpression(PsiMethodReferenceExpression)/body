@@ -1,5 +1,7 @@
 {
   myHolder.add(checkFeature(expression,Feature.METHOD_REFERENCES));
+  final PsiElement parent=PsiUtil.skipParenthesizedExprUp(expression.getParent());
+  if (parent instanceof PsiExpressionStatement)   return;
   final JavaResolveResult result;
   final JavaResolveResult[] results;
   try {
@@ -21,20 +23,24 @@
  else {
     final TextAttributesScheme colorsScheme=myHolder.getColorsScheme();
     if (method instanceof PsiMethod && !expression.isConstructor()) {
-      final PsiElement methodNameElement=expression.getReferenceNameElement();
-      myHolder.add(HighlightNamesUtil.highlightMethodName((PsiMethod)method,methodNameElement,false,colorsScheme));
+      PsiElement methodNameElement=expression.getReferenceNameElement();
+      if (methodNameElement != null) {
+        myHolder.add(HighlightNamesUtil.highlightMethodName((PsiMethod)method,methodNameElement,false,colorsScheme));
+      }
     }
     myHolder.add(HighlightNamesUtil.highlightClassNameInQualifier(expression,colorsScheme));
   }
-  if (!LambdaUtil.isValidLambdaContext(expression.getParent())) {
-    myHolder.add(HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(expression).descriptionAndTooltip("Method reference expression is not expected here").create());
+  if (!LambdaUtil.isValidLambdaContext(parent)) {
+    String description="Method reference expression is not expected here";
+    myHolder.add(HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(expression).descriptionAndTooltip(description).create());
   }
   final PsiType functionalInterfaceType=expression.getFunctionalInterfaceType();
   if (!myHolder.hasErrorResults()) {
     if (functionalInterfaceType != null) {
       final boolean notFunctional=!LambdaUtil.isFunctionalType(functionalInterfaceType);
       if (notFunctional) {
-        myHolder.add(HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(expression).descriptionAndTooltip(functionalInterfaceType.getPresentableText() + " is not a functional interface").create());
+        String description=functionalInterfaceType.getPresentableText() + " is not a functional interface";
+        myHolder.add(HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(expression).descriptionAndTooltip(description).create());
       }
     }
   }
@@ -42,10 +48,11 @@
     final PsiElement referenceNameElement=expression.getReferenceNameElement();
     if (referenceNameElement instanceof PsiKeyword) {
       if (!PsiMethodReferenceUtil.isValidQualifier(expression)) {
-        final PsiElement qualifier=expression.getQualifier();
-        String description="Cannot find class " + qualifier.getText();
-        HighlightInfo result1=HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(qualifier).descriptionAndTooltip(description).create();
-        myHolder.add(result1);
+        PsiElement qualifier=expression.getQualifier();
+        if (qualifier != null) {
+          String description="Cannot find class " + qualifier.getText();
+          myHolder.add(HighlightInfo.newHighlightInfo(HighlightInfoType.ERROR).range(qualifier).descriptionAndTooltip(description).create());
+        }
       }
     }
   }

@@ -1,0 +1,52 @@
+{
+  final StringBuilder buffer=new StringBuilder();
+  final Ref<VcsException> ex=new Ref<>();
+  final AtomicInteger records=new AtomicInteger();
+  handler.addLineListener(new GitLineHandlerListener(){
+    @Override public void onLineAvailable(    String line,    Key outputType){
+      try {
+        String tail=null;
+        int nextRecordStart=line.indexOf(GitLogParser.RECORD_START);
+        if (nextRecordStart == -1) {
+          buffer.append(line).append("\n");
+        }
+ else         if (nextRecordStart == 0) {
+          tail=line + "\n";
+        }
+ else {
+          buffer.append(line.substring(0,nextRecordStart));
+          tail=line.substring(nextRecordStart) + "\n";
+        }
+        if (tail != null) {
+          if (records.incrementAndGet() > bufferSize) {
+            recordConsumer.consume(buffer);
+            buffer.setLength(0);
+          }
+          buffer.append(tail);
+        }
+      }
+ catch (      Exception e) {
+        ex.set(new VcsException(e));
+      }
+    }
+    @Override public void processTerminated(    int exitCode){
+      try {
+        recordConsumer.consume(buffer);
+      }
+ catch (      Exception e) {
+        ex.set(new VcsException(e));
+      }
+    }
+    @Override public void startFailed(    Throwable exception){
+      ex.set(new VcsException(exception));
+    }
+  }
+);
+  handler.runInCurrentThread(null);
+  if (!ex.isNull()) {
+    if (ex.get().getCause() instanceof ProcessCanceledException) {
+      throw (ProcessCanceledException)ex.get().getCause();
+    }
+    throw ex.get();
+  }
+}
