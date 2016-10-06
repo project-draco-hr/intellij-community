@@ -1,39 +1,24 @@
 {
   TerminalBlock withFilter=extractFilter();
   if (withFilter != null)   return withFilter;
-  if (getSingleStatement() instanceof PsiForeachStatement) {
-    if (myVariable.getType() instanceof PsiPrimitiveType)     return null;
-    PsiForeachStatement foreachStatement=(PsiForeachStatement)getSingleStatement();
-    final PsiExpression iteratedValue=foreachStatement.getIteratedValue();
-    final PsiStatement body=foreachStatement.getBody();
-    if (iteratedValue != null && body != null) {
-      final PsiType iteratedValueType=iteratedValue.getType();
-      FlatMapOp op=null;
-      if (iteratedValueType instanceof PsiArrayType) {
-        if (!isSupported(((PsiArrayType)iteratedValueType).getComponentType()))         return null;
-        op=new ArrayFlatMapOp(myPreviousOp,iteratedValue,myVariable,foreachStatement);
-      }
+  if (getSingleStatement() instanceof PsiLoopStatement) {
+    PsiLoopStatement loopStatement=(PsiLoopStatement)getSingleStatement();
+    StreamSource source=StreamSource.tryCreate(loopStatement);
+    final PsiStatement body=loopStatement.getBody();
+    if (source == null || body == null)     return null;
+    if (myVariable.getType() instanceof PsiPrimitiveType && !myVariable.getType().equals(source.getVariable().getType()))     return null;
+    FlatMapOp op=new FlatMapOp(myPreviousOp,source,myVariable,loopStatement);
+    TerminalBlock withFlatMap=new TerminalBlock(op,source.getVariable(),body);
+    if (ReferencesSearch.search(myVariable,new LocalSearchScope(body)).findFirst() == null) {
+      return withFlatMap;
+    }
  else {
-        final PsiClass iteratorClass=PsiUtil.resolveClassInClassTypeOnly(iteratedValueType);
-        final PsiClass collectionClass=JavaPsiFacade.getInstance(body.getProject()).findClass(CommonClassNames.JAVA_UTIL_COLLECTION,foreachStatement.getResolveScope());
-        if (collectionClass != null && InheritanceUtil.isInheritorOrSelf(iteratorClass,collectionClass,true)) {
-          op=new FlatMapOp(myPreviousOp,iteratedValue,myVariable,foreachStatement);
-        }
-      }
-      if (op != null) {
-        TerminalBlock withFlatMap=new TerminalBlock(op,foreachStatement.getIterationParameter(),body);
-        if (ReferencesSearch.search(myVariable,new LocalSearchScope(body)).findFirst() == null) {
-          return withFlatMap;
-        }
- else {
-          TerminalBlock withFlatMapFilter=withFlatMap.extractFilter();
-          if (withFlatMapFilter != null && !withFlatMapFilter.isEmpty()) {
-            PsiStatement[] statements=withFlatMapFilter.getStatements();
-            PsiStatement lastStatement=statements[statements.length - 1];
-            if (lastStatement instanceof PsiBreakStatement && op.breaksMe((PsiBreakStatement)lastStatement) && ReferencesSearch.search(withFlatMapFilter.getVariable(),new LocalSearchScope(statements)).findFirst() == null) {
-              return new TerminalBlock(new CompoundFilterOp((FilterOp)withFlatMapFilter.getLastOperation(),op),myVariable,Arrays.copyOfRange(statements,0,statements.length - 1));
-            }
-          }
+      TerminalBlock withFlatMapFilter=withFlatMap.extractFilter();
+      if (withFlatMapFilter != null && !withFlatMapFilter.isEmpty()) {
+        PsiStatement[] statements=withFlatMapFilter.getStatements();
+        PsiStatement lastStatement=statements[statements.length - 1];
+        if (lastStatement instanceof PsiBreakStatement && op.breaksMe((PsiBreakStatement)lastStatement) && ReferencesSearch.search(withFlatMapFilter.getVariable(),new LocalSearchScope(statements)).findFirst() == null) {
+          return new TerminalBlock(new CompoundFilterOp((FilterOp)withFlatMapFilter.getLastOperation(),op),myVariable,Arrays.copyOfRange(statements,0,statements.length - 1));
         }
       }
     }
