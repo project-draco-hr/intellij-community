@@ -1,0 +1,42 @@
+{
+  if (!(forStatement.getInitialization() instanceof PsiDeclarationStatement))   return null;
+  PsiDeclarationStatement initialization=(PsiDeclarationStatement)forStatement.getInitialization();
+  if (initialization.getDeclaredElements().length != 1)   return null;
+  PsiElement declaration=initialization.getDeclaredElements()[0];
+  if (!(declaration instanceof PsiLocalVariable))   return null;
+  PsiLocalVariable counter=(PsiLocalVariable)declaration;
+  if (!counter.getType().equals(PsiType.INT) && !counter.getType().equals(PsiType.LONG))   return null;
+  PsiExpression initializer=counter.getInitializer();
+  if (initializer == null)   return null;
+  if (!(forStatement.getUpdate() instanceof PsiExpressionStatement))   return null;
+  PsiExpression lValue=extractIncrementedLValue(((PsiExpressionStatement)forStatement.getUpdate()).getExpression());
+  if (!(lValue instanceof PsiReferenceExpression) || ((PsiReferenceExpression)lValue).resolve() != counter)   return null;
+  if (!(forStatement.getCondition() instanceof PsiBinaryExpression))   return null;
+  PsiBinaryExpression condition=(PsiBinaryExpression)forStatement.getCondition();
+  IElementType type=condition.getOperationTokenType();
+  boolean closed=false;
+  PsiExpression bound;
+  PsiExpression ref;
+  if (type.equals(JavaTokenType.LE)) {
+    bound=condition.getROperand();
+    ref=condition.getLOperand();
+    closed=true;
+  }
+ else   if (type.equals(JavaTokenType.LT)) {
+    bound=condition.getROperand();
+    ref=condition.getLOperand();
+  }
+ else   if (type.equals(JavaTokenType.GE)) {
+    bound=condition.getLOperand();
+    ref=condition.getROperand();
+    closed=true;
+  }
+ else   if (type.equals(JavaTokenType.GT)) {
+    bound=condition.getLOperand();
+    ref=condition.getROperand();
+  }
+ else   return null;
+  if (bound == null || !(ref instanceof PsiReferenceExpression) || ((PsiReferenceExpression)ref).resolve() != counter)   return null;
+  if (!TypeConversionUtil.areTypesAssignmentCompatible(counter.getType(),bound))   return null;
+  return new CountingLoop(counter,initializer,bound,closed);
+}
