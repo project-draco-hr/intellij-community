@@ -4,7 +4,10 @@
   }
   return new JavaElementVisitor(){
     @Override public void visitMethodCallExpression(    PsiMethodCallExpression methodCall){
-      final PsiMethod method=methodCall.resolveMethod();
+      PsiMethod method=methodCall.resolveMethod();
+      if (method == null)       return;
+      PsiClass psiClass=method.getContainingClass();
+      if (psiClass == null)       return;
       if (isCallOf(method,CommonClassNames.JAVA_UTIL_COLLECTION,STREAM_METHOD,0)) {
         handleCollectionStream(methodCall);
       }
@@ -14,8 +17,34 @@
  else       if (isCallOf(method,CommonClassNames.JAVA_UTIL_OPTIONAL,IS_PRESENT_METHOD,0)) {
         handleOptionalIsPresent(methodCall);
       }
+ else       if (isStreamCall(method,ANY_MATCH_METHOD)) {
+        if (isParentNegated(methodCall)) {
+          boolean argNegated=isArgumentLambdaNegated(methodCall);
+          registerMatchFix(methodCall,new SimplifyMatchNegationFix("!" + psiClass.getName() + (argNegated ? ".anyMatch(x -> !(...))" : ".anyMatch(...)"),argNegated ? ALL_MATCH_METHOD : NONE_MATCH_METHOD));
+        }
+      }
+ else       if (isStreamCall(method,NONE_MATCH_METHOD)) {
+        if (isParentNegated(methodCall)) {
+          registerMatchFix(methodCall,new SimplifyMatchNegationFix("!" + psiClass.getName() + ".noneMatch(...)",ANY_MATCH_METHOD));
+        }
+        if (isArgumentLambdaNegated(methodCall)) {
+          registerMatchFix(methodCall,new SimplifyMatchNegationFix(psiClass.getName() + ".noneMatch(x -> !(...))",ALL_MATCH_METHOD));
+        }
+      }
+ else       if (isStreamCall(method,ALL_MATCH_METHOD)) {
+        if (isArgumentLambdaNegated(methodCall)) {
+          boolean parentNegated=isParentNegated(methodCall);
+          registerMatchFix(methodCall,new SimplifyMatchNegationFix((parentNegated ? "!" : "") + psiClass.getName() + ".allMatch(x -> !(...))",parentNegated ? ANY_MATCH_METHOD : NONE_MATCH_METHOD));
+        }
+      }
  else {
         handleStreamForEach(methodCall,method);
+      }
+    }
+    void registerMatchFix(    PsiMethodCallExpression methodCall,    SimplifyMatchNegationFix fix){
+      PsiElement nameElement=methodCall.getMethodExpression().getReferenceNameElement();
+      if (nameElement != null) {
+        holder.registerProblem(nameElement,fix.getMessage(),new SimplifyCallChainFix(fix));
       }
     }
     private void handleOptionalIsPresent(    PsiMethodCallExpression methodCall){
