@@ -1,0 +1,35 @@
+{
+  if (!PsiUtil.isLanguageLevel8OrHigher(holder.getFile())) {
+    return PsiElementVisitor.EMPTY_VISITOR;
+  }
+  return new JavaElementVisitor(){
+    @Override public void visitAnonymousClass(    final PsiAnonymousClass aClass){
+      super.visitAnonymousClass(aClass);
+      PsiMethod[] methods=aClass.getMethods();
+      if (methods.length == 1 && aClass.getFields().length == 0 && aClass.getInnerClasses().length == 0 && aClass.getInitializers().length == 0) {
+        PsiExpressionList argumentList=aClass.getArgumentList();
+        PsiMethod method=methods[0];
+        if (argumentList != null && argumentList.getExpressions().length == 0 && method.getBody() != null && method.getDocComment() == null && !AnonymousCanBeLambdaInspection.hasRuntimeAnnotations(method,Collections.emptySet()) && !method.hasModifierProperty(PsiModifier.SYNCHRONIZED) && !AnonymousCanBeLambdaInspection.hasForbiddenRefsInsideBody(method,aClass)) {
+          PsiClassType type=aClass.getBaseClassType();
+          AnonymousLambdaAlternative alternative=getAlternative(type.resolve(),method);
+          if (alternative != null) {
+            final PsiElement lBrace=aClass.getLBrace();
+            LOG.assertTrue(lBrace != null);
+            final TextRange rangeInElement=new TextRange(0,lBrace.getStartOffsetInParent() + aClass.getStartOffsetInParent() - 1);
+            holder.registerProblem(aClass.getParent(),"Anonymous #ref #loc can be replaced with " + alternative.myReplacementMessage,ProblemHighlightType.LIKE_UNUSED_SYMBOL,rangeInElement,new ReplaceWithLambdaAlternativeFix(alternative));
+          }
+        }
+      }
+    }
+    @Contract("null, _ -> null") private AnonymousLambdaAlternative getAlternative(    PsiClass type,    PsiMethod method){
+      if (type == null)       return null;
+      for (      AnonymousLambdaAlternative alternative : ALTERNATIVES) {
+        if (alternative.myClassName.equals(type.getQualifiedName()) && alternative.myMethodName.equals(method.getName())) {
+          return alternative;
+        }
+      }
+      return null;
+    }
+  }
+;
+}
