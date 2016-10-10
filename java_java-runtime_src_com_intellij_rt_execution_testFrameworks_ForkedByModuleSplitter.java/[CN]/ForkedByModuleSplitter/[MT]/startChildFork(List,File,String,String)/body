@@ -1,9 +1,6 @@
 {
   List vmParameters=new ArrayList(myVMParameters);
   myForkedDebuggerHelper.setupDebugger(vmParameters);
-  final File tempFile=File.createTempFile("fork","test");
-  tempFile.deleteOnExit();
-  final String testOutputPath=tempFile.getAbsolutePath();
   final ProcessBuilder builder=new ProcessBuilder();
   builder.add(vmParameters);
   builder.add("-classpath");
@@ -19,14 +16,16 @@
     builder.add(classpath);
   }
   builder.add(getStarterName());
-  builder.add(testOutputPath);
   builder.add(args);
   if (repeatCount != null) {
     builder.add(repeatCount);
   }
   builder.setWorkingDir(workingDir);
   final Process exec=builder.createProcess();
-  final int result=exec.waitFor();
-  ForkedVMWrapper.readWrapped(testOutputPath,myOut,myErr);
-  return result;
+  final boolean[] stopped=new boolean[1];
+  new Thread(createInputReader(exec.getErrorStream(),System.err,stopped),"Read forked error output").start();
+  new Thread(createInputReader(exec.getInputStream(),System.out,stopped),"Read forked output").start();
+  final int i=exec.waitFor();
+  stopped[0]=true;
+  return i;
 }

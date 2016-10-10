@@ -27,8 +27,25 @@
         final IElementType operationSign=signToken.getTokenType();
         final String sign=signToken.getText();
         if (operationSign == JavaTokenType.PLUSEQ || operationSign == JavaTokenType.MINUSEQ) {
-          return new TypeConversionDescriptor("$qualifier$ " + sign + " $val$","$qualifier$.getAndAdd(" + (operationSign == JavaTokenType.MINUSEQ ? "-" : "") + "($val$))");
+          return new TypeConversionDescriptor("$qualifier$ " + sign + " $val$","$qualifier$.addAndGet(" + (operationSign == JavaTokenType.MINUSEQ ? "-($val$))" : "$val$)")){
+            @Override public PsiExpression replace(            PsiExpression expression,            TypeEvaluator evaluator){
+              final PsiMethodCallExpression result=(PsiMethodCallExpression)super.replace(expression,evaluator);
+              final PsiExpression argument=result.getArgumentList().getExpressions()[0];
+              if (argument instanceof PsiPrefixExpression) {
+                final PsiExpression operand=((PsiPrefixExpression)argument).getOperand();
+                final PsiExpression striped=ParenthesesUtils.stripParentheses(operand);
+                if (striped != null && operand != striped) {
+                  operand.replace(striped);
+                }
+              }
+              return result;
+            }
+          }
+;
         }
+      }
+ else       if (context instanceof PsiLiteralExpression && !(context.getParent() instanceof PsiAssignmentExpression)) {
+        return wrapWithNewExpression(to,from,(PsiExpression)context,context);
       }
     }
  else     if (qualifiedName.equals(AtomicIntegerArray.class.getName()) || qualifiedName.equals(AtomicLongArray.class.getName())) {

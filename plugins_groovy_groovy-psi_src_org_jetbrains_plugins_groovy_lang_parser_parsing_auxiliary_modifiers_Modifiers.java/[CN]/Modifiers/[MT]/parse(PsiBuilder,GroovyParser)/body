@@ -1,24 +1,27 @@
 {
-  boolean endsWithNewLine;
   PsiBuilder.Marker modifiersMarker=builder.mark();
-  if (!Annotation.parse(builder,parser) && !parseModifier(builder)) {
-    modifiersMarker.done(GroovyElementTypes.MODIFIERS);
-    return false;
-  }
-  PsiBuilder.Marker newLineMarker=builder.mark();
-  while (true) {
-    newLineMarker.drop();
-    newLineMarker=builder.mark();
-    endsWithNewLine=ParserUtils.getToken(builder,GroovyTokenTypes.mNLS);
-    if (!Annotation.parse(builder,parser) && !parseModifier(builder))     break;
-  }
-  if (endsWithNewLine) {
-    newLineMarker.rollbackTo();
-  }
+  boolean hasModifiers=false;
+  do {
+    final PsiBuilder.Marker modifierListItem=builder.mark();
+    if (hasModifiers)     ParserUtils.getToken(builder,GroovyTokenTypes.mNLS);
+    final boolean parsed=Annotation.parse(builder,parser) || parseModifier(builder);
+    if (parsed) {
+      if (PathExpression.isQualificationDot(builder)) {
+        modifierListItem.rollbackTo();
+        break;
+      }
  else {
-    newLineMarker.drop();
+        modifierListItem.drop();
+        hasModifiers=true;
+      }
+    }
+ else {
+      modifierListItem.rollbackTo();
+      break;
+    }
   }
+ while (true);
   modifiersMarker.done(GroovyElementTypes.MODIFIERS);
   ParserUtils.getToken(builder,GroovyTokenTypes.mNLS);
-  return true;
+  return hasModifiers;
 }

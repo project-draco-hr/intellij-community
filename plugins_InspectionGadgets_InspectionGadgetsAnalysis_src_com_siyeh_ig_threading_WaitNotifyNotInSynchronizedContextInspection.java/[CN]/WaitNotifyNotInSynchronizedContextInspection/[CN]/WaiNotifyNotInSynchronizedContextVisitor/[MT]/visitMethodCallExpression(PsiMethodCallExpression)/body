@@ -1,0 +1,24 @@
+{
+  super.visitMethodCallExpression(expression);
+  if (!ThreadingUtils.isNotifyOrNotifyAllCall(expression) && !ThreadingUtils.isWaitCall(expression)) {
+    return;
+  }
+  final PsiReferenceExpression methodExpression=expression.getMethodExpression();
+  final PsiExpression qualifier=ParenthesesUtils.stripParentheses(methodExpression.getQualifierExpression());
+  if (qualifier == null || qualifier instanceof PsiThisExpression || qualifier instanceof PsiSuperExpression) {
+    if (isSynchronizedOnThis(expression) || isCoveredByGuardedByAnnotation(expression,"this")) {
+      return;
+    }
+    registerError(expression,PsiKeyword.THIS);
+  }
+ else   if (qualifier instanceof PsiReferenceExpression) {
+    if (isSynchronizedOn(expression,qualifier)) {
+      return;
+    }
+    final String text=qualifier.getText();
+    if (isCoveredByGuardedByAnnotation(expression,text)) {
+      return;
+    }
+    registerError(expression,text);
+  }
+}

@@ -4,11 +4,19 @@
       super.visitAnonymousClass(aClass);
       final PsiElement parent=aClass.getParent();
       final PsiElement lambdaContext=parent != null ? parent.getParent() : null;
-      if (lambdaContext != null && (LambdaUtil.isValidLambdaContext(lambdaContext) || !(lambdaContext instanceof PsiExpressionStatement)) && canBeConvertedToLambda(aClass,false,reportNotAnnotatedInterfaces,Collections.emptySet())) {
+      if (lambdaContext != null && (LambdaUtil.isValidLambdaContext(lambdaContext) || !(lambdaContext instanceof PsiExpressionStatement)) && canBeConvertedToLambda(aClass,false,isOnTheFly || reportNotAnnotatedInterfaces,Collections.emptySet())) {
         final PsiElement lBrace=aClass.getLBrace();
         LOG.assertTrue(lBrace != null);
         final TextRange rangeInElement=new TextRange(0,aClass.getStartOffsetInParent() + lBrace.getStartOffsetInParent());
-        holder.registerProblem(parent,"Anonymous #ref #loc can be replaced with lambda",ProblemHighlightType.LIKE_UNUSED_SYMBOL,rangeInElement,new ReplaceWithLambdaFix());
+        ProblemHighlightType problemHighlightType=ProblemHighlightType.LIKE_UNUSED_SYMBOL;
+        if (isOnTheFly && !reportNotAnnotatedInterfaces) {
+          final PsiClass baseClass=aClass.getBaseClassType().resolve();
+          LOG.assertTrue(baseClass != null);
+          if (!AnnotationUtil.isAnnotated(baseClass,CommonClassNames.JAVA_LANG_FUNCTIONAL_INTERFACE,false,false)) {
+            problemHighlightType=ProblemHighlightType.INFORMATION;
+          }
+        }
+        holder.registerProblem(parent,"Anonymous #ref #loc can be replaced with lambda",problemHighlightType,rangeInElement,new ReplaceWithLambdaFix());
       }
     }
   }
