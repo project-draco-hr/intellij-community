@@ -1,0 +1,47 @@
+{
+  SelectionModel selectionModel=editor.getSelectionModel();
+  if (CodeInsightSettings.getInstance().SURROUND_SELECTION_ON_QUOTE_TYPED && selectionModel.hasSelection() && isDelimiter(c)) {
+    String selectedText=selectionModel.getSelectedText();
+    if (!StringUtil.isEmpty(selectedText)) {
+      final int selectionStart=selectionModel.getSelectionStart();
+      final int selectionEnd=selectionModel.getSelectionEnd();
+      if (selectedText.length() > 1) {
+        final char firstChar=selectedText.charAt(0);
+        final char lastChar=selectedText.charAt(selectedText.length() - 1);
+        if (isSimilarDelimiters(firstChar,c) && lastChar == getMatchingDelimiter(firstChar) && (isQuote(firstChar) || firstChar != c) && !shouldSkipReplacementOfQuotesOrBraces(file,editor,selectedText,c) && selectedText.indexOf(lastChar,1) == selectedText.length() - 1) {
+          selectedText=selectedText.substring(1,selectedText.length() - 1);
+        }
+      }
+      final int caretOffset=selectionModel.getSelectionStart();
+      final char c2=getMatchingDelimiter(c);
+      final String newText=String.valueOf(c) + selectedText + c2;
+      boolean ltrSelection=selectionModel.getLeadSelectionOffset() != selectionModel.getSelectionEnd();
+      boolean restoreStickySelection=editor instanceof EditorEx && ((EditorEx)editor).isStickySelection();
+      selectionModel.removeSelection();
+      editor.getDocument().replaceString(selectionStart,selectionEnd,newText);
+      TextRange replacedTextRange=Registry.is("editor.smarterSelectionQuoting") ? new TextRange(caretOffset + 1,caretOffset + newText.length() - 1) : new TextRange(caretOffset,caretOffset + newText.length());
+      if (replacedTextRange.getEndOffset() <= editor.getDocument().getTextLength()) {
+        if (restoreStickySelection) {
+          EditorEx editorEx=(EditorEx)editor;
+          CaretModel caretModel=editorEx.getCaretModel();
+          caretModel.moveToOffset(ltrSelection ? replacedTextRange.getStartOffset() : replacedTextRange.getEndOffset());
+          editorEx.setStickySelection(true);
+          caretModel.moveToOffset(ltrSelection ? replacedTextRange.getEndOffset() : replacedTextRange.getStartOffset());
+        }
+ else {
+          if (ltrSelection || editor instanceof EditorWindow) {
+            editor.getSelectionModel().setSelection(replacedTextRange.getStartOffset(),replacedTextRange.getEndOffset());
+          }
+ else {
+            editor.getSelectionModel().setSelection(replacedTextRange.getEndOffset(),replacedTextRange.getStartOffset());
+          }
+          if (Registry.is("editor.smarterSelectionQuoting")) {
+            editor.getCaretModel().moveToOffset(ltrSelection ? replacedTextRange.getEndOffset() : replacedTextRange.getStartOffset());
+          }
+        }
+      }
+      return Result.STOP;
+    }
+  }
+  return super.beforeSelectionRemoved(c,project,editor,file);
+}
