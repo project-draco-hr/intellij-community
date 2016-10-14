@@ -1,0 +1,59 @@
+{
+  super.visitMethodCallExpression(expression);
+  final PsiReferenceExpression methodExpression=expression.getMethodExpression();
+  final String name=methodExpression.getReferenceName();
+  if (!isOptionalGetMethodName(name)) {
+    return;
+  }
+  final PsiExpression qualifier=ParenthesesUtils.stripParentheses(methodExpression.getQualifierExpression());
+  if (qualifier == null) {
+    return;
+  }
+  final PsiType type=qualifier.getType();
+  if (!TypeUtils.isOptional(type)) {
+    return;
+  }
+  PsiElement context=PsiTreeUtil.getParentOfType(expression,PsiMember.class,PsiLambdaExpression.class);
+  if (context instanceof PsiMethod) {
+    context=((PsiMethod)context).getBody();
+  }
+ else   if (context instanceof PsiClassInitializer) {
+    context=((PsiClassInitializer)context).getBody();
+  }
+ else   if (context instanceof PsiField) {
+    context=((PsiField)context).getInitializer();
+  }
+  if (context == null) {
+    return;
+  }
+  final StandardDataFlowRunner dfaRunner=new StandardDataFlowRunner(false,true,isOnTheFly());
+  dfaRunner.analyzeMethod(context,new StandardInstructionVisitor(){
+    @Override public DfaInstructionState[] visitMethodCall(    MethodCallInstruction instruction,    DataFlowRunner runner,    DfaMemoryState memState){
+      final int length=instruction.getArgs().length;
+      if (length != 0) {
+        return super.visitMethodCall(instruction,runner,memState);
+      }
+      final DfaValue qualifierValue=memState.peek();
+      final DfaInstructionState[] states=super.visitMethodCall(instruction,runner,memState);
+      final PsiCall callExpression=instruction.getCallExpression();
+      if ((callExpression instanceof PsiMethodCallExpression) && isCallOnSameQualifier((PsiMethodCallExpression)callExpression,qualifierValue,qualifier)) {
+        final PsiMethod targetMethod=instruction.getTargetMethod();
+        if (targetMethod != null) {
+          final PsiClass aClass=targetMethod.getContainingClass();
+          if (TypeUtils.isOptional(aClass)) {
+            final String methodName=targetMethod.getName();
+            if ("isPresent".equals(methodName)) {
+              memState.pop();
+              memState.push(runner.getFactory().getConstFactory().getFalse());
+            }
+ else             if (isOptionalGetMethodName(methodName)) {
+              registerMethodCallError((PsiMethodCallExpression)instruction.getCallExpression(),aClass);
+            }
+          }
+        }
+      }
+      return states;
+    }
+  }
+);
+}
