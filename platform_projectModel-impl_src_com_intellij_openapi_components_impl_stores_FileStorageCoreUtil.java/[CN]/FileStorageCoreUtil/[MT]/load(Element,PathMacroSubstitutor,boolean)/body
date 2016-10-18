@@ -5,20 +5,26 @@
   StringInterner interner=intern ? new StringInterner() : null;
   List<Element> children=rootElement.getChildren(COMPONENT);
   if (children.isEmpty() && rootElement.getName().equals(COMPONENT) && rootElement.getAttributeValue(NAME) != null) {
-    children=Collections.singletonList(rootElement);
+    children=new SmartList<>(rootElement);
   }
+  CompositePathMacroFilter filter=null;
   TreeMap<String,Element> map=new TreeMap<>();
-  for (  Element element : children) {
+  for (Iterator<Element> iterator=children.iterator(); iterator.hasNext(); ) {
+    Element element=iterator.next();
     String name=getComponentNameIfValid(element);
     if (name == null || !(element.getAttributes().size() > 1 || !element.getChildren().isEmpty())) {
       continue;
     }
+    iterator.remove();
     if (interner != null) {
       JDOMUtil.internElement(element,interner);
     }
     map.put(name,element);
     if (pathMacroSubstitutor instanceof TrackingPathMacroSubstitutor) {
-      ((TrackingPathMacroSubstitutor)pathMacroSubstitutor).addUnknownMacros(name,PathMacrosCollector.getMacroNames(element));
+      if (filter == null) {
+        filter=new CompositePathMacroFilter(PathMacrosCollector.MACRO_FILTER_EXTENSION_POINT_NAME.getExtensions());
+      }
+      ((TrackingPathMacroSubstitutor)pathMacroSubstitutor).addUnknownMacros(name,PathMacrosCollector.getMacroNames(element,filter,PathMacros.getInstance()));
     }
     element.removeAttribute(NAME);
   }
