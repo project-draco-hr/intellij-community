@@ -1,2 +1,36 @@
 {
+  if (!PsiUtil.isLanguageLevel8OrHigher(holder.getFile())) {
+    return PsiElementVisitor.EMPTY_VISITOR;
+  }
+  return new JavaElementVisitor(){
+    @Override public void visitIfStatement(    PsiIfStatement statement){
+      if (statement.getElseBranch() != null)       return;
+      PsiExpression condition=statement.getCondition();
+      PsiReferenceExpression value=getReferenceComparedWithNull(condition);
+      if (value == null)       return;
+      PsiElement previous=PsiTreeUtil.skipSiblingsBackward(statement,PsiWhiteSpace.class,PsiComment.class);
+      PsiMethodCallExpression getCall=tryExtractMapGetCall(value,previous);
+      if (getCall == null)       return;
+      PsiExpression[] getArguments=getCall.getArgumentList().getExpressions();
+      if (getArguments.length != 1)       return;
+      PsiStatement thenBranch=ControlFlowUtils.stripBraces(statement.getThenBranch());
+      PsiAssignmentExpression assignment=ExpressionUtils.getAssignment(thenBranch);
+      EquivalenceChecker equivalence=EquivalenceChecker.getCanonicalPsiEquivalence();
+      if (assignment != null) {
+        if (!mySuggestMapGetOrDefault)         return;
+        if (ExpressionUtils.isSimpleExpression(assignment.getRExpression()) && equivalence.expressionsAreEquivalent(assignment.getLExpression(),value)) {
+          holder.registerProblem(condition,QuickFixBundle.message("java.8.replace.map.get.inspection.description"),new ReplaceGetNullCheck("getOrDefault"));
+        }
+      }
+ else {
+        if (!mySuggestMapComputeIfAbsent)         return;
+        PsiExpression key=getArguments[0];
+        PsiExpression mapExpression=getCall.getMethodExpression().getQualifierExpression();
+        PsiExpression lambdaCandidate=extractLambdaCandidate(thenBranch,mapExpression,key,value);
+        if (lambdaCandidate == null)         return;
+        holder.registerProblem(condition,QuickFixBundle.message("java.8.replace.map.get.inspection.description"),new ReplaceGetNullCheck("computeIfAbsent"));
+      }
+    }
+  }
+;
 }

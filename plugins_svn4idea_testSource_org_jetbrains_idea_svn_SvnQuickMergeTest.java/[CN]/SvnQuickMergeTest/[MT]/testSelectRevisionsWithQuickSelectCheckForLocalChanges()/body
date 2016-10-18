@@ -10,13 +10,9 @@
     runInAndVerifyIgnoreOutput(myBranchRoot,"ci","-m","change in branch " + i,myBranchTree.myS1File.getPath());
     Thread.sleep(10);
   }
-  final QuickMerge quickMerge=newQuickMerge(myBranchUrl);
-  final AtomicReference<String> selectionError=new AtomicReference<>();
-  final QuickMergeTestInteraction testInteraction=new QuickMergeTestInteraction(){
-    @Override public boolean shouldReintegrate(    @NotNull String sourceUrl,    @NotNull String targetUrl){
-      return true;
-    }
-    @Override public List<CommittedChangeList> showRecentListsForSelection(    @NotNull List<CommittedChangeList> list,    @NotNull String mergeTitle,    @NotNull MergeChecker mergeChecker,    @NotNull PairConsumer<Long,MergeDialogI> loader,    boolean everyThingLoaded){
+  AtomicReference<String> selectionError=new AtomicReference<>();
+  QuickMergeTestInteraction testInteraction=new QuickMergeTestInteraction(true){
+    @NotNull @Override public List<CommittedChangeList> showRecentListsForSelection(    @NotNull List<CommittedChangeList> list,    @NotNull MergeChecker mergeChecker,    boolean everyThingLoaded){
       if (list.size() != 4) {
         selectionError.set("List size: " + list.size());
       }
@@ -28,19 +24,10 @@
   }
 ;
   testInteraction.setMergeVariant(QuickMergeContentsVariants.showLatest);
-  final WaitingTaskDescriptor descriptor=new WaitingTaskDescriptor();
-  ApplicationManager.getApplication().invokeLater(new Runnable(){
-    @Override public void run(){
-      quickMerge.execute(testInteraction,descriptor);
-    }
-  }
-);
-  descriptor.waitForCompletion();
-  testInteraction.throwIfExceptions();
+  waitQuickMerge(myBranchUrl,testInteraction);
   if (selectionError.get() != null) {
     throw new RuntimeException(selectionError.get());
   }
-  Assert.assertTrue(descriptor.isCompleted());
   VcsDirtyScopeManager.getInstance(myProject).markEverythingDirty();
   myChangeListManager.ensureUpToDate(false);
   final Change fileChange=myChangeListManager.getChange(myTree.myS1File);

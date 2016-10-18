@@ -1,0 +1,45 @@
+{
+  ChangeContextUtil.encodeContextInfo(anonymousClass,true);
+  final String canonicalText=anonymousClass.getBaseClassType().getCanonicalText();
+  final PsiCodeBlock body=method.getBody();
+  LOG.assertTrue(body != null);
+  final Collection<PsiComment> comments=collectCommentsOutsideMethodBody(anonymousClass,body);
+  final Project project=anonymousClass.getProject();
+  final PsiElementFactory elementFactory=JavaPsiFacade.getElementFactory(project);
+  final String withoutTypesDeclared=ReplaceWithLambdaFix.composeLambdaText(method);
+  PsiLambdaExpression lambdaExpression=(PsiLambdaExpression)elementFactory.createExpressionFromText(withoutTypesDeclared,anonymousClass);
+  PsiElement lambdaBody=lambdaExpression.getBody();
+  LOG.assertTrue(lambdaBody != null);
+  lambdaBody.replace(body);
+  lambdaExpression=replacer.apply(lambdaExpression);
+  final Set<PsiVariable> variables=new HashSet<>();
+  final Set<String> usedLocalNames=new HashSet<>();
+  collectLocalVariablesDefinedInsideLambda(lambdaExpression,variables,usedLocalNames);
+  ReplaceWithLambdaFix.giveUniqueNames(project,elementFactory,lambdaExpression,usedLocalNames,variables.toArray(new PsiVariable[variables.size()]));
+  final PsiExpression singleExpr=RedundantLambdaCodeBlockInspection.isCodeBlockRedundant(lambdaExpression.getBody());
+  if (singleExpr != null) {
+    lambdaExpression.getBody().replace(singleExpr);
+  }
+  ChangeContextUtil.decodeContextInfo(lambdaExpression,null,null);
+  restoreComments(comments,lambdaExpression);
+  final JavaCodeStyleManager javaCodeStyleManager=JavaCodeStyleManager.getInstance(project);
+  if (forceIgnoreTypeCast) {
+    return (PsiExpression)javaCodeStyleManager.shortenClassReferences(lambdaExpression);
+  }
+  PsiTypeCastExpression typeCast=(PsiTypeCastExpression)elementFactory.createExpressionFromText("(" + canonicalText + ")"+ withoutTypesDeclared,lambdaExpression);
+  final PsiExpression typeCastOperand=typeCast.getOperand();
+  LOG.assertTrue(typeCastOperand instanceof PsiLambdaExpression);
+  final PsiElement fromText=((PsiLambdaExpression)typeCastOperand).getBody();
+  LOG.assertTrue(fromText != null);
+  lambdaBody=lambdaExpression.getBody();
+  LOG.assertTrue(lambdaBody != null);
+  fromText.replace(lambdaBody);
+  ((PsiLambdaExpression)typeCastOperand).getParameterList().replace(lambdaExpression.getParameterList());
+  typeCast=(PsiTypeCastExpression)lambdaExpression.replace(typeCast);
+  if (RedundantCastUtil.isCastRedundant(typeCast)) {
+    final PsiExpression operand=typeCast.getOperand();
+    LOG.assertTrue(operand != null);
+    return (PsiExpression)typeCast.replace(operand);
+  }
+  return (PsiExpression)javaCodeStyleManager.shortenClassReferences(typeCast);
+}

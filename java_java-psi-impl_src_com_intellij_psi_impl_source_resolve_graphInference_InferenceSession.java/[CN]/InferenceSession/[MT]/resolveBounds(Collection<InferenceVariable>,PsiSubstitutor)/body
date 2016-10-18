@@ -9,6 +9,10 @@
         unresolved.add(var);
       }
     }
+    if (!unresolved.isEmpty() && vars.size() > unresolved.size()) {
+      vars.removeAll(unresolved);
+      vars.addAll(unresolved);
+    }
     if (!myIncorporationPhase.hasCaptureConstraints(unresolved)) {
       PsiSubstitutor firstSubstitutor=resolveSubset(vars,substitutor);
       if (hasBoundProblems(vars,firstSubstitutor)) {
@@ -22,12 +26,30 @@
       }
     }
     if (!initFreshVariables(substitutor,unresolved)) {
-      return null;
+      return;
     }
     myIncorporationPhase.forgetCaptures(vars);
     if (!repeatInferencePhases()) {
-      return null;
+      return;
     }
   }
-  return substitutor;
+  if (myContext != null) {
+    myContext.putUserData(ERASED,myErased);
+  }
+  final Map<PsiTypeParameter,PsiType> map=substitutor.getSubstitutionMap();
+  for (  PsiTypeParameter parameter : map.keySet()) {
+    final PsiType mapping=map.get(parameter);
+    PsiTypeParameter param;
+    if (parameter instanceof InferenceVariable) {
+      ((InferenceVariable)parameter).setInstantiation(mapping);
+      if (((InferenceVariable)parameter).getCallContext() != myContext) {
+        continue;
+      }
+      param=((InferenceVariable)parameter).getParameter();
+    }
+ else {
+      param=parameter;
+    }
+    mySiteSubstitutor=mySiteSubstitutor.put(param,mapping);
+  }
 }

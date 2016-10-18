@@ -1,0 +1,56 @@
+{
+  final CompoundInitialState compoundInitialState=createState(parentSession);
+  InitialInferenceState initialInferenceState=compoundInitialState.getInitialState(parent);
+  if (initialInferenceState != null) {
+    final InferenceSession childSession=new InferenceSession(initialInferenceState);
+    final List<String> errorMessages=parentSession.getIncompatibleErrorMessages();
+    if (errorMessages != null) {
+      return childSession.prepareSubstitution();
+    }
+    return childSession.collectAdditionalAndInfer(parameters,arguments,properties,compoundInitialState.getInitialSubstitutor());
+  }
+ else {
+    PsiElement gParent=PsiUtil.skipParenthesizedExprUp(parent.getParent());
+    while (true) {
+      if (gParent instanceof PsiReturnStatement) {
+        final PsiElement returnContainer=gParent.getParent();
+        if (returnContainer instanceof PsiCodeBlock) {
+          gParent=returnContainer.getParent();
+        }
+      }
+      if (gParent instanceof PsiLambdaExpression) {
+        final PsiCall call=PsiTreeUtil.getParentOfType(gParent,PsiCall.class);
+        if (call != null) {
+          initialInferenceState=compoundInitialState.getInitialState(call);
+          if (initialInferenceState != null) {
+            final int idx=LambdaUtil.getLambdaIdx(call.getArgumentList(),gParent);
+            final PsiMethod method=call.resolveMethod();
+            if (method != null && idx > -1) {
+              final PsiType parameterType=PsiTypesUtil.getParameterType(method.getParameterList().getParameters(),idx,true);
+              final PsiType parameterTypeInTermsOfSession=initialInferenceState.getInferenceSubstitutor().substitute(parameterType);
+              final PsiType lambdaTargetType=compoundInitialState.getInitialSubstitutor().substitute(parameterTypeInTermsOfSession);
+              return LambdaUtil.performWithLambdaTargetType((PsiLambdaExpression)gParent,lambdaTargetType,new Producer<PsiSubstitutor>(){
+                @Nullable @Override public PsiSubstitutor produce(){
+                  if (call.equals(PsiTreeUtil.getParentOfType(parent,PsiCall.class,true))) {
+                    final InferenceSession inferenceSession=new InferenceSession(typeParameters,partialSubstitutor,parent.getManager(),parent,policy);
+                    inferenceSession.initExpressionConstraints(parameters,arguments,parent);
+                    return inferenceSession.infer(parameters,arguments,parent);
+                  }
+                  final InferenceSession sessionInsideLambda=startTopLevelInference(call,policy);
+                  return inferNested(typeParameters,parameters,arguments,partialSubstitutor,parent,policy,properties,sessionInsideLambda);
+                }
+              }
+);
+            }
+          }
+ else {
+            gParent=PsiUtil.skipParenthesizedExprUp(call.getParent());
+            continue;
+          }
+        }
+      }
+      break;
+    }
+  }
+  return null;
+}

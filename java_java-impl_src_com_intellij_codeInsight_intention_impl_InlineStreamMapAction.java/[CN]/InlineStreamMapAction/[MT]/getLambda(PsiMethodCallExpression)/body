@@ -1,0 +1,50 @@
+{
+  PsiExpression[] expressions=call.getArgumentList().getExpressions();
+  if (expressions.length == 1) {
+    PsiExpression expression=expressions[0];
+    if (expression instanceof PsiLambdaExpression)     return (PsiLambdaExpression)expression;
+    if (expression instanceof PsiMethodReferenceExpression) {
+      return LambdaRefactoringUtil.convertMethodReferenceToLambda((PsiMethodReferenceExpression)expression,false,true);
+    }
+    return null;
+  }
+  if (expressions.length != 0)   return null;
+  PsiMethod method=call.resolveMethod();
+  if (method == null)   return null;
+  PsiClass containingClass=method.getContainingClass();
+  if (containingClass == null)   return null;
+  String className=containingClass.getQualifiedName();
+  if (className == null)   return null;
+  String varName;
+  String type;
+switch (className) {
+case CommonClassNames.JAVA_UTIL_STREAM_INT_STREAM:
+    varName="i";
+  type=CommonClassNames.JAVA_LANG_INTEGER;
+break;
+case CommonClassNames.JAVA_UTIL_STREAM_LONG_STREAM:
+varName="l";
+type=CommonClassNames.JAVA_LANG_LONG;
+break;
+case CommonClassNames.JAVA_UTIL_STREAM_DOUBLE_STREAM:
+varName="d";
+type=CommonClassNames.JAVA_LANG_DOUBLE;
+break;
+default :
+return null;
+}
+varName=JavaCodeStyleManager.getInstance(call.getProject()).suggestUniqueVariableName(varName,call,true);
+String expression;
+if ("boxed".equals(method.getName())) {
+expression=varName + " -> (" + type+ ")"+ varName;
+}
+ else if ("asLongStream".equals(method.getName())) {
+expression=varName + " -> (long)" + varName;
+}
+ else if ("asDoubleStream".equals(method.getName())) {
+expression=varName + " -> (double)" + varName;
+}
+ else return null;
+PsiElementFactory factory=JavaPsiFacade.getElementFactory(call.getProject());
+return (PsiLambdaExpression)factory.createExpressionFromText(expression,call);
+}
