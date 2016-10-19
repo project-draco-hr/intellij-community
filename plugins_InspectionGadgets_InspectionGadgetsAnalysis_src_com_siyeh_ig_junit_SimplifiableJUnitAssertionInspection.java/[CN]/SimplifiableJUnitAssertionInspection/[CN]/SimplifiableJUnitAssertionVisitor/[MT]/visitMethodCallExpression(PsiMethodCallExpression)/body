@@ -1,28 +1,30 @@
 {
   super.visitMethodCallExpression(expression);
-  if (isAssertThatCouldBeAssertNull(expression)) {
-    if (hasEqEqExpressionArgument(expression)) {
-      registerMethodCallError(expression,"assertNull()");
-    }
- else {
-      registerMethodCallError(expression,"assertNotNull()");
-    }
-  }
- else   if (isAssertThatCouldBeAssertSame(expression)) {
-    if (hasEqEqExpressionArgument(expression)) {
-      registerMethodCallError(expression,"assertSame()");
-    }
- else {
-      registerMethodCallError(expression,"assertNotSame()");
-    }
-  }
- else   if (isAssertTrueThatCouldBeAssertEquals(expression)) {
-    registerMethodCallError(expression,"assertEquals()");
-  }
- else   if (isAssertEqualsThatCouldBeAssertLiteral(expression)) {
+  if (isAssertEqualsThatCouldBeAssertLiteral(expression)) {
     registerMethodCallError(expression,getReplacementMethodName(expression));
   }
- else   if (isAssertThatCouldBeFail(expression)) {
-    registerMethodCallError(expression,"fail()");
+ else {
+    final boolean assertTrue=isAssertTrue(expression);
+    final boolean assertFalse=isAssertFalse(expression);
+    if (!assertTrue && !assertFalse) {
+      return;
+    }
+    final AssertHint assertTrueFalseHint=AssertHint.createAssertTrueFalseHint(expression);
+    if (assertTrueFalseHint == null) {
+      return;
+    }
+    final PsiExpression position=assertTrueFalseHint.getPosition(expression.getArgumentList().getExpressions());
+    if (isNullComparison(position)) {
+      registerMethodCallError(expression,hasEqEqExpressionArgument(position) ? "assertNull()" : "assertNotNull()");
+    }
+ else     if (isIdentityComparison(position)) {
+      registerMethodCallError(expression,hasEqEqExpressionArgument(position) ? "assertSame()" : "assertNotSame()");
+    }
+ else     if (assertTrue && isEqualityComparison(position)) {
+      registerMethodCallError(expression,"assertEquals()");
+    }
+ else     if (isAssertThatCouldBeFail(position,!assertTrue)) {
+      registerMethodCallError(expression,"fail()");
+    }
   }
 }
