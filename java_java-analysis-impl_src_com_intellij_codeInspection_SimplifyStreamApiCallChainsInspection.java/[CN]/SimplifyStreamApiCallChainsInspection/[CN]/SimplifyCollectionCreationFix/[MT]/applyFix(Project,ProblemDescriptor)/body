@@ -1,0 +1,30 @@
+{
+  PsiElement element=descriptor.getStartElement();
+  if (!(element instanceof PsiMethodCallExpression))   return;
+  PsiMethodCallExpression collectCall=(PsiMethodCallExpression)element;
+  PsiType type=collectCall.getType();
+  if (!(type instanceof PsiClassType))   return;
+  PsiClass resolvedType=((PsiClassType)type).resolve();
+  if (resolvedType == null || resolvedType instanceof PsiTypeParameter)   return;
+  PsiMethodCallExpression streamCall=getQualifierMethodCall(collectCall);
+  if (streamCall == null)   return;
+  PsiExpression collectionExpression=streamCall.getMethodExpression().getQualifierExpression();
+  if (collectionExpression == null)   return;
+  String typeText=type.getCanonicalText();
+  if (CommonClassNames.JAVA_UTIL_LIST.equals(resolvedType.getQualifiedName()) || CommonClassNames.JAVA_UTIL_SET.equals(resolvedType.getQualifiedName())) {
+    PsiType[] parameters=((PsiClassType)type).getParameters();
+    if (parameters.length != 1)     return;
+    typeText=myReplacement + "<" + parameters[0].getCanonicalText()+ ">";
+  }
+  if (!FileModificationService.getInstance().preparePsiElementForWrite(element))   return;
+  PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
+  PsiExpression result=factory.createExpressionFromText("new " + typeText + "("+ collectionExpression.getText()+ ")",element);
+  PsiNewExpression newExpression=(PsiNewExpression)element.replace(result);
+  PsiJavaCodeReferenceElement classReference=newExpression.getClassOrAnonymousClassReference();
+  LOG.assertTrue(classReference != null);
+  JavaCodeStyleManager.getInstance(project).shortenClassReferences(classReference);
+  if (PsiDiamondTypeUtil.canCollapseToDiamond(newExpression,newExpression,null)) {
+    PsiDiamondTypeUtil.replaceExplicitWithDiamond(classReference.getParameterList());
+  }
+  CodeStyleManager.getInstance(project).reformat(newExpression);
+}

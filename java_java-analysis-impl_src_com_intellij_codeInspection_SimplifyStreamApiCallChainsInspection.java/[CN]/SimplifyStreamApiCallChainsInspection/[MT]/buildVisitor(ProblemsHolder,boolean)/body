@@ -63,6 +63,11 @@
         }
       }
     }
+    @Contract("null -> false") private boolean isCollectionStream(    PsiMethodCallExpression qualifierCall){
+      if (qualifierCall == null)       return false;
+      PsiMethod qualifier=qualifierCall.resolveMethod();
+      return isCallOf(qualifier,CommonClassNames.JAVA_UTIL_COLLECTION,STREAM_METHOD,0);
+    }
     private void handleStreamForEach(    PsiMethodCallExpression methodCall,    PsiMethod method){
       final String name;
       if (isCallOf(method,CommonClassNames.JAVA_UTIL_STREAM_STREAM,FOR_EACH_METHOD,1)) {
@@ -75,9 +80,7 @@
         return;
       }
       final PsiMethodCallExpression qualifierCall=getQualifierMethodCall(methodCall);
-      if (qualifierCall == null)       return;
-      final PsiMethod qualifier=qualifierCall.resolveMethod();
-      if (isCallOf(qualifier,CommonClassNames.JAVA_UTIL_COLLECTION,STREAM_METHOD,0)) {
+      if (isCollectionStream(qualifierCall)) {
         final ReplaceStreamMethodFix fix=new ReplaceStreamMethodFix(name,FOR_EACH_METHOD,true);
         holder.registerProblem(methodCall,getCallChainRange(methodCall,qualifierCall),fix.getMessage(),new SimplifyCallChainFix(fix));
       }
@@ -87,7 +90,7 @@
       if (parameter instanceof PsiMethodCallExpression) {
         PsiMethodCallExpression collectorCall=(PsiMethodCallExpression)parameter;
         PsiMethod collectorMethod=collectorCall.resolveMethod();
-        ReplaceCollectorFix fix=null;
+        ReplaceCollectorFix fix;
         if (isCallOf(collectorMethod,CommonClassNames.JAVA_UTIL_STREAM_COLLECTORS,COUNTING_COLLECTOR,0)) {
           fix=new ReplaceCollectorFix(COUNTING_COLLECTOR,"count()",false);
         }
@@ -118,7 +121,23 @@
  else         if (isCallOf(collectorMethod,CommonClassNames.JAVA_UTIL_STREAM_COLLECTORS,SUMMING_DOUBLE_COLLECTOR,1)) {
           fix=new ReplaceCollectorFix(SUMMING_DOUBLE_COLLECTOR,"mapToDouble({0}).sum()",false);
         }
-        if (fix != null && collectorCall.getArgumentList().getExpressions().length == collectorMethod.getParameterList().getParametersCount()) {
+ else {
+          PsiType type=methodCall.getType();
+          if (type instanceof PsiClassType && !(((PsiClassType)type).resolve() instanceof PsiTypeParameter)) {
+            String replacement=collectorToCollection(collectorCall);
+            if (replacement != null) {
+              PsiMethodCallExpression qualifier=getQualifierMethodCall(methodCall);
+              if (isCollectionStream(qualifier)) {
+                PsiElement startElement=qualifier.getMethodExpression().getReferenceNameElement();
+                if (startElement != null) {
+                  holder.registerProblem(methodCall,new TextRange(startElement.getTextOffset() - methodCall.getTextOffset(),methodCall.getTextLength()),"Can be replaced with '" + replacement + "' constructor",new SimplifyCallChainFix(new SimplifyCollectionCreationFix(replacement)));
+                }
+              }
+            }
+          }
+          return;
+        }
+        if (collectorCall.getArgumentList().getExpressions().length == collectorMethod.getParameterList().getParametersCount()) {
           TextRange range=methodCall.getTextRange();
           PsiElement nameElement=methodCall.getMethodExpression().getReferenceNameElement();
           if (nameElement != null) {
