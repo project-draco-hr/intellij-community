@@ -1,0 +1,35 @@
+{
+  final PsiElement methodNameIdentifier=descriptor.getPsiElement();
+  final PsiElement parent=methodNameIdentifier.getParent();
+  if (parent == null) {
+    return;
+  }
+  final PsiMethodCallExpression callExpression=(PsiMethodCallExpression)parent.getParent();
+  if (isAssertEqualsThatCouldBeAssertLiteral(callExpression)) {
+    replaceAssertEqualsWithAssertLiteral(callExpression);
+  }
+ else {
+    final boolean assertTrue=isAssertTrue(callExpression);
+    final boolean assertFalse=isAssertFalse(callExpression);
+    if (!assertTrue && !assertFalse) {
+      return;
+    }
+    final AssertHint assertTrueFalseHint=AssertHint.createAssertTrueFalseHint(callExpression);
+    if (assertTrueFalseHint == null) {
+      return;
+    }
+    final PsiExpression position=assertTrueFalseHint.getPosition(callExpression.getArgumentList().getExpressions());
+    if (isNullComparison(position)) {
+      replaceAssertWithAssertNull(callExpression,(PsiBinaryExpression)position,assertTrueFalseHint.getMessage(),assertTrueFalseHint.getArgIndex());
+    }
+ else     if (isIdentityComparison(position)) {
+      replaceAssertWithAssertSame(callExpression,(PsiBinaryExpression)position,assertTrueFalseHint.getMessage(),assertTrueFalseHint.getArgIndex());
+    }
+ else     if (assertTrue && isEqualityComparison(position)) {
+      replaceAssertTrueWithAssertEquals(callExpression,position,assertTrueFalseHint.getMessage(),assertTrueFalseHint.getArgIndex());
+    }
+ else     if (isAssertThatCouldBeFail(position,!assertTrue)) {
+      replaceAssertWithFail(callExpression,assertTrueFalseHint.getMessage());
+    }
+  }
+}
