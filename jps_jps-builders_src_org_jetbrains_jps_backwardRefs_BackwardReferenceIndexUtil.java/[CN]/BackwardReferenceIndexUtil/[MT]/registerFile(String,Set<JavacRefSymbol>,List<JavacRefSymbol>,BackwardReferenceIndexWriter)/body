@@ -1,0 +1,43 @@
+{
+  final int fileId=writer.enumeratePath(filePath);
+  int funExprId=0;
+  final List<LightRef> definitions=new ArrayList<LightRef>(defs.size());
+  for (  JavacRefSymbol def : defs) {
+    Tree.Kind kind=def.getPlaceKind();
+    if (kind == Tree.Kind.CLASS) {
+      Symbol.ClassSymbol sym=(Symbol.ClassSymbol)def.getSymbol();
+      Type superclass=sym.getSuperclass();
+      List<Type> interfaces=sym.getInterfaces();
+      final Symbol[] supers;
+      if (superclass != Type.noType) {
+        supers=new Symbol[interfaces.size() + 1];
+        supers[interfaces.size()]=superclass.asElement();
+      }
+ else {
+        supers=interfaces.isEmpty() ? EMPTY_SYMBOL_ARRAY : new Symbol[interfaces.size()];
+      }
+      int i=0;
+      for (      Type anInterface : interfaces) {
+        supers[i++]=anInterface.asElement();
+      }
+      final LightRef.JavaLightClassRef aClass=writer.asClassUsage(sym);
+      definitions.add(aClass);
+      if (supers.length != 0) {
+        final LightRef.JavaLightClassRef[] superIds=new LightRef.JavaLightClassRef[supers.length];
+        for (int j=0; j < supers.length; j++) {
+          superIds[j]=writer.asClassUsage(supers[j]);
+        }
+        writer.writeHierarchy(fileId,aClass,superIds);
+      }
+    }
+ else     if (kind == LAMBDA_EXPRESSION || kind == MEMBER_REFERENCE) {
+      final LightRef.JavaLightClassRef functionalType=writer.asClassUsage(def.getSymbol());
+      int id=funExprId++;
+      LightRef.JavaLightFunExprDef result=new LightRef.JavaLightFunExprDef(id);
+      definitions.add(result);
+      writer.writeHierarchy(fileId,result,functionalType);
+    }
+  }
+  writer.writeClassDefinitions(fileId,definitions);
+  writer.writeReferences(fileId,refs);
+}

@@ -7,10 +7,14 @@
     LOG.assertTrue(filterToMerge != null);
     final PsiMethodCallExpression callToStay=filterCall.getTextLength() < filterToMerge.getTextLength() ? filterCall : filterToMerge;
     final PsiMethodCallExpression callToEliminate=callToStay == filterCall ? filterToMerge : filterCall;
-    final PsiLambdaExpression targetLambda=(PsiLambdaExpression)callToStay.getArgumentList().getExpressions()[0];
+    String resultingOperation=callToEliminate.getMethodExpression().getReferenceName();
+    LOG.assertTrue(resultingOperation != null);
+    final PsiLambdaExpression targetLambda=getLambda(callToStay);
+    LOG.assertTrue(targetLambda != null,callToStay);
     final PsiParameter[] parameters=targetLambda.getParameterList().getParameters();
     final String name=parameters.length > 0 ? parameters[0].getName() : null;
-    final PsiLambdaExpression sourceLambda=(PsiLambdaExpression)callToEliminate.getArgumentList().getExpressions()[0];
+    final PsiLambdaExpression sourceLambda=getLambda(callToEliminate);
+    LOG.assertTrue(sourceLambda != null,callToEliminate);
     if (name != null) {
       final PsiParameter[] sourceLambdaParams=sourceLambda.getParameterList().getParameters();
       if (sourceLambdaParams.length > 0 && !name.equals(sourceLambdaParams[0].getName())) {
@@ -22,11 +26,17 @@
         }
       }
     }
+    PsiElementFactory factory=JavaPsiFacade.getElementFactory(project);
+    PsiElement nameElement=callToStay.getMethodExpression().getReferenceNameElement();
+    LOG.assertTrue(nameElement != null);
+    if (!resultingOperation.equals(nameElement.getText())) {
+      nameElement.replace(factory.createIdentifier(resultingOperation));
+    }
     PsiElement targetBody=targetLambda.getBody();
     LOG.assertTrue(targetBody instanceof PsiExpression);
     final PsiElement sourceLambdaBody=sourceLambda.getBody();
     LOG.assertTrue(sourceLambdaBody instanceof PsiExpression);
-    final PsiExpression compoundExpression=JavaPsiFacade.getElementFactory(project).createExpressionFromText(ParenthesesUtils.getText((PsiExpression)targetBody,ParenthesesUtils.OR_PRECEDENCE) + " && " + ParenthesesUtils.getText((PsiExpression)sourceLambdaBody,ParenthesesUtils.OR_PRECEDENCE),sourceLambda);
+    final PsiExpression compoundExpression=factory.createExpressionFromText(ParenthesesUtils.getText((PsiExpression)targetBody,ParenthesesUtils.OR_PRECEDENCE) + " && " + ParenthesesUtils.getText((PsiExpression)sourceLambdaBody,ParenthesesUtils.OR_PRECEDENCE),sourceLambda);
     targetBody=targetBody.replace(compoundExpression);
     CodeStyleManager.getInstance(project).reformat(targetBody);
     final PsiExpression qualifierExpression=callToEliminate.getMethodExpression().getQualifierExpression();
