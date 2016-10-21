@@ -1,0 +1,19 @@
+{
+  if (!(var instanceof PsiLocalVariable) || var.getInitializer() == null)   return UNKNOWN;
+  if (isDeclarationJustBefore(var,nextStatement))   return DECLARED_JUST_BEFORE;
+  if (PsiTreeUtil.getParentOfType(var,PsiLambdaExpression.class,PsiMethod.class) != PsiTreeUtil.getParentOfType(nextStatement,PsiLambdaExpression.class,PsiMethod.class))   return UNKNOWN;
+  PsiElement block=PsiUtil.getVariableCodeBlock(var,null);
+  if (block == null)   return UNKNOWN;
+  final ControlFlow controlFlow;
+  try {
+    controlFlow=ControlFlowFactory.getInstance(nextStatement.getProject()).getControlFlow(block,LocalsOrMyInstanceFieldsControlFlowPolicy.getInstance());
+  }
+ catch (  AnalysisCanceledException ignored) {
+    return UNKNOWN;
+  }
+  int start=controlFlow.getEndOffset(var.getInitializer()) + 1;
+  int stop=controlFlow.getStartOffset(nextStatement);
+  if (isVariableReferencedBeforeLoopEntry(controlFlow,start,nextStatement,var))   return UNKNOWN;
+  if (!ControlFlowUtil.isValueUsedWithoutVisitingStop(controlFlow,start,stop,var))   return AT_WANTED_PLACE_ONLY;
+  return var.hasModifierProperty(PsiModifier.FINAL) ? UNKNOWN : AT_WANTED_PLACE;
+}
