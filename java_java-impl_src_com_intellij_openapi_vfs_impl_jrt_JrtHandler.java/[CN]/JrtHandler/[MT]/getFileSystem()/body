@@ -1,8 +1,23 @@
 {
   FileSystem fs=SoftReference.dereference(myFileSystem);
   if (fs == null) {
-    fs=JrtFileSystem.getFileSystem(getFile().getPath());
-    myFileSystem=new SoftReference<>(fs);
+    String path=getFile().getPath();
+    try {
+      if (SystemInfo.isJavaVersionAtLeast("9")) {
+        fs=FileSystems.newFileSystem(ROOT_URI,Collections.singletonMap("java.home",path));
+      }
+ else {
+        File file=new File(path,"jrt-fs.jar");
+        if (!file.exists())         throw new IOException("Missing provider: " + file);
+        URL url=file.toURI().toURL();
+        ClassLoader loader=new URLClassLoader(new URL[]{url},null);
+        fs=FileSystems.newFileSystem(ROOT_URI,Collections.emptyMap(),loader);
+      }
+      myFileSystem=new SoftReference<>(fs);
+    }
+ catch (    RuntimeException|Error e) {
+      throw new IOException("Error mounting JRT filesystem at " + path,e);
+    }
   }
   return fs;
 }
