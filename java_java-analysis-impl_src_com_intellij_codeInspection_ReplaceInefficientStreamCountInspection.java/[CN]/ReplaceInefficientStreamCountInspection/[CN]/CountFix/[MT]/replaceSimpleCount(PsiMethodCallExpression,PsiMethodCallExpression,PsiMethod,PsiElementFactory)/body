@@ -2,8 +2,23 @@
   if (!isCallOf(qualifier,CommonClassNames.JAVA_UTIL_COLLECTION,STREAM_METHOD,0))   return;
   PsiExpression qualifierExpression=qualifierCall.getMethodExpression().getQualifierExpression();
   if (qualifierExpression == null)   return;
-  String replacementText="(long) " + qualifierExpression.getText() + "."+ SIZE_METHOD+ "()";
-  PsiElement replacement=countCall.replace(factory.createExpressionFromText(replacementText,countCall));
+  boolean addCast=true;
+  PsiElement toReplace=countCall;
+  PsiElement parent=PsiUtil.skipParenthesizedExprUp(countCall.getParent());
+  if (parent instanceof PsiExpressionStatement) {
+    addCast=false;
+  }
+ else   if (parent instanceof PsiTypeCastExpression) {
+    PsiTypeElement castElement=((PsiTypeCastExpression)parent).getCastType();
+    if (castElement != null && castElement.getType() instanceof PsiPrimitiveType) {
+      addCast=false;
+      if (PsiType.INT.equals(castElement.getType())) {
+        toReplace=parent;
+      }
+    }
+  }
+  String replacementText=(addCast ? "(long) " : "") + qualifierExpression.getText() + "."+ SIZE_METHOD+ "()";
+  PsiElement replacement=toReplace.replace(factory.createExpressionFromText(replacementText,countCall));
   if (replacement instanceof PsiTypeCastExpression && RedundantCastUtil.isCastRedundant((PsiTypeCastExpression)replacement)) {
     RedundantCastUtil.removeCast((PsiTypeCastExpression)replacement);
   }
