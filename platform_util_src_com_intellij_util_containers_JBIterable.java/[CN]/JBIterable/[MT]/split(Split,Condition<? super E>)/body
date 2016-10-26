@@ -1,0 +1,62 @@
+{
+  return intercept(new Function<Iterator<E>,Iterator<JBIterable<E>>>(){
+    @Override public Iterator<JBIterable<E>> fun(    Iterator<E> iterator){
+      final Iterator<E> orig=iterator;
+      final Condition<? super E> condition=Stateful.copy(separator);
+      return new JBIterator<JBIterable<E>>(){
+        JBIterator<E> it;
+        E stored;
+        int st;
+        @Override protected JBIterable<E> nextImpl(){
+          while (it != null && it.advance())           ;
+          it=null;
+          if (stored == null && !orig.hasNext()) {
+            if (st < 0 && mode != Split.BEFORE && mode != Split.GROUP) {
+              st=1;
+              return empty();
+            }
+            return stop();
+          }
+          if (st == -2 && mode == Split.AROUND) {
+            st=-1;
+            return empty();
+          }
+          E tmp=stored;
+          stored=null;
+          return of(tmp).append(once((it=JBIterator.wrap(orig)).takeWhile(new Condition<E>(){
+            @Override public boolean value(            E e){
+              boolean sep=condition.value(e);
+              int st0=st;
+              st=st0 < 0 && sep ? -2 : st0 > 0 && !sep ? 2 : sep ? -1 : 1;
+              boolean result;
+switch (mode) {
+case AFTER:
+                result=st != -2 && (st != 1 || st0 == 0);
+              break;
+case BEFORE:
+            result=st != -2 && st != -1;
+          break;
+case AROUND:
+        result=st0 >= 0 && st > 0;
+      break;
+case GROUP:
+    result=st0 >= 0 && st > 0 || st0 <= 0 && st < 0;
+  break;
+case OFF:
+result=st > 0;
+break;
+default :
+throw new AssertionError(st);
+}
+stored=!result && mode != Split.OFF ? e : null;
+return result;
+}
+}
+)));
+}
+}
+;
+}
+}
+);
+}
