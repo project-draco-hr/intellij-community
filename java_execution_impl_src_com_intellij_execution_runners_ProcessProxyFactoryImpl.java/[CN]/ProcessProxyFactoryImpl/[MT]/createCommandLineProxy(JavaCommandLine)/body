@@ -1,19 +1,29 @@
 {
   JavaParameters javaParameters=javaCmdLine.getJavaParameters();
-  if (useLauncher(javaParameters)) {
-    String mainClass=javaParameters.getMainClass();
-    if (mainClass != null) {
+  String mainClass=javaParameters.getMainClass();
+  if (ourMayUseLauncher && mainClass != null) {
+    String moduleName=javaParameters.getModuleName();
+    String rtJarPath=JavaSdkUtil.getIdeaRtJarPath();
+    if (moduleName == null || new File(rtJarPath).isFile()) {
       try {
         ProcessProxyImpl proxy=new ProcessProxyImpl();
-        JavaSdkUtil.addRtJar(javaParameters.getClassPath());
-        ParametersList vmParametersList=javaParameters.getVMParametersList();
-        vmParametersList.defineProperty(ProcessProxyImpl.PROPERTY_PORT_NUMBER,String.valueOf(proxy.getPortNumber()));
-        vmParametersList.defineProperty(ProcessProxyImpl.PROPERTY_BIN_PATH,PathManager.getBinPath());
-        javaParameters.getProgramParametersList().prepend(mainClass);
-        javaParameters.setMainClass(ProcessProxyImpl.LAUNCH_MAIN_CLASS);
+        String port=String.valueOf(proxy.getPortNumber());
+        String binPath=PathManager.getBinPath();
+        if (moduleName == null) {
+          JavaSdkUtil.addRtJar(javaParameters.getClassPath());
+          ParametersList vmParametersList=javaParameters.getVMParametersList();
+          vmParametersList.defineProperty(ProcessProxyImpl.PROPERTY_PORT_NUMBER,port);
+          vmParametersList.defineProperty(ProcessProxyImpl.PROPERTY_BIN_PATH,binPath);
+          javaParameters.getProgramParametersList().prepend(mainClass);
+          javaParameters.setMainClass(ProcessProxyImpl.LAUNCH_MAIN_CLASS);
+        }
+ else {
+          javaParameters.getVMParametersList().add("-javaagent:" + rtJarPath + '='+ port+ ':'+ binPath);
+        }
         return proxy;
       }
- catch (      ProcessProxyImpl.NoMoreSocketsException ignored) {
+ catch (      IOException e) {
+        Logger.getInstance(ProcessProxy.class).warn(e);
       }
     }
   }
