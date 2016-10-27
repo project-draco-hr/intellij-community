@@ -15,9 +15,36 @@
           protected JUnit4Builder junit4Builder(){
             return new JUnit4Builder(){
               public Runner runnerForClass(              Class testClass) throws Throwable {
+                try {
+                  Method ignored=BlockJUnit4ClassRunner.class.getDeclaredMethod("isIgnored",new Class[]{FrameworkMethod.class});
+                  if (ignored != null) {
+                    return new BlockJUnit4ClassRunner(testClass){
+                      protected boolean isIgnored(                      FrameworkMethod child){
+                        return false;
+                      }
+                    }
+;
+                  }
+                }
+ catch (                NoSuchMethodException ignored) {
+                }
                 return new BlockJUnit4ClassRunner(testClass){
-                  protected boolean isIgnored(                  FrameworkMethod child){
-                    return false;
+                  protected void runChild(                  FrameworkMethod method,                  RunNotifier notifier){
+                    final Description description=describeChild(method);
+                    final EachTestNotifier eachNotifier=new EachTestNotifier(notifier,description);
+                    eachNotifier.fireTestStarted();
+                    try {
+                      methodBlock(method).evaluate();
+                    }
+ catch (                    AssumptionViolatedException e) {
+                      eachNotifier.addFailedAssumption(e);
+                    }
+catch (                    Throwable e) {
+                      eachNotifier.addFailure(e);
+                    }
+ finally {
+                      eachNotifier.fireTestFinished();
+                    }
                   }
                 }
 ;
