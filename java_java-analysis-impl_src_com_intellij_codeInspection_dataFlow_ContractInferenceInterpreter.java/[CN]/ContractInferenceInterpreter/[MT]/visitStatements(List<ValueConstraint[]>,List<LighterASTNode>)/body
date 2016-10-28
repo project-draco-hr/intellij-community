@@ -1,0 +1,47 @@
+{
+  CodeBlockContracts result=new CodeBlockContracts();
+  for (  LighterASTNode statement : statements) {
+    IElementType type=statement.getTokenType();
+    if (type == BLOCK_STATEMENT) {
+      result.addAll(visitStatements(states,getStatements(getCodeBlock(statement),myTree)));
+    }
+ else     if (type == IF_STATEMENT) {
+      List<PreContract> conditionResults=visitExpression(states,findExpressionChild(myTree,statement));
+      List<LighterASTNode> thenElse=getStatements(statement,myTree);
+      if (thenElse.size() > 0) {
+        result.addAll(visitStatements(antecedentsReturning(conditionResults,TRUE_VALUE),singletonList(thenElse.get(0))));
+      }
+      List<ValueConstraint[]> falseStates=antecedentsReturning(conditionResults,FALSE_VALUE);
+      if (thenElse.size() > 1) {
+        result.addAll(visitStatements(falseStates,singletonList(thenElse.get(1))));
+      }
+ else {
+        states=falseStates;
+        continue;
+      }
+    }
+ else     if (type == WHILE_STATEMENT) {
+      states=antecedentsReturning(visitExpression(states,findExpressionChild(myTree,statement)),FALSE_VALUE);
+      continue;
+    }
+ else     if (type == THROW_STATEMENT) {
+      result.addAll(asPreContracts(toContracts(states,THROW_EXCEPTION)));
+    }
+ else     if (type == RETURN_STATEMENT) {
+      result.addAll(visitExpression(states,findExpressionChild(myTree,statement)));
+    }
+ else     if (type == ASSERT_STATEMENT) {
+      List<PreContract> conditionResults=visitExpression(states,findExpressionChild(myTree,statement));
+      result.addAll(asPreContracts(toContracts(antecedentsReturning(conditionResults,FALSE_VALUE),THROW_EXCEPTION)));
+    }
+ else     if (type == DECLARATION_STATEMENT) {
+      result.registerDeclaration(statement,myTree,myBody.getStartOffset());
+      continue;
+    }
+ else     if (type == DO_WHILE_STATEMENT) {
+      result.addAll(visitStatements(states,getStatements(statement,myTree)));
+    }
+    break;
+  }
+  return result.accumulated;
+}
