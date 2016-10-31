@@ -1,0 +1,40 @@
+{
+  String stringText=pyString.getText();
+  StringNodeInfo stringInfo=new StringNodeInfo(pyString.getStringNodes().get(0));
+  newStringText.append("{");
+  final int autoNumber=field.getAutoPosition() == null ? 0 : field.getAutoPosition();
+  final PySubstitutionChunkReference reference=new PySubstitutionChunkReference(pyString,field,autoNumber,false);
+  final PyExpression resolveResult=getActualReplacementExpression(reference);
+  if (resolveResult == null)   return false;
+  final PsiElement adjusted=adjustQuotesInside(resolveResult,pyString);
+  if (adjusted == null)   return false;
+  newStringText.append(adjusted.getText());
+  final String quotedAttrsAndItems=quoteItemsInFragments(field,stringInfo.getSingleQuote());
+  if (quotedAttrsAndItems == null)   return false;
+  newStringText.append(quotedAttrsAndItems);
+  final String conversion=field.getConversion();
+  if (conversion != null) {
+    newStringText.append(conversion);
+  }
+  final TextRange specRange=field.getFormatSpecRange();
+  if (specRange != null) {
+    if (withNestedFields) {
+      int specOffset=specRange.getStartOffset();
+      for (      PyNewStyleStringFormatParser.Field nestedField : field.getNestedFields()) {
+        newStringText.append(stringText.substring(specOffset,nestedField.getLeftBraceOffset()));
+        specOffset=nestedField.getFieldEnd();
+        if (!processField(nestedField,pyString,newStringText,false)) {
+          return false;
+        }
+      }
+      if (specOffset < specRange.getEndOffset()) {
+        newStringText.append(stringText.substring(specOffset,specRange.getEndOffset()));
+      }
+    }
+ else {
+      newStringText.append(field.getFormatSpec());
+    }
+  }
+  newStringText.append("}");
+  return true;
+}
