@@ -1,44 +1,27 @@
 {
-  final GrField field=(GrField)psiElement;
-  String fieldName=field.getName();
-  NameProvider nameProvider=new NameProvider(field,newName);
-  MultiMap<PsiNamedElement,UsageInfo> propertyUsages=MultiMap.createLinked();
-  MultiMap<PsiNamedElement,UsageInfo> simpleUsages=MultiMap.createLinked();
-  List<PsiReference> unknownUsages=new ArrayList<>();
+  GrField field=(GrField)psiElement;
+  Map<GrReferenceExpression,PsiElement> handled=ContainerUtil.newHashMap();
   for (  UsageInfo usage : usages) {
     final PsiReference ref=usage.getReference();
     if (ref instanceof GrReferenceExpression) {
-      final GroovyResolveResult resolveResult=((GrReferenceExpression)ref).advancedResolve();
-      final PsiElement element=resolveResult.getElement();
-      if (resolveResult.isInvokedOnProperty()) {
-        propertyUsages.putValue((PsiNamedElement)element,usage);
-      }
- else {
-        simpleUsages.putValue((PsiNamedElement)element,usage);
-      }
+      PsiElement resolved=ref.resolve();
+      ref.handleElementRename(getNewNameFromTransformations(resolved,newName));
+      handled.put((GrReferenceExpression)ref,resolved);
     }
  else     if (ref != null) {
-      unknownUsages.add(ref);
+      handleElementRename(newName,ref,field.getName());
     }
-  }
-  for (  PsiReference ref : unknownUsages) {
-    handleElementRename(newName,ref,fieldName);
   }
   field.setName(newName);
-  nameProvider.putNewElements(field);
-  PsiManager manager=field.getManager();
-  for (  PsiNamedElement element : simpleUsages.keySet()) {
-    for (    UsageInfo info : simpleUsages.get(element)) {
-      final String name=nameProvider.getNewName(element);
-      rename(nameProvider.getNewElement(element),info,name == null ? newName : name,name != null,manager);
-    }
-  }
-  for (  PsiNamedElement element : propertyUsages.keySet()) {
-    for (    UsageInfo info : propertyUsages.get(element)) {
-      rename(element,info,newName,true,manager);
-    }
+  for (  GrReferenceExpression expression : handled.keySet()) {
+    PsiElement oldResolved=handled.get(expression);
+    if (oldResolved == null)     continue;
+    PsiElement resolved=expression.resolve();
+    if (resolved == null)     continue;
+    if (expression.getManager().areElementsEquivalent(oldResolved,resolved))     continue;
+    qualify(field,expression);
   }
   if (listener != null) {
-    listener.elementRenamed(field);
+    listener.elementRenamed(psiElement);
   }
 }
