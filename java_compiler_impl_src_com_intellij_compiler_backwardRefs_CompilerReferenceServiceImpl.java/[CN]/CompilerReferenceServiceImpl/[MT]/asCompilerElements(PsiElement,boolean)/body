@@ -1,2 +1,32 @@
 {
+  myReadDataLock.lock();
+  try {
+    if (myReader == null)     return null;
+    VirtualFile file=PsiUtilCore.getVirtualFile(psiElement);
+    if (file == null)     return null;
+    ElementPlace place=ElementPlace.get(file,myProjectFileIndex);
+    if (place == null || (place == ElementPlace.SRC && myDirtyModulesHolder.contains(file))) {
+      return null;
+    }
+    final LanguageLightRefAdapter adapter=findAdapterForFileType(file.getFileType());
+    if (adapter == null)     return null;
+    final LightRef ref=adapter.asLightUsage(psiElement,myReader.getNameEnumerator());
+    if (ref == null)     return null;
+    if (place == ElementPlace.LIB && buildHierarchyForLibraryElements) {
+      final List<LightRef> elements=adapter.getHierarchyRestrictedToLibraryScope(ref,psiElement,myReader.getNameEnumerator(),LibraryScopeCache.getInstance(myProject).getLibrariesOnlyScope());
+      final LightRef[] fullHierarchy=new LightRef[elements.size() + 1];
+      fullHierarchy[0]=ref;
+      int i=1;
+      for (      LightRef element : elements) {
+        fullHierarchy[i++]=element;
+      }
+      return new CompilerElementInfo(place,fullHierarchy);
+    }
+ else {
+      return new CompilerElementInfo(place,ref);
+    }
+  }
+  finally {
+    myReadDataLock.unlock();
+  }
 }
